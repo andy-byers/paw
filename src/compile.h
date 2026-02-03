@@ -42,6 +42,9 @@
 #include "stats.h"
 #include "trait.h"
 
+#warning
+#include"stdio.h"
+
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
 #define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))
@@ -91,7 +94,7 @@ struct StringMap;
 struct BodyList;
 struct BodyMap;
 
-void *pawP_alloc(struct Pool *pool, void *ptr, size_t size0, size_t size);
+EXTERN_C void *pawP_alloc(struct Pool *pool, void *ptr, size_t size0, size_t size);
 #define P_ALLOC(C, ptr, size0, size) pawP_alloc((C)->pool, ptr, size0, size)
 
 EXTERN_C Str *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n);
@@ -100,7 +103,7 @@ inline static Str *pawP_scan_str(struct Compiler *C, char const *s)
     return pawP_scan_nstr(C, s, strlen(s));
 }
 
-Str *pawP_format_string(struct Compiler *C, char const *fmt, ...);
+EXTERN_C Str *pawP_format_string(struct Compiler *C, char const *fmt, ...);
 
 #define IS_SCALAR_TYPE(code) ((code) < BUILTIN_STR)
 #define IS_BASIC_TYPE(code) ((code) <= BUILTIN_STR)
@@ -156,9 +159,8 @@ struct Compiler {
     struct StringMap *symbols;
     struct Searchers *searchers;
 
-    // '.traits' maps each ADT to a list of implemented traits. Includes ADTs
-    // from all modules being compiled.
-    struct TraitMap *traits; // DeclId => HirDeclList *
+    struct IrSolver *S;
+
     struct IrLayoutMap *layouts;
 
     struct HirTypeMap *hir_types; // NodeId => IrType *
@@ -168,10 +170,11 @@ struct Compiler {
     struct AdtDefMap *adt_defs; // DefId => IrAdtDef *
     struct FnDefMap *fn_defs; // DefId => IrFnDef *
     struct ImplMap *impl_defs; // DefId => IrImpl *
-
-    // map for quickly determining the methods implementing a given builtin
-    // trait for a given type
-    struct TraitOwners *trait_owners;
+    struct GenericDefMap *generic_defs; // DefId => IrGenericDef *
+    struct IrDefKinds *ir_def_kinds;
+    struct IrGenericTypes *ir_generic_types;
+    struct IrTraitBounds *ir_trait_bounds;
+    struct NodeMap *self_types;
 
     struct GlobalList *globals;
 
@@ -188,7 +191,9 @@ struct Compiler {
         } primitives;
 
         struct {
+            // maps [T] to ListIterator<T>
             struct TypeCollection *list;
+            // maps [K: V] to MapIterator<K, V>
             struct TypeCollection *map;
         } iterators;
 
@@ -199,9 +204,9 @@ struct Compiler {
     } typesystem;
 
     struct {
-        struct IrImplList *blanket;
-        struct IrImplOwners *inherent;
-        struct IrImplOwners *trait;
+        struct IrDefs *blanket;
+        struct IrDefs *inherent;
+        struct IrDefs *trait;
     } impls;
 
     Str const *main_name;
@@ -254,7 +259,6 @@ void pawP_lower_ast(struct Compiler *C);
 void pawP_collect_items(struct Compiler *C, struct Pool *pool);
 
 struct IrType *pawP_lower_type(struct Compiler *C, struct HirModule m, struct HirType *type);
-struct IrTypeList *pawP_lower_type_list(struct Compiler *C, struct HirModule m, struct HirTypeList *types);
 
 struct RegisterInfo {
     int value;
@@ -304,6 +308,7 @@ struct Instantiation pawP_instantiate_assoc(struct Compiler *C, struct SourceLoc
 // Substitute types in "subst.generics" for types in "subst.types" in the context of the given "type"
 // Note that "type" is not modified by this operation.
 struct IrType *pawP_substitute(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct Substitution subst);
+struct IrTrait *pawP_substitute_trait(struct Compiler *C, struct SourceLoc loc, struct IrTrait *trait, struct Substitution subst);
 
 // TODO: remove this one and rename _v2
 // Instantiate a polymorphic function or type
@@ -324,8 +329,6 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
 struct AstDecl *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader input, void *ud);
-
-void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d);
 
 struct MonoResult {
     struct IrTypeList *types;
@@ -362,14 +365,6 @@ Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
 EXTERN_C Str *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
 EXTERN_C Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types);
 
-struct ExternInfo {
-    Str *name;
-    Value value;
-};
-
-struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *adt);
-
-
 // Generate code for data structures used during compilation
 
 #define P_ID_HASH(Ctx_, Did_) ((void)Ctx_, (paw_Uint)(Did_).value)
@@ -379,14 +374,16 @@ struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *
 #define P_VALUE_HASH(Ctx_, Value_) ((void)Ctx_, V_UINT(Value_))
 #define P_VALUE_EQUALS(Ctx_, A_, B_) ((void)Ctx_, V_UINT(A_) == V_UINT(B_))
 
+DEFINE_MAP(struct Compiler, NodeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, NodeId)
 DEFINE_MAP(struct Compiler, FnDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrFnDef *)
 DEFINE_MAP(struct Compiler, AdtDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAdtDef *)
 DEFINE_MAP(struct Compiler, ImplMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrImpl *)
+DEFINE_MAP(struct Compiler, GenericDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrGenericDef *)
 DEFINE_MAP(struct Compiler, TraitDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTraitDef *)
 DEFINE_MAP(struct Compiler, VariantDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrVariantDef *)
 DEFINE_MAP(struct Compiler, HirTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct IrType *)
 DEFINE_MAP(struct Compiler, DefTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrType *)
-DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTypeList *)
+DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTrait *)
 DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *)
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *)

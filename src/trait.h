@@ -6,16 +6,18 @@
 #define PAW_TRAIT_H
 
 #include "core.h"
+#include "util.h"
 
 struct Compiler;
-struct IrType;
-struct IrTypeList;
+struct IrTrait;
 
-EXTERN_C struct IrTypeList *pawP_query_traits(struct Compiler *C, struct IrType *type);
-void pawP_add_trait_impl(struct Compiler *C, struct IrType *type, struct IrType *trait);
-paw_Bool pawP_satisfies_bounds(struct Compiler *C, struct IrType *type, struct IrTypeList *bounds);
+int pawIr_unify_traits(struct Compiler *C, struct IrTrait *a, struct IrTrait *b);
+struct IrTrait *pawIr_normalize_trait(struct Compiler *C, struct IrTrait *trait);
 
-// Return 1 if the given trait is implemented by the given type, 0 otherwise
-paw_Bool pawIr_implements_trait(struct Compiler *C, struct IrType *type, struct IrType *trait);
+static void pawIr_unify_traits_unchecked(struct Compiler *C, struct IrTrait *a, struct IrTrait *b)
+{
+    int const unused = pawIr_unify_traits(C, a, b);
+    paw_assert(unused == 0); PAW_UNUSED(unused);
+}
 
 #endif // PAW_TRAIT_H

@@ -6,6 +6,7 @@
 #include "hir.h"
 #include "ir_type.h"
 #include "resolve.h"
+#include "solve.h"
 #include "unify.h"
 
 struct LowerType {
@@ -41,8 +42,7 @@ static IrTypeList *new_unknowns(struct Compiler *C, struct HirDeclList *params, 
     K_LIST_FOREACH (params, pdecl) {
         struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
         IrType *type = pawIr_get_type(C, d->id);
-        IrTypeList *bounds = IrGetGeneric(type)->bounds;
-        IrType *unknown = pawU_new_unknown(C->U, d->span.start, bounds);
+        IrType *unknown = pawU_new_unknown(C->U, d->span.start, NULL);
         IrTypeList_push(C, unknowns, unknown);
         IrTypeList_push(C, generics, type);
     }
@@ -59,11 +59,10 @@ IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct H
 
     // TODO: is this correct? prob. needs to be instantiated, "seg" likely not used later so it seems to work
     pawIr_set_type(C, segment.id, type);
-    decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
 
     if (d->rhs == NULL) return type;
     IrType *rhs = GET_NODE_TYPE(C, d->rhs);
-    IrTypeList *types = IR_TYPE_SUBTYPES(rhs);
+    IrTypeList *types = IR_TYPE_SUBTYPES_(rhs);
     if (d->generics == NULL) return rhs;
 
     IrTypeList *generics;
@@ -76,6 +75,8 @@ IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct H
             int const rc = pawU_unify(C->U, *pu, *pk);
             paw_assert(rc == 0); PAW_UNUSED(rc);
         }
+        K_LIST_XFOREACH (subst, IrType *, p)
+            *p = pawU_normalize(C->U, *p);
     }
 
     return pawP_instantiate(C, rhs, subst);
@@ -99,7 +100,7 @@ static IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
     IrType *type = pawIr_get_type(L->C, segment.target);
     if (segment.types != NULL) {
         IrTypeList *args = lower_type_list(L, segment.types);
-        type = pawP_instantiate(L->C, type, args);
+        type = pawIr_solver_instantiate_type_with(L->C->S, IR_TYPE_DID(type), args);
     }
     pawIr_set_type(L->C, segment.id, type);
     return type;
@@ -166,14 +167,3 @@ static IrTypeList *lower_type_list(struct LowerType *L, struct HirTypeList *type
     }
     return result;
 }
-
-IrTypeList *pawP_lower_type_list(struct Compiler *C, struct HirModule m, struct HirTypeList *types)
-{
-    struct LowerType L = {
-        .hir = C->hir,
-        .C = C,
-        .m = m,
-    };
-    return lower_type_list(&L, types);
-}
-

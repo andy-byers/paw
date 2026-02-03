@@ -189,6 +189,11 @@ impl Compare for str {
     }
 }
 
+pub fn __private_instantiate_iterators() {
+    let m: [str: ()] = [:];
+    m.iterator().next();
+}
+
 
 #[extern_std] pub fn print(message: str);
 #[extern_std] pub fn println(message: str);

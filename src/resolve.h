@@ -23,7 +23,6 @@ struct Resolver {
     struct ImportModules *modules;
     struct AstModuleDecl *current;
     struct SegmentTable *segtab;
-    int decl_count;
 };
 
 struct OrState {

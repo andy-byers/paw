@@ -1,6 +1,8 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+//
+// TODO: Use Visit/Accept distinction to avoid having to manually visit subtrees inside custom Visit callbacks
 
 #ifndef PAW_TYPE_FOLDER_H
 #define PAW_TYPE_FOLDER_H
@@ -9,14 +11,34 @@
 #include "ir_type.h"
 #include "mir.h"
 
+struct IrTypeVisitor {
+    struct Compiler *C;
+    void *ud;
+
+    void (*VisitType)(struct IrTypeVisitor *, IrType *);
+    void (*VisitTrait)(struct IrTypeVisitor *, IrTrait *);
+    void (*VisitTypeList)(struct IrTypeVisitor *, IrTypeList *);
+
+#define DEFINE_CALLBACK(X) void (*Visit##X)(struct IrTypeVisitor *, struct Ir##X *);
+    IR_TYPE_LIST(DEFINE_CALLBACK)
+#undef DEFINE_CALLBACK
+};
+
+void pawIr_type_visitor_init(struct IrTypeVisitor *F, struct Compiler *C, void *ud);
+void pawIr_visit_type(struct IrTypeVisitor *F, IrType *node);
+void pawIr_visit_type_list(struct IrTypeVisitor *F, IrTypeList *list);
+void pawIr_visit_trait(struct IrTypeVisitor *F, IrTrait *node);
+
+
 struct IrTypeFolder {
     struct Compiler *C;
     void *ud;
 
-    IrType *(*FoldType)(struct IrTypeFolder *F, IrType *type);
-    IrTypeList *(*FoldTypeList)(struct IrTypeFolder *F, IrTypeList *list);
+    IrType *(*FoldType)(struct IrTypeFolder *, IrType *);
+    IrTrait *(*FoldTrait)(struct IrTypeFolder *, IrTrait *);
+    IrTypeList *(*FoldTypeList)(struct IrTypeFolder *, IrTypeList *);
 
-#define DEFINE_CALLBACK(X) IrType *(*Fold##X)(struct IrTypeFolder * F, struct Ir##X * node);
+#define DEFINE_CALLBACK(X) IrType *(*Fold##X)(struct IrTypeFolder *, struct Ir##X *);
     IR_TYPE_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
 };
@@ -24,6 +46,7 @@ struct IrTypeFolder {
 void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud);
 IrType *pawIr_fold_type(struct IrTypeFolder *F, IrType *node);
 IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, IrTypeList *list);
+IrTrait *pawIr_fold_trait(struct IrTypeFolder *F, IrTrait *node);
 
 struct HirTypeFolder {
     struct IrTypeFolder F;

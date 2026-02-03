@@ -272,6 +272,7 @@ pub fn test_map() {
     map_getset_no_collisions(10);
     map_getset_no_collisions(100);
 }
+
 pub fn map_getset_no_collisions(n: int) {
     let map = [:];
 
@@ -629,5 +630,26 @@ pub fn test_nested_inout() {
     outer(n);
     outer(n);
     assert(n == 3);
+}
+
+struct Type<T> {
+    pub value: T,
+}
+
+impl<A, B> Type<(A, B)> {
+    pub fn first(self) -> A {
+        self.value.0
+    }
+
+    pub fn second(self) -> B {
+        self.value.1
+    }
+}
+
+#[test]
+pub fn test_inherent_impl() {
+    let t = Type{value: ("abc", 123)};
+    assert(t.first() == "abc");
+    assert(t.second() == 123);
 }
 

@@ -1,0 +1,32 @@
+// ambiguous_method_call.paw
+
+// TODO: This test throws an error because it cannot find a method to call
+//       due to the uninferred type argument. Requires multiple type
+//       checker passes to resolve correctly.
+//       On each pass, refine a list of candidates for each associated
+//       function call. There should be only 1 candidate for each call at
+//       the end of type checking.
+
+pub trait Trait<T> {
+    fn method(&self);
+}
+
+enum Type<T> {
+    First, Second(T)
+}
+
+impl Trait<int> for Type<int> {
+    fn method(&self) {}
+}
+
+impl Trait<float> for Type<float> {
+    fn method(&self) {}
+}
+
+#[test]
+pub fn test() {
+    let e = Type::First;
+    e.method(); // e: Type<_>
+    e = Type::Second(456);
+    e.method(); // e: Type<int>
+}

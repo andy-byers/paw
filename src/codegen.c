@@ -9,6 +9,7 @@
 #include "debug.h"
 #include "error.h"
 #include "hir.h"
+#include "impl.h"
 #include "ir_type.h"
 #include "lib.h"
 #include "map.h"
@@ -18,6 +19,7 @@
 #include "parse.h"
 #include "regstack.h"
 #include "ssa.h"
+#include "unify.h"
 
 #include "codegen/codegen.h"
 #include "glue.h"
@@ -45,137 +47,155 @@ static Str const *module_prefix(struct Generator *G, int modno)
         : NULL;
 }
 
-static void VisitType(struct Mir *mir, IrType *type);
+static void VisitType(struct Compiler *, IrType *);
 
-static void VisitTypeList(struct Mir *mir, IrTypeList *list)
+static void VisitTypeList(struct Compiler *C, IrTypeList *list)
 {
     if (list != NULL) {
         IrType *const *ptype;
         K_LIST_FOREACH (list, ptype)
-            VisitType(mir, *ptype);
+            VisitType(C, *ptype);
     }
 }
 
-static void VisitPtr(struct Mir *mir, struct IrPtr *t)
+static void VisitPtr(struct Compiler *C, struct IrPtr *t)
 {
-    VisitType(mir, t->pointee);
+    VisitType(C, t->pointee);
 }
 
-static void VisitAdt(struct Mir *mir, struct IrAdt *t)
+static void VisitAdt(struct Compiler *C, struct IrAdt *t)
 {
-    struct Compiler *C = mir->C;
-    VisitTypeList(mir, t->types);
+    VisitTypeList(C, t->types);
 
     struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
     for (int discr = 0; discr < def->variants->count; ++discr) {
         IrTypeList *fields = pawP_instantiate_variant_fields(C, t, discr);
-        VisitTypeList(mir, fields);
+        VisitTypeList(C, fields);
     }
 }
 
-static void VisitSignature(struct Mir *mir, struct IrSignature *t)
+static void VisitSignature(struct Compiler *C, struct IrSignature *t)
 {
-    VisitTypeList(mir, t->types);
-    VisitTypeList(mir, t->params);
-    VisitType(mir, t->result);
-    VisitType(mir, t->self);
+    VisitTypeList(C, t->types);
+    VisitType(C, pawIr_materialize_fn(C, t->did, t->types));
+    VisitType(C, pawIr_get_context(C, IR_CAST_TYPE(t)));
 }
 
-static void VisitFnPtr(struct Mir *mir, struct IrFnPtr *t)
+static void VisitFnPtr(struct Compiler *C, struct IrFnPtr *t)
 {
-    VisitTypeList(mir, t->params);
-    VisitType(mir, t->result);
+    VisitTypeList(C, t->params);
+    VisitType(C, t->result);
 }
 
-static void VisitTuple(struct Mir *mir, struct IrTuple *t)
+static void VisitTuple(struct Compiler *C, struct IrTuple *t)
 {
-    VisitTypeList(mir, t->elems);
+    VisitTypeList(C, t->elems);
 }
 
-static void VisitTraitObj(struct Mir *mir, struct IrTraitObj *t)
-{
-    VisitTypeList(mir, t->types);
-}
-
-static void VisitType(struct Mir *mir, IrType *type)
+static void VisitType(struct Compiler *C, IrType *type)
 {
     if (type == NULL) return;
 
     switch (IR_KINDOF(type)) {
+        case kIrUnit:
+            C->typesystem.primitives.unit_t = type;
+            return;
+        case kIrBool:
+            C->typesystem.primitives.bool_t = type;
+            return;
+        case kIrChar:
+            C->typesystem.primitives.char_t = type;
+            return;
+        case kIrInt:
+            C->typesystem.primitives.int_t = type;
+            return;
+        case kIrFloat:
+            C->typesystem.primitives.float_t = type;
+            return;
+        case kIrStr:
+            C->typesystem.primitives.str_t = type;
+            return;
         case kIrAdt:
-            switch (pawP_type2code(mir->C, type)) {
+            switch (pawP_type2code(C, type)) {
                 case BUILTIN_UNIT:
-                    mir->C->typesystem.primitives.unit_t = type;
+                    C->typesystem.primitives.unit_t = type;
                     return;
                 case BUILTIN_BOOL:
-                    mir->C->typesystem.primitives.bool_t = type;
+                    C->typesystem.primitives.bool_t = type;
                     return;
                 case BUILTIN_CHAR:
-                    mir->C->typesystem.primitives.char_t = type;
+                    C->typesystem.primitives.char_t = type;
                     return;
                 case BUILTIN_INT:
-                    mir->C->typesystem.primitives.int_t = type;
+                    C->typesystem.primitives.int_t = type;
                     return;
                 case BUILTIN_FLOAT:
-                    mir->C->typesystem.primitives.float_t = type;
+                    C->typesystem.primitives.float_t = type;
                     return;
                 case BUILTIN_STR:
-                    mir->C->typesystem.primitives.str_t = type;
+                    C->typesystem.primitives.str_t = type;
                     return;
                 case BUILTIN_LIST: {
-                    void *const *p = TypeCollection_get(mir->C, mir->C->typesystem.lists, type);
+                    void *const *p = TypeCollection_get(C, C->typesystem.lists, type);
                     if (p != NULL) return;
 
-                    TypeCollection_insert(mir->C, mir->C->typesystem.lists, type, NULL);
+                    TypeCollection_insert(C, C->typesystem.lists, type, NULL);
+
+                    struct Instantiation *inst = pawP_find_method(C, type, SCAN_STR(C, "iterator"));
+                    paw_assert(inst != NULL);
+                    TypeCollection_insert(C, C->typesystem.iterators.list, type, ir_fn_result(C, inst->inst));
                     break;
                 }
                 case BUILTIN_MAP: {
-                    void *const *p = TypeCollection_get(mir->C, mir->C->typesystem.maps, type);
+                    void *const *p = TypeCollection_get(C, C->typesystem.maps, type);
                     if (p != NULL) return;
 
-                    TypeCollection_insert(mir->C, mir->C->typesystem.maps, type, NULL);
+                    TypeCollection_insert(C, C->typesystem.maps, type, NULL);
+
+                    struct Instantiation *inst = pawP_find_method(C, type, SCAN_STR(C, "iterator"));
+                    paw_assert(inst != NULL);
+                    TypeCollection_insert(C, C->typesystem.iterators.map, type, ir_fn_result(C, inst->inst));
                     break;
                 }
                 default: {
-                    void *const *p = TypeCollection_get(mir->C, mir->C->typesystem.adts, type);
+                    void *const *p = TypeCollection_get(C, C->typesystem.adts, type);
                     if (p != NULL) return;
 
-                    struct IrAdtDef const *def = pawIr_get_adt_def(mir->C, IR_TYPE_DID(type));
-                    if (pawS_eq(def->name, SCAN_STR(mir->C, "ListIterator"))) {
-                        IrTypeList *field_types = pawP_instantiate_struct_fields(mir->C, IrGetAdt(type));
-                        TypeCollection_insert(mir->C, mir->C->typesystem.iterators.list, K_LIST_FIRST(field_types), type);
-                    } else if (pawS_eq(def->name, SCAN_STR(mir->C, "MapIterator"))) {
-                        IrTypeList *field_types = pawP_instantiate_struct_fields(mir->C, IrGetAdt(type));
-                        TypeCollection_insert(mir->C, mir->C->typesystem.iterators.map, K_LIST_FIRST(field_types), type);
+                    struct IrAdtDef const *def = pawIr_get_adt_def(C, IR_TYPE_DID(type));
+                    if (pawS_eq(def->name, SCAN_STR(C, "ListIterator"))) {
+                        // field_types[0] = [T], where type = ListIterator<T>
+                        IrTypeList *field_types = pawP_instantiate_struct_fields(C, IrGetAdt(type));
+                        TypeCollection_insert(C, C->typesystem.iterators.list, K_LIST_FIRST(field_types), type);
+                    } else if (pawS_eq(def->name, SCAN_STR(C, "MapIterator"))) {
+                        // field_types[0] = [K: V], where type = MapIterator<K, V>
+                        IrTypeList *field_types = pawP_instantiate_struct_fields(C, IrGetAdt(type));
+                        TypeCollection_insert(C, C->typesystem.iterators.map, K_LIST_FIRST(field_types), type);
                     }
 
-                    TypeCollection_insert(mir->C, mir->C->typesystem.adts, type, NULL);
+                    TypeCollection_insert(C, C->typesystem.adts, type, NULL);
                     break;
                 }
             }
-            VisitAdt(mir, IrGetAdt(type));
+            VisitAdt(C, IrGetAdt(type));
             break;
         case kIrPtr:
-            TypeCollection_insert(mir->C, mir->C->typesystem.types, type, NULL);
-            VisitPtr(mir, IrGetPtr(type));
+            TypeCollection_insert(C, C->typesystem.types, type, NULL);
+            VisitPtr(C, IrGetPtr(type));
             break;
         case kIrFnPtr:
-            TypeCollection_insert(mir->C, mir->C->typesystem.types, type, NULL);
-            VisitFnPtr(mir, IrGetFnPtr(type));
+            TypeCollection_insert(C, C->typesystem.types, type, NULL);
+            VisitFnPtr(C, IrGetFnPtr(type));
             break;
         case kIrSignature:
-            TypeCollection_insert(mir->C, mir->C->typesystem.types, type, NULL);
-            VisitSignature(mir, IrGetSignature(type));
+            TypeCollection_insert(C, C->typesystem.types, type, NULL);
+            VisitSignature(C, IrGetSignature(type));
             break;
         case kIrTuple:
-            TypeCollection_insert(mir->C, mir->C->typesystem.types, type, NULL);
-            VisitTuple(mir, IrGetTuple(type));
-            break;
-        case kIrTraitObj:
-            VisitTraitObj(mir, IrGetTraitObj(type));
+            TypeCollection_insert(C, C->typesystem.types, type, NULL);
+            VisitTuple(C, IrGetTuple(type));
             break;
         case kIrNever:
-            mir->C->typesystem.primitives.never_t = type;
+            C->typesystem.primitives.never_t = type;
             break;
         case kIrInfer:
         case kIrGeneric:
@@ -185,7 +205,7 @@ static void VisitType(struct Mir *mir, IrType *type)
 
 static void collect_type(struct Mir *mir, IrType *type)
 {
-    VisitType(mir, type);
+    VisitType(mir->C, type);
 }
 
 static void collect_types(struct Mir *mir)
@@ -219,6 +239,11 @@ static void code_items(struct Generator *G)
     struct Compiler *C = G->C;
     BodyList *bodies = BodyList_new(C);
 
+    pawU_enter_binder(C->U, SCAN_STR(C, "(method_query)"));
+
+    VisitType(C, C->strtab_type);
+    VisitType(C, C->main_args_type);
+
     struct Mir *const *pitem;
     K_LIST_FOREACH (G->items, pitem) {
         BodyList_push(C, bodies, *pitem);
@@ -231,14 +256,17 @@ static void code_items(struct Generator *G)
     C->typesystem.primitives.int_t = pawP_builtin_type(C, BUILTIN_INT);
     C->typesystem.primitives.float_t = pawP_builtin_type(C, BUILTIN_FLOAT);
     C->typesystem.primitives.str_t = pawP_builtin_type(C, BUILTIN_STR);
-    TypeCollection_insert(C, C->typesystem.maps, C->strtab_type, NULL);
-    TypeCollection_insert(C, C->typesystem.lists, C->main_args_type, NULL);
+//    TypeCollection_insert(C, C->typesystem.maps, C->strtab_type, NULL);
+//    TypeCollection_insert(C, C->typesystem.lists, C->main_args_type, NULL);
 
     pawCodegen_generate(C, &(struct TranslationUnit){
         .modname = C->modname->text,
         .mir_count = bodies->count,
         .mirs = bodies->data,
     });
+
+    pawU_discard_variables(C->U);
+    pawU_leave_binder(C->U);
 
     BodyList_delete(C, bodies);
 }

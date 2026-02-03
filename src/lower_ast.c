@@ -488,12 +488,22 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
             variants, d->is_pub, d->is_struct, d->is_inline);
 }
 
+static struct HirDecl *lower_self_decl(struct LowerAst *L, NodeId parent_id)
+{
+    NodeId const self_id = *NodeMap_get(L->C, L->C->self_types, parent_id);
+    struct AstDecl *self_decl = pawAst_get_node(L->ast, self_id);
+    return lower_decl(L, self_decl);
+}
+
 static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)
 {
-    struct HirIdent const ident = lower_ident(d->ident);
     HirDeclList *generics = lower_decl_list(L, d->generics);
+    if (generics == NULL) generics = HirDeclList_new(L->hir);
+    HirDeclList_insert(L->hir, generics, 0, lower_self_decl(L, d->id));
+
     HirDeclList *methods = lower_methods(L, d->methods);
-    return NEW_NODE(L, trait_decl, d->span, d->id, d->did, ident, generics, methods, d->is_pub);
+    return NEW_NODE(L, trait_decl, d->span, d->id, d->did,
+            lower_ident(d->ident), generics, methods, d->is_pub);
 }
 
 static struct HirDecl *LowerConstDecl(struct LowerAst *L, struct AstConstDecl *d)

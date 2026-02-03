@@ -102,16 +102,53 @@ static bool is_empty_irtype(Compiler *C, IrType *irtype)
     return variant->fields->count == 0;
 }
 
+static ::Str *core_name(struct Compiler *C, IrType *type)
+{
+    switch (IR_KINDOF(type)) {
+        case kIrUnit:
+            return SCAN_STR(C, "unit");
+        case kIrBool:
+            return SCAN_STR(C, "bool");
+        case kIrChar:
+            return SCAN_STR(C, "char");
+        case kIrInt:
+            return SCAN_STR(C, "int");
+        case kIrFloat:
+            return SCAN_STR(C, "float");
+        case kIrStr:
+            return SCAN_STR(C, "str");
+        case kIrTuple:
+            // TODO: redo name mangling
+            return pawP_format_string(C, "tuple%d", IrGetTuple(type)->elems->count);
+        default:
+            return pawIr_get_adt_def(C, IR_TYPE_DID(type))->name;
+    }
+}
+
+// TODO: Ensure mangling produces a unique name.
 static std::string mangle_fn_name(Compiler *C, ::Str const *modname, IrType *type, IrType *self)
 {
     paw_assert(type->hdr.kind == kIrSignature);
-    auto const fsig = type->Signature_;
+    auto const fsig = *IrGetSignature(type);
 
     auto const *fdef = pawIr_get_fn_def(C, fsig.did);
-    if (fsig.self == nullptr) return to_string(pawP_mangle_name(C, modname, fdef->name, fsig.types));
+    if (self == nullptr) return to_string(pawP_mangle_name(C, modname, fdef->name, fsig.types));
+    if (IrIsAdt(self)) {
+        auto const *adef = pawIr_get_adt_def(C, IR_TYPE_DID(self));
 
-    auto const *adef = pawIr_get_adt_def(C, IR_TYPE_DID(self));
-    return to_string(pawP_mangle_attr(C, modname, adef->name, IR_TYPE_SUBTYPES(self), fdef->name, fsig.types));
+        IrTypeList *types = NULL;
+        if (fdef->generics != NULL) {
+            types = IrTypeList_new(C);
+            IrTypeList_reserve(C, types, fdef->generics->count);
+            paw_assert(fsig.types->count >= fdef->generics->count);
+            IrType *const *p = &K_LIST_AT(fsig.types, fsig.types->count - fdef->generics->count);
+            while (p != K_LIST_END(fsig.types)) IrTypeList_push(C, types, *p++);
+        }
+
+        return to_string(pawP_mangle_attr(C, modname, adef->name, IR_TYPE_SUBTYPES_(self), fdef->name, types));
+    }
+    auto *self_name = core_name(C, self);
+    return to_string(pawP_mangle_attr(C, modname, self_name, NULL, fdef->name, NULL));
 }
 
 static std::string mangle_adt_name(Compiler *C, ::Str const *modname, IrType *type)
@@ -151,12 +188,8 @@ static std::string mangle_mir_name(Mir const *mir)
                 return to_string(mir->name); // skip mangling for C functions
         }
     } else if (pawP_contains_core_annotation(mir->C, mir->annotations)) {
-        char const *self = nullptr;
-        if (mir->self != nullptr) {
-            IrAdtDef const *def = pawIr_get_adt_def(mir->C, IR_TYPE_DID(mir->self));
-            paw_assert(def != nullptr);
-            self = def->name->text;
-        }
+        char const *self = mir->self == nullptr ? nullptr
+            : core_name(mir->C, mir->self)->text;
         return format_core_name(modname->text, self, mir->name->text);
     }
     return mangle_fn_name(mir->C, modname, mir->type, mir->self);
@@ -295,15 +328,17 @@ public:
 
     void declare_adt(IrType *irtype)
     {
-        auto const did = IR_TYPE_DID(irtype);
-        IrAdtDef const *def = pawIr_get_adt_def(C, did);
-        auto const location = def->is_inline
-            ? ObjectType::Location::STACK
-            : ObjectType::Location::HEAP;
-        auto const *modname = C->modinfo->data[did.modno].name;
-        auto const name = mangle_adt_name(C, modname, irtype);
-        auto *type = X->get_named_type(name, location);
-        types_->insert(irtype, type);
+        if (get_type(irtype) == nullptr) {
+            auto const did = IR_TYPE_DID(irtype);
+            IrAdtDef const *def = pawIr_get_adt_def(C, did);
+            auto const location = def->is_inline
+                ? ObjectType::Location::STACK
+                : ObjectType::Location::HEAP;
+            auto const *modname = C->modinfo->data[did.modno].name;
+            auto const name = mangle_adt_name(C, modname, irtype);
+            auto *type = X->get_named_type(name, location);
+            types_->insert(irtype, type);
+        }
     }
 
     Type *define_adt(IrType *irtype)
@@ -381,17 +416,18 @@ private:
     {
         auto *itr = types_->lookup(irtype);
         if (itr != nullptr) return *itr;
-        auto const fptr = irtype->FnPtr_;
+        auto *params = ir_fn_params(C, irtype);
+        auto *result = ir_fn_result(C, irtype);
         auto const is_closure = !IrIsSignature(irtype);
         auto const is_method = is_method_type(irtype);
-        auto *return_type = define_type(fptr.result);
+        auto *return_type = define_type(result);
         auto *type = X->get_fn_type(return_type,
-                define_irtypes(fptr.params),
+                define_irtypes(params),
                 is_closure ? FUNC_CLOSURE :
                     is_method ? FUNC_METHOD :
                     FUNC_FUNCTION,
                 true /* has_env */,
-                IrIsNever(fptr.result));
+                IrIsNever(result));
         types_->insert(irtype, type);
         return type;
     }
@@ -418,7 +454,7 @@ private:
 
     bool is_method_type(IrType *irtype)
     {
-        if (irtype->hdr.kind == kIrSignature && irtype->Signature_.self != nullptr) {
+        if (irtype->hdr.kind == kIrSignature && pawIr_get_context(C, irtype) != nullptr) {
             auto const *def = pawIr_get_fn_def(C, IR_TYPE_DID(irtype));
             if (def->params->count > 0) {
                 auto const *name = def->params->data[0].name;
@@ -676,8 +712,8 @@ static void compile_object(Context &X, llvm::TargetMachine &machine, std::string
 
     auto const opt = opt_level(options.opt_suffix);
     auto mpm = pb.buildPerModuleDefaultPipeline(opt);
-    if (options.enable_asan)
-        mpm.addPass(llvm::AddressSanitizerPass({}));
+//TODO    if (options.enable_asan)
+//TODO        mpm.addPass(llvm::AddressSanitizerPass({}));
     mpm.run(*m, mam);
 
     if (options.print_ir)
@@ -803,7 +839,7 @@ public:
         }
 
         if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {
-            auto const *fptr = IR_FPTR(mir->type);
+            auto const *fptr = IrGetFnPtr(IR_GET_FN(C, mir->type));
             paw_Bool const materialize_args = fptr->params->count > 0;
             paw_Bool const materialize_return = builtin_kind(fptr->result) != BUILTIN_INT;
             create_main_fn_wrapper(*fn, materialize_args, materialize_return);
@@ -866,6 +902,16 @@ public:
                 });
         FOREACH_TYPE(C->typesystem.maps, irtype, {
                     translator.declare_builtin(irtype);
+                });
+        FOREACH_TYPE(C->typesystem.iterators.list, irtype, {
+                    translator.declare_builtin(irtype);
+                    IrType *iterator = (IrType *)*TypeCollectionIterator_valuep(&iter_);
+                    translator.declare_adt(iterator);
+                });
+        FOREACH_TYPE(C->typesystem.iterators.map, irtype, {
+                    IrType *iterator = (IrType *)*TypeCollectionIterator_valuep(&iter_);
+                    translator.declare_builtin(irtype);
+                    translator.declare_adt(iterator);
                 });
 
         FOREACH_TYPE(C->typesystem.adts, irtype, {
@@ -1336,10 +1382,9 @@ private:
             m.access = create_internal_method(irself, "access", result_type, {self_type, key_type});
         }
 
-        // NOTE: If "Map<K, V>" exists, then so too does "MapIterator<K, V>" (mentioned by the
-        //     "iterator" method signature). Needed so that method "MapIterator<K, V>::next" can
-        //     be found during code generation.
-        auto *const *iterator_irtype = TypeCollection_get(C, C->typesystem.iterators.map, irself);
+        m.iterator_type = NULL;
+        m.iterator_next = NULL;
+        void *iterator_irtype = TypeCollection_get(C, C->typesystem.iterators.map, irself);
         paw_assert(iterator_irtype != nullptr);
         m.iterator_type = cast<ObjectType>(get_type(*(IrType **)iterator_irtype));
         m.iterator_next = get_method(*(IrType **)iterator_irtype, "next");
@@ -1352,8 +1397,7 @@ private:
     {
         auto &methods = methods_[self];
         auto const itr = methods.find(name);
-        paw_assert(itr != end(methods));
-        return itr->second;
+        return itr != end(methods) ? itr->second : NULL;
     }
 
     void declare_fn(Mir const *mir)
@@ -2015,7 +2059,7 @@ private:
 
     llvm::Value *load_result(llvm::Value *value)
     {
-        auto *result_type = get_type(IR_FPTR(state_->mir_->type)->result);
+        auto *result_type = get_type(ir_fn_result(C, state_->mir_->type));
         return B->CreateLoad(*result_type, value);
     }
 
@@ -2335,6 +2379,7 @@ static void link_compilation_artifact(paw_Env *P, std::string prefix)
         .with_arg("-L" + libgc_dir + "/lib")
         .with_staticlib("gc")
         .with_arg("-L" + root_dir)
+        .with_arg("--coverage") // TODO
         .with_staticlib("paw_stdc");
 
     auto const o = P->options;

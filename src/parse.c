@@ -1654,17 +1654,17 @@ static struct AstExpr *expr_except_struct_lit(struct Lex *lex)
 static struct AstDeclList *type_param(struct Lex *lex)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
+    struct AstDeclList *list = NULL;
     if (test_next(lex, '<')) {
         ++lex->expr_depth;
-        struct AstDeclList *list = AstDeclList_new(lex->ast);
+        list = AstDeclList_new(lex->ast);
         parse_generic_list(lex, list, start);
         --lex->expr_depth;
 
         if (list->count == 0)
             PARSE_ERROR(lex, empty_type_list, start);
-        return list;
     }
-    return NULL;
+    return list;
 }
 
 static struct AstExpr *function_body(struct Lex *lex)

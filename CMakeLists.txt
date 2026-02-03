@@ -20,7 +20,7 @@ set(PAW_BINARY_DIR "" CACHE PATH "Location of compilation artifacts")
 
 # TODO: installation support
 # TODO:   PAW_ROOT_DIR=("paw", "paw_stdc.o", <stdlib sources>)
-set(PAW_ROOT_DIR ${CMAKE_ROOT_DIR})
+set(PAW_ROOT_DIR ${CMAKE_BINARY_DIR}/src/codegen)
 
 find_package(LLVM REQUIRED CONFIG)
 add_definitions(${LLVM_DEFINITIONS})
@@ -76,6 +76,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/pool.h
     ${PAW_SOURCE_DIR}/prefix.h
     ${PAW_SOURCE_DIR}/resolve.h
+    ${PAW_SOURCE_DIR}/solve.h
     ${PAW_SOURCE_DIR}/source.h
     ${PAW_SOURCE_DIR}/ssa.h
     ${PAW_SOURCE_DIR}/stats.h
@@ -125,6 +126,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/parse.c
     ${PAW_SOURCE_DIR}/pool.c
     ${PAW_SOURCE_DIR}/resolve.c
+    ${PAW_SOURCE_DIR}/solve.c
     ${PAW_SOURCE_DIR}/source.c
     ${PAW_SOURCE_DIR}/ssa.c
     ${PAW_SOURCE_DIR}/stats.c

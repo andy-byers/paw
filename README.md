@@ -259,8 +259,8 @@ pub fn main() {
 ## Error handling
 Paw uses `Result<T, E>` to express a recoverable error, e.g. "no such file or directory".
 Runtime panics are issued for unrecoverable errors, e.g. "out of memory", an assertion failure, or an out-of-bounds element access.
-Panics cannot be caught inside Paw.
-A panic always stops execution at the location of the panic and causes the VM entrpoint function to return with an error.
+Panics cannot be caught.
+A panic always stops execution at the location of the panic and exits the process with a nonzero status code.
 A panic can also be caused by calling the `panic` builtin function.
 
 ## Operators
@@ -283,9 +283,13 @@ A panic can also be caused by calling the `panic` builtin function.
 |1         |`= op=`                  |Assignment, operator assignment              |Right        |
 
 ## Roadmap
++ [ ] ensure mangling produces a unique name
++ [ ] prevent duplicate methods across compatible inherent impl blocks
++ [x] parameterize methods and associated functions on the type parameters of their containing impl blocks, as well as their own type parameters, then get rid of IrSignature::self member
++ [x] consider collecting generic bounds into predicate lists to be validated after the main unification routine
 + [ ] add check to make sure implemented trait methods are compatible with trait declarations
 + [ ] make sure to complain when generic params not mentioned on context of impl block. i.e. `impl<T> Trait<T> for Type {...}` is an error if `Type` has generic parameters.
-+ [ ] consider using `mut` to indicate mutability and make immutable the default for local variables
++ [ ] consider using `mut` to indicate mutability and make immutable the default for locals and arguments
 + [ ] consider implementing either RAII or "defer" for cleaning up resources
 + [ ] add overflow checks for `paw_Int` operations during constant folding and codegen
 

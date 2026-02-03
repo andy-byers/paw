@@ -122,8 +122,8 @@ pub inline struct RangeIterator<T: Compare + Increment> {
     iter: T,
 }
 
-impl<Tyy: Compare + Increment> RangeIterator<Tyy> {
-    pub fn new(range: Range<Tyy>) -> Self {
+impl<Ty: Compare + Increment> RangeIterator<Ty> {
+    pub fn new(range: Range<Ty>) -> Self {
         Self{iter: range.start, end: range.end}
     }
 }

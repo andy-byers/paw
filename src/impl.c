@@ -4,6 +4,7 @@
 
 #include "impl.h"
 #include "ir_type.h"
+#include "solve.h"
 #include "type_folder.h"
 #include "unify.h"
 
@@ -26,8 +27,19 @@
 // t.f(t);
 //
 
-#warning remove
-#include"stdio.h"
+#define TODO (struct SourceLoc){0}
+
+struct Candidate {
+    IrType *context;
+    DeclId fn_did;
+};
+
+DEFINE_LIST(struct Compiler, Candidates, struct Candidate)
+
+static IrType *type_of_generic(struct Compiler *C, struct IrGenericDef const *g)
+{
+    return pawIr_new_generic(C, g->did);
+}
 
 static Str const *name_of_method(struct Compiler *C, IrType *type)
 {
@@ -36,196 +48,158 @@ static Str const *name_of_method(struct Compiler *C, IrType *type)
     return def->name;
 }
 
-static struct Instantiation instantiate_impl_assoc(struct Compiler *C, struct SourceLoc loc, IrType *base, IrType *type, IrTypeList *binder, IrType *method)
+static struct Instantiation instantiate_impl_assoc(struct Compiler *C, IrType *base, IrType *type, IrType *method)
 {
-    if (IrIsTraitObj(base)) {
-        method = pawIr_substitute_self(C, base, type, method);
-        base = type;
-    }
+//TODO    if (IrIsTraitObj(base)) {
+//TODO        method = pawIr_substitute_self(C, base, type, method);
+//TODO        base = type;
+//TODO    }
 
-    struct Substitution subst = {0};
-    if (binder != NULL) {
-        subst.types = pawU_new_unknowns(C->U, loc, binder);
-        subst.generics = binder;
+    method = pawIr_solver_instantiate_type(C->S, IR_TYPE_DID(method));
+    struct Substitution const subst = {
+        pawIr_get_generic_types(C, IR_TYPE_DID(method)),
+        IR_TYPE_SUBTYPES_(method),
+    };
 
-//        struct IrTypeFolder F;
-//        struct Substitution subst;
-//        IrTypeList *type_args = pawU_new_unknowns(C->U, loc, binder);
-//        pawP_init_substitution_folder(&F, C, &subst, binder, type_args);
-//
-//        struct IrSignature *f = IrGetSignature(method);
-//        IrTypeList *params = pawIr_fold_type_list(&F, f->params);
-//        IrType *result = pawIr_fold_type(&F, f->result);
-//        base = pawIr_fold_type(&F, base);
-//
-//        method = pawIr_new_signature(C, f->did, f->types, params, result);
-
-        base = pawP_substitute(C, loc, base, subst);
-        method = pawP_substitute(C, loc, method, subst);
-//        IrGetSignature(method)->self = type;
-    }
-
-    if (pawU_unify(C->U, base, type) != 0)
-        pawErr_generic_error(ENV(C), C->modname, loc, "");
-
-    IrGetSignature(method)->self = type;
     return (struct Instantiation){
         .inst = method,
         .subst = subst,
     };
 }
 
-static paw_Bool find_method_in_list_impl(struct Compiler *C, IrType *base, IrType *self, IrGenericDefs *generics, IrTypeList *methods, Str const *name, struct Instantiation *out)
+static paw_Bool find_method_in_list_impl(struct Compiler *C, IrType *base, IrType *self, IrTypeList *methods, Str const *name, struct Candidate *out)
 {
-    struct SourceLoc const loc = {0};
-
-    IrTypeList *binder = NULL;
-    if (generics != NULL) {
-        binder = IrTypeList_new(C);
-        IrTypeList_reserve(C, binder, generics->count);
-        struct IrGenericDef *const *p;
-        K_LIST_FOREACH (generics, p) {
-            IrType *g = pawIr_new_generic(C, (*p)->did, (*p)->bounds);
-            IrTypeList_push(C, binder, g);
-        }
-    }
-
     IrType *const *p;
     K_LIST_FOREACH (methods, p) {
         if (pawS_eq(name, name_of_method(C, *p))) {
-            *out = instantiate_impl_assoc(C, loc, base, self, binder, *p);
+            out->fn_did = IR_TYPE_DID(*p);
+            out->context = base;
             return PAW_TRUE;
         }
     }
     return PAW_FALSE;
 }
 
-static IrType *find_method_in_list(struct Compiler *C, IrType *self, IrTypeList *methods, Str const *name)
-{
-    struct SourceLoc const loc = {0};
-
-    IrType *const *type_ptr;
-    K_LIST_FOREACH (methods, type_ptr) {
-        if (pawS_eq(name, name_of_method(C, *type_ptr)))
-            return pawP_instantiate_assoc(C, loc, self, *type_ptr).inst;
-    }
-    return NULL;
-}
-
 // Replace generics from the impl block binder with inference types in the
 // context of the receiver type
-static IrType *instantiate_impl(struct Compiler *C, struct SourceLoc loc, struct IrImpl const *impl)
+static IrType *instantiate_impl(IrSolver *S, struct IrImpl const *impl)
 {
-    if (impl->generics == NULL)
-        return impl->type;
-
-    // get a copy of the impl block binder
-    struct IrGenericDef *const *p;
-    IrTypeList *generics = IrTypeList_new(C);
-    IrTypeList_reserve(C, generics, impl->generics->count);
-    K_LIST_FOREACH (impl->generics, p) {
-        IrType *generic = pawIr_get_def_type(C, (*p)->did);
-        IrTypeList_push(C, generics, generic);
-    }
-
-    IrTypeList *types = pawU_new_unknowns(C->U, loc, generics);
-    struct Substitution const subst = {generics, types};
-    return pawP_substitute(C, loc, impl->type, subst);
+    return pawIr_solver_instantiate_impl(S, impl->did).type;
 }
 
-static int check_impl(struct Compiler *C, struct SourceLoc loc, IrType *self, struct IrImpl const *impl)
+// Learn about predicates from the ADT definition
+static void add_context_preconditions(struct Compiler *C, IrSolver *S, IrType *self)
+{
+    IrTypeList *args = IR_TYPE_SUBTYPES_(self);
+    if (args != NULL) {
+        IrTypeList *params = pawIr_get_generic_types(C, IR_TYPE_DID(self));
+        struct Substitution const subst = {params, args};
+
+        IrType *const *p, *const *a;
+        K_LIST_ZIP (params, p, args, a) {
+            IrTraitList *bounds = pawIr_get_trait_bounds(C, IR_TYPE_DID(*p));
+            if (bounds != NULL) {
+                K_LIST_XFOREACH (bounds, IrTrait *const, b) {
+                    IrTrait *t = pawP_substitute_trait(C, TODO, *b, subst);
+                    pawIr_solver_add_precondition(S, *a, t);
+                }
+            }
+        }
+    }
+}
+
+static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrImpl const *impl)
 {
     // save the current position in the unification table
     int const save = pawU_current_position(C->U);
+    IrSolver *S = pawIr_push_solver(C);
+    add_context_preconditions(C, S, self);
 
-    IrType *type = instantiate_impl(C, loc, impl);
-    IrType *copy = pawIr_clone_type(C, self);
-    int const status = pawU_unify(C->U, type, copy);
+    IrType *context = instantiate_impl(S, impl);
+    paw_Bool const matches =
+        pawU_unify(C->U, self, context) == 0
+        // only exclude an impl block from search if there is a trait obligation that
+        // is known to be unsatisfiable (pending obligations might be solved later,
+        // once more types have been inferred)
+        && pawIr_solver_solve(S) >= 0;
 
-    // erase all inference variables created in this function
-    pawU_load_position(C->U, save);
-    return status;
+    // undo all changes to the environment made in this function
+    pawU_undo_unifications(C->U, save);
+    pawIr_solver_rollback(S);
+    pawIr_pop_solver(C);
+    return matches;
 }
-
-DEFINE_LIST(struct Compiler, InstantiationList, struct Instantiation)
 
 struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str *name)
 {
-    struct SourceLoc const loc = {0}; // TODO
-    paw_assert(!IrIsTraitObj(self));
-
-//    if (IrIsTraitObj(self)) {
-//        struct IrTraitObj const *t = IrGetTraitObj(self);
-//        struct IrTraitDef const *def = pawIr_get_trait_def(C, t->did);
-//        return find_method_in_list(C, self, def->methods, name);
-//    }
-
-#define ADD_APPLICABLE_METHODS(Base_, Self_, Binder_, Methods_) do { \
-            struct Instantiation inst; \
-            if (find_method_in_list_impl(C, Base_, Self_, Binder_, Methods_, name, &inst)) \
-                InstantiationList_push(C, result, inst); \
+#define ADD_APPLICABLE_METHODS(Base_, Self_, Methods_) do { \
+            struct Candidate c_; \
+            if (find_method_in_list_impl(C, Base_, Self_, Methods_, name, &c_)) \
+                Candidates_push(C, candidates, c_); \
         } while (0)
 
-    InstantiationList *result = InstantiationList_new(C);
+    Candidates *candidates = Candidates_new(C);
     if (IrIsGeneric(self)) {
         // The receiver is a generic type. Search in traits specified by bounds on
         // the generic type parameter.
-        struct IrGeneric const *t = IrGetGeneric(self);
-
-        IrType *const *bound_ptr;
-        K_LIST_FOREACH (t->bounds, bound_ptr) {
-            struct IrTraitObj const *t = IrGetTraitObj(*bound_ptr);
-            struct IrTraitDef const *def = pawIr_get_trait_def(C, t->did);
-            IrType *base = pawIr_get_def_type(C, def->did);
-            ADD_APPLICABLE_METHODS(base, self, def->generics, def->methods);
+        IrTraitList *bounds = pawIr_get_trait_bounds(C, IR_TYPE_DID(self));
+        if (bounds != NULL) {
+            K_LIST_XFOREACH (bounds, IrTrait *const, p) {
+                struct IrTraitDef const *def = pawIr_get_trait_def(C, (*p)->did);
+                IrType *base = pawIr_get_def_type(C, (*p)->did);
+                ADD_APPLICABLE_METHODS(base, self, def->methods);
+            }
         }
     } else {
-        // The receiver is a nominal type. Search in impl blocks whose "Self" is
+        // The receiver is a concrete type. Search in impl blocks whose "Self" is
         // compatible with the receiver type "self".
-        struct IrAdt const *t = IrGetAdt(self);
 
         // search inherent implementations
-        {
-            IrImplList *const *impls_ptr = IrImplOwners_get(C, C->impls.inherent, t->did);
-            if (impls_ptr != NULL) {
-                struct IrImpl *const *p;
-                K_LIST_FOREACH (*impls_ptr, p) {
-                    struct IrImpl const *impl = *p;
-                    if (check_impl(C, loc, self, impl) == 0)
-                        ADD_APPLICABLE_METHODS(impl->type, self, impl->generics, impl->methods);
-                }
-            }
+        K_LIST_XFOREACH (C->impls.inherent, DeclId const, p) {
+            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
+            if (impl_is_compatible(C, self, impl))
+                ADD_APPLICABLE_METHODS(impl->type, self, impl->methods);
         }
 
         // search trait implementations
-        {
-            IrImplList *const *impls_ptr = IrImplOwners_get(C, C->impls.trait, t->did);
-            if (impls_ptr != NULL) {
-                struct IrImpl *const *p;
-                K_LIST_FOREACH (*impls_ptr, p) {
-                    struct IrImpl const *impl = *p;
-                    if (check_impl(C, loc, self, impl) == 0)
-                        ADD_APPLICABLE_METHODS(impl->type, self, impl->generics, impl->methods);
-                }
-            }
+        K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
+            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
+            if (impl_is_compatible(C, self, impl))
+                ADD_APPLICABLE_METHODS(impl->type, self, impl->methods);
         }
 
         // search blanket implementations
-        {
-            struct IrImpl *const *p;
-            K_LIST_FOREACH (C->impls.blanket, p)
-                ADD_APPLICABLE_METHODS((*p)->type, self, (*p)->generics, (*p)->methods);
+        K_LIST_XFOREACH (C->impls.blanket, DeclId const, p) {
+            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
+            ADD_APPLICABLE_METHODS(impl->type, self, impl->methods);
         }
     }
 
+    if (candidates->count == 0)
+        return NULL;
+
     // TODO: return error indicator
-    if (result->count > 1)
-        pawErr_generic_error(ENV(C), C->modname, loc, "multiple applicable methods");
-    if (result->count == 0) return NULL;
+    if (candidates->count > 1)
+        pawErr_generic_error(ENV(C), C->modname, TODO, "multiple applicable methods");
+
     // allocate return value
+    struct Candidate const result = Candidates_first(candidates);
+    IrType *method = pawIr_solver_instantiate_type(C->S, result.fn_did);
+
+    // apply information known about the context type
+    IrType *context = pawIr_get_context(C, method);
+    int const unused = pawU_unify(C->U, context, self);
+    paw_assert(unused == 0); PAW_UNUSED(unused);
+    method = pawU_normalize(C->U, method);
+
     struct Instantiation *out = P_ALLOC(C, NULL, 0, sizeof(*out));
-    *out = K_LIST_FIRST(result);
+    *out = (struct Instantiation){
+        .subst.generics = pawIr_get_generic_types(C, result.fn_did),
+        .subst.types = IR_TYPE_SUBTYPES_(method),
+        .inst = method,
+    };
     return out;
 
 #undef ADD_APPLICABLE_METHODS
 }
+

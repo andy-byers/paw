@@ -99,7 +99,7 @@ pub fn test_type_alias() {
     let l: L<_> = [1, 2, 3];
     assert(l[-1] == 3);
 
-    type M<K, V> = [K: V];
+    type M<K: Hash + Equals, V> = [K: V];
     let m: M<_, _> = [1: "a", 2: "b", 3: "c"];
     assert(m[3] == "c");
 }

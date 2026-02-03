@@ -5,12 +5,112 @@
 #include "type_folder.h"
 #include "ir_type.h"
 
+static void VisitType(struct IrTypeVisitor *, IrType *);
+
+static void visit_type_list(struct IrTypeVisitor *V, IrTypeList *list)
+{
+    if (list != NULL) {
+        IrType *const *ptype;
+        K_LIST_FOREACH (list, ptype)
+            VisitType(V, *ptype);
+    }
+}
+
+static void VisitPtr(struct IrTypeVisitor *V, struct IrPtr *t)
+{
+    VisitType(V, t->pointee);
+}
+
+static void VisitAdt(struct IrTypeVisitor *V, struct IrAdt *t)
+{
+    V->VisitTypeList(V, t->types);
+}
+
+static void VisitSignature(struct IrTypeVisitor *V, struct IrSignature *t)
+{
+    V->VisitTypeList(V, t->types);
+}
+
+static void VisitFnPtr(struct IrTypeVisitor *V, struct IrFnPtr *t)
+{
+    V->VisitTypeList(V, t->params);
+    VisitType(V, t->result);
+}
+
+static void VisitTuple(struct IrTypeVisitor *V, struct IrTuple *t)
+{
+    V->VisitTypeList(V, t->elems);
+}
+
+static void VisitTrait(struct IrTypeVisitor *V, struct IrTrait *t)
+{
+    V->VisitTypeList(V, t->types);
+}
+
+static void VisitNever(struct IrTypeVisitor *V, struct IrNever *t)
+{
+    PAW_UNUSED(V);
+    PAW_UNUSED(t);
+}
+
+static void VisitType(struct IrTypeVisitor *V, IrType *node)
+{
+    if (node == NULL)
+        return;
+    if (V->VisitType != NULL)
+        V->VisitType(V, node);
+
+    switch (IR_KINDOF(node)) {
+#define DEFINE_ACCEPT(X) \
+    case kIr##X: \
+        if (V->Visit##X != NULL) \
+            V->Visit##X(V, IrGet##X(node)); \
+            break;
+        IR_TYPE_LIST(DEFINE_ACCEPT)
+#undef DEFINE_ACCEPT
+    }
+}
+
+void pawIr_type_visitor_init(struct IrTypeVisitor *V, struct Compiler *C, void *ud)
+{
+    *V = (struct IrTypeVisitor){
+        .ud = ud,
+        .C = C,
+
+        .VisitTrait = VisitTrait,
+        .VisitTypeList = visit_type_list,
+
+        .VisitPtr = VisitPtr,
+        .VisitAdt = VisitAdt,
+        .VisitSignature = VisitSignature,
+        .VisitFnPtr = VisitFnPtr,
+        .VisitTuple = VisitTuple,
+        .VisitNever = VisitNever,
+    };
+}
+
+void pawIr_visit_type(struct IrTypeVisitor *V, IrType *node)
+{
+    VisitType(V, node);
+}
+
+void pawIr_visit_trait(struct IrTypeVisitor *V, IrTrait *node)
+{
+    VisitTrait(V, node);
+}
+
+void pawIr_visit_type_list(struct IrTypeVisitor *V, IrTypeList *list)
+{
+    if (list != NULL)
+        V->VisitTypeList(V, list);
+}
+
+
 static IrType *FoldType(struct IrTypeFolder *, IrType *);
 
 static IrTypeList *fold_type_list(struct IrTypeFolder *F, IrTypeList *list)
 {
-    if (list == NULL)
-        return NULL;
+    if (list == NULL) return NULL;
     IrTypeList *result = IrTypeList_new(F->C);
     IrTypeList_reserve(F->C, result, list->count);
 
@@ -37,12 +137,7 @@ static IrType *FoldAdt(struct IrTypeFolder *F, struct IrAdt *t)
 static IrType *FoldSignature(struct IrTypeFolder *F, struct IrSignature *t)
 {
     IrTypeList *types = F->FoldTypeList(F, t->types);
-    IrTypeList *params = F->FoldTypeList(F, t->params);
-    IrType *result = FoldType(F, t->result);
-    IrType *self = FoldType(F, t->self);
-    IrType *r = pawIr_new_signature(F->C, t->did, types, params, result);
-    IrGetSignature(r)->self = self; // TODO: maybe should store separately
-    return r;
+    return pawIr_new_signature(F->C, t->did, types);
 }
 
 static IrType *FoldFnPtr(struct IrTypeFolder *F, struct IrFnPtr *t)
@@ -58,16 +153,66 @@ static IrType *FoldTuple(struct IrTypeFolder *F, struct IrTuple *t)
     return pawIr_new_tuple(F->C, elems);
 }
 
-static IrType *FoldTraitObj(struct IrTypeFolder *F, struct IrTraitObj *t)
+static IrTrait *FoldTrait(struct IrTypeFolder *F, struct IrTrait *t)
 {
     IrTypeList *types = F->FoldTypeList(F, t->types);
-    return pawIr_new_trait_obj(F->C, t->did, types);
+    return pawIr_new_trait(F->C, t->did, types);
 }
 
 static IrType *FoldNever(struct IrTypeFolder *F, struct IrNever *t)
 {
     PAW_UNUSED(t);
     return pawIr_new_never(F->C);
+}
+
+static IrType *FoldType(struct IrTypeFolder *F, IrType *node)
+{
+    if (node == NULL)
+        return NULL;
+    if (F->FoldType != NULL)
+        node = F->FoldType(F, node);
+
+    switch (IR_KINDOF(node)) {
+#define DEFINE_ACCEPT(X) \
+    case kIr##X: \
+        if (F->Fold##X == NULL) return node; \
+        return F->Fold##X(F, IrGet##X(node));
+        IR_TYPE_LIST(DEFINE_ACCEPT)
+#undef DEFINE_ACCEPT
+    }
+}
+
+void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud)
+{
+    *F = (struct IrTypeFolder){
+        .ud = ud,
+        .C = C,
+
+        .FoldTrait = FoldTrait,
+        .FoldTypeList = fold_type_list,
+
+        .FoldPtr = FoldPtr,
+        .FoldAdt = FoldAdt,
+        .FoldSignature = FoldSignature,
+        .FoldFnPtr = FoldFnPtr,
+        .FoldTuple = FoldTuple,
+        .FoldNever = FoldNever,
+    };
+}
+
+IrType *pawIr_fold_type(struct IrTypeFolder *F, IrType *node)
+{
+    return FoldType(F, node);
+}
+
+IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, IrTypeList *list)
+{
+    return list != NULL ? F->FoldTypeList(F, list) : NULL;
+}
+
+IrTrait *pawIr_fold_trait(struct IrTypeFolder *F, IrTrait *node)
+{
+    return F->FoldTrait(F, node);
 }
 
 static void FoldPat(struct HirVisitor *V, struct HirPat *node)
@@ -91,53 +236,8 @@ static void FoldDecl(struct HirVisitor *V, struct HirDecl *node)
     paw_assert(node != NULL);
     struct IrTypeFolder *F = V->ud;
     IrType *type = GET_NODE_TYPE(F->C, node);
-    SET_NODE_TYPE(F->C, node, pawIr_fold_type(F, type));
-}
-
-static IrType *FoldType(struct IrTypeFolder *F, IrType *node)
-{
-    if (node == NULL)
-        return NULL;
-    if (F->FoldType != NULL)
-        node = F->FoldType(F, node);
-
-    switch (IR_KINDOF(node)) {
-#define DEFINE_ACCEPT(X)        \
-    case kIr##X:                \
-        if (F->Fold##X == NULL) \
-            return node;        \
-        return F->Fold##X(F, IrGet##X(node));
-        IR_TYPE_LIST(DEFINE_ACCEPT)
-#undef DEFINE_ACCEPT
-    }
-}
-
-void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud)
-{
-    *F = (struct IrTypeFolder){
-        .ud = ud,
-        .C = C,
-
-        .FoldTypeList = fold_type_list,
-
-        .FoldPtr = FoldPtr,
-        .FoldAdt = FoldAdt,
-        .FoldSignature = FoldSignature,
-        .FoldFnPtr = FoldFnPtr,
-        .FoldTuple = FoldTuple,
-        .FoldTraitObj = FoldTraitObj,
-        .FoldNever = FoldNever,
-    };
-}
-
-IrType *pawIr_fold_type(struct IrTypeFolder *F, IrType *node)
-{
-    return FoldType(F, node);
-}
-
-IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, IrTypeList *list)
-{
-    return list != NULL ? F->FoldTypeList(F, list) : NULL;
+    if (type != NULL)
+        SET_NODE_TYPE(F->C, node, pawIr_fold_type(F, type));
 }
 
 void pawHir_type_folder_init(struct HirTypeFolder *F, struct Hir *hir, void *ud)
@@ -172,6 +272,7 @@ DEFINE_FOLDERS(decl, Decl)
 DEFINE_FOLDERS(stmt, Stmt)
 DEFINE_FOLDERS(pat, Pat)
 #undef DEFINE_FOLDERS
+
 
 static void FoldPlace(struct MirVisitor *V, struct MirPlace r)
 {

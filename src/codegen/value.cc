@@ -333,8 +333,7 @@ void List::generate_methods(Context &X, ListType *type, List::Methods &m)
     auto *c = X.get_context();
 
     // generate "fn List<T>::push(self, value: T)"
-    {
-        auto *fn = m.push;
+    if (auto *fn = m.push) {
         State state(X, fn);
 
         auto *grow_block = llvm::BasicBlock::Create(*c, "grow", fn->get_fn());
@@ -358,8 +357,7 @@ void List::generate_methods(Context &X, ListType *type, List::Methods &m)
     }
 
     // generate "fn List<T>::pop(self) -> T"
-    {
-        auto *fn = m.pop;
+    if (auto *fn = m.pop) {
         State state(X, fn);
 
         auto *error_block = llvm::BasicBlock::Create(*c, "error", fn->get_fn());
@@ -383,8 +381,7 @@ void List::generate_methods(Context &X, ListType *type, List::Methods &m)
     }
 
     // generate "fn List<T>::insert(self, index: int, value: T)"
-    {
-        auto *fn = m.insert;
+    if (auto *fn = m.insert) {
         State state(X, fn);
 
         auto *check_block = llvm::BasicBlock::Create(*c, "check", fn->get_fn());
@@ -421,8 +418,7 @@ void List::generate_methods(Context &X, ListType *type, List::Methods &m)
     }
 
     // generate "fn List<T>::remove(self, index: int) -> T"
-    {
-        auto *fn = m.remove;
+    if (auto *fn = m.remove) {
         State state(X, fn);
 
         auto *check_block = llvm::BasicBlock::Create(*c, "check", fn->get_fn());
@@ -838,8 +834,7 @@ void Map::generate_methods(Context &X, MapType *type, Map::Methods &methods)
     }
 
     // generate "fn Map<K, V>::get(self, key: K) -> Option<V>"
-    {
-        auto *fn = methods.get;
+    if (auto *fn = methods.get) {
         State state(X, fn);
 
         auto *some_block = llvm::BasicBlock::Create(*c, "some", fn->get_fn());
@@ -880,8 +875,7 @@ void Map::generate_methods(Context &X, MapType *type, Map::Methods &methods)
     }
 
     // generate "fn Map<K, V>::remove(self, key: K)"
-    {
-        auto *fn = methods.remove;
+    if (auto *fn = methods.remove) {
         State state(X, fn);
 
         auto *found_block = llvm::BasicBlock::Create(*c, "found", fn->get_fn());
@@ -945,8 +939,7 @@ void Map::generate_methods(Context &X, MapType *type, Map::Methods &methods)
     }
 
     // generate "fn MapIterator<K, V>::next(self) -> Option<K>"
-    {
-        auto *fn = methods.iterator_next;
+    if (auto *fn = methods.iterator_next) {
         State state(X, fn);
 
         auto *loop_header_block = llvm::BasicBlock::Create(*c, "loop_header", fn->get_fn());

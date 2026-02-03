@@ -1,0 +1,25 @@
+// builtin_impl2.paw
+
+pub trait Sum<T> {
+    fn sum(&self) -> T;
+}
+
+impl Sum<int> for [int] {
+    fn sum(&self) -> int {
+        let total = 0;
+        for i in self {
+            total += i;
+        }
+        total
+    }
+}
+
+pub fn sum_ints<T: Sum<int>>(t: T) -> int {
+    t.sum()
+}
+
+#[test]
+pub fn test() {
+    let list = [1, 2, 3, 4, 5];
+    assert(sum_ints(list) == 15);
+}

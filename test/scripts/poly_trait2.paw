@@ -1,0 +1,60 @@
+// poly_trait2.paw
+
+pub trait TestDefault {
+    fn default() -> Self;
+}
+
+pub trait TestMerge<Rhs> {
+    fn merge(&self, rhs: Rhs) -> Self;
+}
+
+pub trait TestReduce<T: TestMerge<T> + TestDefault> {
+    fn reduce(&self) -> T;
+}
+
+impl<T: TestMerge<T> + TestDefault> TestReduce<T> for [T] {
+    fn reduce(&self) -> T {
+        let total = T::default();
+        for value in self {
+            total = total.merge(value);
+        }
+        total
+    }
+}
+
+impl TestDefault for int {
+    fn default() -> Self {
+       0 
+    }
+}
+
+impl TestMerge<int> for int {
+    fn merge(&self, rhs: Self) -> Self {
+        self + rhs
+    }
+}
+
+impl TestDefault for str {
+    fn default() -> Self {
+       ""
+    }
+}
+
+impl TestMerge<str> for str {
+    fn merge(&self, rhs: Self) -> Self {
+        self ++ rhs
+    }
+}
+
+pub fn reduce<X: TestReduce<Y>, Y: TestMerge<Y> + TestDefault>(x: X) -> Y {
+    x.reduce()
+}
+
+#[test]
+pub fn test() {
+    let list = [1, 2, 3, 4, 5];
+    assert(reduce(list) == 15);
+
+    let list = ["", "H", "ello, wor", "ld!", ""];
+    assert(reduce(list) == "Hello, world!");
+}

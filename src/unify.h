@@ -18,7 +18,9 @@ struct Unifier {
     int depth;
 };
 
-struct IrType *pawU_normalize(UnificationTable *table, struct IrType *a);
+struct IrType *pawU_normalize(struct Unifier *U, struct IrType *a);
+
+struct IrObligations *pawU_steal_obligations(struct Unifier *U);
 
 // Check if 'a' and 'b' are equal without side effects (besides normalization)
 paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b);
@@ -36,10 +38,15 @@ struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct SourceLoc loc, st
 void pawU_enter_binder(struct Unifier *U, Str const *modname);
 void pawU_leave_binder(struct Unifier *U);
 
-// Return true if 'a' is more generic than or equal to 'b', false otherwise
-paw_Bool pawU_is_compat(struct Unifier *U, struct IrType *a, struct IrType *b);
-
 int pawU_current_position(struct Unifier *U);
-void pawU_load_position(struct Unifier *U, int position);
+void pawU_undo_unifications(struct Unifier *U, int position);
+void pawU_discard_variables(struct Unifier *U);
+
+
+static inline void pawU_unify_unchecked(struct Unifier *U, IrType *a, IrType *b)
+{
+    int const unused = pawU_unify(U, a, b);
+    paw_assert(unused == 0); PAW_UNUSED(unused);
+}
 
 #endif // PAW_UNIFY_H

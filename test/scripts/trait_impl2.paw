@@ -1,0 +1,41 @@
+// trait_impl2.paw
+
+pub trait Setter<T> {
+    fn set(&self, t: T);
+}
+
+pub trait Transfer<Outer> {
+    fn transfer<Inner: Setter<Outer>>(&self, value: Inner);
+}
+
+pub struct FirstType<T> {
+    pub value: T,
+}
+
+impl<T> Setter<T> for FirstType<T> {
+    fn set(&self, t: T) {
+        self.value = t;
+    }
+}
+
+pub struct SecondType<T> {
+    pub value: T,
+}
+
+impl<T> Transfer<T> for SecondType<T> {
+    fn transfer<Inner: Setter<T>>(&self, value: Inner) {
+        value.set(self.value);
+    }
+}
+
+const MESSAGE: str = "Hello, world!";
+
+#[test]
+pub fn test() {
+    let first = FirstType{value: ""};
+    let second = SecondType{value: MESSAGE};
+    second.transfer(first);
+    assert(first.value == MESSAGE);
+    assert(second.value == MESSAGE);
+}
+

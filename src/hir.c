@@ -34,7 +34,7 @@ void pawHir_free(struct Hir *hir)
 #define DEFINE_NODE_CONSTRUCTOR(name, T)         \
     struct T *pawHir_new_##name(struct Hir *hir) \
     {                                            \
-        if (hir->C->hir_count == INT_MAX)       \
+        if (hir->C->hir_count == INT_MAX)        \
             pawM_error(ENV(hir));                \
         return NEW_NODE(hir->C, struct T);       \
     }
@@ -287,7 +287,8 @@ static void AcceptTraitDecl(struct HirVisitor *V, struct HirTraitDecl *d)
 static void AcceptConstDecl(struct HirVisitor *V, struct HirConstDecl *d)
 {
     AcceptType(V, d->tag);
-    AcceptExpr(V, d->init);
+    if (d->init != NULL)
+        AcceptExpr(V, d->init);
 }
 
 static void AcceptReturnExpr(struct HirVisitor *V, struct HirReturnExpr *s)
@@ -650,23 +651,10 @@ IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *li
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (list, pdecl) {
         IrType *type = GET_NODE_TYPE(C, *pdecl);
-//        if (IrIsPtr(type)) type = IrGetPtr(type)->pointee;
         IrTypeList_push(C, types, type);
     }
     return types;
 }
-
-enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d)
-{
-    if (pawS_eq(d->ident.name, CSTR(C, CSTR_HASH))) {
-        return TRAIT_HASH;
-    } else if (pawS_eq(d->ident.name, CSTR(C, CSTR_EQUALS))) {
-        return TRAIT_EQUALS;
-    } else {
-        return TRAIT_USER;
-    }
-}
-
 
 struct Printer {
     Buffer *buf;

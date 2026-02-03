@@ -304,32 +304,27 @@ impl<X> Trait<X> for Struct<X> {
 
 struct Marker<T>;
 
-#[test]
-pub fn emit_warning() {
-    println("WARNING: broken tests");
+fn call_method2<A, B, C: Trait<A>>(b: B, c: C) -> (A, B) {
+    c.method(b)
 }
 
-//fn call_method2<A, B, C: Trait<A>>(b: B, c: C) -> (A, B) {
-//    c.method(b)
-//}
-//
-//fn call_assoc_fn<A, B, C: Trait<A>>(a: A, b: B, _: Marker<C>) -> (A, B) {
-//    C::assoc_fn(a, b)
-//}
+fn call_assoc_fn<A, B, C: Trait<A>>(a: A, b: B, _: Marker<C>) -> (A, B) {
+    C::assoc_fn(a, b)
+}
 
-//#[test]
-//pub fn test_call_method2() {
-//    let t = call_method2(true, Struct{value: "abc"});
-//    assert(t.0 == "abc");
-//    assert(t.1 == true);
-//}
-//
-//#[test]
-//pub fn test_call_assoc_fn() {
-//    let t = call_assoc_fn(1, 2.0, Marker::<Struct<int>>);
-//    assert(t.0 == 1);
-//    assert(t.1 == 2.0);
-//}
+#[test]
+pub fn test_call_method2() {
+    let t = call_method2(true, Struct{value: "abc"});
+    assert(t.0 == "abc");
+    assert(t.1 == true);
+}
+
+#[test]
+pub fn test_call_assoc_fn() {
+    let t = call_assoc_fn(1, 2.0, Marker::<Struct<int>>);
+    assert(t.0 == 1);
+    assert(t.1 == 2.0);
+}
 
 pub trait TestConcat<X> {
     fn concat(self, rhs: X) -> Self;
@@ -441,7 +436,7 @@ impl<X: Hash> GetPair<X> for Inner<X> {
     }
 }
 
-struct Outer<X: GetPair<Y>, Y> {
+struct Outer<X: GetPair<Y>, Y: Hash> {
     pub value: X,
 }
 
@@ -486,3 +481,4 @@ impl<D: TestAccept<int>> AcceptInt<int, D> {
 pub fn test_call_accept() {
     AcceptInt::call_accept_zero(Accept::<int>);
 }
+

@@ -42,8 +42,8 @@ DEFINE_MAP(struct SsaConverter, PhiMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirI
 static paw_Bool is_trivial_local(struct SsaConverter *S, MirLocal L)
 {
     // keep result and arguments
-    struct IrFnPtr const *fptr = IR_FPTR(S->mir->type);
-    if (L.value <= fptr->params->count) return PAW_FALSE;
+    IrTypeList const *params = ir_fn_params(S->C, S->mir->type);
+    if (L.value <= params->count) return PAW_FALSE;
 
     struct MirLocalData const data = *mir_local_data(S->mir, L);
     // being captured implies being non-SSA, but a local can be non-SSA for reasons

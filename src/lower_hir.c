@@ -15,7 +15,6 @@
 #include "match.h"
 #include "mir.h"
 #include "ssa.h"
-#include "unify.h"
 
 #define LOWERING_ERROR(L_, Kind_, ...) pawErr_##Kind_((L_)->C, (L_)->pm->name, __VA_ARGS__)
 #define REG_AT(Base_, Offset_) MIR_REG((Base_).value + (Offset_))
@@ -227,6 +226,11 @@ static IrType *get_builtin_type(struct LowerHir *L, enum BuiltinKind kind)
 static IrType *get_type(struct LowerHir *L, NodeId id)
 {
     return pawIr_get_type(L->C, id);
+}
+
+static IrType *type_of(struct LowerHir *L, struct HirType *type)
+{
+    return get_type(L, type->hdr.id);
 }
 
 static paw_Bool is_scalar_type(struct FunctionState *fs, IrType *type)
@@ -686,8 +690,9 @@ struct MirInstruction *terminate_switch(struct FunctionState *fs, struct SourceL
 
 static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, struct BlockState *bs, struct Mir *mir)
 {
+    struct IrFnPtr const *fn = IrGetFnPtr(IR_GET_FN(L->C, mir->type));
     *fs = (struct FunctionState){
-        .result = IR_FPTR(mir->type)->result,
+        .result = fn->result,
         .registers = mir->registers,
         .up = MirUpvalueList_new(mir),
         .level = L->stack->count,
@@ -712,7 +717,7 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
         .name = SCAN_STR(L->C, PRIVATE("return")),
         .span = mir->span,
     };
-    fs->ret = alloc_local(fs, ident, NO_NODE, fs->result)->r;
+    fs->ret = alloc_local(fs, ident, NO_NODE, fn->result)->r;
     paw_assert(fs->ret.L.value == 0);
     fs->exit = new_bb(fs);
     return entry;
@@ -888,7 +893,7 @@ static struct MirPlace lower_sequence_index(struct HirVisitor *V, struct HirInde
 
     IrType *object_type = GET_NODE_TYPE(fs->C, e->target);
     IrType *index_type = GET_NODE_TYPE(fs->C, e->index);
-    IrType *element_type = pawIr_get_type(fs->C, e->id);
+    IrType *element_type = get_type(L, e->id);
     if (builtin_kind(L, index_type) == BUILTIN_INT) {
         struct MirPlace const index = lower_rvalue(V, e->index);
         return select_sequence_element(fs, object, object_type, index, element_type);
@@ -905,7 +910,7 @@ static struct MirPlace lower_mapping_index(struct HirVisitor *V, struct HirIndex
     struct FunctionState *fs = L->fs;
 
     IrType *target_type = GET_NODE_TYPE(fs->C, e->target);
-    IrType *element_type = pawIr_get_type(fs->C, e->id);
+    IrType *element_type = get_type(L, e->id);
     struct MirPlace const index = lower_rvalue(V, e->index);
 
     return select_mapping_element(fs, object, target_type, index,
@@ -918,7 +923,7 @@ static struct MirPlace lower_selector(struct HirVisitor *V, struct HirSelector *
     struct FunctionState *fs = L->fs;
 
     struct MirPlace const target = lower_lvalue(V, e->target);
-    IrType *field_type = pawIr_get_type(fs->C, e->id);
+    IrType *field_type = get_type(L, e->id);
     return select_field(fs, target, e->index, 0, field_type);
 }
 
@@ -939,7 +944,7 @@ static struct MirPlace lower_index(struct HirVisitor *V, struct HirIndex *e, paw
 static paw_Bool visit_param_decl(struct HirVisitor *V, struct HirParamDecl *d)
 {
     struct LowerHir *L = V->ud;
-    IrType *type = pawIr_get_type(L->C, d->id);
+    IrType *type = get_type(L, d->id);
     type = ir_auto_deref(type);
     L->fs->mir->is_method = d->is_self;
     alloc_local(L->fs, d->ident, d->id, type);
@@ -951,7 +956,7 @@ static paw_Bool visit_let_stmt(struct HirVisitor *V, struct HirLetStmt *s)
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    IrType *type = pawIr_get_type(L->C, s->id);
+    IrType *type = get_type(L, s->pat->hdr.id);
     struct HirBindingPat const *p = HirGetBindingPat(s->pat);
 
     if (s->init != NULL) {
@@ -1649,6 +1654,8 @@ static struct MirPlace lower_variant_constructor(struct HirVisitor *V, struct Hi
     return output;
 }
 
+#warning
+#include"stdio.h"
 static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExpr *callee, struct HirExprList *args_in, MirPlaceList *args_out)
 {
     struct LowerHir *L = V->ud;
@@ -1660,13 +1667,14 @@ static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExp
     struct MirPlace target;
     if (is_method) {
         IrType *fn_type = get_type(L, callee->hdr.id);
+
         // must be a method call since "is_index" is set to 1 for field selectors
         target = new_register(fs, fn_type);
         struct HirSelector const *select = HirGetSelector(callee);
         NEW_INSTR(fs, global, callee->hdr.span.start, target);
 
         // add context argument for method call
-        IrType *self_type = K_LIST_FIRST(IR_FPTR(fn_type)->params);
+        IrType *self_type = K_LIST_FIRST(ir_fn_params(L->C, fn_type));
         struct MirPlace self = self_arg(fs, select->target, self_type);
         MirPlaceList_push(fs->mir, args_out, self);
         mark_nontrivial(fs, self);
@@ -1676,9 +1684,9 @@ static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExp
 
     int offset;
     struct HirExpr *const *pexpr;
-    struct IrFnPtr const *fptr = IR_FPTR(target.type);
+    IrTypeList *params = ir_fn_params(L->C, target.type);
     K_LIST_ENUMERATE (args_in, offset, pexpr) {
-        IrType *type = IrTypeList_get(fptr->params, is_method + offset);
+        IrType *type = IrTypeList_get(params, is_method + offset);
         struct MirPlace arg;
         if (IrIsPtr(type)) {
             arg = rvalue_ptr(fs, *pexpr);
@@ -1709,7 +1717,7 @@ static struct MirPlace lower_call_expr(struct HirVisitor *V, struct HirCallExpr 
     struct MirPlace const result = new_register(fs, get_type(L, e->id));
     NEW_INSTR(fs, call, e->span.start, target, args, result);
 
-    if (IrIsNever(IR_FPTR(target_type)->result)) {
+    if (IrIsNever(ir_fn_result(L->C, target_type))) {
         // this function never returns
         terminate_unreachable(fs, e->span.start);
         set_current_bb(fs, new_bb(fs));
@@ -2254,7 +2262,7 @@ static paw_Bool is_polymorphic_fn(struct LowerHir *L, struct HirFnDecl *fn)
     if (fn->generics != NULL)
         return PAW_TRUE;
 
-    if (fn->parent_id.value != NO_DECL.value) {
+    if (DECL_ID_EXISTS(fn->parent_id)) {
         // check for binder on parent impl block
         struct HirImplDecl *parent = HirGetImplDecl(
                 pawHir_get_decl(L->hir, fn->parent_id));
@@ -2266,16 +2274,15 @@ static paw_Bool is_polymorphic_fn(struct LowerHir *L, struct HirFnDecl *fn)
 
 static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFnDecl *fn)
 {
-    IrType *type = pawIr_get_type(L->C, fn->id);
-    struct IrSignature *fsig = IrGetSignature(type);
-    struct Mir *result = pawMir_new(L->C, L->pm->modno, fn->span, fn->ident.name, fn->annos,
-            type, fsig->self, -1, fn->parent_id, fn->fn_kind, fn->is_pub, is_polymorphic_fn(L, fn));
-    if (fn->body == NULL) return result;
-
-    validate_fn_annotations(L, result);
-    lower_hir_body_aux(L, fn, result);
-    postprocess(result);
-
+    IrType *type = pawIr_get_def_type(L->C, fn->did);
+    struct Mir *result = pawMir_new(L->C, L->pm->modno, fn->span, fn->ident.name,
+            fn->annos, type, pawIr_get_context(L->C, type), -1, fn->parent_id,
+            fn->fn_kind, fn->is_pub, is_polymorphic_fn(L, fn));
+    if (fn->body != NULL) {
+        validate_fn_annotations(L, result);
+        lower_hir_body_aux(L, fn, result);
+        postprocess(result);
+    }
     pawP_callback(L->C, "paw.on_build_mir", result);
     return result;
 }
@@ -2400,6 +2407,13 @@ static void lower_global_constants(struct LowerHir *L)
     }
 }
 
+static paw_Bool is_entrypoint(struct Compiler *C, DeclId did)
+{
+    struct IrFnDef const *def = pawIr_get_fn_def(C, did);
+    if (!DECL_ID_EXISTS(def->parent)) return PAW_TRUE;
+    return pawIr_get_kind(C, def->parent) != IR_TRAIT_DEF;
+}
+
 void pawP_lower_hir(struct Compiler *C)
 {
     BodyMap *result = BodyMap_new(C);
@@ -2427,15 +2441,11 @@ void pawP_lower_hir(struct Compiler *C)
     HirDeclMapIterator_init(L.hir->decls, &iter);
     while (HirDeclMapIterator_is_valid(&iter)) {
         struct HirDecl *decl = *HirDeclMapIterator_valuep(&iter);
-        if (HirIsFnDecl(decl)) {
-            IrType *type = GET_NODE_TYPE(C, decl);
-            struct IrSignature *fsig = IrGetSignature(type);
-            if (fsig->self == NULL || !IrIsTraitObj(fsig->self)) {
-                struct HirFnDecl *d = HirGetFnDecl(decl);
-                L.pm = &K_LIST_AT(L.hir->modules, d->did.modno);
-                struct Mir *r = lower_hir_body(&L, d);
-                BodyMap_insert(C, result, d->did, r);
-            }
+        if (HirIsFnDecl(decl) && is_entrypoint(C, decl->hdr.did)) {
+            struct HirFnDecl *d = HirGetFnDecl(decl);
+            L.pm = &K_LIST_AT(L.hir->modules, d->did.modno);
+            struct Mir *r = lower_hir_body(&L, d);
+            BodyMap_insert(C, result, d->did, r);
         }
         HirDeclMapIterator_next(&iter);
     }

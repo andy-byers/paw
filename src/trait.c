@@ -4,204 +4,46 @@
 
 #include "error.h"
 #include "map.h"
+#include "solve.h"
 #include "type_folder.h"
 #include "unify.h"
 
-#define TRAIT_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, HirModuleList_get((C_)->hir->modules, Modno_).name, __VA_ARGS__)
-
-static void unify(struct Compiler *C, int modno, struct SourceLoc loc, IrType *a, IrType *b)
+static int equals_adaptor(struct Unifier *U, IrType *a, IrType *b)
 {
-    if (pawU_unify(C->U, a, b) != 0) {
-        char const *lhs = pawIr_print_type(C, a);
-        char const *rhs = pawIr_print_type(C, b);
-        TRAIT_ERROR(C, incompatible_types, modno, loc, lhs, rhs);
-    }
+    return pawU_equals(U, a, b) ? 0 : -1;
 }
 
-// TODO: functionality of this and below function can be merged, as well as versions in typeck.c
-static void instantiate_impl_trait(struct Compiler *C, struct SourceLoc loc, struct IrImpl const *impl, IrType **type_out, IrType **trait_out)
+static int aux(struct Compiler *C, IrTrait *a, IrTrait *b, int (*callback)(struct Unifier *, IrType *, IrType *))
 {
-    if (impl->generics == NULL) {
-        *type_out = impl->type;
-        *trait_out = impl->trait;
-        return;
-    }
+    if (a->did.value != b->did.value)
+        return -1;
 
-    struct IrGenericDef *const *p;
-    IrTypeList *generics = IrTypeList_new(C);
-    IrTypeList_reserve(C, generics, impl->generics->count);
-    K_LIST_FOREACH (impl->generics, p) {
-        IrType *generic = pawIr_get_def_type(C, (*p)->did);
-        IrTypeList_push(C, generics, generic);
+    IrType *const *x, *const *y;
+    paw_assert(a->types->count == b->types->count);
+    K_LIST_ZIP (a->types, x, b->types, y) {
+        if (callback(C->U, *x, *y) != 0)
+            return -1;
     }
-
-    struct IrTypeFolder F;
-    struct Substitution subst;
-    IrTypeList *after = pawU_new_unknowns(C->U, loc, generics);
-    pawP_init_substitution_folder(&F, C, &subst, generics, after);
-    *type_out = pawIr_fold_type(&F, impl->type);
-    *trait_out = pawIr_fold_type(&F, impl->trait);
+    return 0;
 }
 
-static IrType *instantiate_impl(struct Compiler *C, struct SourceLoc loc, struct IrImpl const *impl)
+int pawIr_unify_traits(struct Compiler *C, IrTrait *a, IrTrait *b)
 {
-    if (impl->generics == NULL)
-        return impl->type;
-
-    struct IrGenericDef *const *p;
-    IrTypeList *generics = IrTypeList_new(C);
-    IrTypeList_reserve(C, generics, impl->generics->count);
-    K_LIST_FOREACH (impl->generics, p) {
-        IrType *generic = pawIr_get_def_type(C, (*p)->did);
-        IrTypeList_push(C, generics, generic);
-    }
-
-    struct IrTypeFolder F;
-    struct Substitution subst;
-    IrTypeList *after = pawU_new_unknowns(C->U, loc, generics);
-    pawP_init_substitution_folder(&F, C, &subst, generics, after);
-    return pawIr_fold_type(&F, impl->type);
+    return aux(C, a, b, pawU_unify);
 }
 
-static int check_impl(struct Compiler *C, struct SourceLoc loc, IrType *self, struct IrImpl const *impl)
+paw_Bool pawIr_trait_equals(struct Compiler *C, IrTrait *a, IrTrait *b)
 {
-    // save the current position in the unification table
-    int const save = pawU_current_position(C->U);
-
-    IrType *type = instantiate_impl(C, loc, impl);
-    IrType *copy = pawIr_clone_type(C, self);
-    int const status = pawU_unify(C->U, type, copy);
-
-    // erase all inference variables created in this function
-    pawU_load_position(C->U, save);
-    return status;
+    return aux(C, a, b, equals_adaptor) == 0;
 }
 
-static IrTypeList *collect_types(struct Compiler *C, IrTypeList *types)
+IrTrait *pawIr_normalize_trait(struct Compiler *C, IrTrait *trait)
 {
-    IrTypeList *result = IrTypeList_new(C);
-    if (types != NULL) {
-        struct IrType *const *p;
-        K_LIST_FOREACH (types, p) {
-            IrType *type = pawP_generalize(C, (struct SourceLoc){0}, *p);
-            IrTypeList_push(C, result, type);
-        }
+    IrTypeList *types = IrTypeList_new(C);
+    if (trait->types != NULL) {
+        IrTypeList_reserve(C, types, trait->types->count);
+        K_LIST_XFOREACH (trait->types, IrType *const, p)
+            IrTypeList_push(C, types, pawU_normalize(C->U, *p));
     }
-    return result;
-}
-
-static IrTypeList *collect_trait_impls(struct Compiler *C, IrType *self)
-{
-    int const modno = (int)IR_TYPE_DID(self).modno;
-    IrTypeList *result = IrTypeList_new(C);
-    struct SourceLoc const loc = {0};
-
-    // add instantiated trait type from trait impl blocks where the context type is
-    // compatible with "self"
-    {
-        IrImplList *const *impls_ptr = IrImplOwners_get(C, C->impls.trait, IR_TYPE_DID(self));
-        if (impls_ptr != NULL) {
-            struct IrImpl *const *p;
-            K_LIST_FOREACH (*impls_ptr, p) {
-                struct IrImpl const *impl = *p;
-                if (check_impl(C, loc, self, impl) == 0) {
-                    IrType *type, *trait;
-                    instantiate_impl_trait(C, loc, impl, &type, &trait);
-                    unify(C, modno, loc, type, self);
-                    IrTypeList_push(C, result, trait);
-                }
-            }
-        }
-    }
-
-    // add instantiated trait types from blanket impl blocks
-    {
-        struct IrImpl *const *p;
-        K_LIST_FOREACH (C->impls.blanket, p) {
-            struct IrImpl const *impl = *p;
-            // TODO: need to check generic bounds
-//            if (check_impl(C, loc, self, impl) == 0) {
-                IrType *type, *trait;
-                instantiate_impl_trait(C, loc, impl, &type, &trait);
-                unify(C, modno, loc, type, self);
-                IrTypeList_push(C, result, trait);
-//            }
-        }
-    }
-    return result;
-}
-
-paw_Bool pawIr_implements_trait(struct Compiler *C, IrType *type, IrType *trait)
-{
-    IrTypeList *impls;
-    if (IrIsGeneric(type)) {
-        impls = collect_types(C, IrGetGeneric(type)->bounds);
-    } else if (IrIsInfer(type)) {
-        impls = collect_types(C, IrGetInfer(type)->bounds);
-    } else if (IrIsAdt(type)) {
-        impls = collect_trait_impls(C, type);
-    } else {
-        return PAW_FALSE;
-    }
-
-    DeclId const did = IrGetTraitObj(trait)->did;
-
-    IrType *const *p;
-    K_LIST_FOREACH (impls, p) {
-        if (IR_TYPE_DID(*p).value == did.value) {
-//            int const save = pawU_current_position(C->U);
-            if (pawU_unify(C->U, trait, *p) == 0)
-                return PAW_TRUE;
-//            pawU_load_position(C->U, save);
-        }
-    }
-
-    return PAW_FALSE;
-}
-
-paw_Bool pawP_satisfies_bounds(struct Compiler *C, IrType *type, IrTypeList *bounds)
-{
-    if (bounds != NULL) {
-        IrType *const *pbound;
-        K_LIST_FOREACH (bounds, pbound) {
-            if (!pawIr_implements_trait(C, type, *pbound))
-                return PAW_FALSE;
-        }
-    }
-    return PAW_TRUE;
-}
-
-struct TraitSubstitution {
-    IrType *trait;
-    IrType *adt;
-};
-
-static IrType *subst_trait_obj(struct IrTypeFolder *F, struct IrTraitObj *t)
-{
-    struct Compiler *C = F->C;
-    struct TraitSubstitution *subst = F->ud;
-    IrType *type = IR_CAST_TYPE(t);
-    if (pawU_equals(C->U, type, subst->trait)) {
-        return subst->adt;
-    }
-    return type;
-}
-
-IrType *pawIr_substitute_self(struct Compiler *C, IrType *trait, IrType *adt, IrType *method)
-{
-    struct IrTypeFolder F;
-    struct TraitSubstitution subst = {
-        .trait = trait,
-        .adt = adt,
-    };
-    pawIr_type_folder_init(&F, C, &subst);
-    F.FoldTraitObj = subst_trait_obj;
-    struct IrSignature *fsig = IrGetSignature(method);
-    IrTypeList *types = pawIr_fold_type_list(&F, fsig->types);
-    IrTypeList *params = pawIr_fold_type_list(&F, fsig->params);
-    IrType *result = pawIr_fold_type(&F, fsig->result);
-    IrType *fn = pawIr_new_signature(C, fsig->did, types, params, result);
-
-    IrGetSignature(fn)->self = adt;
-    return fn;
+    return pawIr_new_trait(C, trait->did, types);
 }

@@ -16,6 +16,7 @@
 #include "map.h"
 #include "os.h"
 #include "resolve.h"
+#include "solve.h"
 #include "type_folder.h"
 #include "unify.h"
 
@@ -109,7 +110,7 @@ void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     void pawP_lower_hir(struct Compiler *C);
     void pawP_generate_code(struct Compiler *C);
 
-    pawP_parse_module(C, C->modname, input, ud);
+    pawP_parse_module(C, (Str *)C->modname, input, ud);
 
     pawP_resolve_names(C);
     pawP_lower_ast(C);
@@ -120,21 +121,27 @@ void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
 
 enum BuiltinKind pawP_type2code(struct Compiler *C, IrType *type)
 {
-    if (IrIsAdt(type)) {
+    if (IrIsUnit(type)) {
+        return BUILTIN_UNIT;
+    } else if (IrIsBool(type)) {
+        return BUILTIN_BOOL;
+    } else if (IrIsChar(type)) {
+        return BUILTIN_CHAR;
+    } else if (IrIsInt(type)) {
+        return BUILTIN_INT;
+    } else if (IrIsFloat(type)) {
+        return BUILTIN_FLOAT;
+    } else if (IrIsStr(type)) {
+        return BUILTIN_STR;
+    } else if (IrIsAdt(type)) {
         DeclId const base = IR_TYPE_DID(type);
-        if (base.value == C->builtins[BUILTIN_UNIT].did.value) {
-            return BUILTIN_UNIT;
-        } else if (base.value == C->builtins[BUILTIN_BOOL].did.value) {
-            return BUILTIN_BOOL;
-        } else if (base.value == C->builtins[BUILTIN_CHAR].did.value) {
-            return BUILTIN_CHAR;
-        } else if (base.value == C->builtins[BUILTIN_INT].did.value) {
-            return BUILTIN_INT;
-        } else if (base.value == C->builtins[BUILTIN_FLOAT].did.value) {
-            return BUILTIN_FLOAT;
-        } else if (base.value == C->builtins[BUILTIN_STR].did.value) {
-            return BUILTIN_STR;
-        } else if (base.value == C->builtins[BUILTIN_LIST].did.value) {
+        // TODO: these are not types...
+        if (base.value == C->builtins[BUILTIN_HASH].did.value) {
+            return BUILTIN_HASH;
+        } else if (base.value == C->builtins[BUILTIN_EQUALS].did.value) {
+            return BUILTIN_EQUALS;
+        } else
+        if (base.value == C->builtins[BUILTIN_LIST].did.value) {
             return BUILTIN_LIST;
         } else if (base.value == C->builtins[BUILTIN_MAP].did.value) {
             return BUILTIN_MAP;
@@ -142,12 +149,6 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, IrType *type)
             return BUILTIN_OPTION;
         } else if (base.value == C->builtins[BUILTIN_RESULT].did.value) {
             return BUILTIN_RESULT;
-        } else if (base.value == C->builtins[BUILTIN_HASH].did.value) {
-            return BUILTIN_HASH;
-        } else if (base.value == C->builtins[BUILTIN_EQUALS].did.value) {
-            return BUILTIN_EQUALS;
-        } else if (base.value == C->builtins[BUILTIN_COMPARE].did.value) {
-            return BUILTIN_COMPARE;
         } else if (base.value == C->builtins[BUILTIN_RANGE].did.value) {
             return BUILTIN_RANGE;
         } else if (base.value == C->builtins[BUILTIN_RANGE_TO].did.value) {
@@ -174,10 +175,26 @@ struct Builtin *pawP_builtin_info(struct Compiler *C, enum BuiltinKind code)
     return &C->builtins[code];
 }
 
-IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code)
+IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind kind)
 {
-    DeclId const did = pawP_builtin_info(C, code)->did;
-    return pawIr_get_def_type(C, did);
+    switch (kind) {
+        case BUILTIN_UNIT:
+            return pawIr_new_unit(C);
+        case BUILTIN_BOOL:
+            return pawIr_new_bool(C);
+        case BUILTIN_CHAR:
+            return pawIr_new_char(C);
+        case BUILTIN_INT:
+            return pawIr_new_int(C);
+        case BUILTIN_FLOAT:
+            return pawIr_new_float(C);
+        case BUILTIN_STR:
+            return pawIr_new_str(C);
+        default: {
+            DeclId const did = pawP_builtin_info(C, kind)->did;
+            return pawIr_get_def_type(C, did);
+        }
+    }
 }
 
 Str *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n)
@@ -202,7 +219,7 @@ Str *pawP_format_string(struct Compiler *C, char const *fmt, ...)
     return pawL_buffer_finish(P, &buf);
 }
 
-static void define_prelude_adt(struct Compiler *C, unsigned cstr, enum BuiltinKind kind)
+static void register_builtin(struct Compiler *C, unsigned cstr, enum BuiltinKind kind)
 {
     Str *s = CACHED_STRING(ENV(C), cstr);
     C->builtins[kind] = (struct Builtin){
@@ -293,17 +310,23 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
 
     C->main_name = SCAN_STR(C, "main");
 
-    C->globals = GlobalList_new(C);
     C->modinfo = ModuleInfo_new(C);
     C->builtin_lookup = BuiltinMap_new(C);
     C->hir_types = HirTypeMap_new(C);
+    C->self_types = NodeMap_new(C);
+    C->globals = GlobalList_new(C);
+    C->layouts = IrLayoutMap_new(C);
+
     C->def_types = DefTypeMap_new(C);
     C->variant_defs = VariantDefMap_new(C);
     C->trait_defs = TraitDefMap_new(C);
     C->adt_defs = AdtDefMap_new(C);
     C->fn_defs = FnDefMap_new(C);
     C->impl_defs = ImplMap_new(C);
-    C->layouts = IrLayoutMap_new(C);
+    C->generic_defs = GenericDefMap_new(C);
+    C->ir_def_kinds = IrDefKinds_new(C);
+    C->ir_generic_types = IrGenericTypes_new(C);
+    C->ir_trait_bounds = IrTraitBounds_new(C);
 
     C->typesystem.lists = TypeCollection_new(C);
     C->typesystem.maps = TypeCollection_new(C);
@@ -313,14 +336,11 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->typesystem.iterators.list = TypeCollection_new(C);
     C->typesystem.iterators.map = TypeCollection_new(C);
 
-    C->impls.blanket = IrImplList_new(C);
-    C->impls.inherent = IrImplOwners_new(C);
-    C->impls.trait = IrImplOwners_new(C);
+    C->impls.blanket = IrDefs_new(C);
+    C->impls.inherent = IrDefs_new(C);
+    C->impls.trait = IrDefs_new(C);
 
     C->segtab = SegmentTable_new(C);
-
-    C->traits = TraitMap_new(C);
-    C->trait_owners = TraitOwners_new(C);
 
     ModuleInfo_push(C, C->modinfo, (struct Module){
                 .pathname = pathname,
@@ -333,37 +353,37 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->U = P_ALLOC(C, NULL, 0, sizeof(struct Unifier));
     *C->U = (struct Unifier){.C = C};
 
+    C->S = pawIr_push_solver(C);
+
     // builtin primitives
-    define_prelude_adt(C, CSTR_UNIT, BUILTIN_UNIT);
-    define_prelude_adt(C, CSTR_BOOL, BUILTIN_BOOL);
-    define_prelude_adt(C, CSTR_CHAR, BUILTIN_CHAR);
-    define_prelude_adt(C, CSTR_INT, BUILTIN_INT);
-    define_prelude_adt(C, CSTR_FLOAT, BUILTIN_FLOAT);
-    define_prelude_adt(C, CSTR_STR, BUILTIN_STR);
+    register_builtin(C, CSTR_UNIT, BUILTIN_UNIT);
+    register_builtin(C, CSTR_BOOL, BUILTIN_BOOL);
+    register_builtin(C, CSTR_CHAR, BUILTIN_CHAR);
+    register_builtin(C, CSTR_INT, BUILTIN_INT);
+    register_builtin(C, CSTR_FLOAT, BUILTIN_FLOAT);
+    register_builtin(C, CSTR_STR, BUILTIN_STR);
 
     // builtin containers (in Paw code, List<T> can be written as [T], and
     // Map<K, V> as [K: V])
-    define_prelude_adt(C, CSTR_LIST, BUILTIN_LIST);
-    define_prelude_adt(C, CSTR_MAP, BUILTIN_MAP);
+    register_builtin(C, CSTR_LIST, BUILTIN_LIST);
+    register_builtin(C, CSTR_MAP, BUILTIN_MAP);
 
     // builtin ADTs
-    define_prelude_adt(C, CSTR_OPTION, BUILTIN_OPTION);
-    define_prelude_adt(C, CSTR_RESULT, BUILTIN_RESULT);
-    define_prelude_adt(C, CSTR_RANGE, BUILTIN_RANGE);
-    define_prelude_adt(C, CSTR_RANGE_TO, BUILTIN_RANGE_TO);
-    define_prelude_adt(C, CSTR_RANGE_FROM, BUILTIN_RANGE_FROM);
-    define_prelude_adt(C, CSTR_RANGE_FULL, BUILTIN_RANGE_FULL);
-    define_prelude_adt(C, CSTR_RANGE_INCLUSIVE, BUILTIN_RANGE_INCLUSIVE);
-    define_prelude_adt(C, CSTR_RANGE_TO_INCLUSIVE, BUILTIN_RANGE_TO_INCLUSIVE);
-
-    // builtin traits
-    define_prelude_adt(C, CSTR_HASH, BUILTIN_HASH);
-    define_prelude_adt(C, CSTR_EQUALS, BUILTIN_EQUALS);
-    define_prelude_adt(C, CSTR_COMPARE, BUILTIN_COMPARE);
+    register_builtin(C, CSTR_OPTION, BUILTIN_OPTION);
+    register_builtin(C, CSTR_RESULT, BUILTIN_RESULT);
+    register_builtin(C, CSTR_RANGE, BUILTIN_RANGE);
+    register_builtin(C, CSTR_RANGE_TO, BUILTIN_RANGE_TO);
+    register_builtin(C, CSTR_RANGE_FROM, BUILTIN_RANGE_FROM);
+    register_builtin(C, CSTR_RANGE_FULL, BUILTIN_RANGE_FULL);
+    register_builtin(C, CSTR_RANGE_INCLUSIVE, BUILTIN_RANGE_INCLUSIVE);
+    register_builtin(C, CSTR_RANGE_TO_INCLUSIVE, BUILTIN_RANGE_TO_INCLUSIVE);
 
     // builtin iterators
-    define_prelude_adt(C, CSTR_LIST_ITERATOR, BUILTIN_LIST_ITERATOR);
-    define_prelude_adt(C, CSTR_MAP_ITERATOR, BUILTIN_MAP_ITERATOR);
+    register_builtin(C, CSTR_LIST_ITERATOR, BUILTIN_LIST_ITERATOR);
+    register_builtin(C, CSTR_MAP_ITERATOR, BUILTIN_MAP_ITERATOR);
+
+    register_builtin(C, CSTR_HASH, BUILTIN_HASH);
+    register_builtin(C, CSTR_EQUALS, BUILTIN_EQUALS);
 
     // external constant values must be known in the frontend
     set_extern_value(C, "paw_math_PI", F2V(M_PI));
@@ -543,55 +563,55 @@ static void mangle_add_arg(struct Compiler *C, Buffer *buf, IrType *type)
 {
     paw_Env *P = ENV(C);
     switch (type->hdr.kind) {
-        case kIrAdt:
-            switch (pawP_type2code(C, type)) {
-                case BUILTIN_UNIT:
-                    pawL_add_char(P, buf, '0');
-                    break;
-                case BUILTIN_BOOL:
-                    pawL_add_char(P, buf, 'b');
-                    break;
-                case BUILTIN_INT:
-                    pawL_add_char(P, buf, 'i');
-                    break;
-                case BUILTIN_FLOAT:
-                    pawL_add_char(P, buf, 'f');
-                    break;
-                case BUILTIN_STR:
-                    pawL_add_char(P, buf, 's');
-                    break;
-                default: {
-                    struct IrAdt const *adt = IrGetAdt(type);
-                    struct IrAdtDef const *def = pawIr_get_adt_def(C, IR_TYPE_DID(type));
-                    add_string_with_len(P, buf, def->name);
-                    if (adt->types != NULL) {
-                        IrType *const *ptype;
-                        mangle_start_generic_args(C, buf);
-                        K_LIST_FOREACH (adt->types, ptype)
-                            mangle_add_arg(C, buf, *ptype);
-                        mangle_finish_generic_args(C, buf);
-                    }
-                }
+        case kIrUnit:
+            pawL_add_char(P, buf, '0');
+            break;
+        case kIrBool:
+            pawL_add_char(P, buf, 'b');
+            break;
+        case kIrChar:
+            pawL_add_char(P, buf, 'c');
+            break;
+        case kIrInt:
+            pawL_add_char(P, buf, 'i');
+            break;
+        case kIrFloat:
+            pawL_add_char(P, buf, 'f');
+            break;
+        case kIrStr:
+            pawL_add_char(P, buf, 's');
+            break;
+        case kIrAdt: {
+            struct IrAdt const *t = IrGetAdt(type);
+            struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
+            add_string_with_len(P, buf, def->name);
+            // TODO: transition always allocating an IrTypeList object for IrAdt, IrSignature, etc. (remove t->types != NULL check)
+            if (t->types != NULL && t->types->count > 0) {
+                mangle_start_generic_args(C, buf);
+                K_LIST_XFOREACH (t->types, IrType *const, p)
+                    mangle_add_arg(C, buf, *p);
+                mangle_finish_generic_args(C, buf);
             }
             break;
-        case kIrFnPtr:
-        case kIrSignature: {
-            IrType *const *pparam;
-            struct IrFnPtr const *fn = IR_FPTR(type);
+        }
+        case kIrSignature:
+            type = IR_SIGNATURE_FN(C, type);
+            // (fallthrough)
+        case kIrFnPtr: {
+            struct IrFnPtr const *fn = IrGetFnPtr(type);
             pawL_add_char(P, buf, 'F');
-            K_LIST_FOREACH (fn->params, pparam)
-                mangle_add_arg(C, buf, *pparam);
+            K_LIST_XFOREACH (fn->params, IrType *const, p)
+                mangle_add_arg(C, buf, *p);
             pawL_add_char(P, buf, 'E');
-            if (!IrIsAdt(fn->result) || pawP_type2code(C, fn->result) != PAW_TUNIT)
+            if (!IrIsUnit(fn->result))
                 mangle_add_arg(C, buf, fn->result);
             break;
         }
         case kIrTuple: {
-            IrType *const *pelem;
-            struct IrTuple const *tuple = IrGetTuple(type);
+            struct IrTuple const *t = IrGetTuple(type);
             pawL_add_char(P, buf, 'T');
-            K_LIST_FOREACH (tuple->elems, pelem)
-                mangle_add_arg(C, buf, *pelem);
+            K_LIST_XFOREACH (t->elems, IrType *const, p)
+                mangle_add_arg(C, buf, *p);
             pawL_add_char(P, buf, 'E');
             break;
         }
@@ -610,15 +630,13 @@ static void mangle_type(struct Compiler *C, Buffer *buf, IrType *type)
 
 static void mangle_types(struct Compiler *C, Buffer *buf, IrTypeList const *types)
 {
-    if (types == NULL)
-        return;
-    mangle_start_generic_args(C, buf);
-
-    IrType **pt;
-    K_LIST_FOREACH (types, pt)
-        mangle_type(C, buf, *pt);
-
-    mangle_finish_generic_args(C, buf);
+    // TODO: transition always allocating an IrTypeList object for IrAdt, IrSignature, etc. (remove types != NULL check)
+    if (types && types->count > 0) {
+        mangle_start_generic_args(C, buf);
+        K_LIST_XFOREACH (types, IrType *const, p)
+            mangle_type(C, buf, *p);
+        mangle_finish_generic_args(C, buf);
+    }
 }
 
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *C)

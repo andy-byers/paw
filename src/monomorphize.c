@@ -1,5 +1,5 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
-// This source code is licensed under the MIT License, which can be found in
+
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
 // Monomorphization routine:
@@ -21,9 +21,6 @@
 #include "mir.h"
 #include "type_folder.h"
 #include "unify.h"
-
-#warning
-#include"stdio.h"
 
 #define TODO (struct SourceLoc){0}
 
@@ -75,6 +72,11 @@ static void log_instance(struct MonoCollector *M, char const *kind, Str const *n
 #endif
 }
 
+static enum BuiltinKind builtin_kind(struct MonoCollector *M, IrType *type)
+{
+    return pawP_type2code(M->C, type);
+}
+
 static IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneric *t)
 {
     IrType **pa, **pb;
@@ -89,7 +91,7 @@ static IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneric *t)
     return IR_CAST_TYPE(t);
 }
 
-IrType *finalize_type(struct MonoCollector *M, IrType *type)
+static IrType *finalize_type(struct MonoCollector *M, IrType *type)
 {
     struct GenericsState *gs = M->gs;
     while (gs != NULL) {
@@ -296,25 +298,15 @@ static IrType *instantiate_method(struct Compiler *C, IrType *method, IrType *se
 static IrType *copy_type(struct MonoCollector *M, IrType *type)
 {
     if (IrIsSignature(type)) {
-        struct IrSignature *fn = IrGetSignature(type);
-        if (fn->self != NULL) {
-            // determine the "Self" type and look up the concrete method
-            IrType *self = finalize_type(M, fn->self);
+        IrType *self = pawIr_get_context(M->C, type);
+        if (self != NULL) {
+            // fold "Self" type and look up concrete method
+            self = finalize_type(M, self);
             struct IrFnDef *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
             IrType *method = pawP_find_method(M->C, self, def->name)->inst;
-            method = pawP_generalize(M->C, TODO, method);
             type = finalize_type(M, type);
-            if (pawU_unify(M->C->U, type, method) != 0)
-                __builtin_trap();
-//            type = pawP_find_method(M->C, self, def->name);
-//printf("XXX %s\n", pawIr_print_type(M->C, type));
-//            type = instantiate_method(M->C, type, self);
-//printf("    %s\n", pawIr_print_type(M->C, type));
-//            type = instantiate_type(M->C, type, fn->types);
-//printf("    %s\n", pawIr_print_type(M->C, type));
-//    type = finalize_type(M, type);
-//printf("    %s\n", pawIr_print_type(M->C, type));
-    return method;
+            pawU_unify_unchecked(M->C->U, type, method);
+            return pawU_normalize(M->C->U, method);
         }
     }
     return finalize_type(M, type);
@@ -418,7 +410,7 @@ static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir
     if (!base->is_poly) return base;
 
     struct GenericsState gs;
-    enter_generics_context(M, &gs, ir_signature_types(base->type), sig->types);
+    enter_generics_context(M, &gs, ir_signature_types_(base->type), sig->types);
 
     struct Mir *inst = new_mir(M, base, IR_CAST_TYPE(sig), self);
     do_monomorphize(M, base, inst);
@@ -426,35 +418,6 @@ static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir
 
     leave_generics_context(M);
     return inst;
-}
-
-static IrTypeList *get_generic_types(struct MonoCollector *M, IrType *type, IrGenericDefs *defs)
-{
-    if (IrIsGeneric(type)) {
-        IrTypeList *binder = IrTypeList_new(M->C);
-        IrTypeList_push(M->C, binder, type);
-        return binder;
-    }
-
-    IrTypeList *result = IrTypeList_new(M->C);
-    paw_assert(defs->count > 0);
-    IrTypeList_reserve(M->C, result, defs->count);
-    struct IrGenericDef *const *p;
-    K_LIST_FOREACH (defs, p) {
-        IrType *g = pawIr_new_generic(M->C, (*p)->did, (*p)->bounds);
-        IrTypeList_push(M->C, result, g);
-    }
-    return result;
-}
-
-static IrTypeList *get_concrete_types(struct MonoCollector *M, IrType *base, IrType *inst, IrType *inst_method)
-{
-    if (IrIsGeneric(base)) {
-        IrTypeList *binder = IrTypeList_new(M->C);
-        IrTypeList_push(M->C, binder, inst);
-        return binder;
-    }
-    return IR_TYPE_SUBTYPES(inst);
 }
 
 static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *base, struct IrSignature *sig, IrType *self)
@@ -468,49 +431,24 @@ static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *
     // types they were instantiated with. Substitute the former for the latter
     // in the context of the function.
 
-    struct GenericsState gs;
     struct Instantiation const *inst = pawP_find_method(M->C, self, def->name);
-    IrType *method = pawP_generalize(M->C, TODO, inst->inst);
-    if (pawU_unify(M->C->U, IR_CAST_TYPE(sig), method) != 0)
-        __builtin_trap();
-    if (pawU_unify(M->C->U, sig->self, IrGetSignature(method)->self) != 0)
-        __builtin_trap();
-    sig->did = IR_TYPE_DID(method);
-    enter_generics_context(M, &gs, inst->subst.generics, inst->subst.types);
-    struct Mir *result = monomorphize_function_aux(M, base, sig, self);
-    leave_generics_context(M);
-    return result;
+
+    sig->did = IR_TYPE_DID(inst->inst);
+
+    pawU_unify_unchecked(M->C->U, (IrType *)sig, inst->inst);
+//TODO    IrType *fn = IR_SIGNATURE_FN(M->C, inst->inst);
+//TODO    pawU_unify(M->C->U, sig->result, IrGetSignature(inst->inst)->result);
+//TODO    for (int i = 0; i < sig->params->count; ++i)
+//TODO        pawU_unify(M->C->U, sig->params->data[i], IrGetSignature(inst->inst)->params->data[i]);
+
+    sig = (struct IrSignature *)pawU_normalize(M->C->U, (IrType *)sig);
+
+    return monomorphize_function_aux(M, base, sig, self);
 }
 
 static paw_Bool test_types(struct MonoCollector *M, IrType *a, IrType *b)
 {
-    struct Compiler *C = M->C;
-    if (!pawIr_type_equals(C, a, b))
-        return PAW_FALSE;
-
-    if (IrIsSignature(a)) {
-        struct IrSignature *sa = IrGetSignature(a);
-        struct IrSignature *sb = IrGetSignature(b);
-
-        if (!sa->self != !sb->self
-                || (sa->self != NULL && !test_types(M, sa->self, sb->self))
-                || !sa->types != !sb->types)
-            return PAW_FALSE;
-
-        if (sa->types != NULL) {
-            // Type arguments must be checked on functions. Though they are not required
-            // to appear in the function signature, generics might still be used to
-            // specify different behavior. This happens, for example, when a polymorphic
-            // function has a generic parameter with a trait bound that allows an
-            // associated function to be called.
-            IrType *const *pa, *const *pb;
-            K_LIST_ZIP(sa->types, pa, sb->types, pb) {
-                if (!test_types(M, *pa, *pb))
-                    return PAW_FALSE;
-            }
-        }
-    }
-    return PAW_TRUE;
+    return pawIr_type_equals(M->C, a, b);
 }
 
 static IrType *cannonicalize_fn(struct MonoCollector *M, IrTypeList *monos, IrType *type)
@@ -566,89 +504,9 @@ static IrTypeList *mono_list_for_decl(struct MonoCollector *M, DeclMonoMap *list
     return monos;
 }
 
-static IrType *register_method(struct MonoCollector *M, struct IrSignature *t);
-
-// Register "hash" and "eq" methods required for a type to be used as a map key
-// Both functions are called by the runtime, but not necessarily by Paw code.
-static void register_map_methods(struct MonoCollector *M, IrType *type)
-{
-    IrType *key = ir_map_key(type);
-    struct TraitOwnerList *owners = pawP_get_trait_owners(M->C, key);
-
-    IrTypeList **pequals_list = &K_LIST_AT(owners, TRAIT_EQUALS);
-    if (*pequals_list == NULL) {
-        IrType *equals = pawP_find_method(M->C, key, SCAN_STR(M->C, "eq"))->inst;
-        equals = instantiate_method(M->C, equals, key);
-        register_method(M, IrGetSignature(equals));
-        *pequals_list = IrTypeList_new(M->C);
-        IrTypeList_push(M->C, *pequals_list, equals);
-        TraitOwnerList_set(owners, TRAIT_EQUALS, *pequals_list);
-    }
-
-    IrTypeList **phash_list = &K_LIST_AT(owners, TRAIT_HASH);
-    if (*phash_list == NULL) {
-        IrType *hash = pawP_find_method(M->C, key, SCAN_STR(M->C, "hash"))->inst;
-        hash = instantiate_method(M->C, hash, key);
-        register_method(M, IrGetSignature(hash));
-        *phash_list = IrTypeList_new(M->C);
-        IrTypeList_push(M->C, *phash_list, hash);
-        TraitOwnerList_set(owners, TRAIT_HASH, *phash_list);
-    }
-}
+static IrType *register_method(struct MonoCollector *M, struct IrSignature *t, IrType *self);
 
 static IrType *register_function(struct MonoCollector *M, struct IrSignature *t);
-
-// Instantiate and collect all methods declared on the given stdlib ADT instance
-// Needed so that functions generated in "codegen.cc" can find the methods they
-// depend on.
-static void instantiate_std_methods(struct MonoCollector *M, IrType *inst)
-{
-    struct Compiler *C = M->C;
-    DeclId const did = IR_TYPE_DID(inst);
-    Str const *modname = ModuleInfo_get(M->C->modinfo, (int)did.modno).name;
-    if (!pawL_is_std_name(modname->text)) return;
-
-    // TODO: This needs to be fixed...
-
-    {
-        struct IrImplList *const *impls_ptr = IrImplOwners_get(M->C, M->C->impls.inherent, did);
-        if (impls_ptr != NULL) {
-            struct IrImplList *impls = *impls_ptr;
-            paw_assert(impls->count == 1);
-
-            IrType *const *pmethod;
-            IrTypeList *args = IR_TYPE_SUBTYPES(inst);
-            struct IrImpl const *impl = IrImplList_first(impls);
-            K_LIST_FOREACH (impl->methods, pmethod) {
-                IrType *method = args == NULL ? *pmethod
-                    : pawP_instantiate_method(C, impl->type, args, *pmethod);
-                register_method(M, IrGetSignature(method));
-            }
-        }
-    }
-
-    {
-        struct IrImplList *const *impls_ptr = IrImplOwners_get(M->C, M->C->impls.trait, did);
-        if (impls_ptr != NULL) {
-            struct IrImpl *const *impl_ptr;
-            K_LIST_FOREACH (*impls_ptr, impl_ptr) {
-                IrType *const *pmethod;
-                IrTypeList *args = IR_TYPE_SUBTYPES(inst);
-                struct IrImpl const *impl = *impl_ptr;
-                if (pawP_type2code(M->C, inst) == BUILTIN_LIST) {
-                    struct IrTraitDef const *def = pawIr_get_trait_def(M->C, IR_TYPE_DID(impl->trait));
-                    if (pawS_eq(def->name, SCAN_STR(M->C, "Equals")))
-                        continue;
-                }
-                K_LIST_FOREACH (impl->methods, pmethod) {
-                    IrType *method = args == NULL ? *pmethod
-                        : pawP_instantiate_method(C, impl->type, args, *pmethod);
-                    register_method(M, IrGetSignature(method));
-                }
-            }
-        }
-    }
-}
 
 static IrType *cannonicalize_adt(struct MonoCollector *M, IrTypeList *monos, IrType *type)
 {
@@ -659,7 +517,6 @@ static IrType *cannonicalize_adt(struct MonoCollector *M, IrTypeList *monos, IrT
     }
     IrTypeList_push(M->C, M->types, type);
     IrTypeList_push(M->C, monos, type);
-    instantiate_std_methods(M, type);
 
     // catch infinitely-sized inline aggregates
     pawIr_compute_layout(M->C, type);
@@ -678,17 +535,18 @@ static IrType *register_function(struct MonoCollector *M, struct IrSignature *t)
     return cannonicalize_fn(M, monos, IR_CAST_TYPE(t));
 }
 
-static IrType *register_method(struct MonoCollector *M, struct IrSignature *t)
+static IrType *register_method(struct MonoCollector *M, struct IrSignature *t, IrType *self)
 {
-    t->self = IrIsAdt(t->self) ? collect_adt(M, IrGetAdt(t->self)) : t->self;
-    IrTypeList *monos = mono_list_for_type(M, M->methods, t->self);
+    self = IrIsAdt(self) ? collect_adt(M, IrGetAdt(self)) : self;
+    IrTypeList *monos = mono_list_for_type(M, M->methods, self);
     return cannonicalize_method(M, monos, IR_CAST_TYPE(t));
 }
 
 static IrType *collect_signature(struct MonoCollector *M, struct IrSignature *t)
 {
-    if (t->self != NULL)
-        return register_method(M, t);
+    IrType *self = pawIr_get_context(M->C, IR_CAST_TYPE(t));
+    if (self != NULL)
+        return register_method(M, t, self);
     return register_function(M, t);
 }
 
@@ -698,9 +556,10 @@ static struct Mir *monomorphize(struct MonoCollector *M, IrType *type)
     struct Mir *base = *BodyMap_get(M->C, M->bodies, t->did); // must exist
     if (!base->is_poly) return base;
 
-    return t->self == NULL
+    IrType *self = pawIr_get_context(M->C, type);
+    return self == NULL
                ? monomorphize_function_aux(M, base, t, NULL)
-               : monomorphize_method_aux(M, base, t, t->self);
+               : monomorphize_method_aux(M, base, t, self);
 }
 
 static IrType *collect_other(struct MonoCollector *M, IrType *type)
@@ -714,10 +573,15 @@ static IrType *collect_other(struct MonoCollector *M, IrType *type)
     return type;
 }
 
+static void register_special_dependencies(struct MonoCollector *M, IrType *type);
+static void register_std_methods(struct MonoCollector *M, IrType *type);
+
 static IrType *collect_type(struct IrTypeFolder *F, IrType *type)
 {
     struct MirTypeFolder *outer = F->ud;
     struct MonoCollector *M = outer->ud;
+
+    register_special_dependencies(M, type);
 
     paw_assert(!IrIsGeneric(type) && !IrIsInfer(type));
     if (IrIsAdt(type))
@@ -727,19 +591,31 @@ static IrType *collect_type(struct IrTypeFolder *F, IrType *type)
     return collect_other(M, type);
 }
 
+static void register_special_dependencies(struct MonoCollector *M, IrType *type)
+{
+#define COLLECT_METHOD(Type_, Name_) do { \
+    struct Instantiation *inst = pawP_find_method(M->C, type, SCAN_STR(M->C, Name_)); \
+    if (inst != NULL) collect_type(&M->F->F, inst->inst); \
+} while (0)
+
+    switch (builtin_kind(M, type)) {
+        case BUILTIN_LIST:
+            COLLECT_METHOD(type, "push");
+            break;
+        case BUILTIN_MAP:
+            COLLECT_METHOD(type, "key_hash");
+            COLLECT_METHOD(type, "key_eq");
+            break;
+        default:
+            break;
+    }
+
+#undef COLLECT_METHOD
+}
+
 static paw_Bool is_entrypoint(struct Mir const *mir)
 {
     return mir->is_pub && !mir->is_poly;
-}
-
-static void monomorphize_builtin_method(struct MonoCollector *M, IrType *adt, char const *name)
-{
-    IrType *method_type = pawP_find_method(M->C, adt, SCAN_STR(M->C, name))->inst;
-    struct IrSignature *signature = IrGetSignature(method_type);
-    struct Mir *const *pbody = BodyMap_get(M->C, M->bodies, signature->did);
-    paw_assert(pbody != NULL);
-
-    monomorphize_method_aux(M, *pbody, signature, adt);
 }
 
 struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
@@ -789,6 +665,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
         pawMir_fold(M.F, body);
     }
 
+    pawU_discard_variables(C->U);
     pawU_leave_binder(C->U);
 
     IrType *const *pother;

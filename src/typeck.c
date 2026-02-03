@@ -15,6 +15,7 @@
 #include "ir_type.h"
 #include "map.h"
 #include "parse.h"
+#include "solve.h"
 #include "str.h"
 #include "type_folder.h"
 #include "unify.h"
@@ -23,10 +24,12 @@
 #define TYPE2CODE(T_, Type_) pawP_type2code((T_)->C, Type_)
 #define NODE_START(Node_) ((Node_)->hdr.span.start)
 #define NODE_END(Node_) ((Node_)->hdr.span.end)
-#define GET_TYPE(T_, Id_) pawIr_get_type((T_)->C, Id_)
+#define GET_TYPE(T_, Id_) pawU_normalize((T_)->U, pawIr_get_type((T_)->C, Id_))
 #define SET_TYPE(T_, Id_, Type_) pawIr_set_type((T_)->C, Id_, Type_)
 
 #define TYPECK_ERROR(T_, Kind_, ...) pawErr_##Kind_((T_)->C, (T_)->pm->name, __VA_ARGS__)
+
+#define TODO (struct SourceLoc){0}
 
 enum BlockKind {
     BLOCK_NORMAL,
@@ -156,19 +159,43 @@ static IrTypeList *check_type_list(struct TypeChecker *T, struct HirTypeList *li
     return result;
 }
 
-static IrType *normalize(struct TypeChecker *T, IrType *type)
+#include"stdio.h"
+static int solve_pending_obligations(struct TypeChecker *T)
 {
-    return pawU_normalize(T->U->table, type);
+    int const remaining = pawIr_solver_solve(T->C->S);
+    if (remaining < 0)
+        pawErr_generic_error(ENV(T), T->pm->name, TODO, "unsatisfiable trait obligation");
+    return remaining;
 }
 
-static IrType *unify(struct TypeChecker *T, struct SourceLoc loc, IrType *a, IrType *b)
+static IrType *normalize_type(struct TypeChecker *T, IrType *type)
+{
+    return pawU_normalize(T->U, type);
+}
+
+static IrTrait *normalize_trait(struct TypeChecker *T, IrTrait *trait)
+{
+    return pawIr_normalize_trait(T->C, trait);
+}
+
+static IrType *unify_types(struct TypeChecker *T, struct SourceLoc loc, IrType *a, IrType *b)
 {
     if (pawU_unify(T->U, a, b) != 0) {
-        char const *lhs = pawIr_print_type(T->C, a);
-        char const *rhs = pawIr_print_type(T->C, b);
+        char const *lhs = pawIr_print_type(T->C, pawU_normalize(T->U, a));
+        char const *rhs = pawIr_print_type(T->C, pawU_normalize(T->U, b));
         TYPECK_ERROR(T, incompatible_types, loc, lhs, rhs);
     }
-    return IrIsNever(a) ? b : a;
+    return normalize_type(T, IrIsNever(a) ? b : a);
+}
+
+static IrTrait *unify_traits(struct TypeChecker *T, struct SourceLoc loc, IrTrait *a, IrTrait *b)
+{
+    if (pawIr_unify_traits(T->C, a, b) != 0) {
+        char const *lhs = pawIr_print_trait(T->C, normalize_trait(T, a));
+        char const *rhs = pawIr_print_trait(T->C, normalize_trait(T, b));
+        TYPECK_ERROR(T, incompatible_types, loc, lhs, rhs);
+    }
+    return normalize_trait(T, a);
 }
 
 static struct HirDecl *get_decl(struct TypeChecker *T, DeclId did)
@@ -176,19 +203,19 @@ static struct HirDecl *get_decl(struct TypeChecker *T, DeclId did)
     return pawHir_get_decl(T->hir, did);
 }
 
-static IrType *builtin_type(struct TypeChecker *T, enum BuiltinKind code)
+static IrType *builtin_type(struct TypeChecker *T, enum BuiltinKind kind)
 {
-    return pawP_builtin_type(T->C, code);
+    return pawP_builtin_type(T->C, kind);
 }
 
 static IrType *unify_unit_type(struct TypeChecker *T, struct SourceLoc loc, IrType *type)
 {
-    return unify(T, loc, type, builtin_type(T, BUILTIN_UNIT));
+    return unify_types(T, loc, type, builtin_type(T, BUILTIN_UNIT));
 }
 
 static IrType *unify_never_type(struct TypeChecker *T, struct SourceLoc loc, IrType *type)
 {
-    return unify(T, loc, type, pawIr_new_never(T->C));
+    return unify_types(T, loc, type, pawIr_new_never(T->C));
 }
 
 static paw_Bool is_unit_variant(struct TypeChecker *T, IrType *type)
@@ -208,26 +235,26 @@ static struct HirAdtDecl *get_adt(struct TypeChecker *T, IrType *type)
 
 static void require_trait(struct TypeChecker *T, IrType *type, enum TraitKind kind)
 {
-    struct IrInfer *t = IrGetInfer(type);
-    if (t->bounds == NULL) t->bounds = IrTypeList_new(T->C);
     enum BuiltinKind k = kind == TRAIT_HASH ? BUILTIN_HASH : BUILTIN_EQUALS;
-    struct HirDecl *decl = get_decl(T, T->C->builtins[k].did);
-    IrType *trait = GET_NODE_TYPE(T->C, decl);
-    IrTypeList_push(T->C, t->bounds, trait);
+    DeclId const did = T->C->builtins[k].did;
+
+    IrTypeList *args = IrTypeList_new(T->C);
+    IrTypeList_push(T->C, args, type);
+
+    IrTrait *trait = pawIr_solver_instantiate_trait_with(T->C->S, did, args);
+    pawIr_solver_add_obligation(T->C->S, type, trait);
 }
 
 static IrType *maybe_unit_variant(struct TypeChecker *T, struct SourceSpan span, IrType *type)
 {
     if (IrIsSignature(type)) {
         // handle enumerators with no fields
-        struct HirDecl *decl = get_decl(T, IrGetSignature(type)->did);
-        if (HirIsVariantDecl(decl)) {
-            struct HirVariantDecl *d = HirGetVariantDecl(decl);
-            if (d->fields->count > 0) {
-                struct IrVariantDef *def = pawIr_get_variant_def(T->C, d->did);
+        enum IrDefKind const kind = pawIr_get_kind(T->C, IR_TYPE_DID(type));
+        if (kind == IR_VARIANT_DEF) {
+            struct IrVariantDef *def = pawIr_get_variant_def(T->C, IR_TYPE_DID(type));
+            if (def->fields->count > 0)
                 TYPECK_ERROR(T, missing_variant_args, span.start, def->name->text);
-            }
-            return IR_FPTR(type)->result;
+            return pawIr_get_context(T->C, type);
         }
     }
     return type;
@@ -251,9 +278,12 @@ static IrType *check_operand(struct TypeChecker *T, struct HirExpr *expr)
         struct HirDecl *decl = get_decl(T, IrGetSignature(type)->did);
         if (!HirIsVariantDecl(decl)) {
             // erase identity of function
-            struct IrSignature const *f = IrGetSignature(type);
-            IrTypeList *params = copy_typelist(T, f->params);
-            return pawIr_new_fn_ptr(T->C, params, f->result);
+            struct IrFnPtr const *fn = IrGetFnPtr(IR_GET_FN(T->C, type));
+            IrTypeList *params = copy_typelist(T, fn->params);
+            return pawIr_new_fn_ptr(T->C, params, fn->result);
+//TODO            struct IrSignature const *f = IrGetSignature(type);
+//TODO            IrTypeList *params = copy_typelist(T, f->params);
+//TODO            return pawIr_new_fn_ptr(T->C, params, f->result);
         }
     }
     return type;
@@ -262,13 +292,13 @@ static IrType *check_operand(struct TypeChecker *T, struct HirExpr *expr)
 static void expect_bool_expr(struct TypeChecker *T, struct HirExpr *e)
 {
     IrType *type = check_operand(T, e);
-    unify(T, NODE_START(e), type, builtin_type(T, BUILTIN_BOOL));
+    unify_types(T, NODE_START(e), type, builtin_type(T, BUILTIN_BOOL));
 }
 
 static void expect_int_expr(struct TypeChecker *T, struct HirExpr *e)
 {
     IrType *type = check_operand(T, e);
-    unify(T, NODE_START(e), type, builtin_type(T, BUILTIN_INT));
+    unify_types(T, NODE_START(e), type, builtin_type(T, BUILTIN_INT));
 }
 
 static IrTypeList *check_exprs(struct TypeChecker *T, struct HirExprList *list)
@@ -369,7 +399,7 @@ static IrType *check_block(struct TypeChecker *T, struct HirBlock *block)
     check_stmt_list(T, block->stmts);
     if (block->result != NULL) {
         IrType *result = check_operand(T, block->result);
-        bs.result = unify(T, block->span.start, result, bs.result);
+        bs.result = unify_types(T, block->span.start, result, bs.result);
     } else {
         unify_unit_type(T, block->span.start, bs.result);
     }
@@ -403,9 +433,10 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     struct BlockState bs;
     enter_block(T, &bs, d->span, BLOCK_NORMAL);
 
+    pawIr_solver_add_preconditions_from(T->C->S, d->did);
     IrType *result = check_operand(T, d->body);
-    bs.result = unify(T, d->span.start, result, bs.result);
-    unify(T, d->span.start, bs.result, ret);
+    bs.result = unify_types(T, d->span.start, result, bs.result);
+    unify_types(T, d->span.start, bs.result, ret);
 
     leave_block(T);
     T->rs = rs.outer;
@@ -447,10 +478,17 @@ static IrTypeList *instantiate_fields(struct Compiler *C, IrType *self, struct H
     return pawIr_fold_type_list(&F, field_types);
 }
 
-static IrType *instantiate(struct TypeChecker *T, struct SourceLoc loc, IrType *base, IrTypeList *types)
+static IrType *instantiate(struct TypeChecker *T, IrType *base, IrTypeList *types)
 {
-    if (types == NULL) return pawP_generalize(T->C, loc, base);
-    return pawP_instantiate(T->C, base, types);
+    if (IrIsGeneric(base) || IrIsTuple(base) || IrIsFnPtr(base) || IrIsPtr(base) || IS_BASIC_TYPE(pawP_type2code(T->C, base)))
+        return base;
+
+    if (IR_TYPE_SUBTYPES_(base) == NULL || (IrIsSignature(base) && IR_TYPE_SUBTYPES_(base)->count == 0))
+        return base;
+
+    return types != NULL
+        ? pawIr_solver_instantiate_type_with(T->C->S, IR_TYPE_DID(base), types)
+        : pawIr_solver_instantiate_type(T->C->S, IR_TYPE_DID(base));
 }
 
 static paw_Bool is_enum_decl(struct HirDecl *decl)
@@ -475,7 +513,7 @@ static IrType *lower_adt_segment(struct TypeChecker *T, struct HirSegment segmen
 
     // Instantiate with type arguments, if provided. Otherwise, instantiate with
     // a list of IrInfer types which must be resolved later via unification.
-    return instantiate(T, segment.span.start, type, args);
+    return instantiate(T, type, args);
 }
 
 static IrType *lower_type_path(struct TypeChecker *T, struct HirPath path)
@@ -493,23 +531,21 @@ static void unify_segment_types(struct TypeChecker *T, struct HirSegment segment
     K_LIST_ENUMERATE (segment.types, index, ptype) {
         IrType *a = IrTypeList_get(params, index);
         IrType *b = IrTypeList_get(args, index);
-        unify(T, NODE_START(*ptype), a, b);
+        unify_types(T, NODE_START(*ptype), a, b);
     }
 }
 
 static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name);
 
-static IrType *get_containing_bound(struct Compiler *C, IrType *base, DeclId did)
+static IrTrait *get_containing_bound(struct Compiler *C, IrType *base, DeclId did)
 {
-    IrTypeList *bounds = IrIsGeneric(base)
-        ? IrGetGeneric(base)->bounds
-        : IrGetInfer(base)->bounds;
+    IrTraitList *bounds = pawIr_get_trait_bounds(C, IR_TYPE_DID(base));
+    IrTrait *result /* always set in loop */;
 
-    IrType *result /* always set in loop */;
-
-    IrType *const *b, *const *f;
+    IrTrait *const *b;
     K_LIST_FOREACH (bounds, b) {
-        struct IrTraitDef const *def = pawIr_get_trait_def(C, IR_TYPE_DID(*b));
+        IrType *const *f;
+        struct IrTraitDef const *def = pawIr_get_trait_def(C, (*b)->did);
         K_LIST_FOREACH (def->methods, f) {
             if (IR_TYPE_DID(*f).value == did.value) {
                 result = *b;
@@ -521,8 +557,17 @@ static IrType *get_containing_bound(struct Compiler *C, IrType *base, DeclId did
     return result;
 }
 
-#warning
-#include"stdio.h"
+static IrTypeList *typelist_suffix(struct TypeChecker *T, IrTypeList *types, int n)
+{
+    paw_assert(0 < n && n <= types->count);
+    IrTypeList *suffix = IrTypeList_new(T->C);
+    IrTypeList_reserve(T->C, suffix, n);
+    IrType *const *p = K_LIST_END(types) - n;
+    for (int i = 0; i < n; ++i)
+        IrTypeList_push(T->C, suffix, *p++);
+    return suffix;
+}
+
 static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
 {
     switch (path.kind) {
@@ -548,22 +593,29 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                     TYPECK_ERROR(T, unexpected_type, segment.span.start, repr);
                 }
                 if (IrIsSignature(assoc)) {
-                    base = pawP_generalize(T->C, segment.span.start, base);
+                    base = instantiate(T, base, NULL);
                     return pawP_instantiate_assoc(T->C, segment.span.start, base, assoc).inst;
-                } else {
+                } else { // TODO: need to demonstrate that this branch is hit. add a comment
                     IrType *target = GET_TYPE(T, segment.target);
                     IrTypeList *args = lower_types(T, segment.types);
-                    target = instantiate(T, segment.span.start, target, args);
+                    target = instantiate(T, target, args);
                     return target;
                 }
             } else {
                 IrType *target = GET_TYPE(T, segment.target);
-                IrTypeList *args = lower_types(T, segment.types);
-                target = instantiate(T, segment.span.start, target, args);
+                target = instantiate(T, target, NULL);
+                IrTypeList *args = lower_types(T, segment.types); // TODO: just pass this to instantiate()...
+                if (args != NULL) {
+                    IrTypeList *params = IR_TYPE_SUBTYPES(target);
+                    params = typelist_suffix(T, params, args->count);
+                    unify_segment_types(T, segment, params, args);
+                }
                 return target;
             }
         }
         case HIR_PATH_ASSOC: {
+            // The path refers to an associated function or enum variant:
+            //     format: Name ["::" Types] "::" Name ["::" Types]
             paw_assert(path.segments->count == 2);
             struct HirSegment const first = K_LIST_FIRST(path.segments);
             struct HirSegment const last = K_LIST_LAST(path.segments);
@@ -574,24 +626,26 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             if (last.target.value != INVALID_NODE_ID.value) {
                 // the value was located during name resolution, meaning it must be an enum
                 // variant or a method/associated function called on a type parameter
-                assoc = pawIr_get_type(T->C, last.target);
+                assoc = GET_TYPE(T, last.target);
                 if (IrIsGeneric(base)) {
-                    // "base" is a type parameter, meaning "assoc" must refer to a method
-                    // declared on one of its generic bounds.
+                    paw_assert(first.types == NULL);
                     struct IrSignature const *fn = IrGetSignature(assoc);
-                    IrType *old = pawP_generalize(T->C, first.span.start, fn->self);
-                    assoc = pawP_instantiate_assoc(T->C, first.span.start, old, assoc).inst;
-                    IrType *bound = get_containing_bound(T->C, base, fn->did);
-                    IrType *self = IrGetSignature(assoc)->self;
-                    bound = unify(T, last.span.start, self, bound);
-                    assoc = pawIr_substitute_self(T->C, bound, base, assoc);
+                    assoc = instantiate(T, assoc, NULL);
+                    IrTrait *bound = get_containing_bound(T->C, base, fn->did);
+                    IrType *type_ctx = pawIr_get_context(T->C, assoc);
+                    IrTrait *trait_ctx = pawIr_get_trait_context(T->C, assoc);
+                    unify_types(T, last.span.start, type_ctx, base);
+                    unify_traits(T, last.span.start, trait_ctx, bound);
                 } else {
-                    // "base"
+                    // path refers to a type constructor
                     assoc = pawP_instantiate_assoc(T->C, first.span.start, base, assoc).inst;
+                    if (last.types != NULL)
+                        pawErr_generic_error(ENV(T), T->pm->name, last.span.start,
+                                "unexpected type arguments on type constructor \"%s\"", last.ident.name->text);
                 }
             } else {
-                // The value must be a method or associated function called on an ADT. Such
-                // values cannot be found during name resolution (type information is required).
+                // The value must be an associated function called on an ADT. Such values
+                // cannot be found during name resolution (type information is required).
                 assoc = lookup_method(T->C, base, last.ident.name);
                 if (assoc == NULL)
                     pawErr_generic_error(ENV(T), T->pm->name, last.span.start,
@@ -600,6 +654,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             if (last.types != NULL) {
                 IrTypeList *params = IR_TYPE_SUBTYPES(assoc);
                 IrTypeList *args = lower_types(T, last.types);
+                params = typelist_suffix(T, params, args->count);
                 unify_segment_types(T, last, params, args);
             }
             // fill in rest of possibly unfinished path segment
@@ -633,7 +688,7 @@ static IrType *check_ascription_expr(struct TypeChecker *T, struct HirAscription
 {
     IrType *type = check_operand(T, e->expr);
     IrType *tag = check_type(T, e->type, e->type->hdr.span);
-    return unify(T, e->span.start, type, tag);
+    return unify_types(T, e->span.start, type, tag);
 }
 
 static IrType *check_logical_expr(struct TypeChecker *T, struct HirLogicalExpr *e)
@@ -660,14 +715,14 @@ static IrType *check_chain_expr(struct TypeChecker *T, struct HirChainExpr *e)
     paw_assert(ret != NULL);
 
     if (is_option_t(T, type)) {
-        IrType *option = pawP_generalize(T->C, e->span.start, type);
-        unify(T, e->span.start, option, ret);
+        IrType *option = instantiate(T, type, NULL);
+        unify_types(T, e->span.start, option, ret);
     } else if (is_result_t(T, type)) {
-        IrType *result = pawP_generalize(T->C, e->span.start, type);
+        IrType *result = instantiate(T, type, NULL);
         IrType *error = K_LIST_LAST(ir_adt_types(type));
         IrType *infer = K_LIST_LAST(ir_adt_types(result));
-        unify(T, e->span.start, error, infer);
-        unify(T, e->span.start, result, ret);
+        unify_types(T, e->span.start, error, infer);
+        unify_types(T, e->span.start, result, ret);
     } else {
         char const *repr = pawIr_print_type(T->C, type);
         TYPECK_ERROR(T, invalid_chain_operand, e->span.start, repr);
@@ -800,7 +855,7 @@ static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, en
 
     IrType *lhs = check_operand(T, left);
     IrType *rhs = check_operand(T, right);
-    IrType *type = unify(T, span.start, lhs, rhs);
+    IrType *type = unify_types(T, span.start, lhs, rhs);
     enum BuiltinKind const code = TYPE2CODE(T, type);
 
     if (!IS_BUILTIN_TYPE(code) || !VALID_OPS[op][code]) {
@@ -822,7 +877,7 @@ static IrType *check_assign_expr(struct TypeChecker *T, struct HirAssignExpr *e)
 {
     IrType *lhs = check_operand(T, e->lhs);
     IrType *rhs = check_operand(T, e->rhs);
-    unify(T, e->span.start, lhs, rhs);
+    unify_types(T, e->span.start, lhs, rhs);
     return builtin_type(T, BUILTIN_UNIT);
 }
 
@@ -851,7 +906,7 @@ static IrType *check_match_expr(struct TypeChecker *T, struct HirMatchExpr *e)
 
     if (IrIsNever(bs.result))
         // propagate divergence status to enclosing block
-        unify(T, e->span.start, bs.result, T->bs->result);
+        unify_types(T, e->span.start, bs.result, T->bs->result);
 
     SET_TYPE(T, e->target->hdr.id, ms.target);
     return bs.result;
@@ -864,14 +919,14 @@ static IrType *check_match_arm(struct TypeChecker *T, struct HirMatchArm *e)
 
     struct MatchState *ms = T->ms;
     IrType *pat = check_pat(T, e->pat);
-    ms->target = unify(T, e->span.start, pat, ms->target);
+    ms->target = unify_types(T, e->span.start, pat, ms->target);
     if (e->guard != NULL) expect_bool_expr(T, e->guard);
     IrType *result = check_operand(T, e->result);
-    result = unify(T, e->span.start, bs.result, result);
+    result = unify_types(T, e->span.start, bs.result, result);
 
     leave_block(T);
 
-    T->bs->result = unify(T, e->span.start, result, T->bs->result);
+    T->bs->result = unify_types(T, e->span.start, result, T->bs->result);
     return T->bs->result;
 }
 
@@ -880,7 +935,7 @@ static IrType *new_list_t(struct TypeChecker *T, struct SourceLoc loc, IrType *e
     IrType *base = pawP_builtin_type(T->C, BUILTIN_LIST);
     IrTypeList *types = IrTypeList_new(T->C);
     IrTypeList_push(T->C, types, elem_t);
-    return instantiate(T, loc, base, types);
+    return instantiate(T, base, types);
 }
 
 static IrType *new_map_t(struct TypeChecker *T, struct SourceLoc loc, IrType *key_t, IrType *value_t)
@@ -889,7 +944,7 @@ static IrType *new_map_t(struct TypeChecker *T, struct SourceLoc loc, IrType *ke
     IrTypeList *types = IrTypeList_new(T->C);
     IrTypeList_push(T->C, types, key_t);
     IrTypeList_push(T->C, types, value_t);
-    return instantiate(T, loc, base, types);
+    return instantiate(T, base, types);
 }
 
 static void check_closure_param(struct TypeChecker *T, struct HirParamDecl *d)
@@ -901,10 +956,8 @@ static void check_closure_param(struct TypeChecker *T, struct HirParamDecl *d)
 
 static IrType *erase_signature_type(struct TypeChecker *T, IrType *type)
 {
-    if (IrIsSignature(type)) {
-        struct IrSignature const *fsig = IrGetSignature(type);
-        return pawIr_new_fn_ptr(T->C, fsig->params, fsig->result);
-    }
+    if (IrIsSignature(type))
+        return IR_GET_FN(T->C, type);
     return type;
 }
 
@@ -942,9 +995,12 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
     rs.prev = ret;
 
     IrType *result = check_operand(T, e->expr);
-    bs.result = unify(T, NODE_START(e->expr), bs.result, result);
+    bs.result = unify_types(T, NODE_START(e->expr), bs.result, result);
     if (!IrIsNever(bs.result))
-        unify(T, NODE_START(e->expr), bs.result, ret);
+        unify_types(T, NODE_START(e->expr), bs.result, ret);
+    K_LIST_XFOREACH (params, IrType *, p)
+        *p = pawU_normalize(T->U, *p);
+    ret = pawU_normalize(T->U, ret);
 
     leave_block(T);
     T->bs = outer;
@@ -957,12 +1013,13 @@ static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name)
 {
     struct Instantiation *method = pawP_find_method(C, self, name);
     if (method == NULL) return NULL;
-    return pawP_generalize(C, (struct SourceLoc){0}, method->inst);
+    return method->inst;
 }
 
 static void check_impl_item(struct TypeChecker *T, struct HirImplDecl *d)
 {
-    T->self = pawIr_get_type(T->C, d->id);
+    T->self = GET_TYPE(T, d->id);
+    pawIr_solver_add_preconditions_from(T->C->S, d->did);
 
     struct HirDecl *const *pmethod;
     K_LIST_FOREACH (d->methods, pmethod)
@@ -982,12 +1039,12 @@ static void CheckLetStmt(struct TypeChecker *T, struct HirLetStmt *s)
     enter_block(T, &bs, s->span, BLOCK_MATCH);
     enter_match_ctx(T, &ms, tag);
     IrType *lhs = check_pat(T, s->pat);
-    unify(T, s->span.start, bs.result, tag);
+    unify_types(T, s->span.start, bs.result, tag);
     leave_match_ctx(T);
     leave_block(T);
 
-    unify(T, s->span.start, lhs, tag);
-    unify(T, s->span.start, tag, rhs);
+    unify_types(T, s->span.start, lhs, tag);
+    unify_types(T, s->span.start, tag, rhs);
 
     pawIr_set_type(T->C, s->id, rhs);
 }
@@ -1054,7 +1111,7 @@ static void check_const_item(struct TypeChecker *T, struct HirConstDecl *d)
     IrType *tag = GET_NODE_TYPE(T->C, d->tag);
     if (d->init != NULL) {
         IrType *init = check_operand(T, d->init);
-        unify(T, d->span.start, init, tag);
+        unify_types(T, d->span.start, init, tag);
         check_const(T, d->init, tag);
     }
     pawIr_set_type(T->C, d->id, tag);
@@ -1067,42 +1124,31 @@ static IrType *check_field_decl(struct TypeChecker *T, struct HirFieldDecl *d)
 
 static IrType *check_type_decl(struct TypeChecker *T, struct HirTypeDecl *d)
 {
-    if (d->generics != NULL) {
-        struct HirDecl *const *pdecl;
-        K_LIST_FOREACH (d->generics, pdecl) {
-            struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
-            if (d->bounds != NULL)
-                TYPECK_ERROR(T, trait_bounds_on_alias_generic,
-                        d->span.start, d->ident.name->text);
-            IrType *type = pawIr_new_generic(T->C, d->did, NULL);
-            SET_NODE_TYPE(T->C, *pdecl, type);
-        }
-    }
-    IrType *type = check_type(T, d->rhs, d->span);
-    SET_NODE_TYPE(T->C, d->rhs, type);
-    return type;
+    return pawIr_get_def_type(T->C, d->did);
 }
 
-static paw_Bool is_adt_self(struct TypeChecker *T, IrType *adt)
+static paw_Bool is_self(struct TypeChecker *T, IrType *adt)
 {
-    return T->self != NULL
-               ? pawU_is_compat(T->C->U, T->self, adt)
-               : PAW_FALSE;
+    if (T->self == NULL) return PAW_FALSE;
+    int const position = pawU_current_position(T->U);
+    int const status = pawU_unify(T->U, adt, T->self);
+    pawU_undo_unifications(T->U, position);
+    return status == 0;
 }
 
-static void ensure_accessible_field(struct TypeChecker *T, struct HirDecl *field, struct HirDecl *base, IrType *type)
+static void ensure_accessible_field(struct TypeChecker *T, struct HirDecl *field, IrType *type)
 {
     paw_Bool const is_pub = HirIsFieldDecl(field)
         ? HirGetFieldDecl(field)->is_pub
         : HirGetFnDecl(field)->is_pub;
-    if (is_pub || is_adt_self(T, type))
+    if (is_pub || is_self(T, type))
         return; // field is public or control is inside own impl block
 
     struct HirIdent const ident = HirIsFieldDecl(field)
         ? HirGetFieldDecl(field)->ident
         : HirGetFnDecl(field)->ident;
     TYPECK_ERROR(T, associated_item_visibility, ident.span.start, ident.name->text,
-            HirGetAdtDecl(base)->ident.name->text);
+            "TODO");
 }
 
 static IrType *select_field(struct TypeChecker *T, IrType *target, struct HirSelector *e)
@@ -1143,7 +1189,7 @@ static IrType *select_field(struct TypeChecker *T, IrType *target, struct HirSel
     e->is_index = PAW_TRUE;
     e->index = index;
 
-    ensure_accessible_field(T, field, HIR_CAST_DECL(adt), target);
+    ensure_accessible_field(T, field, target);
     return result;
 }
 
@@ -1164,22 +1210,19 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
         if (method == NULL)
             TYPECK_ERROR(T, unknown_method, select->ident.span.start,
                     select->ident.name->text, pawIr_print_type(T->C, self));
-    } else {
-        if (IrIsAdt(self)) {
-            paw_assert(!select->is_index);
-            method = lookup_method(T->C, self, select->ident.name);
-        }
-        if (method == NULL)
-            return select_field(T, self, select);
+    } else if (!select->is_index) {
+        method = lookup_method(T->C, self, select->ident.name);
     }
 
+    if (method == NULL)
+        return select_field(T, self, select);
+
     struct HirDecl *fn_decl = get_decl(T, IR_TYPE_DID(method));
-    struct HirDecl *self_decl = get_decl(T, IR_TYPE_DID(self));
     if (HirGetFnDecl(fn_decl)->is_assoc)
         TYPECK_ERROR(T, not_a_method, NODE_START(target),
                    HirGetFnDecl(fn_decl)->ident.name->text);
 
-    ensure_accessible_field(T, fn_decl, self_decl, self);
+    ensure_accessible_field(T, fn_decl, self);
     *pparam_offset = 1;
     return method;
 }
@@ -1195,7 +1238,7 @@ static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
     }
     SET_NODE_TYPE(T->C, e->target, target);
 
-    struct IrFnPtr const *fn = IR_FPTR(target);
+    struct IrFnPtr const *fn = IrGetFnPtr(IR_GET_FN(T->C, target));
     int const nparams = fn->params->count - param_offset;
     if (e->args->count != nparams)
         TYPECK_ERROR(T, incorrect_arity, e->span.start, nparams, e->args->count);
@@ -1209,7 +1252,7 @@ static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
     struct HirExpr *const *parg;
     K_LIST_ENUMERATE (e->args, index, parg) {
         IrType *param = IrTypeList_get(fn->params, index + param_offset);
-        unify(T, NODE_START(*parg), ir_auto_deref(param), check_operand(T, *parg));
+        unify_types(T, NODE_START(*parg), ir_auto_deref(param), check_operand(T, *parg));
     }
 
     if (IrIsNever(fn->result)) // function never returns
@@ -1221,7 +1264,7 @@ static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
 static IrType *check_conversion_expr(struct TypeChecker *T, struct HirConversionExpr *e)
 {
     static int const ALLOWED_CASTS[NBUILTINS][NBUILTINS] = {
-        //          to  = {0, b, x, i, f}
+        //          to  = {0, b, c, i, f}
         [BUILTIN_BOOL]  = {0, 1, 1, 1, 1},
         [BUILTIN_CHAR]  = {0, 1, 1, 1, 0},
         [BUILTIN_INT]   = {0, 1, 1, 1, 1},
@@ -1272,7 +1315,7 @@ static IrType *check_list_lit(struct TypeChecker *T, struct HirContainerLit *e, 
     struct HirExpr *const *pexpr;
     K_LIST_FOREACH (e->items, pexpr) {
         IrType *v = check_operand(T, *pexpr);
-        unify(T, NODE_START(*pexpr), elem_t, v);
+        unify_types(T, NODE_START(*pexpr), elem_t, v);
     }
     return new_list_t(T, span.start, elem_t);
 }
@@ -1290,8 +1333,8 @@ static IrType *check_map_lit(struct TypeChecker *T, struct HirContainerLit *e, s
         paw_assert(field->fid == -1);
         IrType *k = check_operand(T, field->key);
         IrType *v = check_operand(T, field->value);
-        unify(T, field->span.start, key_t, k);
-        unify(T, field->span.start, value_t, v);
+        unify_types(T, field->span.start, key_t, k);
+        unify_types(T, field->span.start, value_t, v);
         SET_NODE_TYPE(T->C, *pexpr, v);
     }
     return new_map_t(T, span.start, key_t, value_t);
@@ -1364,7 +1407,7 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
     if (fields->count == 0)
         TYPECK_ERROR(T, unit_struct_with_braces, adt->ident.span.start, adt->ident.name->text);
 
-    IrType *base_type = pawIr_get_type(T->C, adt->id);
+    IrType *base_type = GET_TYPE(T, adt->id);
     field_types = subst_types(T, ir_adt_types(base_type), ir_adt_types(type), field_types);
     struct HirExprList *order = collect_field_exprs(T, e->items, map, adt->ident.name);
 
@@ -1376,14 +1419,14 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
     struct HirDecl *const *pdecl;
     K_LIST_ZIP (fields, pdecl, field_types, ptype) {
         struct HirFieldDecl *field = HirGetFieldDecl(*pdecl);
-        ensure_accessible_field(T, *pdecl, decl, type);
+        ensure_accessible_field(T, *pdecl, type);
         int const *pindex = FieldMap_get(T, map, field->ident);
         if (pindex == NULL)
             TYPECK_ERROR(T, missing_field, span.start,
                     field->ident.name->text, adt->ident.name->text);
 
         struct HirExpr *item = HirExprList_get(order, *pindex);
-        unify(T, field->span.start, *ptype, check_operand(T, item));
+        unify_types(T, field->span.start, *ptype, check_operand(T, item));
         HirExprList_set(items, index, item);
         FieldMap_remove(T, map, field->ident);
         HirGetFieldExpr(item)->fid = index++;
@@ -1443,7 +1486,7 @@ static IrType *range_index(struct TypeChecker *T, struct SourceLoc loc, enum Bui
     if (range_kind != BUILTIN_RANGE_FULL) {
         IrTypeList *types = IrTypeList_new(T->C);
         IrTypeList_push(T->C, types, builtin_type(T, BUILTIN_INT));
-        return instantiate(T, loc, expect, types);
+        return instantiate(T, expect, types);
     }
     // RangeFull is not polymorphic
     return expect;
@@ -1457,14 +1500,14 @@ static IrType *check_list_index(struct TypeChecker *T, struct HirIndex *e, IrTyp
         return ir_list_elem(target);
 
     // index must have type Range*<int>
-    unify(T, NODE_START(e->index), index, range_index(T, e->span.start, kind));
+    unify_types(T, NODE_START(e->index), index, range_index(T, e->span.start, kind));
     return target;
 }
 
 static IrType *check_map_index(struct TypeChecker *T, struct HirIndex *e, IrType *target)
 {
     IrType *index = check_operand(T, e->index);
-    unify(T, NODE_START(e->index), index, ir_map_key(target));
+    unify_types(T, NODE_START(e->index), index, ir_map_key(target));
     return ir_map_value(target);
 }
 
@@ -1476,7 +1519,7 @@ static IrType *check_str_index(struct TypeChecker *T, struct HirIndex *e, IrType
         return builtin_type(T, BUILTIN_CHAR);
 
     // index must have type Range*<int>
-    unify(T, NODE_START(e->index), index, range_index(T, e->span.start, index_kind));
+    unify_types(T, NODE_START(e->index), index, range_index(T, e->span.start, index_kind));
     return target;
 }
 
@@ -1556,7 +1599,7 @@ static void locate_binding(struct HirVisitor *V, struct HirBindingPat *p)
 {
     struct BindingChecker *bc = V->ud;
     // all bindings must be specified in the first alternative
-    IrType *type = pawIr_get_type(V->hir->C, p->id);
+    IrType *type = GET_TYPE(bc->T, p->id);
     BindingMap_insert(bc->T, bc->bound, p->ident, (struct BindingInfo){
                                                      .type = type,
                                                  });
@@ -1570,8 +1613,8 @@ static void check_binding(struct HirVisitor *V, struct HirBindingPat *p)
         TYPECK_ERROR(bc->T, missing_binding_in_alternative, p->span.start,
                 p->ident.name->text);
 
-    IrType *type = pawIr_get_type(V->hir->C, p->id);
-    unify(bc->T, p->span.start, pbi->type, type);
+    IrType *type = GET_TYPE(bc->T, p->id);
+    unify_types(bc->T, p->span.start, pbi->type, type);
     ++pbi->uses;
 }
 
@@ -1613,7 +1656,7 @@ static IrType *CheckOrPat(struct TypeChecker *T, struct HirOrPat *p)
     V.PostVisitBindingPat = check_binding;
     for (bc.iter = 1; bc.iter < p->pats->count; ++bc.iter) {
         struct HirPat *next = HirPatList_get(p->pats, bc.iter);
-        unify(T, p->span.start, type, check_pat(T, next));
+        unify_types(T, p->span.start, type, check_pat(T, next));
 
         pawHir_visit_pat(&V, next);
         ensure_all_bindings_created(&bc);
@@ -1667,7 +1710,7 @@ static IrType *CheckStructPat(struct TypeChecker *T, struct HirStructPat *p)
                     field->ident.name->text, v->ident.name->text);
         struct HirFieldPat *field_pat = HirGetFieldPat(*ppat);
         // TODO: source loc should be inside composite lit, not struct def
-        unify(T, field->span.start, pawIr_get_type(T->C, field_pat->id), *ptype);
+        unify_types(T, field->span.start, GET_TYPE(T, field_pat->id), *ptype);
         HirPatList_push(T->hir, sorted, *ppat);
         PatFieldMap_remove(T, map, field->ident);
         field_pat->index = index++;
@@ -1691,22 +1734,25 @@ static IrType *CheckVariantPat(struct TypeChecker *T, struct HirVariantPat *p)
     IrType *type = lower_value_path(T, p->path);
     if (IrIsAdt(type)) return type; // unit structure
 
-    struct IrSignature *fsig = IrGetSignature(type);
-    IrTypeList *params = fsig->params;
-
-    if (p->fields->count != params->count)
-        TYPECK_ERROR(T, incorrect_arity, p->span.start, params->count, p->fields->count);
+    struct IrFnPtr const *fn = IrGetFnPtr(IR_GET_FN(T->C, type));
+    if (p->fields->count != fn->params->count)
+        TYPECK_ERROR(T, incorrect_arity, p->span.start, fn->params->count, p->fields->count);
 
     struct HirPat *const *ppat;
     IrType *const *pparam;
-    K_LIST_ZIP (params, pparam, p->fields, ppat) {
+    K_LIST_ZIP (fn->params, pparam, p->fields, ppat) {
         IrType *const arg = check_pat(T, *ppat);
-        unify(T, NODE_START(*ppat), *pparam, arg);
+        unify_types(T, NODE_START(*ppat), *pparam, arg);
     }
 
-    struct HirVariantDecl *d = HirGetVariantDecl(get_decl(T, fsig->did));
-    p->index = d->index;
-    return fsig->result;
+//TODO    struct HirVariantDecl *d = HirGetVariantDecl(get_decl(T, IR_TYPE_DID(type)));
+//TODO    p->index = d->index;
+//TODO    return pawIr_get_def_type(T->C, d->base_did);
+//TODO//TODO    return fsig->result;
+
+    struct IrVariantDef const *def = pawIr_get_variant_def(T->C, IR_TYPE_DID(type));
+    p->index = def->discr;
+    return fn->result;
 }
 
 static IrType *CheckTuplePat(struct TypeChecker *T, struct HirTuplePat *p)
@@ -1742,7 +1788,7 @@ static IrType *check_const_decl(struct TypeChecker *T, struct HirConstDecl *d)
 {
     IrType *tag = check_type(T, d->tag, d->tag->hdr.span);
     IrType *init = check_operand(T, d->init);
-    unify(T, d->span.start, init, tag);
+    unify_types(T, d->span.start, init, tag);
     check_const(T, d->init, tag);
     pawIr_set_type(T->C, d->id, tag);
     return tag;
@@ -1761,7 +1807,7 @@ static void check_decl(struct TypeChecker *T, struct HirDecl *decl)
         default: // kHirTypeDecl
             type = check_type_decl(T, HirGetTypeDecl(decl));
     }
-    type = normalize(T, type);
+    type = normalize_type(T, type);
     SET_NODE_TYPE(T->C, decl, type);
 }
 
@@ -1780,7 +1826,7 @@ static IrType *check_pat(struct TypeChecker *T, struct HirPat *pat)
 #undef DEFINE_CASE
     }
 
-    type = normalize(T, type);
+    type = normalize_type(T, type);
     SET_NODE_TYPE(T->C, pat, type);
 
     leave_pat(T);
@@ -1797,6 +1843,8 @@ static void check_stmt(struct TypeChecker *T, struct HirStmt *stmt)
         HIR_STMT_LIST(DEFINE_CASE)
 #undef DEFINE_CASE
     }
+
+    solve_pending_obligations(T);
 }
 
 // NOTE: Some expressions are known to directly represent types, based on the context
@@ -1827,7 +1875,7 @@ static IrType *check_return_expr(struct TypeChecker *T, struct HirReturnExpr *e)
     IrType *have = e->expr != NULL
                               ? check_operand(T, e->expr)
                               : builtin_type(T, BUILTIN_UNIT);
-    unify(T, e->span.start, have, want);
+    unify_types(T, e->span.start, have, want);
     ++T->rs->count;
 
     return pawIr_new_never(T->C);
@@ -1926,13 +1974,17 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
             break;
     }
 
-    type = normalize(T, type);
+    type = normalize_type(T, type);
     SET_NODE_TYPE(T->C, expr, type);
+    solve_pending_obligations(T);
     return type;
 }
 
 static void check_item(struct TypeChecker *T, struct HirDecl *item)
 {
+    // create a new solver to hold the item's preconditions
+    pawIr_push_solver(T->C);
+
     if (HirIsFnDecl(item)) {
         check_fn_item(T, HirGetFnDecl(item));
     } else if (HirIsImplDecl(item)) {
@@ -1940,6 +1992,11 @@ static void check_item(struct TypeChecker *T, struct HirDecl *item)
     } else if (HirIsConstDecl(item)) {
         check_const_item(T, HirGetConstDecl(item));
     }
+
+    if (solve_pending_obligations(T) != 0)
+        pawErr_generic_error(ENV(T), T->pm->name, TODO, "unsatisfiable trait obligation");
+
+    pawIr_pop_solver(T->C);
 }
 
 static void check_items(struct TypeChecker *T, struct HirDeclList *items)
@@ -1947,6 +2004,12 @@ static void check_items(struct TypeChecker *T, struct HirDeclList *items)
     struct HirDecl *const *pitem;
     K_LIST_FOREACH (items, pitem)
         check_item(T, *pitem);
+}
+
+static IrType *call_normalize_type(struct IrTypeFolder *F, IrType *type)
+{
+    struct HirTypeFolder const *outer = F->ud;
+    return normalize_type(outer->ud, type);
 }
 
 static void use_module(struct TypeChecker *T, struct HirModule const *pm)
@@ -1959,6 +2022,12 @@ static void check_module_types(struct TypeChecker *T, struct HirModule m)
     DLOG(T, "resolving '%s'", m->name->text);
 
     check_items(T, m.items);
+
+    struct HirTypeFolder F;
+    pawHir_type_folder_init(&F, T->hir, T);
+    F.F.FoldType = call_normalize_type;
+
+    pawHir_fold_decl_types(&F, m.items);
 }
 
 static void check_types(struct TypeChecker *T)
@@ -1987,6 +2056,9 @@ void pawP_check_types(struct Compiler *C)
         .U = C->U,
         .C = C,
     };
+
+    void pawU_run_unit_tests(struct Unifier *U);
+    pawU_run_unit_tests(C->U);
 
     // run the type checker
     check_types(&T);

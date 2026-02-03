@@ -39,7 +39,7 @@ pub fn test_container() {
 }
 
 fn list_function<T>(list: [T]) {}
-fn map_function<K, V>(map: [K: V]) {}
+fn map_function<K: Hash + Equals, V>(map: [K: V]) {}
 
 #[test]
 pub fn test_poly_container() {
@@ -48,7 +48,7 @@ pub fn test_poly_container() {
     assert(l[-1] == true);
     list_function(l);
 
-    type M<K, V> = [K: V];
+    type M<K: Equals + Hash, V> = [K: V];
     let m: M<str, float> = ["a": 1.0, "b": 2.0, "c": 3.0];
     assert(m["c"] == 3.0);
     map_function(m);
@@ -254,3 +254,4 @@ pub fn test_types_are_hoisted() {
         type S = str;
     };
 }
+

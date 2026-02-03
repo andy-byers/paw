@@ -595,7 +595,7 @@ struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar var)
         IrType *type = GET_NODE_TYPE(U->C, *pvariant);
         type = pawP_instantiate_field(U->C, var.type, type);
         struct MatchVars *subvars = variables_for_types(U,
-                var.span, IR_FPTR(type)->params);
+                var.span, ir_fn_params(U->C, type));
         struct Constructor const cons = {
             .kind = CONS_VARIANT,
             .variant.type = type,
@@ -620,9 +620,9 @@ enum BranchMode {
 
 static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar var)
 {
-    enum BuiltinKind code = pawP_type2code(U->C, var.type);
-    if (!IrIsAdt(var.type) || code == BUILTIN_UNIT)
+    if (IrIsTuple(var.type) || IrIsUnit(var.type))
         return BRANCH_TUPLE;
+    enum BuiltinKind code = pawP_type2code(U->C, var.type);
     if (IS_BASIC_TYPE(code))
         return BRANCH_LITERAL;
     struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(var.type));

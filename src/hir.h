@@ -460,6 +460,7 @@ static struct HirDecl *pawHir_new_fn_decl(struct Hir *hir, struct SourceSpan spa
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->FnDecl_ = (struct HirFnDecl){
+        .parent_id = INVALID_DECL_ID,
         .id = id,
         .did = did,
         .span = span,

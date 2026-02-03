@@ -36,7 +36,19 @@ struct VariableAnalyzer {
     int num_vars;
 };
 
-DEFINE_MAP(struct VariableAnalyzer, VarCache, pawP_alloc, mir_place_hash, mir_place_equals, struct MirPlace, struct Variable *)
+static inline paw_Uint place_hash(void *ctx, struct MirPlace place)
+{
+    PAW_UNUSED(ctx);
+    return (place.kind + 1) * (paw_Uint)place.value;
+}
+
+static inline paw_Bool place_equals(void *ctx, struct MirPlace lhs, struct MirPlace rhs)
+{
+    PAW_UNUSED(ctx);
+    return lhs.kind == rhs.kind
+        && lhs.value == rhs.value;
+}
+DEFINE_MAP(struct VariableAnalyzer, VarCache, pawP_alloc, place_hash, place_equals, struct MirPlace, struct Variable *)
 DEFINE_MAP(struct VariableAnalyzer, WorkPool, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *)
 DEFINE_MAP_ITERATOR(WorkPool, MirBlock, void *)
 DEFINE_LIST(struct VariableAnalyzer, VariableList, struct Variable *)
@@ -253,7 +265,7 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
     if (b.value == 0) {
         clear_set(bs->da);
         // write to function arguments in entry block
-        int const num_args = IR_FPTR(V->mir->type)->params->count;
+        int const num_args = ir_fn_params(V->C, V->mir->type)->count;
         for (int i = 0; i < num_args; ++i) {
             struct Variable *var = VariableList_get(V->locals, 1 + i);
             indicate_variable_def(V, var);

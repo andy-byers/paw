@@ -1,0 +1,90 @@
+// impl_selection.paw
+
+pub trait Key {
+    fn key(self) -> int;
+}
+
+struct Type<T> {
+    pub value: T,
+}
+
+impl<Ty: Key> Key for Type<[Ty]> {
+    fn key(self) -> int { 
+        let result = 0;
+        for elem in self.value {
+            result += elem.key();
+        }
+        result
+    }
+}
+
+impl<X, Y> Key for Type<(X, Y)> {
+    fn key(self) -> int { 42 }
+}
+
+fn key<T: Key>(t: T) -> int {
+    t.key()
+}
+
+#[test]
+pub fn test_monomorphic() {
+    let k = key(Type{value: (1, "2")});
+    assert(k == 42);
+
+    let k = key(Type{value: (("",), [1])});
+    assert(k == 42);
+
+    let k = key(Type{value: [12]});
+    assert(k == 12);
+
+    let k = key(["100", "20", "3"]);
+    assert(k == 123);
+
+    let k = key(Type{value: [["1"], ["2", "30"]]});
+    assert(k == 33);
+}
+
+impl Key for int {
+    fn key(self) -> int { 
+        self 
+    }
+}
+
+impl Key for List<str> {
+    fn key(self) -> int {  
+        let result = 0;
+        for elem in self {
+            result += elem.parse_int().unwrap();
+        }
+        result
+    }
+}
+
+
+pub trait Merge<K: Key> {
+    fn merge(self, rhs: K) -> int;
+}
+
+impl<K: Key> Merge<K> for int {
+    fn merge(self, rhs: K) -> int {
+        self + rhs.key()
+    }
+}
+
+impl<K: Key> Merge<K> for List<K> {
+    fn merge(self, rhs: K) -> int {
+        let r = 0;
+        for elem in self {
+            r = r.merge(elem);
+        }
+        r.merge(rhs)
+    }
+}
+
+#[test]
+pub fn test_polymorphic() {
+    assert([].merge(1) == 1);
+    assert([1].merge(2) == 1 + 2);
+    assert([1, 2].merge(3) == 1 + 2 + 3);
+}
+

@@ -31,10 +31,15 @@ DEFINE_LIST(struct Resolver, Scope, struct Symbol)
 DEFINE_LIST(struct Resolver, Symtab, struct Scope *)
 
 
+static NodeId next_id(struct Resolver *R)
+{
+    return (NodeId){(unsigned)++R->ast->node_count};
+}
+
 static DeclId next_did(struct Resolver *R)
 {
     return (DeclId){
-        .value = (unsigned)++R->decl_count,
+        .value = (unsigned)++R->C->decl_count,
         .modno = (unsigned)R->current->modno,
     };
 }
@@ -766,8 +771,20 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
     d->did = next_did(R);
     enter_scope(R);
 
+    // declare type parameter named "Self"
+    {
+        NodeId const self_id = next_id(R);
+        NodeMap_insert(R->C, R->C->self_types, d->id, self_id);
+        struct AstIdent const ident = {
+            .name = SCAN_STR(R->C, "Self"),
+            .span = {0}, // TODO
+        };
+        struct AstDecl *self = pawAst_new_generic_decl(R->ast, (struct SourceSpan){0}, self_id, ident, NULL);
+        add_local(R, enclosing_scope(R), ident, self_id, NAMESPACE_TYPE, SYMBOL_DECL);
+        self->hdr.did = next_did(R);
+    }
+
     declare_generics(R, d->generics);
-    declare_self(R, d->span, d->id, NAMESPACE_TYPE);
 
     maybe_store_builtin(R, R->current->id, d->ident, d->id, d->did);
     return PAW_TRUE;
@@ -788,25 +805,27 @@ static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
     declare_generics(R, d->generics);
     declare_self(R, d->span, d->id, NAMESPACE_TYPE);
 
-    // locate the context parameter definition
-    struct AstDecl *self;
-    {
+    if (AstIsPathType(d->type)) {
         struct Symbol symbol;
+        // locate the context parameter definition
         struct AstPathType const *path = AstGetPathType(d->type);
         struct PathCursor pc = pc_create(path->path);
         if (!lookup_type(R, pc, &symbol))
             pawErr_generic_error(ENV(R), R->current->name, d->span.start,
                     "unable to find type of \"Self\"");
-        self = pawAst_get_node(R->ast, symbol.id);
-    }
 
-    if (AstIsAdtDecl(self)) {
-        struct AstAdtDecl *d = AstGetAdtDecl(self);
-        if (pawAst_is_unit_struct(d)) {
-            // allow unit struct to be constructed by writing "Self"
-            struct AstDecl *v = K_LIST_FIRST(d->variants);
-            declare_self(R, d->span, v->hdr.id, NAMESPACE_VALUE);
+        struct AstDecl *self = pawAst_get_node(R->ast, symbol.id);
+        if (AstIsAdtDecl(self)) {
+            struct AstAdtDecl *d = AstGetAdtDecl(self);
+            if (pawAst_is_unit_struct(d)) {
+                // allow unit struct to be constructed by writing "Self"
+                struct AstDecl *v = K_LIST_FIRST(d->variants);
+                declare_self(R, d->span, v->hdr.id, NAMESPACE_VALUE);
+            }
         }
+    } else if (AstIsFnType(d->type)) {
+        pawErr_generic_error(ENV(R), R->current->name, d->span.start,
+                "target of impl block cannot be a function type");
     }
 
     return PAW_TRUE;
