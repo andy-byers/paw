@@ -32,6 +32,7 @@ TESTS=(
     "trait"
     "underscore"
     "iterator"
+    "test_str_builder"
     "poly_function"
     "poly_struct"
     "poly_enum"

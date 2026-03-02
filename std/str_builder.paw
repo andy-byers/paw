@@ -1,0 +1,15 @@
+// str_builder.paw
+
+pub inline struct Builder {
+    buf: [char],
+}
+
+impl Builder {
+    pub fn new() -> Self {
+        Self{buf: []}
+    }
+
+    #[extern_std] pub fn append_char(self, value: char) -> Self;
+    #[extern_std] pub fn append_str(self, value: str) -> Self;
+    #[extern_std] pub fn string(self) -> str;
+}

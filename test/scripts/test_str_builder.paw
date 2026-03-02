@@ -1,0 +1,27 @@
+// test_str_builder.paw
+
+use str_builder::Builder;
+
+#[test]
+pub fn empty_builder_produces_empty_str() {
+    let sb = Builder::new();
+    assert(sb.string() == "");
+}
+
+#[test]
+pub fn builder_produces_expected_results() {
+    let s = Builder::new()
+        .append_str("")
+        .append_char('H')
+        .append_char('e')
+        .append_str("llo,")
+        .append_char(' ')
+        .append_char('w')
+        .append_str("orl")
+        .append_char('d')
+        .append_char('!')
+        .append_str("")
+        .string();
+    assert(s == "Hello, world!");
+}
+

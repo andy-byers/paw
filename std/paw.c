@@ -325,6 +325,30 @@ paw_Int paw_prelude_str_hash(void *env, paw_Str self)
     return self->hash;
 }
 
+#define LISTC_PUSH_CHAR _PN4list4ListIcE4push
+void LISTC_PUSH_CHAR(void *, paw_List_Char, paw_Char);
+
+paw_str_builder_Builder paw_str_builder_Builder_append_char(void *env, paw_str_builder_Builder b, paw_Char value)
+{
+    PAW_UNUSED(env);
+    LISTC_PUSH_CHAR(NULL, b.buf, value);
+    return b;
+}
+
+paw_str_builder_Builder paw_str_builder_Builder_append_str(void *env, paw_str_builder_Builder b, paw_Str value)
+{
+    PAW_UNUSED(env);
+    for (paw_Int i = 0; i < value->length; ++i)
+        LISTC_PUSH_CHAR(NULL, b.buf, value->text[i]);
+    return b;
+}
+
+paw_Str paw_str_builder_Builder_string(void *env, paw_str_builder_Builder b)
+{
+    PAW_UNUSED(env);
+    return new_str(b.buf->data, b.buf->length);
+}
+
 // From http://www.cse.yorku.ca/~oz/hash.html
 uint32_t paw_builtin_hash_bytes(paw_Char const *bytes, paw_Int length, uint32_t hash)
 {

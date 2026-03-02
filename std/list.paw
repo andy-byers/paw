@@ -75,7 +75,7 @@ impl<T> Advance<T> for ListIterator<T> {
 
 use ops::Equals;
 
-impl<T: Equals> Equals for List<T> {
+impl<T: Equals> Equals for [T] {
     fn eq(self, rhs: Self) -> bool {
         if #self != #rhs {
             return false;

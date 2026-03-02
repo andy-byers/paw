@@ -425,9 +425,8 @@ static paw_Bool resolve_module_prefix(struct Resolver *R, struct ImportScope *ta
     if (pb->path.segments->count == 1 && pb->kind == ISYMBOL_EXPLICIT) {
         add_type(R, target, pb->target, NODE_ID(mod), ISYMBOL_EXPLICIT, pb->is_pub);
         pb->in_type_ns = PAW_TRUE;
-        return PAW_TRUE;
     }
-    return PAW_FALSE;
+    return PAW_TRUE;
 }
 
 static paw_Bool resolve_module_prefixes(struct Resolver *R, struct ImportBindings *bindings)

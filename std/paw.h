@@ -69,6 +69,7 @@ typedef struct {
         paw_Int capacity; \
     } *paw_List_##T;
 
+PAW_DEFINE_LIST(Char)
 PAW_DEFINE_LIST(Str)
 
 #define PAW_DEFINE_OPTION(T) \
@@ -132,30 +133,38 @@ PAW_DEFINE_OPTION(Float)
     }
 
 
-void paw_prelude_println(void *env, paw_Str);
-void paw_prelude_print(void *env, paw_Str);
-void paw_prelude_assert(void *env, paw_Bool);
-_Noreturn void paw_prelude_panic(void *env, paw_Str);
+void paw_prelude_println(void *env, paw_Str self);
+void paw_prelude_print(void *env, paw_Str self);
+void paw_prelude_assert(void *env, paw_Bool self);
+_Noreturn void paw_prelude_panic(void *env, paw_Str self);
 
-paw_Str paw_prelude_char_to_str(void *env, paw_Char);
+paw_Str paw_prelude_char_to_str(void *env, paw_Char self);
 
-paw_Str paw_prelude_int_to_str(void *env, paw_Int);
+paw_Str paw_prelude_int_to_str(void *env, paw_Int self);
 
-paw_Int paw_prelude_float_hash(void *env, paw_Float);
-paw_Str paw_prelude_float_to_str(void *env, paw_Float);
+paw_Int paw_prelude_float_hash(void *env, paw_Float self);
+paw_Str paw_prelude_float_to_str(void *env, paw_Float self);
 
-paw_Option_Int paw_prelude_str_parse_int(void *env, paw_Str);
-paw_Option_Int paw_prelude_str_parse_int_radix(void *env, paw_Str, paw_Int);
-paw_Option_Float paw_prelude_str_parse_float(void *env, paw_Str);
-paw_Option_Int paw_prelude_str_find(void *env, paw_Str, paw_Str);
-paw_List_Str paw_prelude_str_split(void *env, paw_Str, paw_Str);
-paw_Str paw_prelude_str_join(void *env, paw_Str, paw_List_Str);
-paw_Bool paw_prelude_str_starts_with(void *env, paw_Str, paw_Str);
-paw_Bool paw_prelude_str_ends_with(void *env, paw_Str, paw_Str);
-paw_Int paw_prelude_str_hash(void *env, paw_Str);
+paw_Option_Int paw_prelude_str_parse_int(void *env, paw_Str self);
+paw_Option_Int paw_prelude_str_parse_int_radix(void *env, paw_Str self, paw_Int base);
+paw_Option_Float paw_prelude_str_parse_float(void *env, paw_Str self);
+paw_Option_Int paw_prelude_str_find(void *env, paw_Str, paw_Str self);
+paw_List_Str paw_prelude_str_split(void *env, paw_Str, paw_Str self);
+paw_Str paw_prelude_str_join(void *env, paw_Str, paw_List_Str self);
+paw_Bool paw_prelude_str_starts_with(void *env, paw_Str, paw_Str self);
+paw_Bool paw_prelude_str_ends_with(void *env, paw_Str, paw_Str self);
+paw_Int paw_prelude_str_hash(void *env, paw_Str self);
 
 uint32_t paw_builtin_hash_bytes(paw_Char const *bytes, paw_Int length, uint32_t hash);
 paw_Int paw_builtin_rawcmp(paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length);
 paw_Int paw_builtin_abs_index(paw_Int index, paw_Int length);
+
+typedef struct paw_str_builder_Builder {
+    paw_List_Char buf;
+} paw_str_builder_Builder;
+
+paw_str_builder_Builder paw_str_builder_Builder_append_char(void *env, paw_str_builder_Builder b, paw_Char value);
+paw_str_builder_Builder paw_str_builder_Builder_append_str(void *env, paw_str_builder_Builder b, paw_Str value);
+paw_Str paw_str_builder_Builder_string(void *env, paw_str_builder_Builder b);
 
 #endif // PAW_STD_PAW_H

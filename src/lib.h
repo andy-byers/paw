@@ -22,6 +22,7 @@
 #define PAWL_RESULT_NAME "result"
 #define PAWL_MATH_NAME "math"
 #define PAWL_IO_NAME "io"
+#define PAWL_STR_BUILDER_NAME "str_builder"
 
 struct Str;
 
@@ -34,6 +35,7 @@ enum pawL_StdModules {
     PAWL_STD_RESULT,
     PAWL_STD_IO,
     PAWL_STD_MATH,
+    PAWL_STD_STR_BUILDER,
 
     PAWL_NUM_STD_MODULES
 };
@@ -47,6 +49,7 @@ static char const *pawL_StdNames[PAWL_NUM_STD_MODULES] = {
     [PAWL_STD_RESULT] = "result",
     [PAWL_STD_IO] = "io",
     [PAWL_STD_MATH] = "math",
+    [PAWL_STD_STR_BUILDER] = "str_builder",
 };
 
 paw_Bool pawL_is_std_name(char const *name);

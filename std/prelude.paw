@@ -189,9 +189,11 @@ impl Compare for str {
     }
 }
 
-pub fn __private_instantiate_iterators() {
+
+pub fn __private_instantiate_dependencies() {
     let m: [str: ()] = [:];
     m.iterator().next();
+    let _: [char] = [];
 }
 
 
@@ -199,4 +201,3 @@ pub fn __private_instantiate_iterators() {
 #[extern_std] pub fn println(message: str);
 #[extern_std] pub fn assert(cond: bool);
 #[extern_std] pub fn panic(message: str) -> !;
-
