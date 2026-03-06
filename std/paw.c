@@ -48,6 +48,13 @@ _Noreturn void paw_prelude_panic(void *env, paw_Str message)
     exit(EXIT_FAILURE);
 }
 
+static void validate_str(paw_Str str)
+{
+    paw_assert(str->length >= 0);
+    paw_assert(str->length < (paw_Int)PAW_SIZE_MAX);
+    paw_assert(str->text[str->length] == '\0');
+}
+
 paw_Str paw_prelude_char_to_str(void *env, paw_Char self)
 {
     PAW_UNUSED(env);
@@ -323,6 +330,21 @@ paw_Int paw_prelude_str_hash(void *env, paw_Str self)
     // TODO: i32 => i64
     PAW_UNUSED(env);
     return self->hash;
+}
+
+// pub fn substr(self, offset: int, length: int) -> str;
+paw_Str paw_prelude_str_substr(void *env, paw_Str self, paw_Int offset, paw_Int length)
+{
+    PAW_UNUSED(env);
+    validate_str(self);
+
+    offset += offset < 0 ? self->length : 0;
+    if (offset < 0 || length > self->length - offset) {
+        paw_Str message = NEW_LITERAL("invalid range for substring");
+        paw_prelude_panic(env, message);
+    }
+
+    return new_str(self->text + offset, length);
 }
 
 #define LISTC_PUSH_CHAR _PN4list4ListIcE4push

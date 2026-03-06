@@ -41,11 +41,11 @@ target_include_directories(paw_codegen
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR} 
     PRIVATE ${LLVM_INCLUDE_DIRS})
 target_link_libraries(paw_codegen
-    PUBLIC paw ${LLVM_LIBS})
+    PRIVATE paw ${LLVM_LIBS})
 
-add_executable(paw_driver
+add_executable(pawc
     ${CMAKE_CURRENT_SOURCE_DIR}/paw.c)
-target_link_libraries(paw_driver
+target_link_libraries(pawc
     PRIVATE paw paw_codegen)
 
 include(CTest)

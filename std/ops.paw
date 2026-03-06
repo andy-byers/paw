@@ -23,6 +23,11 @@ pub trait Increment {
 }
 
 
+pub trait Default {
+    fn default() -> Self;
+}
+
+
 pub trait Iterate<I: Advance<T>, T> {
     fn iterator(self) -> I;
 }

@@ -29,6 +29,12 @@ impl Equals for unit {
     }
 }
 
+impl Default for unit {
+    fn default() -> Self {
+        ()
+    }
+}
+
 
 pub struct bool; 
 
@@ -51,6 +57,12 @@ impl Hash for bool {
 impl Equals for bool {
     fn eq(self, rhs: Self) -> bool { 
         self == rhs 
+    }
+}
+
+impl Default for bool {
+    fn default() -> Self {
+        false
     }
 }
 
@@ -89,6 +101,12 @@ impl Increment for char {
     }
 }
 
+impl Default for char {
+    fn default() -> Self {
+        '\0'
+    }
+}
+
 
 pub struct int; 
 
@@ -124,6 +142,12 @@ impl Increment for int {
     }
 }
 
+impl Default for int {
+    fn default() -> Self {
+        0
+    }
+}
+
 
 pub struct float; 
 
@@ -151,6 +175,12 @@ impl Compare for float {
     }
 }
 
+impl Default for float {
+    fn default() -> Self {
+        0.0
+    }
+}
+
 
 pub struct str; 
 
@@ -163,6 +193,7 @@ impl str {
     #[extern_std] pub fn find(self, target: str) -> Option<int>;
     #[extern_std] pub fn starts_with(self, prefix: str) -> bool;
     #[extern_std] pub fn ends_with(self, suffix: str) -> bool;
+    #[extern_std] pub fn substr(self, offset: int, length: int) -> str;
 
     pub fn to_str(self) -> str { 
         self 
@@ -186,6 +217,12 @@ impl Compare for str {
 
     fn le(self, rhs: Self) -> bool { 
         self <= rhs 
+    }
+}
+
+impl Default for str {
+    fn default() -> Self {
+        ""
     }
 }
 

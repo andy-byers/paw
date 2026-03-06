@@ -154,6 +154,7 @@ paw_Str paw_prelude_str_join(void *env, paw_Str, paw_List_Str self);
 paw_Bool paw_prelude_str_starts_with(void *env, paw_Str, paw_Str self);
 paw_Bool paw_prelude_str_ends_with(void *env, paw_Str, paw_Str self);
 paw_Int paw_prelude_str_hash(void *env, paw_Str self);
+paw_Str paw_prelude_str_substr(void *env, paw_Str self, paw_Int offset, paw_Int length);
 
 uint32_t paw_builtin_hash_bytes(paw_Char const *bytes, paw_Int length, uint32_t hash);
 paw_Int paw_builtin_rawcmp(paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length);

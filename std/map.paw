@@ -4,15 +4,17 @@
 
 pub struct Map<K: Hash + Equals, V>;
 
-impl<K: Hash + Equals, V> Map<K, V> {
+impl<K: Hash + Equals, V> [K: V] {
     pub fn length(self) -> int {
         #self
     }
 
     #[extern] pub fn get(self, key: K) -> Option<V>;
 
-    pub fn set(self, key: K, value: V) {
+    pub fn set(self, key: K, value: V) -> Option<V> {
+        let old_value = self.get(key);
         self[key] = value;
+        old_value
     }
 
     #[extern] pub fn remove(self, key: K);
@@ -37,7 +39,13 @@ impl<K: Hash + Equals, V> Map<K, V> {
     pub fn key_hash(key: K) -> int { key.hash() }
 }
 
-impl<K: Hash + Equals, V> Iterate<MapIterator<K, V>, K> for Map<K, V> {
+impl<K: Hash + Equals, V> Default for [K: V] {
+    fn default() -> Self {
+        [:]
+    }
+}
+
+impl<K: Hash + Equals, V> Iterate<MapIterator<K, V>, K> for [K: V] {
     fn iterator(self) -> MapIterator<K, V> {
         MapIterator::new(self)
     }

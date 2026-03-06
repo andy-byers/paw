@@ -803,7 +803,7 @@ public:
         llvm::InitializeNativeTargetAsmPrinter();
 
         auto *m = X.get_module()->get_module();
-        auto const target_triple = llvm::sys::getDefaultTargetTriple();
+        llvm::Triple const target_triple(llvm::sys::getDefaultTargetTriple());
         m->setTargetTriple(target_triple);
 
         std::string error;
@@ -1296,7 +1296,7 @@ private:
 
             B->SetInsertPoint(entry_block);
             auto *result = B->CreateCall(
-                    llvm::Intrinsic::getDeclaration(*M,
+                    llvm::Intrinsic::getOrInsertDeclaration(*M,
                         llvm::Intrinsic::sadd_with_overflow,
                         {X.get_i64_ty()}),
                     {fn->getArg(0), fn->getArg(1)});
@@ -1330,7 +1330,7 @@ private:
 
             B->SetInsertPoint(entry_block);
             auto *result = B->CreateCall(
-                    llvm::Intrinsic::getDeclaration(*M,
+                    llvm::Intrinsic::getOrInsertDeclaration(*M,
                         llvm::Intrinsic::smul_with_overflow,
                         {X.get_i64_ty()}),
                     {fn->getArg(0), fn->getArg(1)});

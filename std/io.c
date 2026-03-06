@@ -24,11 +24,12 @@ struct paw_io_File {
 #define INTR_TIMEOUT 100
 
 #define DEFINE_STREAM_GETTER(Stream_) \
-    static paw_io_File get_##Stream_(void) \
+    paw_io_File paw_io_##Stream_(void *env) \
     { \
-        static struct paw_io_File file; \
-        file.file = Stream_; \
-        return &file; \
+        PAW_UNUSED(env); \
+        static struct paw_io_File s_file; \
+        s_file.file = Stream_; \
+        return &s_file; \
     }
 DEFINE_STREAM_GETTER(stdin)
 DEFINE_STREAM_GETTER(stdout)
@@ -89,12 +90,16 @@ static paw_Int os_read(paw_io_File file, void *data, paw_Int size)
     size_t remaining = (size_t)size;
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
         size_t const n = fread(data, 1, remaining, file->file);
+        if (n == 0) break;
+
         data = (paw_Char *)data + n;
         remaining -= n;
 
-        if (remaining == 0 || feof(file->file)) {
+        if (remaining == 0) {
             break;
-        } else if (IO_FERROR(file)) {
+        } else if (feof(file->file)) {
+            break;
+        } else if (ferror(file->file) && errno != EINTR) {
             return -1;
         }
     }
@@ -106,12 +111,16 @@ static paw_Int os_write(paw_io_File file, void const *data, paw_Int size)
     size_t remaining = (size_t)size;
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
         size_t const n = fwrite(data, 1, remaining, file->file);
+        if (n == 0) break;
+
         data = (paw_Char const *)data + n;
         remaining -= n;
 
         if (remaining == 0) {
             break;
-        } else if (IO_FERROR(file)) {
+        } else if (feof(file->file)) {
+            break;
+        } else if (ferror(file->file) && errno != EINTR) {
             return -1;
         }
     }
@@ -204,26 +213,22 @@ PAW_IO_RESULT(Int) paw_io_File_tell(void *env, paw_io_File self)
     }
 }
 
-// pub fn read(self, size: int) -> Result<str>
-PAW_IO_RESULT(Str) paw_io_File_read(void *env, paw_io_File self, paw_Int size)
+// pub fn read(self, data: [char]) -> Result<int>
+PAW_IO_RESULT(Int) paw_io_File_read(void *env, paw_io_File *self, paw_List_Char data)
 {
     PAW_UNUSED(env);
-    struct StringBuilder sb;
-    sb_init(&sb);
+    data->length = os_read(*self, data->data, data->length);
 
-    sb_reserve(&sb, size);
-    sb.length = os_read(self, sb_buffer(&sb), size);
-
-    return sb.length >= 0
-        ? IO_RESULT_OK(Str, sb_create_str(&sb))
-        : IO_RESULT_ERR(Str, check_errno());
+    return data->length >= 0
+        ? IO_RESULT_OK(Int, data->length)
+        : IO_RESULT_ERR(Int, check_errno());
 }
 
-// pub fn write(self, data: str) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File self, paw_Str data)
+// pub fn write(self, data: [char]) -> Result<int>
+PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File *self, paw_List_Char data)
 {
     PAW_UNUSED(env);
-    paw_Int const count = os_write(self, data->text, data->length);
+    paw_Int const count = os_write(*self, data->data, data->length);
     if (count >= 0) {
         return IO_RESULT_OK(Int, count);
     } else {
@@ -241,4 +246,3 @@ PAW_IO_RESULT(Unit) paw_io_File_flush(void *env, paw_io_File self)
         return IO_RESULT_ERR(Unit, check_errno());
     }
 }
-

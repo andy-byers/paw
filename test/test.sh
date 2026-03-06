@@ -89,7 +89,7 @@ TESTS=(
 CLANG_PATH="/usr/bin/clang"
 LIBGC_DIR="/opt/homebrew/opt/bdw-gc"
 ROOT_DIR=$BUILD_PATH/src/codegen
-DRIVER_PATH=$ROOT_DIR/paw_driver
+DRIVER_PATH=$ROOT_DIR/pawc
 FAILURES=()
 
 cmake -DPAW_STRESS=2 \
@@ -97,7 +97,7 @@ cmake -DPAW_STRESS=2 \
     -DPAW_GC_DIR=$LIBGC_DIR \
     -DPAW_ROOT_DIR=$(pwd)/src/codegen \
     ..
-cmake --build . --target paw_driver paw_stdc
+cmake --build . --target pawc paw_stdc
 
 for TESTNAME in "${TESTS[@]}"; do
     SCRIPT_PATH="$TEST_PATH/scripts/$TESTNAME.paw"

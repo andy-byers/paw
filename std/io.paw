@@ -4,6 +4,15 @@
 
 use result;
 
+pub trait Read {
+    fn read(&self, data: [char]) -> Result<int>;
+}
+
+pub trait Write {
+    fn write(&self, data: [char]) -> Result<int>;
+}
+
+
 pub type Result<T> = result::Result<T, Error>;
 
 
@@ -15,9 +24,15 @@ impl File {
     #[extern_std] pub fn open(pathname: str, mode: str) -> Result<Self>;
     #[extern_std] pub fn seek(self, offset: int, whence: Seek) -> Result<()>;
     #[extern_std] pub fn tell(self) -> Result<int>;
-    #[extern_std] pub fn read(self, size: int) -> Result<str>;
-    #[extern_std] pub fn write(self, data: str) -> Result<int>;
     #[extern_std] pub fn flush(self) -> Result<()>;
+}
+
+impl Read for File {
+    #[extern_std] fn read(&self, data: [char]) -> Result<int>;
+}
+
+impl Write for File {
+    #[extern_std] fn write(&self, data: [char]) -> Result<int>;
 }
 
 
@@ -53,3 +68,8 @@ impl Error {
         }
     }
 }
+
+
+#[extern_std] pub fn stdin() -> File;
+#[extern_std] pub fn stdout() -> File;
+#[extern_std] pub fn stderr() -> File;

@@ -11,7 +11,6 @@
 
 #define TODO ((struct SourceLoc){0})
 
-#define PAW_SOLVER_DEBUG
 #if defined(PAW_SOLVER_DEBUG)
 # define LOGLN(Fmt_, ...) fprintf(stderr, "(paw_solver) "Fmt_ "\n", __VA_ARGS__)
 #else

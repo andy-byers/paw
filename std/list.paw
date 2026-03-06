@@ -4,7 +4,7 @@
 
 pub struct List<T>;
 
-impl<T> List<T> {
+impl<T> [T] {
     // Transform negative indices into offsets from the end of the list,
     // where more negative means farther away from the end.
     fn absolute_index(self, index: int) -> Option<int> {
@@ -40,10 +40,45 @@ impl<T> List<T> {
     #[extern] pub fn pop(self) -> T;
     #[extern] pub fn insert(self, index: int, value: T);
     #[extern] pub fn remove(self, index: int) -> T;
-
 }
 
-impl<T> Iterate<ListIterator<T>, T> for List<T> {
+use str_builder;
+
+impl<T: Default> [T] {
+    pub fn with_length(length: int) -> Self {
+        let result = [];
+        for i in 0..length {
+            result.push(T::default());
+        }
+        result
+    }
+}
+
+impl [char] {
+    pub fn from_str(value: str) -> Self {
+        let result = [];
+        for i in 0..#value {
+            result.push(value[i]);
+        }
+        result
+    }
+
+    pub fn as_str(self) -> str {
+        let b = str_builder::Builder::new();
+        for c in self {
+            b.append_char(c);
+        }
+        b.string()
+    }
+}
+
+impl<T> Default for [T] {
+    fn default() -> Self {
+        []
+    }
+}
+
+impl<T> Iterate<ListIterator<T>, T> for [T] {
     fn iterator(self) -> ListIterator<T> {
         ListIterator::new(self)
     }
@@ -88,3 +123,4 @@ impl<T: Equals> Equals for [T] {
         true
     }
 }
+

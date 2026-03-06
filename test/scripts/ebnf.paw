@@ -10,17 +10,24 @@
 //
 
 use io;
+use str_builder;
 
 const CHUNK_SIZE: int = 1 << 12;
 
 fn read_to_str(path: str) -> io::Result<str> {
     let file = io::File::open(path, "r")?;
 
-    let result = "";
+    let chunk = List::<char>::with_length(CHUNK_SIZE);
+    let result = str_builder::Builder::new();
     loop {
-        result ++= match file.read(CHUNK_SIZE)? {
-            "" => return Ok(result),
-            s => s,
+        match file.read(chunk)? {
+            0 => return Ok(result.string()),
+            n => {
+                // TODO: bulk insertion
+                for c in chunk {
+                    result.append_char(c);
+                }
+            },
         };
     }
 }
