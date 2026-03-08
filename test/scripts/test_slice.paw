@@ -1,0 +1,39 @@
+// test_slice.paw
+
+use slice::Slice;
+
+// TODO: Should be replaced with code that explicitly runs a collection
+fn gc_collect() -> [[int]] {
+    let memory = [];
+    for i in 0..100 {
+        let list = [];
+        for j in 0..200 {
+            list.push(j);
+        }
+        memory.push(list);
+    }
+    memory
+}
+
+#[test]
+pub fn slice_keeps_allocation_alive() {
+    let slice = [42].to_slice();
+    gc_collect();
+    assert(slice.get(0) == 42);
+}
+
+#[test]
+pub fn slice_range_valid_after_reallocation() {
+    let list = [42];
+    let slice = list.to_slice();
+
+    // cause "list" to be reallocated
+    for i in 0..10000 {
+        list.push(i);
+    }
+    // this should not change "slice[0]"
+    list[0] = 123;
+
+    assert(slice.get(0) == 42);
+}
+

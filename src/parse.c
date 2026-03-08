@@ -2150,10 +2150,12 @@ static void toplevel_items(struct Lex *lex, struct AstDeclList *items)
     }
 }
 
-// Effectively add the following text at the top of each Paw source file:
+// Effectively add the following text at the top of each (non-prelude) source file:
 //
 //     use prelude;
 //     use prelude::*;
+//
+// If the prelude file is being parsed, inject core type definitions.
 //
 static void import_prelude(struct Lex *lex, struct AstDeclList *items)
 {

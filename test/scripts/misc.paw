@@ -46,12 +46,12 @@ println("hi");
     let test = "test string";
     let file = File::open("abc.txt", "w+").unwrap();
     assert(file_size(file) == 0);
-    let n = file.write(List::<char>::from_str(test)).unwrap();
+    let n = file.write(test.to_slice()).unwrap();
     assert(n == #test);
 
     let data = List::<char>::with_length(#test);
     file.seek(0, io::Seek::Begin);
-    assert(file.read(data).unwrap() == #test);
+    assert(file.read(data.to_slice_mut()).unwrap() == #test);
     assert(file.tell().unwrap() == n);
     assert(file_size(file) == n);
     assert(data.as_str() == test);

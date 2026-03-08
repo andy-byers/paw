@@ -3,13 +3,15 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 use result;
+use slice::Slice;
+use slice::SliceMut;
 
 pub trait Read {
-    fn read(&self, data: [char]) -> Result<int>;
+    fn read(&self, data: SliceMut<char>) -> Result<int>;
 }
 
 pub trait Write {
-    fn write(&self, data: [char]) -> Result<int>;
+    fn write(&self, data: Slice<char>) -> Result<int>;
 }
 
 
@@ -28,11 +30,11 @@ impl File {
 }
 
 impl Read for File {
-    #[extern_std] fn read(&self, data: [char]) -> Result<int>;
+    #[extern_std] fn read(&self, data: SliceMut<char>) -> Result<int>;
 }
 
 impl Write for File {
-    #[extern_std] fn write(&self, data: [char]) -> Result<int>;
+    #[extern_std] fn write(&self, data: Slice<char>) -> Result<int>;
 }
 
 

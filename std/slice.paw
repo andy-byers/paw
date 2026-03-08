@@ -1,0 +1,127 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+use unsafe::Pointer as Ptr;
+
+fn index_out_of_bounds(index: int, length: int) -> ! {
+    panic("index \{index} out of bounds for sequence of length \{length}");
+}
+
+fn invalid_slice_indices(start: int, end: int, length: int) -> ! {
+    panic("invalid slice indices \{start}..\{end} for sequence of length \{length}");
+}
+
+
+pub inline struct Slice<T> {
+    start: Ptr<T>,
+    length: int,
+}
+
+impl<T> Slice<T> {
+    pub fn new(start: Ptr<T>, length: int) -> Self {
+        Self{start, length}
+    }
+
+    pub fn length(self) -> int {
+        self.length
+    }
+
+    pub fn get(self, index: int) -> T {
+        if 0 <= index && index < self.length {
+            self.start.add(index).read()
+        } else {
+            index_out_of_bounds(index, self.length);
+        }
+    }
+}
+
+
+pub inline struct SliceMut<T> {
+    start: Ptr<T>,
+    length: int,
+}
+
+impl<T> SliceMut<T> {
+    pub fn new(start: Ptr<T>, length: int) -> Self {
+        Self{start, length}
+    }
+
+    pub fn length(self) -> int {
+        self.length
+    }
+
+    pub fn get(self, index: int) -> T {
+        if 0 <= index && index < self.length {
+            self.start.add(index).read()
+        } else {
+            index_out_of_bounds(index, self.length);
+        }
+    }
+
+    pub fn set(self, index: int, value: T) {
+        if 0 <= index && index < self.length {
+            self.start.add(index).write(value);
+        } else {
+            index_out_of_bounds(index, self.length);
+        }
+    }
+}
+
+
+pub trait ToSlice<T> {
+    fn to_slice(&self) -> Slice<T>;
+}
+
+pub trait ToSliceMut<T> {
+    fn to_slice_mut(&self) -> SliceMut<T>;
+}
+
+
+impl str {
+    pub fn slice(self, start: int, end: int) -> Slice<char> {
+        if 0 <= start && start <= end && end <= #self {
+            Slice::new(self.get_element_ptr(start), end - start)
+        } else {
+            invalid_slice_indices(start, end, #self);
+        }
+    }
+}
+
+impl ToSlice<char> for str {
+    fn to_slice(&self) -> Slice<char> {
+        self.slice(0, #self)
+    }
+}
+
+
+impl<T> List<T> {
+    pub fn slice(self, start: int, end: int) -> Slice<T> {
+        if 0 <= start && start <= end && end <= #self {
+            Slice::new(self.get_element_ptr(start), end - start)
+        } else {
+            invalid_slice_indices(start, end, #self);
+        }
+    }
+
+    pub fn slice_mut(self, start: int, end: int) -> SliceMut<T> {
+        if 0 <= start && start <= end && end <= #self {
+            SliceMut::new(self.get_element_ptr(start), end - start)
+        } else {
+            invalid_slice_indices(start, end, #self);
+        }
+    }
+}
+
+impl<T> ToSlice<T> for List<T> {
+    fn to_slice(&self) -> Slice<T> {
+        self.slice(0, #self)
+    }
+}
+
+impl<T> ToSliceMut<T> for List<T> {
+    fn to_slice_mut(&self) -> SliceMut<T> {
+        self.slice_mut(0, #self)
+    }
+}
+

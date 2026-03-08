@@ -287,7 +287,7 @@ EXTERN_C struct IrImpl *pawIr_get_impl_def(struct Compiler *C, DeclId did);
 EXTERN_C IrType *pawIr_get_def_type(struct Compiler *C, DeclId did);
 EXTERN_C IrTrait *pawIr_get_trait(struct Compiler *C, DeclId did);
 
-enum IrDefKind pawIr_get_kind(struct Compiler *C, DeclId did);
+EXTERN_C enum IrDefKind pawIr_get_kind(struct Compiler *C, DeclId did);
 EXTERN_C IrType *pawIr_get_context(struct Compiler *C, IrType *fn);
 IrTrait *pawIr_get_trait_context(struct Compiler *C, IrType *fn);
 IrTypeList *pawIr_get_generic_types(struct Compiler *C, DeclId did);

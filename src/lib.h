@@ -18,8 +18,10 @@
 #define PAWL_OPS_NAME "ops"
 #define PAWL_LIST_NAME "list"
 #define PAWL_MAP_NAME "map"
+#define PAWL_SLICE_NAME "slice"
 #define PAWL_OPTION_NAME "option"
 #define PAWL_RESULT_NAME "result"
+#define PAWL_UNSAFE_NAME "unsafe"
 #define PAWL_MATH_NAME "math"
 #define PAWL_IO_NAME "io"
 #define PAWL_STR_BUILDER_NAME "str_builder"
@@ -31,6 +33,7 @@ enum pawL_StdModules {
     PAWL_STD_OPS,
     PAWL_STD_LIST,
     PAWL_STD_MAP,
+    PAWL_STD_SLICE,
     PAWL_STD_OPTION,
     PAWL_STD_RESULT,
     PAWL_STD_IO,

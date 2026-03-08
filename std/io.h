@@ -48,8 +48,8 @@ PAW_DEFINE_RESULT(Str, io_Error)
 PAW_IO_RESULT(io_File) paw_io_File_open(void *, paw_Str, paw_Str);
 PAW_IO_RESULT(Unit) paw_io_File_seek(void *, paw_io_File, paw_Int, paw_io_Seek);
 PAW_IO_RESULT(Int) paw_io_File_tell(void *, paw_io_File);
-PAW_IO_RESULT(Int) paw_io_File_read(void *, paw_io_File *, paw_List_Char);
-PAW_IO_RESULT(Int) paw_io_File_write(void *, paw_io_File *, paw_List_Char);
+PAW_IO_RESULT(Int) paw_io_File_read(void *, paw_io_File *, paw_Slice_Char);
+PAW_IO_RESULT(Int) paw_io_File_write(void *, paw_io_File *, paw_Slice_Char);
 PAW_IO_RESULT(Unit) paw_io_File_flush(void *, paw_io_File);
 
 paw_io_File paw_io_stdin(void *);

@@ -213,27 +213,24 @@ PAW_IO_RESULT(Int) paw_io_File_tell(void *env, paw_io_File self)
     }
 }
 
-// pub fn read(self, data: [char]) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_read(void *env, paw_io_File *self, paw_List_Char data)
+// pub fn read(self, data: SliceMut<char>) -> Result<int>
+PAW_IO_RESULT(Int) paw_io_File_read(void *env, paw_io_File *self, paw_Slice_Char data)
 {
     PAW_UNUSED(env);
-    data->length = os_read(*self, data->data, data->length);
-
-    return data->length >= 0
-        ? IO_RESULT_OK(Int, data->length)
+    paw_Int const length = os_read(*self, data.start, data.length);
+    return length >= 0
+        ? IO_RESULT_OK(Int, length)
         : IO_RESULT_ERR(Int, check_errno());
 }
 
-// pub fn write(self, data: [char]) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File *self, paw_List_Char data)
+// pub fn write(self, data: Slice<char>) -> Result<int>
+PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File *self, paw_Slice_Char data)
 {
     PAW_UNUSED(env);
-    paw_Int const count = os_write(*self, data->data, data->length);
-    if (count >= 0) {
-        return IO_RESULT_OK(Int, count);
-    } else {
-        return IO_RESULT_ERR(Int, check_errno());
-    }
+    paw_Int const length = os_write(*self, data.start, data.length);
+    return length >= 0
+        ? IO_RESULT_OK(Int, length)
+        : IO_RESULT_ERR(Int, check_errno());
 }
 
 // pub fn flush(self) -> Result<()>

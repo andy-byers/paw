@@ -332,6 +332,16 @@ void List::generate_methods(Context &X, ListType *type, List::Methods &m)
     auto *B = X.get_builder();
     auto *c = X.get_context();
 
+    // generate "fn List<T>::get_element_ptr(self, index: int) -> Ptr<T>"
+    if (auto *fn = m.get_element_ptr) {
+        State state(X, fn);
+
+        // TODO: check bounds
+        List list(state, fn->get_arg(0), type, &m);
+        auto *pointer = list.get_element_ptr(fn->get_arg(1));
+        state.create_return(pointer);
+    }
+
     // generate "fn List<T>::push(self, value: T)"
     if (auto *fn = m.push) {
         State state(X, fn);

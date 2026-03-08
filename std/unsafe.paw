@@ -1,0 +1,22 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub struct Pointer<T> {
+    // non-public field to prevent construction
+    inner: ()
+}
+
+impl<T> Pointer<T> {
+    #[extern] pub fn read(self) -> T;
+    #[extern] pub fn write(self, value: T);
+    #[extern] pub fn add(self, offset: int) -> Self;
+}
+
+impl str {
+    #[extern_std] pub fn get_element_ptr(self, index: int) -> Pointer<char>;
+}
+
+impl<T> List<T> {
+    #[extern] pub fn get_element_ptr(self, index: int) -> Pointer<T>;
+}

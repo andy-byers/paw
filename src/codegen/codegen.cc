@@ -1356,6 +1356,7 @@ private:
         m.pop = get_method(irself, "pop");
         m.insert = get_method(irself, "insert");
         m.remove = get_method(irself, "remove");
+        m.get_element_ptr = get_method(irself, "get_element_ptr");
 
         List::generate_methods(X, self_type, m);
         list_methods_.insert(irself, std::move(m));
@@ -1749,9 +1750,68 @@ private:
         return pawP_type2code(C, type);
     }
 
+    std::string get_inherent_context_name(IrType *type)
+    {
+        if (IrIsSignature(type)) {
+            auto const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(type));
+            if (fn_def->parent.value != (unsigned)-1) {
+                if (pawIr_get_kind(C, fn_def->parent) == IR_IMPL_DEF) {
+                    auto const *impl_def = pawIr_get_impl_def(C, fn_def->parent);
+                    if (impl_def->trait == NULL && IrIsAdt(impl_def->type)) {
+                        auto const *adt_def = pawIr_get_adt_def(C, IR_TYPE_DID(impl_def->type));
+                        return to_string(adt_def->name);
+                    }
+                }
+            }
+        }
+        return "";
+    }
+
+    std::string get_fn_name(IrType *type)
+    {
+        if (IrIsSignature(type)) {
+            auto const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(type));
+            return to_string(fn_def->name);
+        }
+        return "";
+    }
+
+    void generate_pointer_add(Type *element_type,  llvm::Value *pointer, llvm::Value *offset, MirPlace output)
+    {
+        auto *result = B->CreateInBoundsGEP(element_type->get_ty(), pointer, offset);
+        set_result(output, result);
+    }
+
+    void generate_pointer_read(Type *element_type,  llvm::Value *pointer, MirPlace output)
+    {
+        auto *result = B->CreateLoad(element_type->get_ty(), pointer);
+        set_result(output, result);
+    }
+
+    void generate_pointer_write(llvm::Value *pointer, llvm::Value *value)
+    {
+        B->CreateStore(value, pointer);
+    }
+
     // Generate code for performing a function call
     void create_call(MirCall const &x)
     {
+        if (get_inherent_context_name(x.target.type) == "Pointer") {
+            auto *element_type = get_type(IrTypeList_first(
+                        IR_TYPE_SUBTYPES(pawIr_get_context(C, x.target.type))));
+            auto const pointer = operand(MirPlaceList_get(x.args, 0));
+            if (get_fn_name(x.target.type) == "add") {
+                auto const index = operand(MirPlaceList_get(x.args, 1));
+                generate_pointer_add(element_type, pointer, index, x.output);
+            } else if (get_fn_name(x.target.type) == "read") {
+                generate_pointer_read(element_type, pointer, x.output);
+            } else if (get_fn_name(x.target.type) == "write") {
+                auto const value = operand(MirPlaceList_get(x.args, 1));
+                generate_pointer_write(pointer, value);
+            }
+            return;
+        }
+
         auto *value = operand(x.target);
         auto *fn = B->CreateExtractValue(value, 0);
         auto *env = B->CreateExtractValue(value, 1);

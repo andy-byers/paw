@@ -347,6 +347,17 @@ paw_Str paw_prelude_str_substr(void *env, paw_Str self, paw_Int offset, paw_Int 
     return new_str(self->text + offset, length);
 }
 
+char *paw_unsafe_str_get_element_ptr(void *env, paw_Str self, paw_Int index)
+{
+    if (index < 0 || index >= self->length) {
+        paw_Str message = NEW_LITERAL("char index out of range");
+        paw_prelude_panic(env, message);
+    }
+
+    return self->text + index;
+}
+
+
 #define LISTC_PUSH_CHAR _PN4list4ListIcE4push
 void LISTC_PUSH_CHAR(void *, paw_List_Char, paw_Char);
 
@@ -362,6 +373,14 @@ paw_str_builder_Builder paw_str_builder_Builder_append_str(void *env, paw_str_bu
     PAW_UNUSED(env);
     for (paw_Int i = 0; i < value->length; ++i)
         LISTC_PUSH_CHAR(NULL, b.buf, value->text[i]);
+    return b;
+}
+
+paw_str_builder_Builder paw_str_builder_Builder_append_slice(void *env, paw_str_builder_Builder b, paw_Slice_Char value)
+{
+    PAW_UNUSED(env);
+    for (paw_Int i = 0; i < value.length; ++i)
+        LISTC_PUSH_CHAR(NULL, b.buf, value.start[i]);
     return b;
 }
 

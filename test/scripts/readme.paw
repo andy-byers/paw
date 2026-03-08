@@ -2,26 +2,27 @@
 
 use io;
 
-fn println(msg: str) {
-    print(msg + "\n");
-}
-
 fn show_usage() {
     println("usage: readme PATHNAME");
     println("PATHNAME = path to README.md");
 }
 
+use str_builder;
+
 fn read_file_to_str(pathname: str) -> str {
     let file = io::File::open(pathname, "r");
+    let result = str_builder::Builder::new();
+    let chunk = List::<char>::with_length(1024);
 
-    let result = "";
-    let chunk = "";
-    do {
-        chunk = file.read(1024);
-        result = result + chunk;
-    } while chunk != "";
+    loop {
+        match file.read(chunk.to_slice_mut()) {
+            Ok(n) if n == 0 => break,
+            Ok(n) => result.append_slice(chunk.slice(0, n)),
+            Err(e) => panic(e.to_str()),
+        }
+    }
 
-    return result;
+    result.string()
 }
 
 fn isspace(s: str) -> bool {
@@ -88,7 +89,7 @@ fn split_into_sources(contents: str) -> Option<[str]> {
 
 fn dump_source_file(filename: str, source: str) {
     let file = io::File::open(filename, "w");
-    file.write(source);
+    file.write(source.to_slice());
 }
 
 pub fn main(args: [str]) -> int {

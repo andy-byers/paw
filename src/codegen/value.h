@@ -342,6 +342,7 @@ public:
         Fn *pop;
         Fn *insert;
         Fn *remove;
+        Fn *get_element_ptr;
     };
 
     using Type = ListType;

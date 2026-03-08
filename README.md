@@ -285,6 +285,9 @@ A panic can also be caused by calling the `panic` builtin function.
 ## Roadmap
 + [ ] ensure mangling produces a unique name
 + [ ] prevent duplicate methods across compatible inherent impl blocks
++ [ ] support operators # and [] on slices
++ [ ] make slice a builtin type (better syntax, allow creation with `container[range]` syntax, use mutability of container to determine slice mutablilty, etc.)
++ [ ] make a note about "gotcha" situations involving slices (For example, if the container a slice is referencing is modified while the slice is live, it is possible for the container to be reallocated, leaving the slice pointing to the old allocation. The GC will keep the old allocation alive via an internal pointer, so while this won't cause a "use after free", it is likely to cause unexpected behavior.)
 + [x] parameterize methods and associated functions on the type parameters of their containing impl blocks, as well as their own type parameters, then get rid of IrSignature::self member
 + [x] consider collecting generic bounds into predicate lists to be validated after the main unification routine
 + [ ] add check to make sure implemented trait methods are compatible with trait declarations

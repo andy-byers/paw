@@ -72,6 +72,14 @@ typedef struct {
 PAW_DEFINE_LIST(Char)
 PAW_DEFINE_LIST(Str)
 
+#define PAW_DEFINE_SLICE(T) \
+    typedef struct { \
+        paw_##T *start; \
+        paw_Int length; \
+    } paw_Slice_##T;
+
+PAW_DEFINE_SLICE(Char)
+
 #define PAW_DEFINE_OPTION(T) \
     typedef struct { \
         paw_Int discr; \
@@ -156,6 +164,8 @@ paw_Bool paw_prelude_str_ends_with(void *env, paw_Str, paw_Str self);
 paw_Int paw_prelude_str_hash(void *env, paw_Str self);
 paw_Str paw_prelude_str_substr(void *env, paw_Str self, paw_Int offset, paw_Int length);
 
+char *paw_unsafe_str_get_element_ptr(void *env, paw_Str self, paw_Int index);
+
 uint32_t paw_builtin_hash_bytes(paw_Char const *bytes, paw_Int length, uint32_t hash);
 paw_Int paw_builtin_rawcmp(paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length);
 paw_Int paw_builtin_abs_index(paw_Int index, paw_Int length);
@@ -166,6 +176,7 @@ typedef struct paw_str_builder_Builder {
 
 paw_str_builder_Builder paw_str_builder_Builder_append_char(void *env, paw_str_builder_Builder b, paw_Char value);
 paw_str_builder_Builder paw_str_builder_Builder_append_str(void *env, paw_str_builder_Builder b, paw_Str value);
+paw_str_builder_Builder paw_str_builder_Builder_append_slice(void *env, paw_str_builder_Builder b, paw_Slice_Char value);
 paw_Str paw_str_builder_Builder_string(void *env, paw_str_builder_Builder b);
 
 #endif // PAW_STD_PAW_H

@@ -605,12 +605,12 @@ use io;
 pub fn test_file() {
     let msg = "Hello, world!";
     let file = io::File::open("newfile", "w+").unwrap();
-    assert(file.write(List::from_str(msg)).unwrap() == #msg);
+    assert(file.write(msg.to_slice()).unwrap() == #msg);
     file.flush();
 
     let buf = List::with_length(#msg);
     let file = io::File::open("newfile", "r").unwrap();
-    assert(file.read(buf).unwrap() == #msg);
+    assert(file.read(buf.to_slice_mut()).unwrap() == #msg);
     assert(buf.as_str() == msg);
 }
 

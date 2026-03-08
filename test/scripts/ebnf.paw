@@ -20,7 +20,7 @@ fn read_to_str(path: str) -> io::Result<str> {
     let chunk = List::<char>::with_length(CHUNK_SIZE);
     let result = str_builder::Builder::new();
     loop {
-        match file.read(chunk)? {
+        match file.read(chunk.to_slice_mut())? {
             0 => return Ok(result.string()),
             n => {
                 // TODO: bulk insertion
