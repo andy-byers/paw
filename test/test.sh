@@ -24,7 +24,7 @@ TESTS=(
     "enum"
     "test_list"
     "test_map"
-    "slice"
+    "test_slice"
     "stack"
     "never"
     "destructure"

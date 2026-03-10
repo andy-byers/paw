@@ -211,7 +211,6 @@ struct AstFieldDecl {
 
 struct AstParamDecl {
     AST_DECL_HEADER;
-    paw_Bool is_ref: 1;
     struct AstIdent ident;
     struct AstType *tag;
 };
@@ -286,7 +285,7 @@ static struct AstDecl *pawAst_new_field_decl(struct Ast *ast, struct SourceSpan 
     return d;
 }
 
-static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstType *tag, paw_Bool is_ref)
+static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstType *tag)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ParamDecl_ = (struct AstParamDecl){
@@ -296,7 +295,6 @@ static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan 
         .kind = kAstParamDecl,
         .ident = ident,
         .tag = tag,
-        .is_ref = is_ref,
     };
     pawAst_set_node(ast, id, d);
     return d;

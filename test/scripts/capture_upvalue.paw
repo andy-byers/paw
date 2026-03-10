@@ -239,7 +239,7 @@ pub fn test_modify_enum() {
 #[test]
 pub fn test_bind_capture_to_inout_parameter() {
     let upvalue = 1;
-    let f = |&arg: int| {
+    let f = |&arg| {
         arg += upvalue;
         arg += upvalue;
     };

@@ -807,7 +807,6 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             DUMP_NAME(P, d->ident.name);
             DUMP_CSTR(P, "tag: ");
             dump_type(P, d->tag);
-            DUMP_FMT(P, "is_ref: %d", d->is_ref);
             break;
         }
         case kAstConstDecl: {

@@ -163,9 +163,6 @@ static struct HirDecl *LowerParamDecl(struct LowerAst *L, struct AstParamDecl *d
 {
     struct HirType *tag = lower_type(L, d->tag);
     struct HirIdent const ident = lower_ident(d->ident);
-    if (d->is_ref)
-        // convert reference parameter into reference type
-        tag = NEW_NODE(L, ref_type, d->tag->hdr.span, next_node_id(L), tag);
     return NEW_NODE(L, param_decl, d->span, d->id, d->did, ident, tag);
 }
 
@@ -440,7 +437,6 @@ static struct HirDecl *lower_closure_param(struct LowerAst *L, struct AstParamDe
     struct HirType *tag = d->tag != NULL ? lower_type(L, d->tag)
         : NEW_NODE(L, infer_type, d->span, next_node_id(L));
     struct HirIdent const ident = lower_ident(d->ident);
-    if (d->is_ref) tag = NEW_NODE(L, ref_type, tag->hdr.span, next_node_id(L), tag);
     return NEW_NODE(L, param_decl, d->span, d->id, d->did, ident, tag);
 }
 

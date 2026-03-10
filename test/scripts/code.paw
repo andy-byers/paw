@@ -623,11 +623,11 @@ pub fn test_list_of_str() {
 
 #[test]
 pub fn test_nested_inout() {
-    let inner = |&x: int| {
+    let inner = |&x| {
         x += 1;
     };
 
-    let outer = |&x: int| {
+    let outer = |&x| {
         inner(x);
     };
 

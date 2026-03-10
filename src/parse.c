@@ -810,6 +810,12 @@ static struct AstType *parse_paren_type(struct Lex *lex, struct SourceLoc start,
     return type;
 }
 
+static struct AstType *parse_pointer_type(struct Lex *lex, struct SourceLoc start, paw_Bool is_strict)
+{
+    struct AstType *pointee = parse_type(lex, is_strict);
+    return NEW_NODE(lex, ref_type, SPAN(start, lex->loc), next_id(lex), pointee);
+}
+
 static struct AstType *parse_container_type(struct Lex *lex, struct SourceLoc start, paw_Bool is_strict)
 {
     struct AstType *first = parse_type(lex, is_strict);
@@ -841,6 +847,8 @@ static struct AstType *parse_type(struct Lex *lex, paw_Bool is_strict)
         return parse_paren_type(lex, start, is_strict);
     } else if (test_next(lex, '[')) {
         return parse_container_type(lex, start, is_strict);
+    } else if (test_next(lex, '&')) {
+        return parse_pointer_type(lex, start, is_strict);
     } else if (test_next(lex, TK_FN)) {
         return parse_signature(lex, start);
     } else if (test(lex, TK_UNDERSCORE)) {
@@ -897,21 +905,28 @@ static struct AstType *self_type(struct Lex *lex, struct SourceSpan span)
 
 static struct AstDecl *fn_param_decl(struct Lex *lex)
 {
-    paw_Bool const is_ref = test_next(lex, '&');
     struct AstIdent const ident = parse_ident_or_underscore(lex);
     struct AstType *tag = expect_type_annotation(lex, "parameter", ident, PAW_TRUE);
     return NEW_NODE(lex, param_decl, SPAN(ident.span.start, NODE_END(tag)),
-            next_id(lex), ident, tag, is_ref);
+            next_id(lex), ident, tag);
 }
 
 static struct AstDecl *closure_param_decl(struct Lex *lex)
 {
+    struct SourceLoc const start = TOKEN_START(lex->t);
     paw_Bool const is_ref = test_next(lex, '&');
     struct AstIdent const ident = parse_ident_or_underscore(lex);
     struct AstType *tag = type_annotation(lex, PAW_FALSE);
+    if (is_ref) {
+        if (tag != NULL)
+            pawErr_generic_error(ENV(lex), lex->modname, start,
+                    "'&' cannot appear on closure parameter with type annotation");
+        tag = NEW_NODE(lex, infer_type, ident.span, next_id(lex));
+        tag = NEW_NODE(lex, ref_type, ident.span, next_id(lex), tag);
+    }
     struct SourceLoc const end = tag != NULL ? NODE_END(tag) : ident.span.end;
     return NEW_NODE(lex, param_decl, SPAN(ident.span.start, end),
-            next_id(lex), ident, tag, is_ref);
+            next_id(lex), ident, tag);
 }
 
 static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
@@ -1168,24 +1183,44 @@ static struct AstDeclList *fn_parameters(struct Lex *lex, paw_Bool *is_method)
 
     struct AstDeclList *params = AstDeclList_new(lex->ast);
     if (lex->in_impl && !test(lex, ')')) {
+        struct SourceLoc const param_start = TOKEN_START(lex->t);
         // check for receiver parameter
+        //
+        //  shorthand syntax     | mut | type
+        // ----------------------|-----|-----------
+        //  self                 | no  | Self
+        //  mut self             | yes | Self
+        //  *self                | no  | *Self
+        //  mut self: *Self      | yes | *Self
+        //  *mut self            | no  | *mut Self
+        //  mut self: *mut Self  | yes | *mut Self
+        //
         // Note that only a single "&" can appear before "self".
         struct AstType *tag;
-        paw_Bool is_ref = test_next(lex, '&');
+        paw_Bool is_shorthand_ref = test_next(lex, '&');
         struct AstIdent const ident = parse_ident_or_underscore(lex);
         if (IS_SELF_VAR(lex, ident)) {
             *is_method = PAW_TRUE;
             if (test(lex, ':')) {
+                if (is_shorthand_ref)
+                    pawErr_generic_error(ENV(lex), lex->modname, param_start,
+                            "'&' can only appear before \"self\" or a type");
                 tag = type_annotation(lex, PAW_TRUE);
             } else {
                 tag = self_type(lex, ident.span);
             }
         } else {
+            if (is_shorthand_ref)
+                pawErr_generic_error(ENV(lex), lex->modname, param_start,
+                        "'&' can only appear before \"self\" or a type");
             tag = type_annotation(lex, PAW_TRUE);
         }
+        if (is_shorthand_ref)
+            tag = NEW_NODE(lex, ref_type, SPAN(start, NODE_END(tag)), next_id(lex), tag);
+
         struct AstDecl *first = NEW_NODE(lex, param_decl,
                 SPAN(start, NODE_END(tag)), next_id(lex),
-                ident, tag, is_ref);
+                ident, tag);
         AstDeclList_push(lex->ast, params, first);
         test_next(lex, ',');
     }
