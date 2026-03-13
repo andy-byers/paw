@@ -9,8 +9,6 @@ pub use option::*;
 pub use result::*;
 
 
-pub struct unit; 
-
 impl unit {
     pub fn to_str(self) -> str { 
         "()" 
@@ -35,8 +33,6 @@ impl Default for unit {
     }
 }
 
-
-pub struct bool; 
 
 impl bool {
     pub fn to_str(self) -> str {
@@ -66,8 +62,6 @@ impl Default for bool {
     }
 }
 
-
-pub struct char; 
 
 impl char { 
     #[extern_std] pub fn to_str(self) -> str;
@@ -108,8 +102,6 @@ impl Default for char {
 }
 
 
-pub struct int; 
-
 impl int {
     #[extern_std] pub fn to_str(self) -> str;
 }
@@ -149,8 +141,6 @@ impl Default for int {
 }
 
 
-pub struct float; 
-
 impl float { 
     #[extern_std] pub fn to_str(self) -> str;
 }
@@ -181,8 +171,6 @@ impl Default for float {
     }
 }
 
-
-pub struct str; 
 
 impl str { 
     #[extern_std] pub fn parse_int(self) -> Option<int>;

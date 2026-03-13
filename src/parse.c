@@ -2176,6 +2176,41 @@ static void import_prelude(struct Lex *lex, struct AstDeclList *items)
                 next_id(lex), path, none, AST_USE_GLOB, PAW_FALSE));
 }
 
+static struct AstDecl *generate_builtin_decl(struct Lex *lex, char const *name)
+{
+    struct SourceSpan span = {0};
+    struct AstIdent const ident = {
+        .name = SCAN_STR(lex->C, name),
+        .span = span,
+    };
+
+    AstDeclList *generics = AstDeclList_new(lex->ast);
+    AstDeclList *fields = AstDeclList_new(lex->ast);
+    AstDeclList *variants = AstDeclList_new(lex->ast);
+    struct AstDecl *v = NEW_NODE(lex, variant_decl, span,
+            next_id(lex), ident, fields, 0);
+    AstDeclList_push(lex->ast, variants, v);
+
+    return NEW_NODE(lex, adt_decl, span, next_id(lex),
+            ident, generics, variants, PAW_TRUE, PAW_TRUE,
+            1); // TODO: remove is_inline (always true)
+}
+
+static void generate_builtin_decls(struct Lex *lex, AstDeclList *items)
+{
+#define GENERATE_DECL(Name_) \
+        AstDeclList_push(lex->ast, items, generate_builtin_decl(lex, Name_));
+
+    GENERATE_DECL("unit");
+    GENERATE_DECL("bool");
+    GENERATE_DECL("char");
+    GENERATE_DECL("int");
+    GENERATE_DECL("float");
+    GENERATE_DECL("str");
+
+#undef GENERATE_DECL
+}
+
 static struct AstDecl *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 {
     pawX_set_source(lex, input, ud);
@@ -2185,6 +2220,9 @@ static struct AstDecl *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 
     import_prelude(lex, items);
     toplevel_items(lex, items);
+
+    if (lex->modno == PRELUDE_MODNO)
+        generate_builtin_decls(lex, items);
 
     paw_assert(lex->ptr == lex->end);
     struct AstDecl *decl = NEW_NODE(lex, module_decl, span_from(lex, start),
