@@ -1,0 +1,61 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+
+pub type Result<T> = prelude::Result<T, OutOfMemory>;
+
+pub struct OutOfMemory;
+
+impl Copy for OutOfMemory {}
+
+
+#[extern]
+pub fn sizeof<T>() -> int;
+
+#[extern]
+pub fn alignof<T>() -> int;
+
+
+fn strideof<T>() -> int {
+    let size = sizeof::<T>();
+    let alignment = alignof::<T>();
+    (size + (alignment - 1)) & ~(alignment - 1)
+}
+
+fn compute_array_size<T>(count: int) -> Result<int> {
+    let stride = strideof::<T>();
+    if count <= INT_MAX / stride {
+        Ok(count * stride)
+    } else {
+        Err(OutOfMemory)
+    }
+}
+
+pub fn alloc<T>(count: int) -> Result<*T> {
+    let size = compute_array_size::<T>(count)?;
+    Ok(raw_alloc(size)? as *T)
+}
+
+pub fn realloc<T>(ptr: *T, count: int) -> Result<*T> {
+    let size = compute_array_size::<T>(count)?;
+    Ok(raw_realloc(ptr as *char, size)? as *T)
+}
+
+pub fn dealloc<T>(ptr: *T) {
+    raw_dealloc(ptr as *char)
+}
+
+
+#[extern = "paw_mem_raw_alloc"] 
+pub fn raw_alloc(size: int) -> Result<*char>;
+
+#[extern = "paw_mem_raw_realloc"] 
+pub fn raw_realloc(ptr: *char, size: int) -> Result<*char>;
+
+#[extern = "paw_mem_raw_dealloc"] 
+pub fn raw_dealloc(ptr: *char);
+
+#[extern = "paw_mem_raw_aligned_alloc"] 
+pub fn raw_aligned_alloc(alignment: int, size: int) -> Result<*char>;
+

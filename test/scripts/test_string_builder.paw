@@ -1,0 +1,29 @@
+// test_string_builder.paw
+
+use string_builder::Builder;
+
+#[test]
+pub fn empty_builder_produces_empty_string() {
+    let b = Builder::new();
+    b.append("").unwrap();
+    assert(b.string().is_empty());
+}
+
+#[test]
+pub fn builder_produces_expected_results() {
+    let b = Builder::new();
+    b.append("").unwrap();
+    b.append_char('H').unwrap();
+    b.append_char('e').unwrap();
+    b.append("llo,").unwrap();
+    b.append_char(' ').unwrap();
+    b.append_char('w').unwrap();
+    b.append("orl").unwrap();
+    b.append_char('d').unwrap();
+    b.append_char('!').unwrap();
+    b.append("").unwrap();
+
+    let s = b.string();
+    assert(s.to_slice().eq(&"Hello, world!".to_slice()));
+}
+

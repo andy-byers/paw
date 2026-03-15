@@ -2,43 +2,61 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-pub inline enum Result<T, E> {
+pub enum Result<T, E> {
     Ok(T),
     Err(E),
 }
 
 impl<T, E> Result<T, E> {
-    pub fn is_ok(self) -> bool {
+    pub fn is_ok(*self) -> bool {
         !self.is_err()
     }
 
-    pub fn is_err(self) -> bool {
+    pub fn is_err(*self) -> bool {
         match self {
-            Err(_) => true,
-            Ok(_) => false,
+            *Err(_) => true,
+            *Ok(_) => false,
         }
     }
 
-    pub fn unwrap_or(self, value: T) -> T {
-        match self {
-            Ok(t) => t,
-            Err(_) => value,
-        }
+    pub fn ok(self) -> Option<T> {
+        Some(self.unwrap())
     }
 
-    pub fn unwrap_err(self) -> E {
+    pub fn err(self) -> Option<E> {
+        Some(self.unwrap_err())
+    }
+
+    pub fn unwrap_or(self, default: T) -> T {
         match self {
-            Err(e) => e,
-            Ok(_) => panic("failed to unwrap error"),
+            Ok(value) => value,
+            Err(_) => default,
         }
     }
 
     pub fn unwrap(self) -> T {
+        self.expect("failed to unwrap")
+    }
+
+    pub fn unwrap_err(self) -> E {
+        self.expect_err("failed to unwrap error")
+    }
+
+    pub fn expect(self, message: str) -> T {
         match self {
-            Ok(t) => t,
-            Err(_) => panic("failed to unwrap"),
+            Ok(value) => value,
+            Err(_) => panic(message),
+        }
+    }
+
+    pub fn expect_err(self, message: str) -> E {
+        match self {
+            Err(error) => error,
+            Ok(_) => panic(message),
         }
     }
 }
 
 pub use Result::*;
+
+impl<T: Copy, E: Copy> Copy for Result<T, E> {}

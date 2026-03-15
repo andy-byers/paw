@@ -14,72 +14,85 @@
 #include "source.h"
 
 #define AST_DECL_LIST(X) \
-    X(ModuleDecl)        \
-    X(FieldDecl)         \
-    X(ParamDecl)         \
-    X(FnDecl)            \
-    X(GenericDecl)       \
-    X(AdtDecl)           \
-    X(ImplDecl)          \
-    X(TypeDecl)          \
-    X(ConstDecl)         \
-    X(TraitDecl)         \
-    X(UseDecl)           \
+    X(ModuleDecl) \
+    X(FieldDecl) \
+    X(ParamDecl) \
+    X(FnDecl) \
+    X(GenericDecl) \
+    X(AdtDecl) \
+    X(ImplDecl) \
+    X(TypeDecl) \
+    X(ConstDecl) \
+    X(TraitDecl) \
+    X(UseDecl) \
     X(VariantDecl)
 
 #define AST_TYPE_LIST(X) \
-    X(RefType)           \
-    X(PathType)          \
-    X(TupleType)         \
-    X(ContainerType)     \
-    X(FnType)            \
-    X(NeverType)         \
+    X(RefType) \
+    X(PathType) \
+    X(ArrayType) \
+    X(TupleType) \
+    X(SliceType) \
+    X(FnType) \
+    X(NeverType) \
     X(InferType)
 
 #define AST_EXPR_LIST(X) \
-    X(ParenExpr)         \
-    X(AddrOfExpr)        \
-    X(LiteralExpr)       \
-    X(LogicalExpr)       \
-    X(StringExpr)        \
-    X(PathExpr)          \
-    X(ChainExpr)         \
-    X(UnOpExpr)          \
-    X(BinOpExpr)         \
-    X(RangeExpr)         \
-    X(ClosureExpr)       \
-    X(ConversionExpr)    \
-    X(CallExpr)          \
-    X(Index)             \
-    X(Selector)          \
-    X(FieldExpr)         \
-    X(AssignExpr)        \
-    X(OpAssignExpr)      \
-    X(Block)             \
-    X(IfExpr)            \
-    X(ForExpr)           \
-    X(LoopExpr)          \
-    X(WhileExpr)         \
-    X(JumpExpr)          \
-    X(ReturnExpr)        \
-    X(MatchArm)          \
+    X(ParenExpr) \
+    X(LiteralExpr) \
+    X(LogicalExpr) \
+    X(StringExpr) \
+    X(PathExpr) \
+    X(ChainExpr) \
+    X(UnOpExpr) \
+    X(BinOpExpr) \
+    X(RangeExpr) \
+    X(ClosureExpr) \
+    X(ConversionExpr) \
+    X(CallExpr) \
+    X(Index) \
+    X(Selector) \
+    X(FieldExpr) \
+    X(AssignExpr) \
+    X(OpAssignExpr) \
+    X(Block) \
+    X(IfExpr) \
+    X(ForExpr) \
+    X(LoopExpr) \
+    X(WhileExpr) \
+    X(JumpExpr) \
+    X(ReturnExpr) \
+    X(MatchArm) \
     X(MatchExpr)
 
 #define AST_STMT_LIST(X) \
-    X(LetStmt)           \
-    X(ExprStmt)          \
+    X(LetStmt) \
+    X(ExprStmt) \
     X(DeclStmt)
 
 #define AST_PAT_LIST(X) \
-    X(OrPat)            \
-    X(FieldPat)         \
-    X(StructPat)        \
-    X(VariantPat)       \
-    X(TuplePat)         \
-    X(IdentPat)         \
-    X(PathPat)          \
-    X(WildcardPat)      \
+    X(OrPat) \
+    X(PtrPat) \
+    X(RefPat) \
+    X(FieldPat) \
+    X(StructPat) \
+    X(VariantPat) \
+    X(TuplePat) \
+    X(IdentPat) \
+    X(PathPat) \
+    X(WildcardPat) \
     X(LiteralPat)
+
+struct AstGenericArg {
+    paw_Bool is_type;
+    NodeId id;
+    NodeId target;
+    Str const *item;
+    union {
+        struct AstType *t;
+        struct AstExpr *k;
+    };
+};
 
 struct AstPath {
     struct AstSegments *segments;
@@ -95,7 +108,7 @@ struct AstSegment {
     NodeId id;
     struct SourceSpan span;
     struct AstIdent ident;
-    struct AstTypeList *types;
+    struct AstGenericArgs *args;
 };
 
 struct AstGenericBound {
@@ -105,14 +118,14 @@ struct AstGenericBound {
 static inline void pawAst_set_node(struct Ast *, NodeId, void *);
 
 enum AstDeclKind {
-#define DEFINE_ENUM(X) kAst##X,
-    AST_DECL_LIST(DEFINE_ENUM)
-#undef DEFINE_ENUM
+#define X(Kind_) kAst##Kind_,
+    AST_DECL_LIST(X)
+#undef X
 };
 
-#define AST_DECL_HEADER     \
-    NodeId id;              \
-    DeclId did;             \
+#define AST_DECL_HEADER \
+    NodeId id; \
+    DeclId did; \
     struct SourceSpan span; \
     enum AstDeclKind kind : 8
 
@@ -162,6 +175,8 @@ struct AstImplDecl {
     struct AstType *trait;
     struct AstType *type;
     struct AstDeclList *generics;
+    struct AstDeclList *types;
+    struct AstDeclList *constants;
     struct AstDeclList *methods;
 };
 
@@ -169,7 +184,6 @@ struct AstAdtDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
-    paw_Bool is_inline : 1;
     struct AstIdent ident;
     struct AstDeclList *generics;
     struct AstDeclList *variants;
@@ -198,8 +212,17 @@ struct AstVariantDecl {
 
 struct AstGenericDecl {
     AST_DECL_HEADER;
-    struct AstIdent ident;
-    struct AstBoundList *bounds;
+    paw_Bool is_type : 1;
+    union {
+        struct {
+            struct AstIdent ident;
+            struct AstBoundList *bounds;
+        } t;
+        struct {
+            struct AstType *type;
+            struct AstIdent ident;
+        } k;
+    };
 };
 
 struct AstFieldDecl {
@@ -220,36 +243,31 @@ struct AstTraitDecl {
     paw_Bool is_pub : 1;
     struct AstIdent ident;
     struct AstDeclList *generics;
+    struct AstDeclList *types;
     struct AstDeclList *methods;
 };
 
 struct AstDecl {
     union {
         struct AstDeclHeader hdr;
-#define DEFINE_UNION(X) struct Ast##X X##_;
-        AST_DECL_LIST(DEFINE_UNION)
-#undef DEFINE_UNION
+#define X(Kind_) struct Ast##Kind_ Kind_##_;
+        AST_DECL_LIST(X)
+#undef X
     };
 };
 
-static char const *kAstDeclNames[] = {
-#define DEFINE_NAME(X) "Ast" #X,
-    AST_DECL_LIST(DEFINE_NAME)
-#undef DEFINE_NAME
-};
-
-#define DEFINE_ACCESS(X)                                         \
-    static inline paw_Bool AstIs##X(struct AstDecl const *node)  \
-    {                                                            \
-        return node->hdr.kind == kAst##X;                        \
-    }                                                            \
-    static inline struct Ast##X *AstGet##X(struct AstDecl *node) \
-    {                                                            \
-        paw_assert(AstIs##X(node));                              \
-        return &node->X##_;                                      \
+#define X(Kind_) \
+    static inline paw_Bool AstIs##Kind_(struct AstDecl const *node) \
+    { \
+        return node->hdr.kind == kAst##Kind_; \
+    } \
+    static inline struct Ast##Kind_ *AstGet##Kind_(struct AstDecl *node) \
+    { \
+        paw_assert(AstIs##Kind_(node)); \
+        return &node->Kind_##_; \
     }
-AST_DECL_LIST(DEFINE_ACCESS)
-#undef DEFINE_ACCESS
+AST_DECL_LIST(X)
+#undef X
 
 struct AstDecl *pawAst_new_decl(struct Ast *ast);
 
@@ -322,7 +340,7 @@ inline static struct AstDecl *pawAst_new_fn_decl(struct Ast *ast, struct SourceS
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_generic_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstBoundList *bounds)
+inline static struct AstDecl *pawAst_new_generic_type_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstBoundList *bounds)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->GenericDecl_ = (struct AstGenericDecl){
@@ -330,14 +348,31 @@ inline static struct AstDecl *pawAst_new_generic_decl(struct Ast *ast, struct So
         .did = NO_DECL,
         .span = span,
         .kind = kAstGenericDecl,
-        .ident = ident,
-        .bounds = bounds,
+        .is_type = PAW_TRUE,
+        .t.ident = ident,
+        .t.bounds = bounds,
     };
     pawAst_set_node(ast, id, d);
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_impl_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstType *trait, struct AstDeclList *generics, struct AstDeclList *methods)
+inline static struct AstDecl *pawAst_new_generic_const_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstIdent ident)
+{
+    struct AstDecl *d = pawAst_new_decl(ast);
+    d->GenericDecl_ = (struct AstGenericDecl){
+        .id = id,
+        .did = NO_DECL,
+        .span = span,
+        .kind = kAstGenericDecl,
+        .is_type = PAW_FALSE,
+        .k.ident = ident,
+        .k.type = type,
+    };
+    pawAst_set_node(ast, id, d);
+    return d;
+}
+
+inline static struct AstDecl *pawAst_new_impl_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstType *trait, struct AstDeclList *generics, struct AstDeclList *types, struct AstDeclList *constants, struct AstDeclList *methods)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ImplDecl_ = (struct AstImplDecl){
@@ -348,13 +383,15 @@ inline static struct AstDecl *pawAst_new_impl_decl(struct Ast *ast, struct Sourc
         .type = type,
         .trait = trait,
         .generics = generics,
+        .types = types,
+        .constants = constants,
         .methods = methods,
     };
     pawAst_set_node(ast, id, d);
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstDeclList *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
+inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstDeclList *variants, paw_Bool is_pub, paw_Bool is_struct)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->AdtDecl_ = (struct AstAdtDecl){
@@ -367,7 +404,6 @@ inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct Source
         .variants = variants,
         .is_pub = is_pub,
         .is_struct = is_struct,
-        .is_inline = is_inline,
     };
     pawAst_set_node(ast, id, d);
     return d;
@@ -408,7 +444,7 @@ inline static struct AstDecl *pawAst_new_const_decl(struct Ast *ast, struct Sour
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstDeclList *methods, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstDeclList *types, struct AstDeclList *methods, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->TraitDecl_ = (struct AstTraitDecl){
@@ -418,6 +454,7 @@ inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct Sour
         .kind = kAstTraitDecl,
         .ident = ident,
         .generics = generics,
+        .types = types,
         .methods = methods,
         .is_pub = is_pub,
 
@@ -460,13 +497,13 @@ inline static struct AstDecl *pawAst_new_variant_decl(struct Ast *ast, struct So
 }
 
 enum AstTypeKind {
-#define DEFINE_ENUM(X) kAst##X,
-    AST_TYPE_LIST(DEFINE_ENUM)
-#undef DEFINE_ENUM
+#define X(Kind_) kAst##Kind_,
+    AST_TYPE_LIST(X)
+#undef X
 };
 
-#define AST_TYPE_HEADER     \
-    NodeId id;              \
+#define AST_TYPE_HEADER \
+    NodeId id; \
     struct SourceSpan span; \
     enum AstTypeKind kind : 8
 
@@ -476,6 +513,7 @@ struct AstTypeHeader {
 
 struct AstRefType {
     AST_TYPE_HEADER;
+    paw_Bool is_mut : 1;
     struct AstType *type;
 };
 
@@ -484,15 +522,20 @@ struct AstPathType {
     struct AstPath path;
 };
 
+struct AstSliceType {
+    AST_TYPE_HEADER;
+    struct AstType *type;
+};
+
+struct AstArrayType {
+    AST_TYPE_HEADER;
+    struct AstType *type;
+    struct AstExpr *length;
+};
+
 struct AstTupleType {
     AST_TYPE_HEADER;
     struct AstTypeList *types;
-};
-
-struct AstContainerType {
-    AST_TYPE_HEADER;
-    struct AstType *first;
-    struct AstType *second;
 };
 
 struct AstFnType {
@@ -512,34 +555,28 @@ struct AstInferType {
 struct AstType {
     union {
         struct AstTypeHeader hdr;
-#define DEFINE_UNION(X) struct Ast##X X##_;
-        AST_TYPE_LIST(DEFINE_UNION)
-#undef DEFINE_UNION
+#define X(Kind_) struct Ast##Kind_ Kind_##_;
+        AST_TYPE_LIST(X)
+#undef X
     };
 };
 
-static char const *kAstTypeNames[] = {
-#define DEFINE_NAME(X) "Ast" #X,
-    AST_TYPE_LIST(DEFINE_NAME)
-#undef DEFINE_NAME
-};
-
-#define DEFINE_ACCESS(X)                                         \
-    static inline paw_Bool AstIs##X(struct AstType const *node)  \
-    {                                                            \
-        return node->hdr.kind == kAst##X;                        \
-    }                                                            \
-    static inline struct Ast##X *AstGet##X(struct AstType *node) \
-    {                                                            \
-        paw_assert(AstIs##X(node));                              \
-        return &node->X##_;                                      \
+#define X(Kind_) \
+    static inline paw_Bool AstIs##Kind_(struct AstType const *node) \
+    { \
+        return node->hdr.kind == kAst##Kind_; \
+    } \
+    static inline struct Ast##Kind_ *AstGet##Kind_(struct AstType *node) \
+    { \
+        paw_assert(AstIs##Kind_(node)); \
+        return &node->Kind_##_; \
     }
-AST_TYPE_LIST(DEFINE_ACCESS)
-#undef DEFINE_ACCESS
+AST_TYPE_LIST(X)
+#undef X
 
 struct AstType *pawAst_new_type(struct Ast *ast);
 
-inline static struct AstType *pawAst_new_ref_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type)
+inline static struct AstType *pawAst_new_ref_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, paw_Bool is_mut)
 {
     struct AstType *t = pawAst_new_type(ast);
     t->RefType_ = (struct AstRefType){
@@ -547,6 +584,7 @@ inline static struct AstType *pawAst_new_ref_type(struct Ast *ast, struct Source
         .span = span,
         .kind = kAstRefType,
         .type = type,
+        .is_mut = is_mut,
     };
     pawAst_set_node(ast, id, t);
     return t;
@@ -560,6 +598,33 @@ inline static struct AstType *pawAst_new_path_type(struct Ast *ast, struct Sourc
         .span = span,
         .kind = kAstPathType,
         .path = path,
+    };
+    pawAst_set_node(ast, id, t);
+    return t;
+}
+
+inline static struct AstType *pawAst_new_slice_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type)
+{
+    struct AstType *t = pawAst_new_type(ast);
+    t->SliceType_ = (struct AstSliceType){
+        .id = id,
+        .span = span,
+        .kind = kAstSliceType,
+        .type = type,
+    };
+    pawAst_set_node(ast, id, t);
+    return t;
+}
+
+inline static struct AstType *pawAst_new_array_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstExpr *length)
+{
+    struct AstType *t = pawAst_new_type(ast);
+    t->ArrayType_ = (struct AstArrayType){
+        .id = id,
+        .span = span,
+        .kind = kAstArrayType,
+        .type = type,
+        .length = length,
     };
     pawAst_set_node(ast, id, t);
     return t;
@@ -616,28 +681,14 @@ inline static struct AstType *pawAst_new_infer_type(struct Ast *ast, struct Sour
     return t;
 }
 
-inline static struct AstType *pawAst_new_container_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *first, struct AstType *second)
-{
-    struct AstType *t = pawAst_new_type(ast);
-    t->ContainerType_ = (struct AstContainerType){
-        .id = id,
-        .span = span,
-        .kind = kAstContainerType,
-        .first = first,
-        .second = second,
-    };
-    pawAst_set_node(ast, id, t);
-    return t;
-}
-
 enum AstExprKind {
-#define DEFINE_ENUM(X) kAst##X,
-    AST_EXPR_LIST(DEFINE_ENUM)
-#undef DEFINE_ENUM
+#define X(Kind_) kAst##Kind_,
+    AST_EXPR_LIST(X)
+#undef X
 };
 
-#define AST_EXPR_HEADER     \
-    NodeId id;              \
+#define AST_EXPR_HEADER \
+    NodeId id; \
     struct SourceSpan span; \
     enum AstExprKind kind : 8
 
@@ -650,11 +701,6 @@ struct AstPathExpr {
     struct AstPath path;
 };
 
-struct AstAddrOfExpr {
-    AST_EXPR_HEADER;
-    struct AstExpr *expr;
-};
-
 struct AstParenExpr {
     AST_EXPR_HEADER;
     struct AstExpr *expr;
@@ -665,7 +711,7 @@ struct AstLiteralExpr {
     enum AstLitKind {
         kAstBasicLit,
         kAstCompositeLit,
-        kAstContainerLit,
+        kAstArrayLit,
         kAstTupleLit,
     } lit_kind;
 
@@ -680,10 +726,9 @@ struct AstLiteralExpr {
             struct AstExprList *items;
         } comp;
 
-        struct AstContainerLit {
-            struct AstExprList *items;
-            enum BuiltinKind code;
-        } cont;
+        struct AstArrayLit {
+            struct AstExprList *elems;
+        } array;
 
         struct AstTupleLit {
             struct AstExprList *elems;
@@ -730,12 +775,16 @@ struct AstUnOpExpr {
     struct AstExpr *target;
 };
 
+#define AST_IS_UNOP(Expr_, Kind_) (AstIsUnOpExpr(Expr_) && AstGetUnOpExpr(Expr_)->op == (Kind_))
+
 struct AstRangeExpr {
     AST_EXPR_HEADER;
     paw_Bool is_inclusive : 1;
     struct AstExpr *lhs;
     struct AstExpr *rhs;
 };
+
+#define AST_IS_BINOP(Expr_, Kind_) (AstIsBinOpExpr(Expr_) && AstGetBinOpExpr(Expr_)->op == (Kind_))
 
 struct AstBinOpExpr {
     AST_EXPR_HEADER;
@@ -785,8 +834,8 @@ struct AstIndex {
 
 struct AstConversionExpr {
     AST_EXPR_HEADER;
-    enum BuiltinKind to;
-    struct AstExpr *arg;
+    struct AstExpr *from;
+    struct AstType *to;
 };
 
 struct AstAssignExpr {
@@ -859,30 +908,24 @@ struct AstMatchExpr {
 struct AstExpr {
     union {
         struct AstExprHeader hdr;
-#define DEFINE_UNION(X) struct Ast##X X##_;
-        AST_EXPR_LIST(DEFINE_UNION)
-#undef DEFINE_UNION
+#define X(Kind_) struct Ast##Kind_ Kind_##_;
+        AST_EXPR_LIST(X)
+#undef X
     };
 };
 
-static char const *kAstExprNames[] = {
-#define DEFINE_NAME(X) "Ast" #X,
-    AST_EXPR_LIST(DEFINE_NAME)
-#undef DEFINE_NAME
-};
-
-#define DEFINE_ACCESS(X)                                         \
-    static inline paw_Bool AstIs##X(struct AstExpr const *node)  \
-    {                                                            \
-        return node->hdr.kind == kAst##X;                        \
-    }                                                            \
-    static inline struct Ast##X *AstGet##X(struct AstExpr *node) \
-    {                                                            \
-        paw_assert(AstIs##X(node));                              \
-        return &node->X##_;                                      \
+#define X(Kind_) \
+    static inline paw_Bool AstIs##Kind_(struct AstExpr const *node) \
+    { \
+        return node->hdr.kind == kAst##Kind_; \
+    } \
+    static inline struct Ast##Kind_ *AstGet##Kind_(struct AstExpr *node) \
+    { \
+        paw_assert(AstIs##Kind_(node)); \
+        return &node->Kind_##_; \
     }
-AST_EXPR_LIST(DEFINE_ACCESS)
-#undef DEFINE_ACCESS
+AST_EXPR_LIST(X)
+#undef X
 
 struct AstExpr *pawAst_new_expr(struct Ast *ast);
 
@@ -893,19 +936,6 @@ inline static struct AstExpr *pawAst_new_paren_expr(struct Ast *ast, struct Sour
         .id = id,
         .span = span,
         .kind = kAstParenExpr,
-        .expr = expr,
-    };
-    pawAst_set_node(ast, id, e);
-    return e;
-}
-
-inline static struct AstExpr *pawAst_new_addr_of_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstExpr *expr)
-{
-    struct AstExpr *e = pawAst_new_expr(ast);
-    e->AddrOfExpr_ = (struct AstAddrOfExpr){
-        .id = id,
-        .span = span,
-        .kind = kAstAddrOfExpr,
         .expr = expr,
     };
     pawAst_set_node(ast, id, e);
@@ -942,16 +972,15 @@ inline static struct AstExpr *pawAst_new_composite_lit(struct Ast *ast, struct S
     return e;
 }
 
-inline static struct AstExpr *pawAst_new_container_lit(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstExprList *items, enum BuiltinKind code)
+inline static struct AstExpr *pawAst_new_array_lit(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstExprList *elems)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->LiteralExpr_ = (struct AstLiteralExpr){
         .id = id,
         .span = span,
         .kind = kAstLiteralExpr,
-        .lit_kind = kAstContainerLit,
-        .cont.items = items,
-        .cont.code = code,
+        .lit_kind = kAstArrayLit,
+        .array.elems = elems,
     };
     pawAst_set_node(ast, id, e);
     return e;
@@ -1084,14 +1113,14 @@ inline static struct AstExpr *pawAst_new_closure_expr(struct Ast *ast, struct So
     return e;
 }
 
-inline static struct AstExpr *pawAst_new_conversion_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstExpr *arg, enum BuiltinKind to)
+inline static struct AstExpr *pawAst_new_conversion_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstExpr *from, struct AstType *to)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->ConversionExpr_ = (struct AstConversionExpr){
         .id = id,
         .span = span,
         .kind = kAstConversionExpr,
-        .arg = arg,
+        .from = from,
         .to = to,
     };
     pawAst_set_node(ast, id, e);
@@ -1342,13 +1371,13 @@ inline static struct AstExpr *pawAst_new_match_expr(struct Ast *ast, struct Sour
 }
 
 enum AstPatKind {
-#define DEFINE_ENUM(X) kAst##X,
-    AST_PAT_LIST(DEFINE_ENUM)
-#undef DEFINE_ENUM
+#define X(Kind_) kAst##Kind_,
+    AST_PAT_LIST(X)
+#undef X
 };
 
-#define AST_PAT_HEADER      \
-    NodeId id;              \
+#define AST_PAT_HEADER \
+    NodeId id; \
     struct SourceSpan span; \
     enum AstPatKind kind : 8
 
@@ -1361,6 +1390,16 @@ struct AstOrPat {
     struct AstPatList *pats;
 };
 
+struct AstRefPat {
+    AST_PAT_HEADER;
+    struct AstPat *referent;
+};
+
+struct AstPtrPat {
+    AST_PAT_HEADER;
+    struct AstPat *pointee;
+};
+
 struct AstFieldPat {
     AST_PAT_HEADER;
     struct AstIdent ident;
@@ -1370,18 +1409,18 @@ struct AstFieldPat {
 struct AstStructPat {
     AST_PAT_HEADER;
     struct AstPath path;
-    struct AstPatList *fields; // [AstFieldPat]
+    struct AstPatList *fields;
 };
 
 struct AstVariantPat {
     AST_PAT_HEADER;
     struct AstPath path;
-    struct AstPatList *fields; // [AstPat]
+    struct AstPatList *fields;
 };
 
 struct AstTuplePat {
     AST_PAT_HEADER;
-    struct AstPatList *elems; // [AstPat]
+    struct AstPatList *elems;
 };
 
 struct AstIdentPat {
@@ -1406,30 +1445,24 @@ struct AstLiteralPat {
 struct AstPat {
     union {
         struct AstPatHeader hdr;
-#define DEFINE_UNION(X) struct Ast##X X##_;
-        AST_PAT_LIST(DEFINE_UNION)
-#undef DEFINE_UNION
+#define X(Kind_) struct Ast##Kind_ Kind_##_;
+        AST_PAT_LIST(X)
+#undef X
     };
 };
 
-static char const *kAstPatNames[] = {
-#define DEFINE_NAME(X) "Ast" #X,
-    AST_PAT_LIST(DEFINE_NAME)
-#undef DEFINE_NAME
-};
-
-#define DEFINE_ACCESS(X)                                        \
-    static inline paw_Bool AstIs##X(struct AstPat const *node)  \
-    {                                                           \
-        return node->hdr.kind == kAst##X;                       \
-    }                                                           \
-    static inline struct Ast##X *AstGet##X(struct AstPat *node) \
-    {                                                           \
-        paw_assert(AstIs##X(node));                             \
-        return &node->X##_;                                     \
+#define X(Kind_) \
+    static inline paw_Bool AstIs##Kind_(struct AstPat const *node) \
+    { \
+        return node->hdr.kind == kAst##Kind_; \
+    } \
+    static inline struct Ast##Kind_ *AstGet##Kind_(struct AstPat *node) \
+    { \
+        paw_assert(AstIs##Kind_(node)); \
+        return &node->Kind_##_; \
     }
-AST_PAT_LIST(DEFINE_ACCESS)
-#undef DEFINE_ACCESS
+AST_PAT_LIST(X)
+#undef X
 
 struct AstPat *pawAst_new_pat(struct Ast *ast);
 
@@ -1441,6 +1474,32 @@ inline static struct AstPat *pawAst_new_or_pat(struct Ast *ast, struct SourceSpa
         .span = span,
         .kind = kAstOrPat,
         .pats = pats,
+    };
+    pawAst_set_node(ast, id, p);
+    return p;
+}
+
+inline static struct AstPat *pawAst_new_ref_pat(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPat *referent)
+{
+    struct AstPat *p = pawAst_new_pat(ast);
+    p->RefPat_ = (struct AstRefPat){
+        .id = id,
+        .span = span,
+        .kind = kAstRefPat,
+        .referent = referent,
+    };
+    pawAst_set_node(ast, id, p);
+    return p;
+}
+
+inline static struct AstPat *pawAst_new_ptr_pat(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPat *pointee)
+{
+    struct AstPat *p = pawAst_new_pat(ast);
+    p->PtrPat_ = (struct AstPtrPat){
+        .id = id,
+        .span = span,
+        .kind = kAstPtrPat,
+        .pointee = pointee,
     };
     pawAst_set_node(ast, id, p);
     return p;
@@ -1553,13 +1612,13 @@ inline static struct AstPat *pawAst_new_literal_pat(struct Ast *ast, struct Sour
 }
 
 enum AstStmtKind {
-#define DEFINE_ENUM(X) kAst##X,
-    AST_STMT_LIST(DEFINE_ENUM)
-#undef DEFINE_ENUM
+#define X(Kind_) kAst##Kind_,
+    AST_STMT_LIST(X)
+#undef X
 };
 
-#define AST_STMT_HEADER     \
-    NodeId id;              \
+#define AST_STMT_HEADER \
+    NodeId id; \
     struct SourceSpan span; \
     enum AstStmtKind kind : 8
 
@@ -1588,30 +1647,24 @@ struct AstExprStmt {
 struct AstStmt {
     union {
         struct AstStmtHeader hdr;
-#define DEFINE_UNION(X) struct Ast##X X##_;
-        AST_STMT_LIST(DEFINE_UNION)
-#undef DEFINE_UNION
+#define X(Kind_) struct Ast##Kind_ Kind_##_;
+        AST_STMT_LIST(X)
+#undef X
     };
 };
 
-static char const *kAstStmtNames[] = {
-#define DEFINE_NAME(X) "Ast" #X,
-    AST_STMT_LIST(DEFINE_NAME)
-#undef DEFINE_NAME
-};
-
-#define DEFINE_ACCESS(X)                                         \
-    static inline paw_Bool AstIs##X(struct AstStmt const *node)  \
-    {                                                            \
-        return node->hdr.kind == kAst##X;                        \
-    }                                                            \
-    static inline struct Ast##X *AstGet##X(struct AstStmt *node) \
-    {                                                            \
-        paw_assert(AstIs##X(node));                              \
-        return &node->X##_;                                      \
+#define X(Kind_) \
+    static inline paw_Bool AstIs##Kind_(struct AstStmt const *node) \
+    { \
+        return node->hdr.kind == kAst##Kind_; \
+    } \
+    static inline struct Ast##Kind_ *AstGet##Kind_(struct AstStmt *node) \
+    { \
+        paw_assert(AstIs##Kind_(node)); \
+        return &node->Kind_##_; \
     }
-AST_STMT_LIST(DEFINE_ACCESS)
-#undef DEFINE_ACCESS
+AST_STMT_LIST(X)
+#undef X
 
 struct AstStmt *pawAst_new_stmt(struct Ast *ast);
 
@@ -1678,6 +1731,7 @@ DEFINE_LIST(struct Ast, AstPatList, struct AstPat *)
 DEFINE_LIST(struct Ast, AstStringList, struct AstStringPart)
 DEFINE_LIST(struct Ast, AstSegments, struct AstSegment)
 DEFINE_LIST(struct Ast, AstBoundList, struct AstGenericBound)
+DEFINE_LIST(struct Ast, AstGenericArgs, struct AstGenericArg)
 
 struct Ast *pawAst_new(struct Compiler *C);
 void pawAst_free(struct Ast *ast);
@@ -1705,12 +1759,12 @@ static inline void pawAst_path_init(struct Ast *ast, struct AstPath *ppath, stru
     };
 }
 
-inline static struct AstSegment *pawAst_add_segment(struct Ast *ast, struct AstSegments *segments, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstTypeList *args)
+inline static struct AstSegment *pawAst_add_segment(struct Ast *ast, struct AstSegments *segments, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstGenericArgs *args)
 {
     AstSegments_push(ast, segments, (struct AstSegment){
                                 .id = id,
                                 .span = span,
-                                .types = args,
+                                .args = args,
                                 .ident = ident,
                             });
     return &K_LIST_LAST(segments);
@@ -1739,15 +1793,15 @@ struct AstVisitor {
     void (*PostVisitType)(struct AstVisitor *V, struct AstType *node);
     void (*PostVisitPat)(struct AstVisitor *V, struct AstPat *node);
 
-#define DEFINE_CALLBACK(X)                                                 \
-        paw_Bool (*Visit##X)(struct AstVisitor * V, struct Ast##X * node); \
-        void (*PostVisit##X)(struct AstVisitor * V, struct Ast##X * node);
-    AST_EXPR_LIST(DEFINE_CALLBACK)
-    AST_DECL_LIST(DEFINE_CALLBACK)
-    AST_STMT_LIST(DEFINE_CALLBACK)
-    AST_TYPE_LIST(DEFINE_CALLBACK)
-    AST_PAT_LIST(DEFINE_CALLBACK)
-#undef DEFINE_CALLBACK
+#define X(Kind_) \
+        paw_Bool (*Visit##Kind_)(struct AstVisitor * V, struct Ast##Kind_ * node); \
+        void (*PostVisit##Kind_)(struct AstVisitor * V, struct Ast##Kind_ * node);
+    AST_EXPR_LIST(X)
+    AST_DECL_LIST(X)
+    AST_STMT_LIST(X)
+    AST_TYPE_LIST(X)
+    AST_PAT_LIST(X)
+#undef X
 };
 
 void pawAst_visitor_init(struct AstVisitor *V, struct Ast *ast, void *ud);
@@ -1763,7 +1817,12 @@ void pawAst_visit_stmt_list(struct AstVisitor *V, struct AstStmtList *list);
 void pawAst_visit_decl_list(struct AstVisitor *V, struct AstDeclList *list);
 void pawAst_visit_type_list(struct AstVisitor *V, struct AstTypeList *list);
 void pawAst_visit_pat_list(struct AstVisitor *V, struct AstPatList *list);
+void pawAst_visit_generic_arg(struct AstVisitor *V, struct AstGenericArg arg);
+void pawAst_visit_generic_args(struct AstVisitor *V, struct AstGenericArgs *list);
 
+
+Str const *pawAst_print_type_path(struct Ast *ast, struct AstPath path);
+Str const *pawAst_print_value_path(struct Ast *ast, struct AstPath path);
 
 char const *pawAst_print_path(struct Ast *ast, struct AstPath path);
 char const *pawAst_dump(struct Ast *ast);

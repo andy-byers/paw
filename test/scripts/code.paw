@@ -1,662 +1,1200 @@
-// code.paw
-  
-inline struct InlineFlat1 {
-    pub v: int,
-}
+////////// code.paw
+////////
+////////pub fn unification_special_case() -> int {
+////////    match None {
+////////        Some(v) => v,
+////////        None => return -1,
+////////    }
+////////}
+////////
+////////pub fn try_operator_special_case() -> Option<int> {
+////////    Some(Some(None?)?)
+////////}
+////////  
+////////inline struct InlineFlat1 {
+////////    pub v: int,
+////////}
+////////
+////////pub fn create_flat1(v: int) -> InlineFlat1 {
+////////    InlineFlat1{v}
+////////}
+////////
+////////pub fn check_flat1(s: InlineFlat1, v: int) {
+////////    assert(s.v == v);
+////////}
+////////
+////////inline struct InlineFlatN {
+////////    pub a: int,
+////////    pub b: char,
+////////    pub c: bool,
+////////}
+////////
+////////pub fn create_flatn(a: int, b: char, c: bool) -> InlineFlatN {
+////////    InlineFlatN{a, b, c}
+////////}
+////////
+////////pub fn check_flatn(s: InlineFlatN, a: int, b: char, c: bool) {
+////////    assert(s.a == a);
+////////    assert(s.b == b);
+////////    assert(s.c == c);
+////////}
+////////
+////////inline struct InlineNested1 {
+////////    pub v: InlineFlat1,
+////////}
+////////
+////////pub fn create_nested1(v: int) -> InlineNested1 {
+////////    InlineNested1{v: InlineFlat1{v}}
+////////}
+////////
+////////pub fn check_nested1(s: InlineNested1, v: int) {
+////////    assert(s.v.v == v);
+////////}
+////////
+////////inline struct InlineNestedN {
+////////    pub a: InlineFlat1,
+////////    pub b: InlineNested1,
+////////    pub c: InlineFlatN,
+////////}
+////////
+////////pub fn create_nestedn(v: int, vv: int, a: int, b: char, c: bool) -> InlineNestedN {
+////////    InlineNestedN{a: InlineFlat1{v}, b: InlineNested1{v: InlineFlat1{v: vv}}, c: InlineFlatN{a, b, c}}
+////////}
+////////
+////////pub fn check_nestedn(s: InlineNestedN, v: int, vv: int, a: int, b: char, c: bool) {
+////////    assert(s.a.v == v);
+////////    assert(s.b.v.v == vv);
+////////    assert(s.c.a == a);
+////////    assert(s.c.b == b);
+////////    assert(s.c.c == c);
+////////}
+////////
+////////#[test]
+////////pub fn test_flat1() {
+////////    let s = create_flat1(1);
+////////    check_flat1(s, 1);
+////////    s = create_flat1(2);
+////////    check_flat1(s, 2);
+////////
+////////    let sa = create_flat1(1);
+////////    let sb = sa;
+////////    sb.v = 2;
+////////    check_flat1(sa, 1);
+////////    check_flat1(sb, 2);
+////////}
+////////
+////////#[test]
+////////pub fn test_flatn() {
+////////    let s = create_flatn(2, '1', false);
+////////    check_flatn(s, 2, '1', false);
+////////    s = create_flatn(3, '2', true);
+////////    check_flatn(s, 3, '2', true);
+////////
+////////    let sa = create_flatn(0, '0', false);
+////////    let sb = sa;
+////////    sb.a = 1;
+////////    sb.c = true;
+////////    check_flatn(sa, 0, '0', false);
+////////    check_flatn(sb, 1, '0', true);
+////////}
+////////
+////////#[test]
+////////pub fn test_nested1() {
+////////    let s = create_nested1(1);
+////////    check_nested1(s, 1);
+////////    s = create_nested1(2);
+////////    check_nested1(s, 2);
+////////
+////////    let sa = create_nested1(1);
+////////    let sb = sa;
+////////    sb.v.v = 2;
+////////    check_nested1(sa, 1);
+////////    check_nested1(sb, 2);
+////////}
+////////
+////////#[test]
+////////pub fn test_nestedn() {
+////////    let s = create_nestedn(1, 1, 1, '1', true);
+////////    check_nestedn(s, 1, 1, 1, '1', true);
+////////    s = create_nestedn(1, 2, 3, '4', false);
+////////    check_nestedn(s, 1, 2, 3, '4', false);
+////////
+////////    let sa = create_nestedn(0, 0, 0, '0', false);
+////////    let sb = sa;
+////////    sb.b.v.v = 2;
+////////    sb.c.a = 3;
+////////    sb.c.c = true;
+////////    check_nestedn(sa, 0, 0, 0, '0', false);
+////////    check_nestedn(sb, 0, 2, 3, '0', true);
+////////}
+////////
+////////#[test]
+////////pub fn test_list() {
+////////    let list = [
+////////        1,
+////////        2,
+////////        3,
+////////    ];
+////////
+////////    assert(list[0] == 1);
+////////    assert(list[1] == 2);
+////////    assert(list[2] == 3);
+////////
+////////    let v = list[0];
+////////    list[0] = list[1];
+////////    list[1] = list[2];
+////////    list[2] = v;
+////////
+////////    assert(list[0] == 2);
+////////    assert(list[1] == 3);
+////////    assert(list[2] == 1);
+////////}
+////////
+////////#[test]
+////////pub fn test_flat1_list() {
+////////    let list = [
+////////        create_flat1(1),
+////////        create_flat1(2),
+////////        create_flat1(3),
+////////    ];
+////////    check_flat1(list[0], 1);
+////////    check_flat1(list[1], 2);
+////////    assert(list[2].v == 3);
+////////
+////////    list[1].v = 20;
+////////    list[2] = InlineFlat1{v: 30};
+////////
+////////    check_flat1(list[0], 1);
+////////    check_flat1(list[1], 20);
+////////    check_flat1(list[2], 30);
+////////}
+////////
+////////#[test]
+////////pub fn test_flatn_list() {
+////////    let list = [
+////////        create_flatn(1, '1', false),
+////////        create_flatn(2, '2', false),
+////////        create_flatn(3, '3', false),
+////////    ];
+////////    check_flatn(list[0], 1, '1', false);
+////////    check_flatn(list[1], 2, '2', false);
+////////    assert(list[2].a == 3);
+////////    assert(list[2].b == '3');
+////////    assert(list[2].c == false);
+////////
+////////    list[1].a = 20;
+////////    list[1].c = true;
+////////    list[2] = InlineFlatN{a: 30, b: list[2].b, c: true};
+////////
+////////    check_flatn(list[0], 1, '1', false);
+////////    check_flatn(list[1], 20, '2', true);
+////////    check_flatn(list[2], 30, '3', true);
+////////}
+////////
+////////#[test]
+////////pub fn test_nested1_list() {
+////////    let list = [
+////////        create_nested1(1),
+////////        create_nested1(2),
+////////        create_nested1(3),
+////////    ];
+////////    check_nested1(list[0], 1);
+////////    check_nested1(list[1], 2);
+////////    assert(list[2].v.v == 3);
+////////
+////////    list[1].v.v = 20;
+////////    list[2] = InlineNested1{v: InlineFlat1{v: 30}};
+////////
+////////    check_nested1(list[0], 1);
+////////    check_nested1(list[1], 20);
+////////    check_nested1(list[2], 30);
+////////}
+////////
+////////#[test]
+////////pub fn test_nestedn_list() {
+////////    let list = [
+////////        create_nestedn(1, 1, 1, '1', false),
+////////        create_nestedn(2, 2, 2, '2', false),
+////////        create_nestedn(3, 3, 3, '3', false),
+////////    ];
+////////    check_nestedn(list[0], 1, 1, 1, '1', false);
+////////    check_nestedn(list[1], 2, 2, 2, '2', false);
+////////    assert(list[2].a.v == 3);
+////////    assert(list[2].b.v.v == 3);
+////////    assert(list[2].c.a == 3);
+////////    assert(list[2].c.b == '3');
+////////    assert(list[2].c.c == false);
+////////
+////////    list[1].b.v.v = 20;
+////////    list[1].c.b = 'X';
+////////    list[1].c.c = true;
+////////    list[2] = create_nestedn(1, 2, 3, '4', true);
+////////
+////////    check_nestedn(list[0], 1, 1, 1, '1', false);
+////////    check_nestedn(list[1], 2, 20, 2, 'X', true);
+////////    check_nestedn(list[2], 1, 2, 3, '4', true);
+////////}
+////////
+////////pub inline struct Pair<T> {
+////////    pub first: T,
+////////    pub second: T,
+////////}
+////////
+////////pub struct BoxedListWrapper { 
+////////    pub list: [Pair<Option<str>>],
+////////}
+////////
+////////#[test]
+////////pub fn test_boxed_list_wrapper() {
+////////    let blw = BoxedListWrapper{
+////////        list: [
+////////            Pair{first: Some("10"), second: None},
+////////            Pair{first: Some("30"), second: None},
+////////        ],
+////////    };
+////////
+////////    match blw.list[0].first {Some(x) => assert(x == "10"), None => panic("A")}
+////////    match blw.list[0].second {Some(_) => panic("B"), None => println("b")}
+////////    match blw.list[1].first {Some(x) => assert(x == "30"), None => panic("C")}
+////////    match blw.list[1].second {Some(_) => panic("D"), None => println("d")}
+////////}
+////////
+////////pub fn map_test(map: [int: str], n: int, filter: int) {
+////////    let i = 0;
+////////    while i < n {
+////////        if i % filter == 0 {
+////////            map[i] = "abc";
+////////        }
+////////        i += 1;
+////////    }
+////////
+////////    let i = 0;
+////////    while i < n {
+////////        if i % filter == 0 {
+////////            assert(map[i] == "abc");
+////////        }
+////////        i += 1;
+////////    }
+////////}
+////////
+////////#[test]
+////////pub fn test_map() {
+////////    map_test([:], 10, 3);
+////////    map_getset_no_collisions(10);
+////////    map_getset_no_collisions(100);
+////////}
+////////
+////////pub fn map_getset_no_collisions(n: int) {
+////////    let map = [:];
+////////
+////////    let i = 1;
+////////    while i < n {
+////////        map[i] = i;
+////////        i += 1;
+////////    }
+////////
+////////    let i = 1;
+////////    while i < n {
+////////        assert(map[i] == i);
+////////        i += 1;
+////////    }
+////////}
+////////
+////////pub fn map_getset(n: int) {
+////////    let map = [:];
+////////
+////////    let i = n;
+////////    while i > 0 {
+////////        map[i] = i;
+////////        i -= 1;
+////////    }
+////////
+////////    let i = n;
+////////    while i > 0 {
+////////        assert(map[i] == i);
+////////        i -= 1;
+////////    }
+////////}
+////////
+////////pub fn map_ops(n: int) {
+////////    let map = [:];
+////////
+////////    let i = n;
+////////    while i > 0 {
+////////        map[i] = i;
+////////        i -= 1;
+////////    }
+////////
+////////    let i = n / 2;
+////////    while i > 0 {
+////////        map.remove(i);
+////////        i -= 1;
+////////    }
+////////
+////////
+////////    let i = n;
+////////    while i > n / 2 {
+////////        assert(map.get_or(i, -1) == i);
+////////        i -= 1;
+////////    }
+////////    while i > 0 {
+////////        assert(map.get_or(i, -1) == -1);
+////////        i -= 1;
+////////    }
+////////}
+////////
+////////pub fn fib(n: int) -> int {
+////////    if n < 2 { return n }
+////////    fib(n - 2) + fib(n - 1)
+////////}
+////////
+////////pub fn limited_fib(n: int) -> Option<int> {
+////////    let LIMIT = 35;
+////////    if n < 2 { 
+////////        Some(n)
+////////    } else if n <= LIMIT { 
+////////        Some(limited_fib(n - 2).unwrap() 
+////////            + limited_fib(n - 1).unwrap())
+////////    } else {
+////////        None
+////////    }
+////////}
+////////
+////////inline struct Abc {
+////////    pub value: int,
+////////}
+////////
+////////impl Abc {
+////////    pub fn alter(*self, value: int) -> Self {
+////////        self.value = value + 1;
+////////        self
+////////    }
+////////}
+////////
+////////#[test]
+////////pub fn test_self_pointer() {
+////////    let abc = Abc{value: 123};
+////////    assert(abc.value == 123);
+////////    abc.alter(100);
+////////    assert(abc.value == 101);
+////////
+////////    let abc = Abc{value: 123};
+////////    assert(abc.alter(100).value == 101);
+////////    assert(abc.value == 101);
+////////}
+////////
+////////#[test]
+////////pub fn test_upvalues() {
+////////    let f = {
+////////        let a = 1;
+////////        let f = || {
+////////            a += 1;
+////////            a
+////////        };
+////////        assert(a == 1);
+////////        assert(f() == 2);
+////////        assert(a == 2);
+////////        f
+////////    };
+////////    assert(f() == 3);
+////////    assert(f() == 4);
+////////    assert(f() == 5);
+////////}
+////////
+////////#[test]
+////////pub fn test_upvalues_2() {
+////////    let a = 1;
+////////    let f = || {
+////////        let b = 2;
+////////        let g = || {
+////////            let c = 3;
+////////            let h = || {
+////////                a + b + c
+////////            };
+////////            h()
+////////        };
+////////        g()
+////////    };
+////////    assert(f() == 1 + 2 + 3);
+////////}
+////////
+////////#[test]
+////////pub fn test_upvalues_3() {
+////////    let a = 1;
+////////    let f = || {
+////////        let b = 2;
+////////        || {
+////////            let c = 3;
+////////            a + b + c
+////////        }
+////////    };
+////////    assert(f()() == 1 + 2 + 3);
+////////}
+////////
+////////#[test]
+////////pub fn test_upvalues_4() {
+////////    let a = 1;
+////////    let f = || {
+////////        let b = 2;
+////////        || {
+////////            let c = 3;
+////////            || {
+////////                a + b + c
+////////            }
+////////        }
+////////    };
+////////    assert(f()()() == 1 + 2 + 3);
+////////}
+////////
+////////fn random(n: int) -> [int] {
+////////    let a = [];
+////////    let x = n;
+////////    while #a < n {
+////////        x = (140_671_485 * x + 12_820_163) % 16_777_216;
+////////        a.push(x);
+////////    }
+////////    return a;
+////////}
+////////
+////////fn bubble(n: int) -> [int] {
+////////    let a = random(n);
+////////    while true {
+////////        let swapped = false;
+////////        let i = 1;
+////////        while i < n {
+////////            if a[i] < a[i - 1] {
+////////                let t = a[i];
+////////                a[i] = a[i - 1];
+////////                a[i - 1] = t;
+////////                swapped = true;
+////////            }
+////////            i = i + 1;
+////////        }
+////////        if !swapped {
+////////            break;
+////////        }
+////////    }
+////////    return a;
+////////}
+////////
+////////#[test]
+////////pub fn test_bubble() {
+////////    let n = 2000;
+////////    bubble(n);
+////////}
+////////
+////////#[test]
+////////pub fn test_list_push() {
+////////    let list = [];
+////////    list.push(1);
+////////    list.push(2);
+////////    list.push(3);
+////////
+////////    assert(#list == 3);
+////////    assert(list[0] == 1);
+////////    assert(list[-3] == 1);
+////////    assert(list[1] == 2);
+////////    assert(list[-2] == 2);
+////////    assert(list[2] == 3);
+////////    assert(list[-1] == 3);
+////////}
+////////
+////////pub fn get_fn(v: int) -> (fn() -> int) {
+////////    || v
+////////}
+////////
+////////pub fn get_fn2(v: int) -> (fn() -> fn() -> int) {
+////////    || || v
+////////}
+////////
+////////#[test]
+////////pub fn test_return_fn() {
+////////    let f = get_fn(1);
+////////    assert(f() == 1);
+////////
+////////    let f = get_fn2(2);
+////////    assert(f()() == 2);
+////////}
+////////
+////////fn not_closure(i: int) -> int { i }
+////////
+////////#[test]
+////////pub fn test_fn_argument() {
+////////    let call_fn = |f: fn(int) -> int| {
+////////        assert(f(1) == 1);
+////////    };
+////////    let closure = |i| i + 1;
+////////    let call_fns = |f: fn(int) -> int, g: fn(int) -> int| {
+////////        assert(f(2) == g(1));
+////////    };
+////////    call_fns(not_closure, closure);
+////////}
+////////
+////////inline struct Functions {
+////////    pub callees: (
+////////        fn(int) -> int,
+////////        fn(int) -> int)
+////////}
+////////
+////////#[test]
+////////pub fn test_fn_in_object() {
+////////    let closure = |i| i + 1;
+////////    
+////////    let object = Functions{callees: (not_closure, closure)};
+////////    assert(object.callees.0(1) == 1);
+////////    assert(object.callees.1(2) == 3);
+////////}
+////////
+////////#[test]
+////////pub fn test_fn_in_container() {
+////////    let closure = |i| i + 1;
+////////    
+////////    let list = [not_closure, closure];
+////////    assert(list[0](1) == 1);
+////////    assert(list[1](2) == 3);
+////////}
+////////
+////////#[test]
+////////pub fn test_range_iterator() {
+////////    let range = 1..3;
+////////    assert(range.start == 1);
+////////    assert(range.end == 3);
+////////    let iter = RangeIterator::new(range);
+////////    assert(iter.next().unwrap() == 1);
+////////    assert(iter.next().unwrap() == 2);
+////////    assert(iter.next().is_none());
+////////}
+////////
+////////#[test]
+////////pub fn test_range_inclusive_iterator() {
+////////    let range = 1..=3;
+////////    assert(range.start == 1);
+////////    assert(range.end == 3);
+////////    let iter = RangeInclusiveIterator::new(range);
+////////    assert(iter.next().unwrap() == 1);
+////////    assert(iter.next().unwrap() == 2);
+////////    assert(iter.next().unwrap() == 3);
+////////    assert(iter.next().is_none());
+////////}
+////////
+////////#[test]
+////////pub fn test_to_str() {
+////////    assert("\{'x'}" == "x");
+////////    assert("\{123}" == "123");
+////////}
+////////
+////////#[test]
+////////pub fn test_parse_int() {
+////////    assert("123".parse_int_radix(10).unwrap() == 123);
+////////}
+////////
+////////#[test]
+////////pub fn test_str_starts_with() {
+////////    assert("abc".starts_with("a"));
+////////    assert("abc".starts_with("ab"));
+////////    assert("abc".starts_with("abc"));
+////////
+////////    assert(!"abc".starts_with("b"));
+////////    assert(!"abc".starts_with("bc"));
+////////    assert(!"abc".starts_with("abcc"));
+////////}
+////////
+////////#[test]
+////////pub fn test_str_ends_with() {
+////////    assert("abc".ends_with("c"));
+////////    assert("abc".ends_with("bc"));
+////////    assert("abc".ends_with("abc"));
+////////
+////////    assert(!"abc".ends_with("b"));
+////////    assert(!"abc".ends_with("ab"));
+////////    assert(!"abc".ends_with("aabc"));
+////////}
+////////
+////////use io;
+////////
+////////#[test]
+////////pub fn test_file() {
+////////    let msg = "Hello, world!";
+////////    let file = io::File::open("newfile", "w+").unwrap();
+////////    assert(file.write(msg.to_slice()).unwrap() == #msg);
+////////    file.flush();
+////////
+////////    let buf = List::with_length(#msg);
+////////    let file = io::File::open("newfile", "r").unwrap();
+////////    assert(file.read(buf.to_slice_mut()).unwrap() == #msg);
+////////    assert(buf.as_str() == msg);
+////////}
+////////
+////////#[test]
+////////pub fn test_list_of_str() {
+////////    let list = ["a", "b", "c"];
+////////    list.push("x");
+////////    println(", ".join(list));
+////////}
+////////
+////////#[test]
+////////pub fn test_nested_inout() {
+////////    let inner = |*x| {
+////////        x += 1;
+////////    };
+////////
+////////    let outer = |*x| {
+////////        inner(x);
+////////    };
+////////
+////////    let n = 0;
+////////    outer(n);
+////////    assert(n == 1);
+////////    outer(n);
+////////    outer(n);
+////////    assert(n == 3);
+////////}
+////////
+////////struct Type<T> {
+////////    pub value: T,
+////////}
+////////
+////////impl<A, B> Type<(A, B)> {
+////////    pub fn first(self) -> A {
+////////        self.value.0
+////////    }
+////////
+////////    pub fn second(self) -> B {
+////////        self.value.1
+////////    }
+////////}
+////////
+////////#[test]
+////////pub fn test_inherent_impl() {
+////////    let t = Type{value: ("abc", 123)};
+////////    assert(t.first() == "abc");
+////////    assert(t.second() == 123);
+////////}
+////////
+//////
+//////
+//////
+////////struct Test {
+////////    pub value: int,
+////////}
+////////
+////////pub trait Trait {
+////////    type Type;
+////////    fn get(*self) -> Self::Type;
+////////    fn set(*self, t: Self::Type);
+////////}
+////////
+////////impl Trait for Test {
+////////    type Type = int;
+////////    fn get(*self) -> Self::Type {
+////////        self.value
+////////    }
+////////    fn set(*self, t: Self::Type) {
+////////        self.value = t;
+////////    }
+////////}
+////////
+//////////impl Trait for Test {
+//////////    type Type = int;
+//////////    fn get() -> Self::Type {
+//////////        123
+//////////    }
+//////////}
+////////
+//////////pub fn function<T: Trait>(value: T) -> T::Type {
+//////////    value.get();
+//////////}
+////////
+////////#[test]
+////////pub fn test() {
+////////    let t = Test{value: 123};
+////////    t.set(456);
+////////    assert(t.get() == 456);
+////////}
+//////
+//////
+//////
+////////struct Test<T> {
+////////    pub value: T,
+////////}
+////////
+////////pub trait Trait {
+////////    type Type;
+////////
+////////    fn get(*self) -> Self::Type;
+////////    fn set(*self, t: Self::Type);
+////////}
+////////
+////////impl Trait for Test<int> {
+////////    type Type = int;
+////////
+////////    fn get(*self) -> Self::Type {
+////////        self.value
+////////    }
+////////    fn set(*self, t: Self::Type) {
+////////        self.value = t;
+////////    }
+////////}
+////////
+////////impl Trait for Test<float> {
+////////    type Type = float;
+////////
+////////    fn get(*self) -> Self::Type {
+////////        self.value
+////////    }
+////////    fn set(*self, t: Self::Type) {
+////////        self.value = t;
+////////    }
+////////}
+////////
+////////pub fn function<Ty: Trait>(t: Ty) -> Ty::Type {
+////////    t.get()
+////////}
+////////
+////////#[test]
+////////pub fn test() {
+////////    let t = Test{value: 123};
+////////    t.set(456);
+////////    let i = function(t);
+////////    assert(i == 456);
+////////
+////////    let t = Test{value: 1.23};
+////////    t.set(4.56);
+////////    let f = function(t);
+////////    assert(f == 4.56);
+////////}
+////////
+////////
+//////
+//////struct Test<T> {
+//////    pub value: T,
+//////}
+//////
+//////pub trait Trait {
+//////    type Type;
+//////
+//////    fn get(*self) -> Self::Type;
+//////    fn set(*self, t: Self::Type);
+//////}
+//////
+//////impl Trait for Test<int> {
+//////    type Type = int;
+//////
+//////    fn get(*self) -> Self::Type {
+//////        self.value
+//////    }
+//////    fn set(*self, t: Self::Type) {
+//////        self.value = t;
+//////    }
+//////}
+//////
+//////impl Trait for Test<float> {
+//////    type Type = float;
+//////
+//////    fn get(*self) -> Self::Type {
+//////        self.value
+//////    }
+//////    fn set(*self, t: Self::Type) {
+//////        self.value = t;
+//////    }
+//////}
+//////
+//////pub fn function<Ty: Trait>(t: Ty) -> Ty::Type {
+//////    t.get()
+//////}
+//////
+//////pub trait TestAdd<Rhs> {
+//////    type Output;
+//////    fn add(self, rhs: Rhs) -> Self::Output;
+//////}
+//////
+//////struct Integer {
+//////    pub v: int,
+//////}
+//////
+//////impl Copy for Integer {}
+//////
+//////impl TestAdd<Integer> for Integer {
+//////    type Output = int;
+//////    fn add(self, rhs: Integer) -> Self::Output {
+//////        self.v + rhs.v
+//////    }
+//////}
+//////struct Float {
+//////    pub v: float,
+//////}
+//////
+//////impl Copy for Float {}
+//////
+//////impl TestAdd<Float> for Float {
+//////    type Output = float;
+//////    fn add(self, rhs: Float) -> Self::Output {
+//////        self.v + rhs.v
+//////    }
+//////}
+//////
+//////pub fn add<T: TestAdd<T>>(lhs: T, rhs: T) -> T::Output {
+//////    lhs.add(rhs)
+//////}
+//////
+//////#[test]
+//////pub fn test() {
+//////    let i = Integer{v: 1};
+//////    let v = add(i, Integer{v: 2});
+//////    assert(v == 3);
+//////
+//////    let f = Float{v: 1.0};
+//////    let v = add(f, Float{v: 2.0});
+//////    assert(v == 3.0);
+//////}
+//////
+////////#[test]
+////////pub fn test() {
+////////    let t = Test{value: 123};
+////////    t.set(456);
+////////    let v = function(t);
+////////    assert(v == 456);
+////////
+////////    let t = Test{value: 1.23};
+////////    t.set(4.56);
+////////    let v = function(t);
+////////    assert(v == 4.56);
+////////}
+//////
+//////
+//////
+////
+////
+//////pub trait AsBytes {
+//////    fn as_bytes(*self) -> []char;
+//////}
+//////
+//////struct SmallString {
+//////    pub chars: [char; 8],
+//////    pub len: int,
+//////}
+//////
+//////use slice;
+//////
+//////impl ToSlice<char> for SmallString {
+//////    fn to_slice(*self) -> []char {
+//////        assert(0 <= self.len && self.len <= 8);
+//////        slice::from_raw_parts(&self.chars[0], self.len)
+//////    }
+//////}
+////
+//////use io;
+//////use string::String;
+////
+////use ptr;
+////
+////// TODO: this causes a name collision with "use ops::*;" in prelude but an error is not thrown
+//////pub trait Iterator_ {
+//////    type Item;
+//////
+//////    fn next(*self) -> Option<Self::Item>;
+//////}
+////
+////
+//////pub struct Container {
+//////    pub num_values: int,
+//////}
+//////
+//////pub struct ContainerIterator {
+//////    pub len: int,
+//////    pub idx: int,
+//////    pub times2: bool,
+//////}
+//////
+//////impl Iterator_ for ContainerIterator {
+//////    type Item = int;
+//////
+//////    fn next(*self) -> Option<Self::Item> {
+//////        if self.idx < self.len {
+//////            let item = self.idx;
+//////            self.idx += 1;
+//////            let x = self.times2 as int + 1;
+//////            Some(item * x)
+//////        } else {
+//////            None
+//////        }
+//////    }
+//////}
+//////
+//////impl IntoIterator_ for Container {
+//////    type Item = int;
+//////    type IntoIter = ContainerIterator;
+//////
+//////    fn into_iter(self) -> Self::IntoIter {
+//////        ContainerIterator{idx: 0, len: self.num_values, times2: false}
+//////    }
+//////}
+//////
+//////impl IntoIterator_ for *Container {
+//////    type Item = int;
+//////    type IntoIter = ContainerIterator;
+//////
+//////    fn into_iter(self) -> Self::IntoIter {
+//////        ContainerIterator{idx: 0, len: self.num_values, times2: true}
+//////    }
+//////}
+//////
+//////pub fn function<I: IntoIterator_>(i: I) {
+//////    
+//////}
+//////
+//////#[test]
+//////pub fn test() {
+////////    function(Container{num_values: 3});
+//////}
+////
+//////use list::List;
+//////
+//////fn list_from_iterator<I: Iterator_>(iter: I) -> List<I::Item> {
+//////    let list = List::new();
+//////    loop {
+//////        match iter.next() {
+//////            Some(value) => list.push(value).unwrap(),
+//////            None => return list,
+//////        }
+//////    }
+//////}
+//////
+//////fn test_list(n: int) -> List<int> {
+//////    let list = List::new();
+//////    list.reserve(n).unwrap();
+//////    while list.len() < n {
+//////        list.push(list.len() + 1).unwrap();
+//////    }
+//////    list
+//////}
+//////
+//////#[test]
+//////pub fn empty_list() {
+//////    let list = List::<int>::new();
+//////    let iter = list.into_iter();
+//////    assert(iter.next().is_none());
+//////    assert(iter.next().is_none());
+//////}
+//////
+//////#[test]
+//////pub fn nonempty_list() {
+//////    let list = test_list(3);
+//////    let iter = list.into_iter();
+//////    assert(iter.next().unwrap() == 1);
+//////    assert(iter.next().unwrap() == 2);
+//////    assert(iter.next().unwrap() == 3);
+//////    assert(iter.next().is_none());
+//////    assert(iter.next().is_none());
+//////}
+////
+////
+////
+////
+//////pub trait A {}
+//////pub trait B {}
+//////pub trait C {}
+//////
+//////pub trait Poly<TA: A, TB: B> {}
+//////pub trait Trait<TA: A, TPoly: Poly<TA, TB>, TB: B> {}
+//////
+//////pub struct Struct<TC: C>;
+//////
+//////impl<TA: A, TPoly: Poly<TA, TB>, TB: B, TC: C> Trait<TA, TPoly, TB> for Struct<TC> {}
+////
+//////
+//////pub trait A<TA> {}
+//////pub trait B<TB> {}
+//////pub trait C<TC> {}
+//////
+//////pub trait A2<TA: B<TA>> {}
+//////pub trait B2<TB: C<TB>> {}
+//////pub trait C2<TC: A<TC>> {}
+//////
+////
+//////struct Test {
+//////    pub value: int,
+//////}
+//////
+//////pub trait Other {}
+//////
+//////impl Other for Test {}
+//////
+//////pub trait Trait {
+//////    type Type: Other;
+//////    fn method(self) -> Self::Type;
+//////}
+//////
+////////pub struct Struct;
+////////
+////////// need to add obligation "<Self as Trait>::Type: int" when instantiating 
+////////// "Trait" below in impl header
+////////impl Trait for Struct {
+////////    type Type = Test;
+////////    fn method(self) -> Self::Type {
+////////        Test{value: 123}
+////////    }
+////////}
+//////
+//////pub fn function<Ty: Trait<Type = Test>>(t: Ty) -> Ty::Type {
+//////    t.method()
+//////}
+//////
+//////#[test]
+//////pub fn test() {
+////////    let i = function(Struct);
+////////    assert(i == 123);
+//////}
+//////
+//////
+//////
+//////
+//////
+//////
+//
+// 
+//
+//
+//use io;
+//use list::List;
+//
+//
+////struct TestList<T> {
+////    pub inner: List<T>,
+////}
+////impl<T: Clone> TestList<T> {
+////    pub fn extend<I: IntoIterator<Item = *T>>(*self, iter: I) {
+////        let _: Option<*T> = iter.into_iter().next();
+////    }
+////}
+//
+//pub trait OtherTrait {}
+//
+//pub trait Trait {
+//    type Type: OtherTrait;
+//    fn next(*self) -> Self::Type;
+//}
+//
+//pub trait Trait2 {
+//    type Item;
+//    type Type2: Trait<Type = Item>;
+//    fn into(*self) -> Self::Type2;
+//}
+//
+//struct Struct;
+//struct Cursor;
+//
+//// <Self as Trait<Self>>::Type: OtherTrait
+//// <Cursor as Trait<Cursor>>::Type: OtherTrait
+//// int: OtherTrait
+//impl Trait for Cursor {
+//    type Type = int;
+//    fn next(*self) -> Self::Type {
+//        123
+//    }
+//}
+//
+//impl Trait2 for Struct {
+//    type Item = int;
+//    type Type2 = Cursor;
+//    fn into(*self) -> Self::Type2 {
+//        Cursor
+//    }
+//}
+//
+//pub fn function<T: Trait2<Item = int>>(t: T) -> T::Item {
+//    t.into().next()
+//}
+//
+//
+////#[test]
+////pub fn test() {
+////    let value = function(Struct);
+////    assert(value == 123);
+////
+////    //let inner = List::new();
+////    //inner.push('a').unwrap();
+////    //inner.push('b').unwrap();
+////    //inner.push('c').unwrap();
+////    //let testlist = TestList{inner};
+////    //testlist.extend("def").unwrap();
+////}
+//
+//
 
-pub fn create_flat1(v: int) -> InlineFlat1 {
-    InlineFlat1{v}
-}
+//pub trait A {}
+//
+//pub trait B {
+//    type Item;
+//}
+//
+//pub trait Trait<TTrait: A> {
+//    type Type: B;
+//}
+//
+//pub struct S<TStruct>;
+//pub struct S2;
+//
+//impl<TImpl: A> Trait<TImpl> for S<TImpl> {
+//    type Type = S2;
+//}
+//
+//struct TypeA;
+//impl A for TypeA {}
+//
+//impl<TImpl> A for S<TImpl> {}
+//impl B for S2 {}
+//
+//pub fn function<TFn: Trait<TFn2>, TFn2: A>(t: TFn) {}
 
-pub fn check_flat1(s: InlineFlat1, v: int) {
-    assert(s.v == v);
-}
+pub trait A { type T: A; }
 
-inline struct InlineFlatN {
-    pub a: int,
-    pub b: char,
-    pub c: bool,
-}
+struct S;
 
-pub fn create_flatn(a: int, b: char, c: bool) -> InlineFlatN {
-    InlineFlatN{a, b, c}
-}
+impl A for S { type T = S; }
 
-pub fn check_flatn(s: InlineFlatN, a: int, b: char, c: bool) {
-    assert(s.a == a);
-    assert(s.b == b);
-    assert(s.c == c);
-}
-
-inline struct InlineNested1 {
-    pub v: InlineFlat1,
-}
-
-pub fn create_nested1(v: int) -> InlineNested1 {
-    InlineNested1{v: InlineFlat1{v}}
-}
-
-pub fn check_nested1(s: InlineNested1, v: int) {
-    assert(s.v.v == v);
-}
-
-inline struct InlineNestedN {
-    pub a: InlineFlat1,
-    pub b: InlineNested1,
-    pub c: InlineFlatN,
-}
-
-pub fn create_nestedn(v: int, vv: int, a: int, b: char, c: bool) -> InlineNestedN {
-    InlineNestedN{a: InlineFlat1{v}, b: InlineNested1{v: InlineFlat1{v: vv}}, c: InlineFlatN{a, b, c}}
-}
-
-pub fn check_nestedn(s: InlineNestedN, v: int, vv: int, a: int, b: char, c: bool) {
-    assert(s.a.v == v);
-    assert(s.b.v.v == vv);
-    assert(s.c.a == a);
-    assert(s.c.b == b);
-    assert(s.c.c == c);
-}
 
 #[test]
-pub fn test_flat1() {
-    let s = create_flat1(1);
-    check_flat1(s, 1);
-    s = create_flat1(2);
-    check_flat1(s, 2);
+pub fn test() {
 
-    let sa = create_flat1(1);
-    let sb = sa;
-    sb.v = 2;
-    check_flat1(sa, 1);
-    check_flat1(sb, 2);
 }
 
-#[test]
-pub fn test_flatn() {
-    let s = create_flatn(2, '1', false);
-    check_flatn(s, 2, '1', false);
-    s = create_flatn(3, '2', true);
-    check_flatn(s, 3, '2', true);
 
-    let sa = create_flatn(0, '0', false);
-    let sb = sa;
-    sb.a = 1;
-    sb.c = true;
-    check_flatn(sa, 0, '0', false);
-    check_flatn(sb, 1, '0', true);
-}
-
-#[test]
-pub fn test_nested1() {
-    let s = create_nested1(1);
-    check_nested1(s, 1);
-    s = create_nested1(2);
-    check_nested1(s, 2);
-
-    let sa = create_nested1(1);
-    let sb = sa;
-    sb.v.v = 2;
-    check_nested1(sa, 1);
-    check_nested1(sb, 2);
-}
-
-#[test]
-pub fn test_nestedn() {
-    let s = create_nestedn(1, 1, 1, '1', true);
-    check_nestedn(s, 1, 1, 1, '1', true);
-    s = create_nestedn(1, 2, 3, '4', false);
-    check_nestedn(s, 1, 2, 3, '4', false);
-
-    let sa = create_nestedn(0, 0, 0, '0', false);
-    let sb = sa;
-    sb.b.v.v = 2;
-    sb.c.a = 3;
-    sb.c.c = true;
-    check_nestedn(sa, 0, 0, 0, '0', false);
-    check_nestedn(sb, 0, 2, 3, '0', true);
-}
-
-#[test]
-pub fn test_list() {
-    let list = [
-        1,
-        2,
-        3,
-    ];
-
-    assert(list[0] == 1);
-    assert(list[1] == 2);
-    assert(list[2] == 3);
-
-    let v = list[0];
-    list[0] = list[1];
-    list[1] = list[2];
-    list[2] = v;
-
-    assert(list[0] == 2);
-    assert(list[1] == 3);
-    assert(list[2] == 1);
-}
-
-#[test]
-pub fn test_flat1_list() {
-    let list = [
-        create_flat1(1),
-        create_flat1(2),
-        create_flat1(3),
-    ];
-    check_flat1(list[0], 1);
-    check_flat1(list[1], 2);
-    assert(list[2].v == 3);
-
-    list[1].v = 20;
-    list[2] = InlineFlat1{v: 30};
-
-    check_flat1(list[0], 1);
-    check_flat1(list[1], 20);
-    check_flat1(list[2], 30);
-}
-
-#[test]
-pub fn test_flatn_list() {
-    let list = [
-        create_flatn(1, '1', false),
-        create_flatn(2, '2', false),
-        create_flatn(3, '3', false),
-    ];
-    check_flatn(list[0], 1, '1', false);
-    check_flatn(list[1], 2, '2', false);
-    assert(list[2].a == 3);
-    assert(list[2].b == '3');
-    assert(list[2].c == false);
-
-    list[1].a = 20;
-    list[1].c = true;
-    list[2] = InlineFlatN{a: 30, b: list[2].b, c: true};
-
-    check_flatn(list[0], 1, '1', false);
-    check_flatn(list[1], 20, '2', true);
-    check_flatn(list[2], 30, '3', true);
-}
-
-#[test]
-pub fn test_nested1_list() {
-    let list = [
-        create_nested1(1),
-        create_nested1(2),
-        create_nested1(3),
-    ];
-    check_nested1(list[0], 1);
-    check_nested1(list[1], 2);
-    assert(list[2].v.v == 3);
-
-    list[1].v.v = 20;
-    list[2] = InlineNested1{v: InlineFlat1{v: 30}};
-
-    check_nested1(list[0], 1);
-    check_nested1(list[1], 20);
-    check_nested1(list[2], 30);
-}
-
-#[test]
-pub fn test_nestedn_list() {
-    let list = [
-        create_nestedn(1, 1, 1, '1', false),
-        create_nestedn(2, 2, 2, '2', false),
-        create_nestedn(3, 3, 3, '3', false),
-    ];
-    check_nestedn(list[0], 1, 1, 1, '1', false);
-    check_nestedn(list[1], 2, 2, 2, '2', false);
-    assert(list[2].a.v == 3);
-    assert(list[2].b.v.v == 3);
-    assert(list[2].c.a == 3);
-    assert(list[2].c.b == '3');
-    assert(list[2].c.c == false);
-
-    list[1].b.v.v = 20;
-    list[1].c.b = 'X';
-    list[1].c.c = true;
-    list[2] = create_nestedn(1, 2, 3, '4', true);
-
-    check_nestedn(list[0], 1, 1, 1, '1', false);
-    check_nestedn(list[1], 2, 20, 2, 'X', true);
-    check_nestedn(list[2], 1, 2, 3, '4', true);
-}
-
-pub inline struct Pair<T> {
-    pub first: T,
-    pub second: T,
-}
-
-pub struct BoxedListWrapper { 
-    pub list: [Pair<Option<str>>],
-}
-
-#[test]
-pub fn test_boxed_list_wrapper() {
-    let blw = BoxedListWrapper{
-        list: [
-            Pair{first: Some("10"), second: None},
-            Pair{first: Some("30"), second: None},
-        ],
-    };
-
-    match blw.list[0].first {Some(x) => assert(x == "10"), None => panic("A")}
-    match blw.list[0].second {Some(_) => panic("B"), None => println("b")}
-    match blw.list[1].first {Some(x) => assert(x == "30"), None => panic("C")}
-    match blw.list[1].second {Some(_) => panic("D"), None => println("d")}
-}
-
-pub fn map_test(map: [int: str], n: int, filter: int) {
-    let i = 0;
-    while i < n {
-        if i % filter == 0 {
-            map[i] = "abc";
-        }
-        i += 1;
-    }
-
-    let i = 0;
-    while i < n {
-        if i % filter == 0 {
-            assert(map[i] == "abc");
-        }
-        i += 1;
-    }
-}
-
-#[test]
-pub fn test_map() {
-    map_test([:], 10, 3);
-    map_getset_no_collisions(10);
-    map_getset_no_collisions(100);
-}
-
-pub fn map_getset_no_collisions(n: int) {
-    let map = [:];
-
-    let i = 1;
-    while i < n {
-        map[i] = i;
-        i += 1;
-    }
-
-    let i = 1;
-    while i < n {
-        assert(map[i] == i);
-        i += 1;
-    }
-}
-
-pub fn map_getset(n: int) {
-    let map = [:];
-
-    let i = n;
-    while i > 0 {
-        map[i] = i;
-        i -= 1;
-    }
-
-    let i = n;
-    while i > 0 {
-        assert(map[i] == i);
-        i -= 1;
-    }
-}
-
-pub fn map_ops(n: int) {
-    let map = [:];
-
-    let i = n;
-    while i > 0 {
-        map[i] = i;
-        i -= 1;
-    }
-
-    let i = n / 2;
-    while i > 0 {
-        map.remove(i);
-        i -= 1;
-    }
-
-
-    let i = n;
-    while i > n / 2 {
-        assert(map.get_or(i, -1) == i);
-        i -= 1;
-    }
-    while i > 0 {
-        assert(map.get_or(i, -1) == -1);
-        i -= 1;
-    }
-}
-
-pub fn fib(n: int) -> int {
-    if n < 2 { return n }
-    fib(n - 2) + fib(n - 1)
-}
-
-pub fn limited_fib(n: int) -> Option<int> {
-    let LIMIT = 35;
-    if n < 2 { 
-        Some(n)
-    } else if n <= LIMIT { 
-        Some(limited_fib(n - 2).unwrap() 
-            + limited_fib(n - 1).unwrap())
-    } else {
-        None
-    }
-}
-
-inline struct Abc {
-    pub value: int,
-}
-
-impl Abc {
-    pub fn alter(&self, value: int) -> Self {
-        self.value = value + 1;
-        self
-    }
-}
-
-#[test]
-pub fn test_self_pointer() {
-    let abc = Abc{value: 123};
-    assert(abc.value == 123);
-    abc.alter(100);
-    assert(abc.value == 101);
-
-    let abc = Abc{value: 123};
-    assert(abc.alter(100).value == 101);
-    assert(abc.value == 101);
-}
-
-#[test]
-pub fn test_upvalues() {
-    let f = {
-        let a = 1;
-        let f = || {
-            a += 1;
-            a
-        };
-        assert(a == 1);
-        assert(f() == 2);
-        assert(a == 2);
-        f
-    };
-    assert(f() == 3);
-    assert(f() == 4);
-    assert(f() == 5);
-}
-
-#[test]
-pub fn test_upvalues_2() {
-    let a = 1;
-    let f = || {
-        let b = 2;
-        let g = || {
-            let c = 3;
-            let h = || {
-                a + b + c
-            };
-            h()
-        };
-        g()
-    };
-    assert(f() == 1 + 2 + 3);
-}
-
-#[test]
-pub fn test_upvalues_3() {
-    let a = 1;
-    let f = || {
-        let b = 2;
-        || {
-            let c = 3;
-            a + b + c
-        }
-    };
-    assert(f()() == 1 + 2 + 3);
-}
-
-#[test]
-pub fn test_upvalues_4() {
-    let a = 1;
-    let f = || {
-        let b = 2;
-        || {
-            let c = 3;
-            || {
-                a + b + c
-            }
-        }
-    };
-    assert(f()()() == 1 + 2 + 3);
-}
-
-fn random(n: int) -> [int] {
-    let a = [];
-    let x = n;
-    while #a < n {
-        x = (140_671_485 * x + 12_820_163) % 16_777_216;
-        a.push(x);
-    }
-    return a;
-}
-
-fn bubble(n: int) -> [int] {
-    let a = random(n);
-    while true {
-        let swapped = false;
-        let i = 1;
-        while i < n {
-            if a[i] < a[i - 1] {
-                let t = a[i];
-                a[i] = a[i - 1];
-                a[i - 1] = t;
-                swapped = true;
-            }
-            i = i + 1;
-        }
-        if !swapped {
-            break;
-        }
-    }
-    return a;
-}
-
-#[test]
-pub fn test_bubble() {
-    let n = 2000;
-    bubble(n);
-}
-
-#[test]
-pub fn test_list_push() {
-    let list = [];
-    list.push(1);
-    list.push(2);
-    list.push(3);
-
-    assert(#list == 3);
-    assert(list[0] == 1);
-    assert(list[-3] == 1);
-    assert(list[1] == 2);
-    assert(list[-2] == 2);
-    assert(list[2] == 3);
-    assert(list[-1] == 3);
-}
-
-pub fn get_fn(v: int) -> (fn() -> int) {
-    || v
-}
-
-pub fn get_fn2(v: int) -> (fn() -> fn() -> int) {
-    || || v
-}
-
-#[test]
-pub fn test_return_fn() {
-    let f = get_fn(1);
-    assert(f() == 1);
-
-    let f = get_fn2(2);
-    assert(f()() == 2);
-}
-
-fn not_closure(i: int) -> int { i }
-
-#[test]
-pub fn test_fn_argument() {
-    let call_fn = |f: fn(int) -> int| {
-        assert(f(1) == 1);
-    };
-    let closure = |i| i + 1;
-    let call_fns = |f: fn(int) -> int, g: fn(int) -> int| {
-        assert(f(2) == g(1));
-    };
-    call_fns(not_closure, closure);
-}
-
-inline struct Functions {
-    pub callees: (
-        fn(int) -> int,
-        fn(int) -> int)
-}
-
-#[test]
-pub fn test_fn_in_object() {
-    let closure = |i| i + 1;
-    
-    let object = Functions{callees: (not_closure, closure)};
-    assert(object.callees.0(1) == 1);
-    assert(object.callees.1(2) == 3);
-}
-
-#[test]
-pub fn test_fn_in_container() {
-    let closure = |i| i + 1;
-    
-    let list = [not_closure, closure];
-    assert(list[0](1) == 1);
-    assert(list[1](2) == 3);
-}
-
-#[test]
-pub fn test_range_iterator() {
-    let range = 1..3;
-    assert(range.start == 1);
-    assert(range.end == 3);
-    let iter = RangeIterator::new(range);
-    assert(iter.next().unwrap() == 1);
-    assert(iter.next().unwrap() == 2);
-    assert(iter.next().is_none());
-}
-
-#[test]
-pub fn test_range_inclusive_iterator() {
-    let range = 1..=3;
-    assert(range.start == 1);
-    assert(range.end == 3);
-    let iter = RangeInclusiveIterator::new(range);
-    assert(iter.next().unwrap() == 1);
-    assert(iter.next().unwrap() == 2);
-    assert(iter.next().unwrap() == 3);
-    assert(iter.next().is_none());
-}
-
-#[test]
-pub fn test_to_str() {
-    assert("\{'x'}" == "x");
-    assert("\{123}" == "123");
-}
-
-#[test]
-pub fn test_parse_int() {
-    assert("123".parse_int_radix(10).unwrap() == 123);
-}
-
-#[test]
-pub fn test_str_starts_with() {
-    assert("abc".starts_with("a"));
-    assert("abc".starts_with("ab"));
-    assert("abc".starts_with("abc"));
-
-    assert(!"abc".starts_with("b"));
-    assert(!"abc".starts_with("bc"));
-    assert(!"abc".starts_with("abcc"));
-}
-
-#[test]
-pub fn test_str_ends_with() {
-    assert("abc".ends_with("c"));
-    assert("abc".ends_with("bc"));
-    assert("abc".ends_with("abc"));
-
-    assert(!"abc".ends_with("b"));
-    assert(!"abc".ends_with("ab"));
-    assert(!"abc".ends_with("aabc"));
-}
-
-use io;
-
-#[test]
-pub fn test_file() {
-    let msg = "Hello, world!";
-    let file = io::File::open("newfile", "w+").unwrap();
-    assert(file.write(msg.to_slice()).unwrap() == #msg);
-    file.flush();
-
-    let buf = List::with_length(#msg);
-    let file = io::File::open("newfile", "r").unwrap();
-    assert(file.read(buf.to_slice_mut()).unwrap() == #msg);
-    assert(buf.as_str() == msg);
-}
-
-#[test]
-pub fn test_list_of_str() {
-    let list = ["a", "b", "c"];
-    list.push("x");
-    println(", ".join(list));
-}
-
-#[test]
-pub fn test_nested_inout() {
-    let inner = |&x| {
-        x += 1;
-    };
-
-    let outer = |&x| {
-        inner(x);
-    };
-
-    let n = 0;
-    outer(n);
-    assert(n == 1);
-    outer(n);
-    outer(n);
-    assert(n == 3);
-}
-
-struct Type<T> {
-    pub value: T,
-}
-
-impl<A, B> Type<(A, B)> {
-    pub fn first(self) -> A {
-        self.value.0
-    }
-
-    pub fn second(self) -> B {
-        self.value.1
-    }
-}
-
-#[test]
-pub fn test_inherent_impl() {
-    let t = Type{value: ("abc", 123)};
-    assert(t.first() == "abc");
-    assert(t.second() == 123);
-}
+// preconditions:
+//     <I as IntoIterator>::Item = *T
+//     I: IntoIterator
+// goal:
+//     <<I as IntoIterator>::IntoIter as Iterator>::Item
+// dependent precondition:
+//     <<Self as IntoIterator>::IntoIter as Iterator>::Item = <Self as IntoIterator>::Item
+//     <<I as IntoIterator>::IntoIter as Iterator>::Item = <I as IntoIterator>::Item
+//     
+
+
+
+
+
+
+//struct Xyz<A, B, C>;
+//
+//#[test]
+//pub fn test() {
+//    let value = function(Struct);
+//
+//    //let inner = List::new();
+//    //inner.push('a').unwrap();
+//    //inner.push('b').unwrap();
+//    //inner.push('c').unwrap();
+//    //let testlist = TestList{inner};
+//    //testlist.extend("def").unwrap();
+//}
+
+// <Self as IntoIterator>::IntoIter: Iterator
+// <<Self as IntoIterator>::IntoIter as Iterator>::Item = <Self as IntoIterator>::Item
+//
+// <I as IntoIterator>::IntoIter: Iterator
+// <<I as IntoIterator>::IntoIter as Iterator>::Item = <I as IntoIterator>::Item
+// 
+// I: IntoIterator
+// <I as IntoIterator>::Item = int
 

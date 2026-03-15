@@ -84,8 +84,6 @@ public:
     enum Kind {
         OBJECT,
         STR,
-        LIST,
-        MAP,
         FN,
     };
 
@@ -152,10 +150,6 @@ public:
     llvm::Value *get_value() const override;
 
     unsigned get_num_args() const { return get_type()->get_num_params(); }
-
-//TODO    llvm::Value *call(llvm::ArrayRef<llvm::Value *> args, llvm::Value *sret = nullptr);
-//TODO    llvm::Value *call(llvm::Value *arg) { return call(llvm::ArrayRef<llvm::Value *>{arg}); }
-//TODO    llvm::Value *call() { return call(llvm::ArrayRef<llvm::Value *>{}); }
 
 private:
     llvm::Value *env_;
@@ -282,31 +276,19 @@ public:
     using Type = StrType;
 
     explicit Str(State &state, llvm::Value *str, Methods const *methods);
-    explicit Str(State &state, llvm::Value *length, Methods const *methods, CreationTag);
-    explicit Str(State &state, llvm::Value *text, llvm::Value *hash, llvm::Value *length, Methods const *methods, CreationTag);
-
-    explicit Str(State &state, llvm::Value *text, llvm::Value *length, Methods const *methods, CreationTag);
-
-    void finalize();
 
     StrType *get_type() const override
     {
         return (StrType *)type_;
     }
 
-    llvm::Value *get_length_ptr() const { return length_ptr_; }
-    llvm::Value *get_hash_ptr() const { return hash_ptr_; }
-    llvm::Value *get_text() const { return text_; }
-
-    llvm::Value *get_hash() const;
+    llvm::Value *get_text() const;
     llvm::Value *get_length() const;
 
     llvm::Value *get_element_ptr(llvm::Value *index);
 
 private:
-    llvm::Value *text_;
-    llvm::Value *hash_ptr_;
-    llvm::Value *length_ptr_;
+    llvm::Value *value_;
     Methods const *methods_;
 };
 
@@ -333,141 +315,6 @@ public:
 private:
     Methods const *methods_;
 };
-
-
-class List: public Value {
-public:
-    struct Methods {
-        Fn *push;
-        Fn *pop;
-        Fn *insert;
-        Fn *remove;
-        Fn *get_element_ptr;
-    };
-
-    using Type = ListType;
-
-    friend class Context;
-    friend class ListType;
-
-    explicit List(State &state, llvm::Value *list, ListType *type, Methods const *methods);
-    explicit List(State &state, llvm::Value *length, ListType *type, Methods const *methods, CreationTag);
-    static void generate_methods(Context &X, ListType *type, Methods &m);
-
-    ListType *get_type() const override
-    {
-        return (ListType *)type_;
-    }
-
-    llvm::Value *get_data_ptr() const { return data_ptr_; }
-    llvm::Value *get_length_ptr() const { return length_ptr_; }
-    llvm::Value *get_capacity_ptr() const { return capacity_ptr_; }
-
-    llvm::Value *get_data() const;
-    llvm::Value *get_length() const;
-    llvm::Value *get_capacity() const;
-    void set_data(llvm::Value *value) const;
-    void set_length(llvm::Value *value) const;
-    void set_capacity(llvm::Value *value) const;
-
-    llvm::Value *get_element_ptr(llvm::Value *index);
-    llvm::Value *get_element_ptr(paw_Int index);
-
-    llvm::Value *get_element(llvm::Value *index);
-    void set_element(llvm::Value *index, llvm::Value *element);
-
-private:
-    llvm::Value *new_buffer(llvm::Value *capacity);
-    void create_grow(llvm::Value *old_capacity);
-
-    Methods const *methods_;
-    llvm::Value *data_ptr_;
-    llvm::Value *length_ptr_;
-    llvm::Value *capacity_ptr_;
-};
-
-
-class Map: public Value {
-public:
-    struct Methods {
-        Fn *get;
-        Fn *remove;
-        Fn *key_hash;
-        Fn *key_eq;
-
-        ObjectType *iterator_type;
-        Fn *iterator_next;
-
-        Owned<Fn> gep;
-        Owned<Fn> nep;
-        Owned<Fn> gep1;
-        Owned<Fn> grow;
-        Owned<Fn> lookup;
-        Owned<Fn> access;
-    };
-
-    using Type = MapType;
-
-    friend class Context;
-    friend class MapType;
-
-    explicit Map(State &state, llvm::Value *map, MapType *type, Methods const *methods);
-    explicit Map(State &state, llvm::Value *length_hint, MapType *type, Methods const *methods, CreationTag);
-    static void generate_methods(Context &X, MapType *type, Methods &m);
-
-    MapType *get_type() const override
-    {
-        return (MapType *)type_;
-    }
-
-    operator llvm::Value *() const
-    {
-        return get_value();
-    }
-
-    llvm::Value *get_data_ptr() const { return data_ptr_; }
-    llvm::Value *get_length_ptr() const { return length_ptr_; }
-    llvm::Value *get_capacity_ptr() const { return capacity_ptr_; }
-
-    llvm::Value *get_data() const;
-    llvm::Value *get_length() const;
-    llvm::Value *get_capacity() const;
-    void set_data(llvm::Value *data) const;
-    void set_length(llvm::Value *capacity) const;
-    void set_capacity(llvm::Value *capacity) const;
-
-    llvm::Value *get_element_ptr(llvm::Value *search_key);
-    llvm::Value *new_element_ptr(llvm::Value *search_key);
-
-    llvm::Value *get_element(llvm::Value *key);
-    void set_element(llvm::Value *key, llvm::Value *value);
-
-private:
-    enum class Flag: int8_t {
-        VACANT = 0b00,
-        ERASED = 0b01,
-        EXISTS = 0b10,
-    };
-
-    struct Components {
-        llvm::Value *flags;
-        llvm::Value *keys;
-        llvm::Value *values;
-    };
-
-    llvm::Value *first_index(llvm::Value *key, llvm::Value *capacity);
-    llvm::Value *next_index(llvm::Value *index, llvm::Value *capacity);
-    llvm::Value *new_buffer(llvm::Value *capacity);
-    llvm::Value *access(llvm::Value *search_key);
-    llvm::Value *lookup(llvm::Value *search_key);
-    Components unpack();
-
-    Methods const *methods_;
-    llvm::Value *data_ptr_;
-    llvm::Value *length_ptr_;
-    llvm::Value *capacity_ptr_;
-};
-
 
 } // namespace paw::cg
 

@@ -8,20 +8,21 @@
 #include "type_folder.h"
 #include "unify.h"
 
-static int equals_adaptor(struct Unifier *U, IrType *a, IrType *b)
+static int equals_adaptor(struct Compiler *C, IrGenericArg a, IrGenericArg b)
 {
-    return pawU_equals(U, a, b) ? 0 : -1;
+    return pawIr_arg_equals(C, a, b) ? 0 : -1;
 }
 
-static int aux(struct Compiler *C, IrTrait *a, IrTrait *b, int (*callback)(struct Unifier *, IrType *, IrType *))
+static int aux(struct Compiler *C, IrTrait *a, IrTrait *b, int (*callback)(struct Compiler *, IrGenericArg, IrGenericArg))
 {
     if (a->did.value != b->did.value)
         return -1;
 
-    IrType *const *x, *const *y;
-    paw_assert(a->types->count == b->types->count);
-    K_LIST_ZIP (a->types, x, b->types, y) {
-        if (callback(C->U, *x, *y) != 0)
+    IrGenericArg const *x;
+    IrGenericArg const *y;
+    paw_assert(a->args->count == b->args->count);
+    K_LIST_ZIP (a->args, x, b->args, y) {
+        if (callback(C, *x, *y) != 0)
             return -1;
     }
     return 0;
@@ -29,7 +30,7 @@ static int aux(struct Compiler *C, IrTrait *a, IrTrait *b, int (*callback)(struc
 
 int pawIr_unify_traits(struct Compiler *C, IrTrait *a, IrTrait *b)
 {
-    return aux(C, a, b, pawU_unify);
+    return aux(C, a, b, pawIr_unify);
 }
 
 paw_Bool pawIr_trait_equals(struct Compiler *C, IrTrait *a, IrTrait *b)
@@ -39,11 +40,22 @@ paw_Bool pawIr_trait_equals(struct Compiler *C, IrTrait *a, IrTrait *b)
 
 IrTrait *pawIr_normalize_trait(struct Compiler *C, IrTrait *trait)
 {
-    IrTypeList *types = IrTypeList_new(C);
-    if (trait->types != NULL) {
-        IrTypeList_reserve(C, types, trait->types->count);
-        K_LIST_XFOREACH (trait->types, IrType *const, p)
-            IrTypeList_push(C, types, pawU_normalize(C->U, *p));
+    IrGenericArgs *args = IrGenericArgs_new(C);
+    if (trait->args != NULL) {
+        IrGenericArgs_reserve(C, args, trait->args->count);
+        K_LIST_XFOREACH (trait->args, IrGenericArg const, p)
+            IrGenericArgs_push(C, args, pawIr_normalize(C, *p));
     }
-    return pawIr_new_trait(C, trait->did, types);
+    return pawIr_new_trait(C, trait->did, args);
+}
+
+IrTrait *pawIr_normalize_trait_projections(struct Compiler *C, IrTrait *trait)
+{
+    IrGenericArgs *args = IrGenericArgs_new(C);
+    if (trait->args != NULL) {
+        IrGenericArgs_reserve(C, args, trait->args->count);
+        K_LIST_XFOREACH (trait->args, IrGenericArg const, p)
+            IrGenericArgs_push(C, args, pawIr_normalize_projections(C, *p));
+    }
+    return pawIr_new_trait(C, trait->did, args);
 }

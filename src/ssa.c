@@ -11,13 +11,11 @@
 
 #define SSA_ERROR(S_, Kind_, ...) pawErr_##Kind_((S_)->C, (S_)->mir->modname, __VA_ARGS__)
 #define REGISTER(Reg_, Type_) ((struct MirPlace){.r = Reg_, .kind = MIR_PLACE_REGISTER, .type = Type_})
-#define LOCAL(Local_, Type_) ((struct MirPlace){.L = Local_, .type = Type_})
 
 struct SsaConverter {
     struct Compiler *C;
     struct Mir *mir;
     struct Pool *pool;
-    struct MirPlaceList *locals;
     struct MirBlockList *idom;
     struct MirBucketList *df;
 
@@ -27,7 +25,7 @@ struct SsaConverter {
 
     // data structures for variable renaming
     struct NameStackList *stacks;
-    struct MirLocalList *changes;
+    struct MirRegisterList *changes;
     struct PhiMap *phis;
 
     struct RenameMap *rename; // MirRegister => MirRegister
@@ -36,35 +34,36 @@ struct SsaConverter {
     paw_Env *P;
 };
 
-DEFINE_MAP(struct SsaConverter, RenameMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirLocal, MirRegister)
-DEFINE_MAP(struct SsaConverter, PhiMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirId, MirLocal)
+DEFINE_MAP(struct SsaConverter, RenameMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, MirRegister)
+DEFINE_MAP(struct SsaConverter, PhiMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirId, MirRegister)
 
-static paw_Bool is_trivial_local(struct SsaConverter *S, MirLocal L)
+static paw_Bool is_trivial_value(struct SsaConverter *S, MirRegister r)
 {
     // keep result and arguments
     IrTypeList const *params = ir_fn_params(S->C, S->mir->type);
-    if (L.value <= params->count) return PAW_FALSE;
+    if (r.value <= params->count) return PAW_FALSE;
 
-    struct MirLocalData const data = *mir_local_data(S->mir, L);
+    struct MirRegisterData const data = *mir_reg_data(S->mir, r);
     // being captured implies being non-SSA, but a local can be non-SSA for reasons
     // other than being captured
     paw_assert(!data.is_captured || data.is_nontrivial);
     return !data.is_nontrivial;
 }
 
-static struct MirPhi *place_trivial_phi_node(struct SsaConverter *S, MirBlock b, MirLocal L)
+static struct MirPhi *place_trivial_phi_node(struct SsaConverter *S, MirBlock b, MirRegister r)
 {
     struct MirBlockData *bb = mir_bb_data(S->mir, b);
-    for (int i = 0; i < bb->joins->count; ++i) {
-        struct MirPhi *phi = MirGetPhi(MirInstructionList_get(bb->joins, i));
-        if (MIR_ID_EQUALS(phi->output.L, L)) return phi; // already exists
+    K_LIST_XFOREACH (bb->joins, struct MirInstruction *const, p) {
+        struct MirPhi *phi = MirGetPhi(*p);
+        if (MIR_ID_EQUALS(phi->output.r, r))
+            return phi; // already exists
     }
-    IrType *type = mir_local_data(S->mir, L)->type;
-    struct MirPlaceList *inputs = MirPlaceList_new(S->mir);
-    struct MirInstruction *phi = pawMir_new_phi(S->mir, (struct SourceLoc){0},
-            inputs, LOCAL(L, type), L.value);
+    IrType *type = mir_reg_data(S->mir, r)->type;
+    MirPlaceList *inputs = MirPlaceList_new(S->mir);
+    struct MirInstruction *phi = pawMir_new_phi(S->mir, (struct SourceSpan){0},
+            inputs, REGISTER(r, type), r.value);
     MirInstructionList_push(S->mir, bb->joins, phi);
-    PhiMap_insert(S, S->phis, phi->hdr.mid, L);
+    PhiMap_insert(S, S->phis, phi->hdr.mid, r);
 
     int ninputs = bb->predecessors->count;
     MirPlaceList_reserve(S->mir, inputs, ninputs);
@@ -77,94 +76,69 @@ static struct MirPhi *place_trivial_phi_node(struct SsaConverter *S, MirBlock b,
 DEFINE_LIST(struct SsaConverter, NameStackList, MirPlaceList *)
 DEFINE_LIST(struct SsaConverter, IntegerList, int)
 
-MirPlaceList *get_name_stack(struct SsaConverter *S, MirLocal L)
+MirPlaceList *get_name_stack(struct SsaConverter *S, MirRegister r)
 {
-    return NameStackList_get(S->stacks, L.value);
+    return NameStackList_get(S->stacks, r.value);
 }
 
 static struct MirPlace next_register(struct SsaConverter *S, IrType *type)
 {
+    paw_assert(type != NULL);
     int const reg_id = S->mir->registers->count;
-    struct MirRegisterData const data = {type};
+    struct MirRegisterData const data = {.type = type};
     MirRegisterDataList_push(S->mir, S->mir->registers, data);
     return (struct MirPlace){
         .kind = MIR_PLACE_REGISTER,
         .r = MIR_REG(reg_id),
         .type = type,
-        // TODO .loc = ???,
     };
 }
 
-static void set_local_name(struct SsaConverter *S, MirLocal L, struct MirPlace name)
+static void set_local_name(struct SsaConverter *S, MirRegister r, struct MirPlace name)
 {
-    MirPlaceList *names = get_name_stack(S, L);
-    MirLocalList_push(S->mir, S->changes, L);
+    MirPlaceList *names = get_name_stack(S, r);
+    MirRegisterList_push(S->mir, S->changes, r);
     MirPlaceList_push(S->mir, names, name);
 }
 
-static struct MirPlace get_local_name(struct SsaConverter *S, MirLocal L)
+static struct MirPlace get_local_name(struct SsaConverter *S, MirRegister r)
 {
-    MirPlaceList const *names = get_name_stack(S, L);
+    MirPlaceList const *names = get_name_stack(S, r);
     paw_assert(names != NULL);
     return K_LIST_LAST(names);
 }
 
 static void rename_input(struct SsaConverter *S, struct MirPlace *pp)
 {
-    if (pp->kind == MIR_PLACE_LOCAL
-            && is_trivial_local(S, pp->L))
-        *pp = get_local_name(S, pp->L);
+    if (pp->kind == MIR_PLACE_REGISTER
+            && is_trivial_value(S, pp->r))
+        *pp = get_local_name(S, pp->r);
 }
 
-static IrType *deref(IrType *type)
+static void rename_output(struct SsaConverter *S, struct MirPlace *pp)
 {
-    return IrGetPtr(type)->pointee;
+    paw_assert(pp->kind == MIR_PLACE_REGISTER);
+    if (is_trivial_value(S, pp->r)) {
+        struct MirPlace const output = next_register(S, pp->type);
+        set_local_name(S, pp->r, output);
+        *pp = output;
+    }
 }
 
 static void rename_join(struct SsaConverter *S, struct MirInstruction *instr)
 {
     struct MirPhi *x = MirGetPhi(instr);
-    MirLocal const local = *PhiMap_get(S, S->phis, x->mid);
+    MirRegister const local = *PhiMap_get(S, S->phis, x->mid);
     x->output = next_register(S, x->output.type);
     set_local_name(S, local, x->output);
 }
 
-static void into_move(struct MirInstruction *instr, struct MirPlace target, struct MirPlace output)
-{
-    instr->Move_.kind = kMirMove;
-    instr->Move_.target = target;
-    instr->Move_.output = output;
-}
-
 static void rename_instruction(struct SsaConverter *S, struct MirInstruction *instr)
 {
-    if (MirIsLoad(instr)) {
-        struct MirLoad *load = MirGetLoad(instr);
-        if (load->pointer.kind == MIR_PLACE_LOCAL
-                && is_trivial_local(S, load->pointer.L)) {
-            struct MirPlace const input = get_local_name(S, load->pointer.L);
-            into_move(instr, input, load->output);
-        }
-    } else if (MirIsStore(instr)) {
-        struct MirStore *store = MirGetStore(instr);
-        if (store->pointer.kind == MIR_PLACE_LOCAL
-                && is_trivial_local(S, store->pointer.L)) {
-            struct MirPlace const output = next_register(S, store->value.type);
-            set_local_name(S, store->pointer.L, output);
-            into_move(instr, store->value, output);
-        }
-    } else if (MirIsAllocLocal(instr)) {
-        struct MirAllocLocal *alloc = MirGetAllocLocal(instr);
-        if (is_trivial_local(S, alloc->output.L)) {
-            struct MirPlace const output = next_register(S, deref(alloc->output.type));
-            set_local_name(S, alloc->output.L, output);
-            instr->hdr.kind = kMirNoop;
-        }
-    } else {
-        struct MirPlace *const *ppp;
-        MirPlacePtrList const *loads = pawMir_get_loads(S->mir, instr);
-        K_LIST_FOREACH (loads, ppp) rename_input(S, *ppp);
-    }
+    MirPlacePtrList const *loads = pawMir_get_loads(S->mir, instr);
+    K_LIST_XFOREACH (loads, struct MirPlace *const, ppp) rename_input(S, *ppp);
+    MirPlacePtrList const *stores = pawMir_get_stores(S->mir, instr);
+    K_LIST_XFOREACH (stores, struct MirPlace *const, ppp) rename_output(S, *ppp);
 }
 
 static paw_Bool list_includes_block(struct MirBlockList const *blocks, MirBlock b)
@@ -177,10 +151,10 @@ static paw_Bool list_includes_block(struct MirBlockList const *blocks, MirBlock 
     return PAW_FALSE;
 }
 
-static struct MirBlockList *compute_live_in(struct SsaConverter *S, struct MirBlockList *defs, MirLocal L)
+static struct MirBlockList *compute_live_in(struct SsaConverter *S, struct MirBlockList *defs, MirRegister r)
 {
-    struct MirBlockList *uses = *UseDefMap_get(S->mir, S->uses, L);
-    return pawMir_compute_live_in(S->mir, uses, defs, L);
+    struct MirBlockList *uses = *UseDefMap_get(S->mir, S->uses, r);
+    return pawMir_compute_live_in(S->mir, uses, defs, r);
 }
 
 static void place_phi_nodes(struct SsaConverter *S)
@@ -207,9 +181,9 @@ static void place_phi_nodes(struct SsaConverter *S)
     struct MirBlockList *W = MirBlockList_new_from(S->mir, S->pool);
     for (int iterations = 1; UseDefMapIterator_is_valid(&iter);
          ++iterations, UseDefMapIterator_next(&iter)) {
-        MirLocal const v = UseDefMapIterator_key(&iter);
+        MirRegister const v = UseDefMapIterator_key(&iter);
         nstacks = PAW_MAX(nstacks, v.value + 1);
-        if (!is_trivial_local(S, v)) continue;
+        if (!is_trivial_value(S, v)) continue;
         // consider each assignment of the variable
         struct MirBlockList *defs = *UseDefMapIterator_valuep(&iter);
         if (defs->count < 2) continue; // variable has single version
@@ -278,9 +252,9 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
         struct MirBlockData const *data = mir_bb_data(S->mir, *y);
         K_LIST_FOREACH (data->joins, instr) {
             // for each phi node in each successor of the current basic block
-            struct MirPhi *phi = MirGetPhi(*instr);
-            MirLocal const L = *PhiMap_get(S, S->phis, phi->mid);
-            MirPlaceList const *stack = get_name_stack(S, L);
+            struct MirPhi const *phi = MirGetPhi(*instr);
+            MirRegister const r = *PhiMap_get(S, S->phis, phi->mid);
+            MirPlaceList const *stack = get_name_stack(S, r);
             if (stack->count > 0) {
                 int const index = mir_which_pred(S->mir, *y, x);
                 struct MirPlace const input = K_LIST_LAST(stack);
@@ -298,9 +272,9 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
 
     // undo changes to the name stacks
     while (S->changes->count > first_change) {
-        MirLocal const v = K_LIST_LAST(S->changes);
+        MirRegister const v = K_LIST_LAST(S->changes);
         MirPlaceList *names = get_name_stack(S, v);
-        MirLocalList_pop(S->changes);
+        MirRegisterList_pop(S->changes);
         MirPlaceList_pop(names);
     }
 }
@@ -331,6 +305,26 @@ static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucke
 
 #endif // PAW_DEBUG_EXTRA
 
+static void remove_local_artifacts(struct SsaConverter *S)
+{
+    K_LIST_XFOREACH (S->mir->blocks, struct MirBlockData *const, pbb) {
+        K_LIST_XFOREACH ((*pbb)->instructions, struct MirInstruction *const, pinstr) {
+            struct MirPlace target;
+            if (MirIsAllocLocal(*pinstr)) {
+                target = MirGetAllocLocal(*pinstr)->output;
+            } else if (MirIsDrop(*pinstr)) {
+                target = MirGetDrop(*pinstr)->target;
+            } else {
+                continue;
+            }
+
+            if (target.kind == MIR_PLACE_REGISTER
+                    && is_trivial_value(S, target.r))
+                (*pinstr)->hdr.kind = kMirNoop;
+        }
+    }
+}
+
 static void ssa_construct(struct Pool *pool, struct Mir *mir)
 {
     struct Compiler *C = mir->C;
@@ -338,7 +332,6 @@ static void ssa_construct(struct Pool *pool, struct Mir *mir)
     struct MirBucketList *df = pawMir_compute_dominance_frontiers(C, mir, idom);
 
     struct SsaConverter S = {
-        .locals = mir->locals,
         .pool = pool,
         .idom = idom,
         .mir = mir,
@@ -347,7 +340,7 @@ static void ssa_construct(struct Pool *pool, struct Mir *mir)
         .P = ENV(C),
     };
 
-    S.changes = MirLocalList_new_from(mir, S.pool);
+    S.changes = MirRegisterList_new_from(mir, S.pool);
     S.defs = UseDefMap_new_from(mir, S.pool);
     S.uses = UseDefMap_new_from(mir, S.pool);
     S.rename = RenameMap_new(&S);
@@ -359,6 +352,7 @@ static void ssa_construct(struct Pool *pool, struct Mir *mir)
 
     place_phi_nodes(&S);
     rename_vars(&S, MIR_ENTRY_BB);
+    remove_local_artifacts(&S);
 }
 
 void pawSsa_construct(struct Mir *mir)

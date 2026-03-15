@@ -58,14 +58,14 @@ static void print_decision(struct Printer *P, struct Decision *dec);
 
 static void print_var(struct Printer *P, struct MatchVar var)
 {
-    PRINT_FORMAT(P, "Var(#%d, %s),\n", var.id, pawIr_print_type(P->C, var.type));
+    PRINT_FORMAT(P, "Var(#%d, %s%s),\n", var.id, pawIr_print_type(P->C, var.type), var.deref ? ", deref" : "");
 }
 
-static void print_vars(struct Printer *P, struct VariableList *vars)
+static void print_vars(struct Printer *P, struct MatchVars *vars)
 {
     for (int i = 0; i < vars->count; ++i) {
         print_indentation(P);
-        print_var(P, VariableList_get(vars, i));
+        print_var(P, MatchVars_get(vars, i));
     }
 }
 
@@ -175,8 +175,8 @@ char const *pawP_print_decision(struct Compiler *C, struct Decision *dec)
     print_indentation(&printer);
     print_decision(&printer, dec);
 
-    pawL_push_result(P, &buf);
-    return paw_str(P, -1);
+    Str const *str = pawL_buffer_finish(P, &buf);
+    return str->text;
 }
 
 #endif // PAW_DEBUG_EXTRA

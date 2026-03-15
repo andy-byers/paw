@@ -1,22 +1,36 @@
 // poly_function.paw
 
-fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
-    let b = [];
+use list::List;
+use hashmap::HashMap;
+
+fn map<A, B>(f: fn(A) -> B, a: List<A>) -> List<B> {
+    let b = List::new();
     for v in a {
-        b.push(f(v));
+        b.push(f(v)).unwrap();
     }
-    return b;
+    b
 }
 
 fn f2i(f: float) -> int {
-    return f as int;
+    f as int
 }
 
 #[test]
 pub fn test_explicit_instantiation() {
-    let source = [0.5, 1.6, 2.7, 3.8, 4.9];
-    let target = [0, 1, 2, 3, 4];
-    let answer = map::<float, int>(f2i, source);
+    let source = List::new();
+    source.push(0.5).unwrap();
+    source.push(1.6).unwrap();
+    source.push(2.7).unwrap();
+    source.push(3.8).unwrap();
+    source.push(4.9).unwrap();
+
+    let target = map::<float, int>(f2i, source);
+    assert(target.len() == 5);
+    assert(target[0] == 0);
+    assert(target[1] == 1);
+    assert(target[2] == 2);
+    assert(target[3] == 3);
+    assert(target[4] == 4);
 }
 
 struct One<A>{pub a: A}
@@ -81,18 +95,18 @@ pub fn test_recursive_instantiation() {
     second_recursive(|| 42, [f2i], map::<int, bool>);
 }
 
-fn make_closure<T>(t: T) -> (fn(T) -> (T, T)) {
-    |x| (x, t)
-}
-
-#[test]
-pub fn test_generic_upvalue() {
-    assert(make_closure(123)(0).0 == 0);
-    assert(make_closure((456, 789))((0, 0)).0.0 == 0);
-    assert(make_closure((456, 789))((0, 0)).0.1 == 0);
-
-    assert(make_closure(123)(0).1 == 123);
-    assert(make_closure((456, 789))((0, 0)).1.0 == 456);
-    assert(make_closure((456, 789))((0, 0)).1.1 == 789);
-}
+//fn make_closure<T>(t: T) -> (fn(T) -> (T, T)) {
+//    |x| (x, t)
+//}
+//
+//#[test]
+//pub fn test_generic_upvalue() {
+//    assert(make_closure(123)(0).0 == 0);
+//    assert(make_closure((456, 789))((0, 0)).0.0 == 0);
+//    assert(make_closure((456, 789))((0, 0)).0.1 == 0);
+//
+//    assert(make_closure(123)(0).1 == 123);
+//    assert(make_closure((456, 789))((0, 0)).1.0 == 456);
+//    assert(make_closure((456, 789))((0, 0)).1.1 == 789);
+//}
 

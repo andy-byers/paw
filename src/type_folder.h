@@ -16,8 +16,11 @@ struct IrTypeVisitor {
     void *ud;
 
     void (*VisitType)(struct IrTypeVisitor *, IrType *);
+    void (*VisitConst)(struct IrTypeVisitor *, IrConst *);
     void (*VisitTrait)(struct IrTypeVisitor *, IrTrait *);
+    void (*VisitGenericArg)(struct IrTypeVisitor *, IrGenericArg);
     void (*VisitTypeList)(struct IrTypeVisitor *, IrTypeList *);
+    void (*VisitGenericArgs)(struct IrTypeVisitor *, IrGenericArgs *);
 
 #define DEFINE_CALLBACK(X) void (*Visit##X)(struct IrTypeVisitor *, struct Ir##X *);
     IR_TYPE_LIST(DEFINE_CALLBACK)
@@ -26,7 +29,10 @@ struct IrTypeVisitor {
 
 void pawIr_type_visitor_init(struct IrTypeVisitor *F, struct Compiler *C, void *ud);
 void pawIr_visit_type(struct IrTypeVisitor *F, IrType *node);
+void pawIr_visit_const(struct IrTypeVisitor *F, IrConst *node);
+void pawIr_visit_generic_arg(struct IrTypeVisitor *F, IrGenericArg node);
 void pawIr_visit_type_list(struct IrTypeVisitor *F, IrTypeList *list);
+void pawIr_visit_generic_args(struct IrTypeVisitor *F, IrGenericArgs *list);
 void pawIr_visit_trait(struct IrTypeVisitor *F, IrTrait *node);
 
 
@@ -35,8 +41,11 @@ struct IrTypeFolder {
     void *ud;
 
     IrType *(*FoldType)(struct IrTypeFolder *, IrType *);
+    IrConst *(*FoldConst)(struct IrTypeFolder *, IrConst *);
     IrTrait *(*FoldTrait)(struct IrTypeFolder *, IrTrait *);
+    IrGenericArg (*FoldGenericArg)(struct IrTypeFolder *, IrGenericArg);
     IrTypeList *(*FoldTypeList)(struct IrTypeFolder *, IrTypeList *);
+    IrGenericArgs *(*FoldGenericArgs)(struct IrTypeFolder *, IrGenericArgs *);
 
 #define DEFINE_CALLBACK(X) IrType *(*Fold##X)(struct IrTypeFolder *, struct Ir##X *);
     IR_TYPE_LIST(DEFINE_CALLBACK)
@@ -45,9 +54,13 @@ struct IrTypeFolder {
 
 void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud);
 IrType *pawIr_fold_type(struct IrTypeFolder *F, IrType *node);
+IrConst *pawIr_fold_const(struct IrTypeFolder *F, IrConst *node);
 IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, IrTypeList *list);
+IrGenericArg pawIr_fold_generic_arg(struct IrTypeFolder *F, IrGenericArg arg);
+IrGenericArgs *pawIr_fold_generic_args(struct IrTypeFolder *F, IrGenericArgs *args);
 IrTrait *pawIr_fold_trait(struct IrTypeFolder *F, IrTrait *node);
 
+// TODO: is this even necessary? i think it was at some point but may not be now...
 struct HirTypeFolder {
     struct IrTypeFolder F;
     struct HirVisitor V;

@@ -1,56 +1,56 @@
 // chain.paw
 
+fn positive_option(i: int) -> Option<int> {
+    if i > 0 { 
+        Some(i) 
+    } else { 
+        None 
+    }
+}
+
+fn positive_even_option(i: int) -> Option<int> {
+    i = positive_option(i)?;
+    if i % 2 == 0 { 
+        Some(i) 
+    } else { 
+        None 
+    }
+}
+
 #[test]
 pub fn test_option() {
-    let positive = |i: int| -> Option<int> {
-        if i > 0 { 
-            Some(i) 
-        } else { 
-            None 
-        }
-    };
+    assert(positive_even_option(-2).is_none());
+    assert(positive_even_option(1).is_none());
+    assert(positive_even_option(2).unwrap() == 2);
+}
 
-    let positive_even = |i: int| -> Option<int> {
-        i = positive(i)?;
-        if i % 2 == 0 { 
-            Some(i) 
-        } else { 
-            None 
-        }
-    };
+fn positive_result(i: int) -> Result<int, str> {
+    if i > 0 { 
+        Ok(i) 
+    } else { 
+        Err("not positive") 
+    }
+}
 
-    assert(positive_even(-2).is_none());
-    assert(positive_even(1).is_none());
-    assert(positive_even(2).unwrap() == 2);
+fn positive_even_result(i: int) -> Result<int, str> {
+    i = positive_result(i)?;
+    if i % 2 == 0 { 
+        Ok(i) 
+    } else { 
+        Err("not even")
+    }
 }
 
 #[test]
 pub fn test_result() {
-    let positive = |i: int| -> Result<int, str> {
-        if i > 0 { 
-            Ok(i) 
-        } else { 
-            Err("not positive") 
-        }
-    };
-
-    let positive_even = |i: int| -> Result<int, str> {
-        i = positive(i)?;
-        if i % 2 == 0 { 
-            Ok(i) 
-        } else { 
-            Err("not even")
-        }
-    };
-
-    assert(positive_even(-2).unwrap_err() == "not positive");
-    assert(positive_even(1).unwrap_err() == "not even");
-    assert(positive_even(2).unwrap() == 2);
+    assert(positive_even_result(-2).unwrap_err() == "not positive");
+    assert(positive_even_result(1).unwrap_err() == "not even");
+    assert(positive_even_result(2).unwrap() == 2);
 }
 
 struct Padding;
 
-inline struct Padded<T> {
+struct Padded<T> {
     pub padding: Padding,
     pub padding2: Padding,
     pub value: T,
@@ -62,77 +62,65 @@ impl<T> Padded<T> {
     }
 }
 
+fn different_positive_option(p: Padded<int>) -> Option<Padded<int>> {
+    if p.value > 0 { 
+        Some(p) 
+    } else { 
+        None 
+    }
+}
+
+fn different_positive_even_option(p: Padded<int>) -> Option<int> {
+    p = different_positive_option(p)?;
+    if p.value % 2 == 0 { 
+        Some(p.value) 
+    } else { 
+        None 
+    }
+}
+
 #[test]
 pub fn test_different_option() {
-    let positive = |p: Padded<int>| -> Option<Padded<int>> {
-        if p.value > 0 { 
-            Some(p) 
-        } else { 
-            None 
-        }
-    };
+    assert(different_positive_option(Padded::new(-2)).is_none());
 
-    assert(positive(Padded::new(-2)).is_none());
+    assert(different_positive_even_option(Padded::new(-2)).is_none());
+    assert(different_positive_even_option(Padded::new(1)).is_none());
+    assert(different_positive_even_option(Padded::new(2)).unwrap() == 2);
+}
 
-    let positive_even = |p: Padded<int>| -> Option<int> {
-        p = positive(p)?;
-        if p.value % 2 == 0 { 
-            Some(p.value) 
-        } else { 
-            None 
-        }
-    };
+fn different_positive_result(p: Padded<int>) -> Result<Padded<int>, str> {
+    if p.value > 0 { 
+        Ok(p) 
+    } else { 
+        Err("not positive") 
+    }
+}
 
-    assert(positive_even(Padded::new(-2)).is_none());
-    assert(positive_even(Padded::new(1)).is_none());
-    assert(positive_even(Padded::new(2)).unwrap() == 2);
+fn different_positive_even_result(p: Padded<int>) -> Result<int, str> {
+    p = different_positive_result(p)?;
+    if p.value % 2 == 0 { 
+        Ok(p.value) 
+    } else { 
+        Err("not even")
+    }
 }
 
 #[test]
 pub fn test_different_result() {
-    let positive = |p: Padded<int>| -> Result<Padded<int>, str> {
-        if p.value > 0 { 
-            Ok(p) 
-        } else { 
-            Err("not positive") 
-        }
-    };
+    assert(different_positive_even_result(Padded::new(-2)).unwrap_err() == "not positive");
+    assert(different_positive_even_result(Padded::new(1)).unwrap_err() == "not even");
+    assert(different_positive_even_result(Padded::new(2)).unwrap() == 2);
+}
 
-    let positive_even = |p: Padded<int>| -> Result<int, str> {
-        p = positive(p)?;
-        if p.value % 2 == 0 { 
-            Ok(p.value) 
-        } else { 
-            Err("not even")
-        }
-    };
+fn id<T>(value: T) -> T { value }
 
-    assert(positive_even(Padded::new(-2)).unwrap_err() == "not positive");
-    assert(positive_even(Padded::new(1)).unwrap_err() == "not even");
-    assert(positive_even(Padded::new(2)).unwrap() == 2);
+fn nonnegative(value: int) -> Option<int> {
+    if value < 0 { return None }
+    Some(value)
 }
 
 fn chain_stack_value(i: int) -> Option<int> {
-    let id = |value| value;
-    let f = |value: int| {
-        if value < 0 { return None }
-        Some(value)
-    };
-
-    // Here, the result of a function call ("f(i)") is passed to the "?" operator and
-    // then immediately passed to another function. Requires a "MOVE" to overwrite
-    // the discriminator after the "?" and before the call to "id". At the MIR level,
-    // this move is a stack-to-stack move. It works because the lifetimes of both the
-    // discriminator (part of the "Option<int>" returned by "f") and the old stack
-    // slot end before the call to "id". 
-    //
-    //    stack      | source location
-    //   ------------|----------------------------------
-    //    .. id f i  | before call to "f" 
-    //    .. id D i  | before "?" ("D" = discriminator)
-    //    .. id i    | before call to "id" 
-    //
-    Some(id(f(i)?))
+    Some(id(nonnegative(i)?))
 }
 
 #[test]

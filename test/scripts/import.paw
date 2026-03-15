@@ -23,13 +23,12 @@ pub fn test_object() {
 }
 
 use mod_a::poly_recursive;
+use mod_a::Test as External;
 
 #[test]
 pub fn test_explicit_import() {
-    let list = [];
-    let count = poly_recursive(5, 123, list);
-    assert(#list == 5);
-    assert(list[-1] == 123);
+    let count = poly_recursive(5, External, 0);
+    assert(count == External.get_value() * 5);
 }
 
 #[test]
@@ -42,11 +41,11 @@ pub fn test_glob_import() {
 
 use mod_c::*;
 
-use MATH::sin as SIN;
-use math as MATH;
-
-#[test]
-pub fn test_import_as() {
-    MATH::sin(1.09);
-    SIN(1.09);
-}
+//use MATH::sin as SIN;
+//use math as MATH;
+//
+//#[test]
+//pub fn test_import_as() {
+//    MATH::sin(1.09);
+//    SIN(1.09);
+//}

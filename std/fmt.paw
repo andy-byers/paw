@@ -1,0 +1,62 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub use string::String;
+
+use mem;
+use string_builder;
+
+
+pub trait Display {
+    fn fmt(*self, f: *Formatter) -> mem::Result<()>;
+}
+
+
+pub struct Error {
+    OutOfMemory,
+    InvalidBase,
+}
+
+use Error::*;
+
+
+pub type Result<T> = result::Result<T, Error>;
+
+
+pub struct Formatter {
+    b: string_builder::Builder,
+}
+
+impl Formatter {
+    pub fn new() -> Self {
+        Self{b: string_builder::Builder::new()}
+    }
+
+    pub fn append<T: ToSlice<char>>(*self, value: T) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn append_char(*self, value: char) -> Result<()> {
+        // TODO: need error conversion
+//        self.b.append_char(value)?;
+        Ok(())
+    }
+
+    pub fn append_int_radix(*self, value: int, base: int) -> Result<()> {
+        if base < 1 || base > 36 { return Err(InvalidBase); }
+        Ok(())
+    }
+
+    pub fn append_int(*self, value: int) -> mem::Result<()> {
+        self.append_int_radix(value, 10)
+    }
+
+    pub fn append_float(*self, value: int) -> mem::Result<()> {
+        Ok(())
+    }
+
+    pub fn string(self) -> String {
+        self.b.string()
+    }
+}

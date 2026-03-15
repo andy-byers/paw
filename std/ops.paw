@@ -2,24 +2,101 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+pub use mem;
+
+
+pub trait Drop {
+    fn drop(*self);
+}
+
+
+pub trait Copy {}
+
+
+pub trait Clone {
+    fn clone(*self) -> Self;
+}
+
+
 pub trait Hash {
-    fn hash(self) -> int;
+    fn hash(*self) -> int;
 }
 
 
-pub trait Equals {
-    fn eq(self, rhs: Self) -> bool;
+pub trait Add<Rhs> {
+    type Output;
+
+    fn add(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait Sub<Rhs> {
+    type Output;
+
+    fn sub(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait Mul<Rhs> {
+    type Output;
+
+    fn mul(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait Div<Rhs> {
+    type Output;
+
+    fn div(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait Rem<Rhs> {
+    type Output;
+
+    fn rem(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait BitAnd<Rhs> {
+    type Output;
+
+    fn bit_and(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait BitOr<Rhs> {
+    type Output;
+
+    fn bit_or(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait BitXor<Rhs> {
+    type Output;
+
+    fn bit_xor(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait Shl<Rhs> {
+    type Output;
+
+    fn shl(*self, rhs: *Rhs) -> Self::Output;
+}
+
+pub trait Shr<Rhs> {
+    type Output;
+
+    fn shr(*self, rhs: *Rhs) -> Self::Output;
 }
 
 
-pub trait Compare {
-    fn lt(self, rhs: Self) -> bool;
-    fn le(self, rhs: Self) -> bool;
+pub trait Equals<Rhs> {
+    fn eq(*self, rhs: *Rhs) -> bool;
+}
+
+
+pub trait Compare<Rhs> {
+    fn lt(*self, rhs: *Rhs) -> bool;
+    fn le(*self, rhs: *Rhs) -> bool;
 }
 
 
 pub trait Increment {
-    fn increment(&self);
+    fn increment(*self);
 }
 
 
@@ -28,117 +105,531 @@ pub trait Default {
 }
 
 
-pub trait Iterate<I: Advance<T>, T> {
-    fn iterator(self) -> I;
+pub trait From<T> {
+    fn from(from: T) -> Self;
 }
 
 
-pub trait Advance<T> {
-    fn next(&self) -> Option<T>;
+pub trait AsPtr<T> {
+    fn as_ptr(*self) -> *T;
 }
 
 
-pub inline struct Range<T: Compare + Increment> {
-    pub start: T,
-    pub end: T,
+pub trait ToSlice<T> {
+    fn to_slice(*self) -> []T;
 }
 
-impl<T: Compare + Increment> Range<T> {
-    pub fn contains(self, value: T) -> bool {
-        self.start.le(value) && value.lt(self.end)
+
+//pub trait ToSliceMut<T> {
+//    fn to_slice_mut(*mut self) -> []mut T;
+//}
+
+
+pub trait Index<Idx> {
+    type Output;
+    fn index(*self, index: Idx) -> *Output;
+}
+
+
+pub trait IntoIterator {
+    type Item;
+    type IntoIter: Iterator<Item = Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter;
+}
+
+pub trait Iterator {
+    type Item;
+
+    fn next(*self) -> Option<Self::Item>;
+}
+
+
+impl Hash for unit {
+    fn hash(*self) -> int { 
+        0 
     }
 }
 
-impl<T: Compare + Increment> Iterate<RangeIterator<T>, T> for Range<T> {
-    fn iterator(self) -> RangeIterator<T> {
-        RangeIterator::new(self)
+impl Equals<Self> for unit {
+    fn eq(*self, rhs: *Self) -> bool { 
+        true 
+    }
+}
+
+impl Default for unit {
+    fn default() -> Self {
+        ()
     }
 }
 
 
-pub inline struct RangeFrom<T: Compare + Increment> {
-    pub start: T,
-}
-
-impl<T: Compare + Increment> RangeFrom<T> {
-    pub fn contains(self, value: T) -> bool {
-        self.start.le(value)
+impl Hash for bool {
+    fn hash(*self) -> int { 
+        *self as int 
     }
 }
 
-impl<T: Compare + Increment> Iterate<RangeFromIterator<T>, T> for RangeFrom<T> {
-    fn iterator(self) -> RangeFromIterator<T> {
-        RangeFromIterator::new(self)
+impl Equals<Self> for bool {
+    fn eq(*self, rhs: *Self) -> bool { 
+        *self == *rhs 
     }
 }
 
-
-pub inline struct RangeTo<T: Compare> {
-    pub end: T,
-}
-
-impl<T: Compare> RangeTo<T> {
-    pub fn contains(self, value: T) -> bool {
-        value.lt(self.end)
+impl Default for bool {
+    fn default() -> Self {
+        false
     }
 }
 
 
-pub inline struct RangeFull;
+impl Hash for char { 
+    fn hash(*self) -> int { 
+        *self as int 
+    }
+}
 
-impl RangeFull {
-    pub fn contains<T>(self, value: T) -> bool {
+impl Equals<Self> for char { 
+    fn eq(*self, rhs: *Self) -> bool { 
+        *self == *rhs 
+    }
+}
+
+impl Compare<Self> for char {
+    fn lt(*self, rhs: *Self) -> bool { 
+        *self < *rhs 
+    }
+
+    fn le(*self, rhs: *Self) -> bool { 
+        *self <= *rhs 
+    }
+}
+
+impl Increment for char {
+    fn increment(*self) { 
+        *self = (*self as int + 1) as char; 
+    }
+}
+
+impl Default for char {
+    fn default() -> Self {
+        '\0'
+    }
+}
+
+
+impl Add<Self> for int {
+    type Output = Self;
+
+    fn add(*self, rhs: *Self) -> Self {
+        *self + *rhs
+    }
+}
+
+impl Sub<Self> for int {
+    type Output = Self;
+
+    fn sub(*self, rhs: *Self) -> Self {
+        *self - *rhs
+    }
+}
+
+impl Mul<Self> for int {
+    type Output = Self;
+
+    fn mul(*self, rhs: *Self) -> Self {
+        *self * *rhs
+    }
+}
+
+impl Div<Self> for int {
+    type Output = Self;
+
+    fn div(*self, rhs: *Self) -> Self {
+        *self / *rhs
+    }
+}
+
+impl Rem<Self> for int {
+    type Output = Self;
+
+    fn rem(*self, rhs: *Self) -> Self {
+        *self % *rhs
+    }
+}
+
+impl BitAnd<Self> for int {
+    type Output = Self;
+
+    fn bit_and(*self, rhs: *Self) -> Self {
+        *self & *rhs
+    }
+}
+
+impl BitOr<Self> for int {
+    type Output = Self;
+
+    fn bit_or(*self, rhs: *Self) -> Self {
+        *self | *rhs
+    }
+}
+
+impl BitXor<Self> for int {
+    type Output = Self;
+
+    fn bit_xor(*self, rhs: *Self) -> Self {
+        *self ^ *rhs
+    }
+}
+
+impl Shl<Self> for int {
+    type Output = Self;
+
+    fn shl(*self, rhs: *Self) -> Self {
+        *self << *rhs
+    }
+}
+
+impl Shr<Self> for int {
+    type Output = Self;
+
+    fn shr(*self, rhs: *Self) -> Self {
+        *self >> *rhs
+    }
+}
+
+// TODO: constants overflow int64
+impl Hash for int { 
+    fn hash(*self) -> int { 
+        // SplitMix64 step from https://en.wikipedia.org/wiki/Xorshift 
+        let x = *self + -7046029254386353131; // 0x9E3779B97F4A7C15
+        x = (x ^ (x >> 30)) * -4658895280553007687; // 0xBF58476D1CE4E5B9
+        x = (x ^ (x >> 27)) * -7723592293110705685; // 0x94D049BB133111EB
+        x ^ (x >> 31)
+    }
+}
+
+impl Equals<Self> for int { 
+    fn eq(*self, rhs: *Self) -> bool { 
+        *self == *rhs 
+    }
+}
+
+impl Compare<Self> for int { 
+    fn lt(*self, rhs: *Self) -> bool { 
+        *self < *rhs 
+    }
+
+    fn le(*self, rhs: *Self) -> bool { 
+        *self <= *rhs 
+    }
+}
+
+impl Increment for int {
+    fn increment(*self) { 
+        *self += 1; 
+    }
+}
+
+impl Default for int {
+    fn default() -> Self {
+        0
+    }
+}
+
+
+impl Add<Self> for float {
+    type Output = Self;
+
+    fn add(*self, rhs: *Self) -> Self {
+        *self + *rhs
+    }
+}
+
+impl Sub<Self> for float {
+    type Output = Self;
+
+    fn sub(*self, rhs: *Self) -> Self {
+        *self - *rhs
+    }
+}
+
+impl Mul<Self> for float {
+    type Output = Self;
+
+    fn mul(*self, rhs: *Self) -> Self {
+        *self * *rhs
+    }
+}
+
+impl Div<Self> for float {
+    type Output = Self;
+
+    fn div(*self, rhs: *Self) -> Self {
+        *self / *rhs
+    }
+}
+
+// TODO: consider using something like "PartialEq" here b/c of NaNs
+impl Equals<Self> for float { 
+    fn eq(*self, rhs: *Self) -> bool { 
+        *self == *rhs 
+    }
+}
+
+impl Compare<Self> for float {
+    fn lt(*self, rhs: *Self) -> bool { 
+        *self < *rhs 
+    }
+
+    fn le(*self, rhs: *Self) -> bool { 
+        *self <= *rhs 
+    }
+}
+
+impl Default for float {
+    fn default() -> Self {
+        0.0
+    }
+}
+
+
+impl Copy for str {}
+
+impl Clone for str {
+    fn clone(*self) -> Self {
+        *self
+    }
+}
+
+impl AsPtr<char> for str {
+    #[extern = "paw_ops_str_AsPtr_as_ptr"]
+    fn as_ptr(*self) -> *char;
+}
+
+use slice;
+
+impl ToSlice<char> for str {
+    fn to_slice(*self) -> []char {
+        slice::from_raw_parts(self.as_ptr(), self.len())
+    }
+}
+
+impl Compare<Self> for str {
+    fn lt(*self, rhs: *Self) -> bool {
+        *self < *rhs
+    }
+
+    fn le(*self, rhs: *Self) -> bool {
+        *self <= *rhs
+    }
+}
+
+impl Index<int> for str {
+    type Output = char;
+    fn index(*self, index: int) -> *char {
+        check_bounds(index, self.len(), false);
+        ptr::add(self.as_ptr(), index)
+    }
+}
+
+impl Hash for str { 
+    fn hash(*self) -> int {
+        self.to_slice().hash()
+    }
+}
+
+impl Equals<Self> for str { 
+    fn eq(*self, rhs: *Self) -> bool { 
+        *self == *rhs
+    }
+}
+
+impl Default for str {
+    fn default() -> Self {
+        ""
+    }
+}
+
+
+impl<T> Copy for []T {}
+
+impl<T> AsPtr<T> for []T {
+    #[extern = "paw_ops_Slice_AsPtr_as_ptr"]
+    fn as_ptr(*self) -> *T;
+}
+
+use ptr;
+
+impl<T> Index<int> for []T {
+    type Output = T;
+    fn index(*self, index: int) -> *T {
+        check_bounds(index, self.len(), false);
+        ptr::add(self.as_ptr(), index)
+    }
+}
+
+//impl<T> Index<Range<int>> for []T {
+//    type Output = []T;
+//    fn index(*self, index: Range<int>) -> []T {
+//        check_bounds(index.start, self.len(), false);
+//        check_bounds(index.end, self.len(), true);
+//        let ptr = ptr::add(self.as_ptr(), index.start);
+//        from_raw_parts(ptr, index.end - index.start)
+//    }
+//}
+//
+//impl<T> Index<RangeInclusive<int>> for []T {
+//    type Output = []T;
+//    fn index(*self, index: RangeInclusive<int>) -> []T {
+//        check_bounds(index.start, self.len(), false);
+//        check_bounds(index.end, self.len(), false);
+//        let ptr = ptr::add(self.as_ptr(), index.start);
+//        from_raw_parts(ptr, index.end - index.start + 1)
+//    }
+//}
+//
+//impl<T> Index<RangeFrom<int>> for []T {
+//    type Output = []T;
+//    fn index(*self, index: RangeFrom<int>) -> []T {
+//        check_bounds(index.start, self.len(), false);
+//        let ptr = ptr::add(self.as_ptr(), index.start);
+//        from_raw_parts(ptr, self.len() - index.start)
+//    }
+//}
+//
+//impl<T> Index<RangeTo<int>> for []T {
+//    type Output = []T;
+//    fn index(*self, index: RangeTo<int>) -> []T {
+//        check_bounds(index.end, self.len(), true);
+//        from_raw_parts(self.as_ptr(), index.end)
+//    }
+//}
+//
+//impl<T> Index<RangeToInclusive<int>> for []T {
+//    type Output = []T;
+//    fn index(*self, index: RangeToInclusive<int>) -> []T {
+//        check_bounds(index.end, self.len(), false);
+//        from_raw_parts(self.as_ptr(), index.end + 1)
+//    }
+//}
+//
+//impl<T> Index<RangeFull> for []T {
+//    type Output = []T;
+//    fn index(*self, index: RangeFull) -> []T {
+//        self
+//    }
+//}
+
+impl<T> ToSlice<T> for []T {
+    fn to_slice(*self) -> []T {
+        *self
+    }
+}
+
+use io;
+impl Hash for []char {
+    fn hash(*self) -> int {
+        builtin_hash_bytes(self.as_ptr(), self.len(), 0)
+    }
+}
+
+impl Compare<Self> for []char {
+    fn lt(*self, rhs: *Self) -> bool {
+        builtin_rawcmp(self.as_ptr(), self.len(), 
+            rhs.as_ptr(), rhs.len()) < 0
+    }
+
+    fn le(*self, rhs: *Self) -> bool {
+        builtin_rawcmp(self.as_ptr(), self.len(), 
+            rhs.as_ptr(), rhs.len()) <= 0
+    }
+}
+
+// TODO: would be nice to figure out a way to replace with "builtin_rawcmp(...) == 0"
+impl<T: Equals<T>> Equals<Self> for []T {
+    fn eq(*self, rhs: *Self) -> bool {
+        if self.len() != rhs.len() {
+            return false;
+        }
+        for i in 0..self.len() {
+            if !self[i].eq(&rhs[i]) {
+                return false;
+            }
+        }
         true
     }
 }
 
 
-pub inline struct RangeInclusive<T: Compare + Increment> {
+impl Copy for () {}
+impl Copy for bool {}
+impl Copy for char {}
+impl Copy for int {}
+impl Copy for float {}
+impl<T> Copy for *T {}
+
+
+impl Clone for () {
+    fn clone(*self) -> Self { 
+        *self 
+    }
+}
+
+impl Clone for bool {
+    fn clone(*self) -> Self { 
+        *self 
+    }
+}
+
+impl Clone for char {
+    fn clone(*self) -> Self { 
+        *self 
+    }
+}
+
+impl Clone for int {
+    fn clone(*self) -> Self { 
+        *self 
+    }
+}
+
+impl Clone for float {
+    fn clone(*self) -> Self { 
+        *self 
+    }
+}
+
+
+
+pub struct Range<T> {
     pub start: T,
     pub end: T,
 }
 
-impl<T: Compare + Increment> RangeInclusive<T> {
-    pub fn contains(self, value: T) -> bool {
-        self.start.le(value) && value.le(self.end)
+impl<T: Compare<T>> Range<T> {
+    pub fn contains(*self, value: *T) -> bool {
+        self.start.le(value) && value.lt(&self.end)
     }
 }
 
-impl<T: Compare + Increment> Iterate<RangeInclusiveIterator<T>, T> for RangeInclusive<T> {
-    fn iterator(self) -> RangeInclusiveIterator<T> {
-        RangeInclusiveIterator::new(self)
+impl<Idx: Clone + Compare<Idx> + Increment> IntoIterator for Range<Idx> {
+    type Item = Idx;
+    type IntoIter = Range<Idx>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self
     }
 }
 
+impl<T: Clone + Compare<T> + Increment> Iterator for Range<T> {
+    type Item = T;
 
-pub inline struct RangeToInclusive<T: Compare> {
-    pub end: T,
-}
-
-impl<T: Compare> RangeToInclusive<T> {
-    pub fn contains(self, value: T) -> bool {
-        value.le(self.end)
-    }
-}
-
-
-pub inline struct RangeIterator<T: Compare + Increment> {
-    end: T,
-    iter: T,
-}
-
-impl<Ty: Compare + Increment> RangeIterator<Ty> {
-    pub fn new(range: Range<Ty>) -> Self {
-        Self{iter: range.start, end: range.end}
-    }
-}
-
-impl<Ty: Compare + Increment> Advance<Ty> for RangeIterator<Ty> {
-    fn next(&self) -> Option<Ty> {
-        if self.iter.lt(self.end) {
-            let iter = self.iter;
-            self.iter.increment();
-            Some(iter)
+    fn next(*self) -> Option<Self::Item> {
+        if self.start.lt(&self.end) {
+            let current = self.start.clone();
+            self.start.increment();
+            Some(current)
         } else {
             None
         }
@@ -146,47 +637,125 @@ impl<Ty: Compare + Increment> Advance<Ty> for RangeIterator<Ty> {
 }
 
 
-pub inline struct RangeFromIterator<T: Compare + Increment> {
-    iter: T,
+pub struct RangeFrom<T> {
+    pub start: T,
 }
 
-impl<T: Compare + Increment> RangeFromIterator<T> {
-    pub fn new(range: RangeFrom<T>) -> Self {
-        Self{iter: range.start}
+impl<T: Compare<T>> RangeFrom<T> {
+    pub fn contains(*self, value: *T) -> bool {
+        self.start.le(value)
     }
 }
 
-impl<T: Compare + Increment> Advance<T> for RangeFromIterator<T> {
-    fn next(&self) -> Option<T> {
-        let iter = self.iter;
-        self.iter.increment();
-        Some(iter)
+impl<T: Clone + Increment> IntoIterator for RangeFrom<T> {
+    type Item = T;
+    type IntoIter = RangeFrom<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self
+    }
+}
+
+impl<T: Clone + Increment> Iterator for RangeFrom<T> {
+    type Item = T;
+
+    fn next(*self) -> Option<Self::Item> {
+        let current = self.start.clone();
+        self.start.increment();
+        Some(current)
     }
 }
 
 
-pub inline struct RangeInclusiveIterator<T: Compare + Increment> {
-    end: T,
-    iter: Option<T>,
+pub struct RangeTo<T: Compare<T>> {
+    pub end: T,
 }
 
-impl<T: Compare + Increment> RangeInclusiveIterator<T> {
-    pub fn new(range: RangeInclusive<T>) -> Self {
-        Self{iter: Some(range.start), end: range.end}
+impl<T: Compare<T>> RangeTo<T> {
+    pub fn contains(*self, value: *T) -> bool {
+        value.lt(&self.end)
     }
 }
 
-impl<T: Compare + Increment> Advance<T> for RangeInclusiveIterator<T> {
-    fn next(&self) -> Option<T> {
-        let iter = self.iter?;
-        if iter.lt(self.end) {
-            let copy = iter;
-            copy.increment();
-            self.iter = Some(copy);
+
+pub struct RangeFull;
+
+impl RangeFull {
+    pub fn contains<T>(*self, value: *T) -> bool {
+        true
+    }
+}
+
+
+pub struct RangeInclusive<T> {
+    pub start: T,
+    pub end: T,
+    pub done: bool,
+}
+
+impl<T: Compare<T>> RangeInclusive<T> {
+    pub fn contains(*self, value: *T) -> bool {
+        self.start.le(value) && value.le(&self.end)
+    }
+}
+
+impl<T: Clone + Compare<T> + Increment> IntoIterator for RangeInclusive<T> {
+    type Item = T;
+    type IntoIter = RangeInclusive<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self
+    }
+}
+
+impl<T: Clone + Compare<T> + Increment> Iterator for RangeInclusive<T> {
+    type Item = T;
+
+    fn next(*self) -> Option<Self::Item> {
+        if self.done { return None; } 
+        if self.start.lt(&self.end) {
+            let current = self.start.clone();
+            self.start.increment();
+            Some(current)
+        } else if (self.start.le(&self.end)) {
+            self.done = true;
+            Some(self.start.clone())
         } else {
-            self.iter = None;
+            self.done = true;
+            None
         }
-        Some(iter)
     }
 }
+
+
+pub struct RangeToInclusive<T: Compare<T>> {
+    pub end: T,
+}
+
+impl<T: Compare<T>> RangeToInclusive<T> {
+    pub fn contains(*self, value: *T) -> bool {
+        value.le(&self.end)
+    }
+}
+
+
+fn check_bounds(index: int, length: int, allow_end: bool) {
+    if index < 0 || index > length - allow_end as int {
+        panic("index out of bounds");
+    }
+}
+
+#[extern = "paw_builtin_hash_bytes"]
+pub fn builtin_hash_bytes(bytes: *char, length: int, seed: int) -> int;
+
+// Allows "*hs" to be equal to "0 as *char" if "*hs_len" is equal to 0.
+#[extern = "paw_builtin_rawcmp"]
+pub fn builtin_rawcmp(
+    lhs: *char, lhs_len: int, 
+    rhs: *char, rhs_len: int) -> int;
+
+
+
+
+
 

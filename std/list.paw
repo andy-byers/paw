@@ -2,125 +2,374 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-pub struct List<T>;
+const DEFAULT_CAPACITY: int = 4;
 
-impl<T> [T] {
-    // Transform negative indices into offsets from the end of the list,
-    // where more negative means farther away from the end.
-    fn absolute_index(self, index: int) -> Option<int> {
-        if index < 0 { 
-            index += #self; 
+pub struct List<T> {
+    start: *T,
+    length: int,
+    capacity: int,
+}
+
+use mem;
+use ptr;
+use slice;
+
+impl<T> List<T> {
+    pub fn new() -> Self {
+        Self{
+            start: ptr::null::<T>(), 
+            length: 0, 
+            capacity: 0,
         }
-        if 0 <= index && index < #self {
-            Some(index)
+    }
+
+    pub fn len(*self) -> int {
+        self.length
+    }
+
+    pub fn capacity(*self) -> int {
+        self.capacity
+    }
+
+    pub fn get(*self, index: int) -> Option<*T> {
+        self.check_bounds(index)?;
+        Some(self.get_element_ptr(index))
+    }
+
+    pub fn set(*self, index: int, value: T) -> Option<T> {
+        self.check_bounds(index)?;
+        Some(ptr::replace(&self[index], value))
+    }
+
+    pub fn push(*self, value: T) -> mem::Result<()> {
+        match self.try_push(value) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(mem::OutOfMemory),
+        }
+    }
+
+    pub fn insert(*self, index: int, value: T) -> Result<(), InsertError> {
+        match self.try_insert(index, value) {
+            Ok(()) => Ok(()),
+            Err((v, e)) => Err(e),
+        }
+    }
+
+    pub fn try_push(*self, value: T) -> Result<(), T> {
+        if self.ensure_many(1).is_err() {
+            return Err(value);
+        }
+
+        let element_ptr = ptr::add(self.start, self.length);
+        ptr::write(element_ptr, value);
+        self.length += 1;
+        Ok(())
+    }
+
+    pub fn try_insert(*self, index: int, value: T) -> Result<(), (T, InsertError)> {
+        if self.ensure_many(1).is_err() {
+            return Err((value, InsertError::OutOfMemory));
+        }
+
+        if index < 0 || index > self.length {
+            return Err((value, InsertError::OutOfBounds));
+        }
+
+        ptr::copy(&self[index], 
+            &self[index + 1], 
+            self.length - index);
+        ptr::write(&self[index], value);
+        self.length += 1;
+        Ok(())
+    }
+
+    pub fn remove(*self, index: int) -> T {
+        self.ensure_bounds(index);
+        let value = ptr::read(&self[index]);
+        ptr::copy(&self[index + 1], 
+            &self[index], 
+            self.length - index - 1);
+        self.length -= 1;
+        value
+    }
+
+    pub fn pop(*self) -> T {
+        if self.length == 0 {
+            panic("pop from empty list");
+        }
+        self.length -= 1;
+        ptr::read(self.get_element_ptr(self.length))
+    }
+
+    pub fn reserve(*self, length: int) -> mem::Result<()> {
+        if (length < 0) { 
+            panic("list length must be nonnegative"); 
+        }
+        if length > self.capacity {
+            self.grow_copy(length)?;
+        }
+        Ok(())
+    }
+
+    pub fn from_raw_parts(start: *T, length: int, capacity: int) -> Self {
+        Self{start, length, capacity}
+    }
+
+    pub fn into_raw_parts(self) -> (*T, int, int) {
+        let Self{start, length, capacity} = self;
+        (start, length, capacity)
+    }
+
+    fn check_bounds(*self, index: int) -> Option<()> {
+        if 0 <= index && index < self.length {
+            Some(())
         } else {
             None
         }
     }
 
-    pub fn length(self) -> int {
-        #self
-    }
-
-    pub fn get(self, index: int) -> Option<T> {
-        match self.absolute_index(index) {
-            Some(i) => Some(self[i]),
-            None => None,
+    fn ensure_bounds(*self, index: int) {
+        match self.check_bounds(index) {
+            None => panic("index out of bounds"),
+            _ => (),
         }
     }
 
-    pub fn get_or(self, index: int, default: T) -> T {
+    fn next_capacity(minimum: int) -> int {
+        let grow = minimum / 2 + 1;
+        if minimum <= INT_MAX - grow {
+            minimum + grow
+        } else {
+            INT_MAX
+        }
+    }
+
+    fn grow_copy(*self, capacity: int) -> mem::Result<()> {
+        let n = Self::next_capacity(capacity);
+        let p = mem::alloc::<T>(n)?;
+        ptr::copy(self.start, p, self.length);
+        self.capacity = n;
+        self.start = p;
+        Ok(())
+    }
+
+    fn grow_resize(*self, capacity: int) -> mem::Result<()> {
+        let n = Self::next_capacity(capacity);
+        self.start = mem::realloc::<T>(self.start, n)?;
+        self.capacity = n;
+        Ok(())
+    }
+
+    fn ensure_one(*self) -> mem::Result<()> {
+        if self.length >= self.capacity {
+            // "self.length + 1" cannot overflow if this list is well-formed
+            self.grow_resize(self.length + 1)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_many(*self, count: int) -> mem::Result<()> {
+        if self.length > self.capacity - count {
+            if self.length > INT_MAX - count {
+                return Err(mem::OutOfMemory);
+            }
+            self.grow_copy(self.length + count)?;
+        }
+        Ok(())
+    }
+
+    fn get_element_ptr(*self, index: int) -> *T {
+        ptr::add(self.as_ptr(), index)
+    }
+}
+
+
+pub enum InsertError {
+    OutOfMemory,
+    OutOfBounds,
+}
+
+
+impl<T> Drop for List<T> {
+    fn drop(*self) {
+        // drop each element in-place, in reverse order
+        for r in 0..self.length {
+            ptr::drop(self.get_element_ptr(self.length - r - 1));
+        }
+
+        mem::dealloc(self.start);
+    }
+}
+
+impl<T> Index<int> for List<T> {
+    type Output = T;
+    fn index(*self, index: int) -> *T {
         match self.get(index) {
             Some(value) => value,
-            None => default,
+            None => panic("index out of bounds for list"),
         }
     }
-
-    #[extern] pub fn push(self, value: T);
-    #[extern] pub fn pop(self) -> T;
-    #[extern] pub fn insert(self, index: int, value: T);
-    #[extern] pub fn remove(self, index: int) -> T;
 }
 
-use str_builder;
+impl<T> ToSlice<T> for List<T> {
+    fn to_slice(*self) -> []T {
+        slice::from_raw_parts(self.as_ptr(), self.len())
+    }
+}
 
-impl<T: Default> [T] {
-    pub fn with_length(length: int) -> Self {
-        let result = [];
+impl<T> AsPtr<T> for List<T> {
+    fn as_ptr(*self) -> *T {
+        self.start
+    }
+}
+
+impl<T: Default> List<T> {
+    pub fn with_length(length: int) -> mem::Result<Self> {
+        let result = List::new();
+        result.reserve(length)?;
         for i in 0..length {
-            result.push(T::default());
+            result.push(T::default())?;
         }
-        result
+        Ok(result)
     }
 }
 
-impl [char] {
-    pub fn from_str(value: str) -> Self {
-        let result = [];
-        for i in 0..#value {
-            result.push(value[i]);
-        }
-        result
-    }
+//TODO use string_builder;
+//TODO 
+//TODO impl List<char> {
+//TODO     pub fn from_str(value: str) -> Self {
+//TODO         let result = [];
+//TODO         for i in 0..#value {
+//TODO             result.push(value[i]);
+//TODO         }
+//TODO         result
+//TODO     }
+//TODO 
+//TODO     pub fn as_str(*self) -> str {
+//TODO         let b = string_builder::Builder::new();
+//TODO         for i in 0..self.len() {
+//TODO             b.append_char(self[i]);
+//TODO         }
+//TODO         for c in self {
+//TODO             b.append_char(c);
+//TODO         }
+//TODO         b.string()
+//TODO     }
+//TODO }
 
-    pub fn as_str(self) -> str {
-        let b = str_builder::Builder::new();
-        for c in self {
-            b.append_char(c);
-        }
-        b.string()
-    }
-}
-
-impl<T> Default for [T] {
+impl<T> Default for List<T> {
     fn default() -> Self {
-        []
-    }
-}
-
-impl<T> Iterate<ListIterator<T>, T> for [T] {
-    fn iterator(self) -> ListIterator<T> {
-        ListIterator::new(self)
+        Self::new()
     }
 }
 
 
-pub inline struct ListIterator<T> {
-    list: [T],
+pub use slice::Iter;
+//pub use slice::IterMut;
+
+pub struct IntoIter<T> {
+    inner: List<T>,
     index: int,
 }
 
-impl<T> ListIterator<T> {
-    pub fn new(list: [T]) -> Self {
-        Self{list, index: 0}
+impl<T> IntoIter<T> {
+    pub fn new(inner: List<T>) -> Self {
+        Self{inner, index: 0}
     }
 }
 
-impl<T> Advance<T> for ListIterator<T> {
-    fn next(&self) -> Option<T> {
-        if self.index < #self.list {
-            let i = self.index;
-            self.index = i + 1;
-            Some(self.list[i])
+impl<T> Drop for IntoIter<T> {
+    fn drop(*self) {
+        let t = ptr::replace(&self.inner, List::new())
+            .into_raw_parts();        
+        let _ = List::from_raw_parts(t.0, 0, t.2);
+    }
+}
+
+impl<T> Iterator for IntoIter<T> {
+    type Item = T;
+
+    fn next(*self) -> Option<Self::Item> {
+        if self.index < self.inner.len() {
+            let p = &self.inner[self.index];
+            self.index += 1;
+            Some(ptr::read(p))
         } else {
             None
-        }
+        }        
     }
 }
 
-use ops::Equals;
+impl<T> IntoIterator for List<T> {
+    type Item = T;
+    type IntoIter = IntoIter<T>;
 
-impl<T: Equals> Equals for [T] {
-    fn eq(self, rhs: Self) -> bool {
-        if #self != #rhs {
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::new(self)
+    }
+}
+
+impl<T> IntoIterator for *List<T> {
+    type Item = *T;
+    type IntoIter = Iter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.to_slice().into_iter()
+    }
+}
+
+//impl<T> IntoIterator for *mut List<T> {
+//    type Item = *mut T;
+//    type IntoIter = IterMut<T>;
+//
+//    fn into_iter(self) -> Self::IntoIter {
+//        self.to_slice_mut().into_iter()
+//    }
+//}
+
+
+impl<T: Equals<T>> Equals<Self> for List<T> {
+    fn eq(*self, rhs: *Self) -> bool {
+        if self.len() != rhs.len() {
             return false;
         }
-        for i in 0..#self {
-            if !self[i].eq(rhs[i]) {
+        for i in 0..self.len() {
+            if !self[i].eq(&rhs[i]) {
                 return false;
             }
         }
         true
     }
 }
+
+//impl ToString for List<char> {
+//    fn to_string(*self) -> mem::Result<String> {
+//        Ok(String::from_raw_parts(
+//            self.start, 
+//            self.length, 
+//            self.capacity))
+//    }
+//}
+
+impl<T: Clone> List<T> {
+    pub fn extend<I: IntoIterator<Item = *T>>(*self, iter: I) -> mem::Result<()> {
+        for value in iter {
+            self.push(value.clone())?;
+        }
+        Ok(())
+    }
+}
+
+impl<T: Copy> List<T> {
+    pub fn extend_from_slice(*self, slice: []T) -> mem::Result<()> {
+        self.ensure_many(slice.len())?;
+
+        ptr::copy(slice.as_ptr(), 
+            ptr::add(self.start, self.length), 
+            slice.len());
+        self.length += slice.len();
+        Ok(())
+    }
+}
+
 

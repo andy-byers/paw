@@ -62,30 +62,30 @@
 #define FLOAT_BINARY_OP(Result_, X_, Y_, Op_) \
     V_SET_FLOAT(Result_, V_FLOAT(X_) Op_ V_FLOAT(Y_))
 
-static void constant_div(struct Compiler *C, Str const *modname, struct SourceLoc loc, Value *pr, Value x, Value y, enum BuiltinKind kind)
+static void constant_div(struct Compiler *C, Str const *modname, struct SourceSpan span, Value *pr, Value x, Value y, enum BuiltinKind kind)
 {
     if (kind == BUILTIN_FLOAT) {
         if (V_FLOAT(y) == 0.0)
-            DIVIDE_BY_0(C, modname, loc);
+            DIVIDE_BY_0(C, modname, span);
         FLOAT_BINARY_OP(pr, x, y, /);
     } else {
         paw_assert(kind == BUILTIN_INT);
         if (V_INT(y) == 0)
-            DIVIDE_BY_0(C, modname, loc);
+            DIVIDE_BY_0(C, modname, span);
         INT_BINARY_OP(pr, x, y, /);
     }
 }
 
-static void constant_mod(struct Compiler *C, Str const *modname, struct SourceLoc loc, Value *pr, Value x, Value y, enum BuiltinKind kind)
+static void constant_mod(struct Compiler *C, Str const *modname, struct SourceSpan span, Value *pr, Value x, Value y, enum BuiltinKind kind)
 {
     if (kind == BUILTIN_FLOAT) {
         if (V_FLOAT(y) == 0.0)
-            DIVIDE_BY_0(C, modname, loc);
+            DIVIDE_BY_0(C, modname, span);
         V_SET_FLOAT(pr, fmod(V_FLOAT(x), V_FLOAT(y)));
     } else {
         paw_assert(kind == BUILTIN_INT);
         if (V_INT(y) == 0)
-            DIVIDE_BY_0(C, modname, loc);
+            DIVIDE_BY_0(C, modname, span);
         INT_BINARY_OP(pr, x, y, %);
     }
 }
@@ -94,11 +94,6 @@ paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v,
 {
     PAW_UNUSED(C);
     switch (op) {
-        case MIR_UNARY_STRLEN: {
-            Str const *x = V_STR(v);
-            V_SET_INT(pr, (paw_Int)x->length);
-            break;
-        }
         case MIR_UNARY_INEG:
             INT_UNARY_OP(pr, v, -);
             break;
@@ -117,7 +112,7 @@ paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v,
     return PAW_TRUE;
 }
 
-paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceLoc loc, enum MirBinaryOpKind op, Value x, Value y, Value *pr)
+paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceSpan span, enum MirBinaryOpKind op, Value x, Value y, Value *pr)
 {
     switch (op) {
         case MIR_BINARY_CEQ:
@@ -188,7 +183,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
             break;
         case MIR_BINARY_IDIV:
             if (V_INT(y) == 0)
-                DIVIDE_BY_0(C, modname, loc);
+                DIVIDE_BY_0(C, modname, span);
             if (IDIVMOD_OVERFLOWS(x, y)) {
                 V_SET_INT(pr, 0);
             } else {
@@ -197,12 +192,12 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
             break;
         case MIR_BINARY_FDIV:
             if (V_FLOAT(y) == 0.0)
-                DIVIDE_BY_0(C, modname, loc);
+                DIVIDE_BY_0(C, modname, span);
             FLOAT_BINARY_OP(pr, x, y, /);
             break;
         case MIR_BINARY_IMOD:
             if (V_INT(y) == 0)
-                DIVIDE_BY_0(C, modname, loc);
+                DIVIDE_BY_0(C, modname, span);
             if (IDIVMOD_OVERFLOWS(x, y)) {
                 V_SET_INT(pr, 0);
             } else {
@@ -211,7 +206,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
             break;
         case MIR_BINARY_FMOD:
             if (V_FLOAT(y) == 0.0)
-                DIVIDE_BY_0(C, modname, loc);
+                DIVIDE_BY_0(C, modname, span);
             V_SET_FLOAT(pr, fmod(V_FLOAT(x), V_FLOAT(y)));
             break;
         case MIR_BINARY_IBITXOR:
@@ -226,7 +221,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_ISHL: {
             paw_Int n = V_INT(y);
             if (n < 0) {
-                SHIFT_BY_NEGATIVE(C, modname, loc);
+                SHIFT_BY_NEGATIVE(C, modname, span);
             } else if (n > 0) {
                 n = PAW_MIN(n, U2INT(sizeof(x) * 8 - 1));
                 V_SET_INT(pr, U2INT(V_UINT(x) << n));
@@ -238,7 +233,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_ISHR: {
             paw_Int n = V_INT(y);
             if (n < 0) {
-                SHIFT_BY_NEGATIVE(C, modname, loc);
+                SHIFT_BY_NEGATIVE(C, modname, span);
             } else if (n > 0) {
                 n = PAW_MIN(n, U2INT(sizeof(x) * 8 - 1));
                 V_SET_INT(pr, V_INT(x) >> n);

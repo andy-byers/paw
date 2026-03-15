@@ -7,15 +7,13 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <stdlib.h>
 
-#include <gc.h>
+#define PAW_MALLOC malloc
+#define PAW_REALLOC realloc
+#define PAW_FREE free
 
-#define PAW_MALLOC GC_MALLOC
-#define PAW_REALLOC GC_REALLOC
-#define PAW_FREE GC_FREE
-
-#define paw_assert assert
-
+#define PAW_ASSERT assert
 #define PAW_UNUSED(X_) ((void)(X_))
 #define PAW_LENGTHOF(X_) (sizeof(X_) - 1)
 #define PAW_ALIGNOF(X_) _Alignof(X_)
@@ -57,10 +55,9 @@ typedef double paw_Float;
 #define PAW_RESULT_ERR 1
 
 typedef struct {
+    paw_Char const *text;
     paw_Int length;
-    uint32_t hash;
-    paw_Char text[];
-} *paw_Str;
+} paw_Str;
 
 #define PAW_DEFINE_LIST(T) \
     typedef struct { \
@@ -70,15 +67,6 @@ typedef struct {
     } *paw_List_##T;
 
 PAW_DEFINE_LIST(Char)
-PAW_DEFINE_LIST(Str)
-
-#define PAW_DEFINE_SLICE(T) \
-    typedef struct { \
-        paw_##T *start; \
-        paw_Int length; \
-    } paw_Slice_##T;
-
-PAW_DEFINE_SLICE(Char)
 
 #define PAW_DEFINE_OPTION(T) \
     typedef struct { \
@@ -140,43 +128,52 @@ PAW_DEFINE_OPTION(Float)
         }; \
     }
 
+typedef struct {
+    void *start;
+    paw_Int length;
+} paw_Slice;
 
-void paw_prelude_println(void *env, paw_Str self);
-void paw_prelude_print(void *env, paw_Str self);
-void paw_prelude_assert(void *env, paw_Bool self);
-_Noreturn void paw_prelude_panic(void *env, paw_Str self);
 
-paw_Str paw_prelude_char_to_str(void *env, paw_Char self);
+void paw_assert(void *env, paw_Bool condition);
+_Noreturn void paw_panic_(void *env, paw_Slice message);
 
-paw_Str paw_prelude_int_to_str(void *env, paw_Int self);
+paw_Str paw_str_from_raw_parts(void *env, char const *ptr, paw_Int len);
+paw_Int paw_str_len(void *env, paw_Str self);
+char const *paw_ops_str_AsPtr_as_ptr(void *env, paw_Str *self);
+paw_Option_Int paw_str_parse_int(void *env, paw_Str self);
+paw_Option_Int paw_str_parse_int_radix(void *env, paw_Str self, paw_Int base);
+paw_Option_Float paw_str_parse_float(void *env, paw_Str self);
+paw_Option_Int paw_str_find(void *env, paw_Str, paw_Str self);
+paw_Bool paw_str_starts_with(void *env, paw_Str, paw_Str self);
+paw_Bool paw_str_ends_with(void *env, paw_Str, paw_Str self);
+paw_Int paw_str_Hash_hash(void *env, paw_Str self);
 
-paw_Int paw_prelude_float_hash(void *env, paw_Float self);
-paw_Str paw_prelude_float_to_str(void *env, paw_Float self);
+paw_Bool paw_ops_str_Compare_lt(void *env, paw_Str self, paw_Str rhs);
+paw_Bool paw_ops_str_Compare_le(void *env, paw_Str self, paw_Str rhs);
 
-paw_Option_Int paw_prelude_str_parse_int(void *env, paw_Str self);
-paw_Option_Int paw_prelude_str_parse_int_radix(void *env, paw_Str self, paw_Int base);
-paw_Option_Float paw_prelude_str_parse_float(void *env, paw_Str self);
-paw_Option_Int paw_prelude_str_find(void *env, paw_Str, paw_Str self);
-paw_List_Str paw_prelude_str_split(void *env, paw_Str, paw_Str self);
-paw_Str paw_prelude_str_join(void *env, paw_Str, paw_List_Str self);
-paw_Bool paw_prelude_str_starts_with(void *env, paw_Str, paw_Str self);
-paw_Bool paw_prelude_str_ends_with(void *env, paw_Str, paw_Str self);
-paw_Int paw_prelude_str_hash(void *env, paw_Str self);
-paw_Str paw_prelude_str_substr(void *env, paw_Str self, paw_Int offset, paw_Int length);
+uint32_t paw_builtin_hash_bytes(void *env, paw_Char const *bytes, paw_Int length, uint32_t hash);
+paw_Int paw_builtin_rawcmp(void *env, paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length);
+void paw_builtin_check_bounds(void *env, paw_Int index, paw_Int length);
 
-char *paw_unsafe_str_get_element_ptr(void *env, paw_Str self, paw_Int index);
+void *paw_ops_Slice_AsPtr_as_ptr(void *env, paw_Slice *self);
+paw_Int paw_slice_Slice_len(void *env, paw_Slice self);
+paw_Slice paw_slice_from_raw_parts(void *env, void *start, paw_Int length);
 
-uint32_t paw_builtin_hash_bytes(paw_Char const *bytes, paw_Int length, uint32_t hash);
-paw_Int paw_builtin_rawcmp(paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length);
-paw_Int paw_builtin_abs_index(paw_Int index, paw_Int length);
+typedef struct paw_mem_OOM {
+    paw_Unit _;
+} paw_mem_OOM;
 
-typedef struct paw_str_builder_Builder {
-    paw_List_Char buf;
-} paw_str_builder_Builder;
+typedef void *paw_Ptr;
+PAW_DEFINE_RESULT(Ptr, mem_OOM)
 
-paw_str_builder_Builder paw_str_builder_Builder_append_char(void *env, paw_str_builder_Builder b, paw_Char value);
-paw_str_builder_Builder paw_str_builder_Builder_append_str(void *env, paw_str_builder_Builder b, paw_Str value);
-paw_str_builder_Builder paw_str_builder_Builder_append_slice(void *env, paw_str_builder_Builder b, paw_Slice_Char value);
-paw_Str paw_str_builder_Builder_string(void *env, paw_str_builder_Builder b);
+paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(void *env, unsigned long size);
+paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *env, void *ptr, unsigned long size);
+paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(void *env, unsigned alignment, unsigned long size);
+void paw_mem_raw_dealloc(void *env, void *ptr);
+
+void *paw_ptr_memcpy(void *env, void *dest, void *src, paw_Int size);
+void *paw_ptr_memmove(void *env, void *dest, void *src, paw_Int size);
+void *paw_ptr_memset(void *env, void *ptr, char value, paw_Int size);
+int paw_ptr_memcmp(void *env, void *lhs, void *rhs, paw_Int size);
 
 #endif // PAW_STD_PAW_H

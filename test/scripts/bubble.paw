@@ -1,16 +1,18 @@
 // bubble.paw
 
-fn random(n: int) -> [int] {
-    let a = [];
+use list::List;
+
+fn random(n: int) -> List<int> {
+    let a = List::new();
     let x = n;
-    while #a < n {
+    while a.len() < n {
         x = (140_671_485 * x + 12_820_163) % 16_777_216;
         a.push(x);
     }
-    return a;
+    a
 }
 
-fn bubble(n: int) -> [int] {
+fn bubble(n: int) -> List<int> {
     let a = random(n);
     while true {
         let swapped = false;
@@ -34,19 +36,26 @@ fn bubble(n: int) -> [int] {
 
 #[test]
 pub fn test() {
-    bubble(1000);
+    let sorted = bubble(1000);
+    for i in 1..sorted.len() {
+        assert(sorted[i - 1] <= sorted[i]);
+    }
 }
 
 
-pub fn main(args: [str]) -> int {
-    let n = if #args > 1 {
-        args[1].parse_int().unwrap()
-    } else {
-        500
-    };
-    println("calling bubble(\{n})");
+use io;
+
+pub fn main() -> int {
+//    let n = if #args > 1 {
+//        args[1].parse_int().unwrap()
+//    } else {
+//        500
+//    };
+
+    let n = 500;
+//    io::println("calling bubble(\{n})");
     bubble(n);
 
-    println("finished");
-    return 0;
+    io::println("finished");
+    0
 }

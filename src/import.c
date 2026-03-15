@@ -11,7 +11,8 @@
 #include "map.h"
 #include "resolve.h"
 
-#define IMPORTER_ERROR(R_, Kind_, Modname_, ...) pawErr_##Kind_((R_)->C, Modname_, __VA_ARGS__)
+#define IMPORTER_ERROR(R_, Kind_, ...) THROW_ERROR((R_)->C, \
+        Kind_, __VA_ARGS__)
 
 #define NODE_ID(Node_) ((Node_)->hdr.id)
 #define GET_NODE(R_, Id_) pawAst_get_node((R_)->ast, Id_)
@@ -133,8 +134,10 @@ struct ImportSymbol const *pawP_find_import_symbol(struct Resolver *R, struct Im
         // import to disambiguate
         while (scope->outer != NULL) scope = scope->outer;
         struct AstModuleDecl const *m = GET_NODE(R, scope->id);
-        IMPORTER_ERROR(R, ambiguous_path, m->name, ident.span.start,
-                pawAst_print_path(R->ast, pc.path));
+        IMPORTER_ERROR(R, AmbiguousPath,
+                .path = pawAst_print_type_path(R->ast, pc.path),
+                .modname = m->name,
+                .span = ident.span);
     }
     return psymbol;
 }
@@ -235,8 +238,13 @@ static paw_Bool add_symbol(struct Resolver *R, struct ImportScope *scope, struct
     if (kind == ISYMBOL_EXPLICIT && get_explicit_symbol(iname) != NULL) {
         while (scope->outer != NULL) scope = scope->outer;
         struct AstModuleDecl const *m = GET_NODE(R, scope->id);
-        IMPORTER_ERROR(R, duplicate_item, m->name, ident.span.start,
-                "item", ident.name->text);
+        IMPORTER_ERROR(R, DuplicateItem,
+                .modname = m->name,
+                .what = ns == NAMESPACE_TYPE
+                    ? SCAN_STR(R->C, "type")
+                    : SCAN_STR(R->C, "value"),
+                .item_name = ident.name,
+                .span = ident.span);
     }
 
     struct ImportSymbol const *psymbol;
@@ -296,6 +304,12 @@ static void collect_trait_decl(struct Resolver *R, struct ImportScope *outer, st
     struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_TYPE, outer);
     ImportScopes_insert(R, R->imports, d->id, scope);
 
+    // add associated types to trait type namespace
+    K_LIST_XFOREACH (d->types, struct AstDecl *const, p) {
+        struct AstGenericDecl const *t = AstGetGenericDecl(*p);
+        add_type(R, scope, t->t.ident, t->id, ISYMBOL_EXPLICIT, d->is_pub);
+    }
+
     // add methods and associated functions to trait value namespace
     struct AstDecl *const *pdecl;
     K_LIST_FOREACH (d->methods, pdecl) {
@@ -310,18 +324,33 @@ static void collect_impl_decl(struct Resolver *R, struct ImportScope *outer, str
     struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_TYPE, outer);
     ImportScopes_insert(R, R->imports, d->id, scope);
 
+    K_LIST_XFOREACH (d->types, struct AstDecl *const, p) {
+        struct AstTypeDecl const *t = AstGetTypeDecl(*p);
+        add_type(R, scope, t->ident, t->id, ISYMBOL_EXPLICIT, t->is_pub);
+    }
+
     // add methods and associated functions to impl block value namespace
-    struct AstDecl *const *pdecl;
-    K_LIST_FOREACH (d->methods, pdecl) {
-        struct AstFnDecl *f = AstGetFnDecl(*pdecl);
+    K_LIST_XFOREACH (d->methods, struct AstDecl *const, p) {
+        struct AstFnDecl *f = AstGetFnDecl(*p);
         add_value(R, scope, f->ident, f->id, ISYMBOL_EXPLICIT, f->is_pub);
         collect_fn_decl(R, scope, f);
     }
 }
 
+static paw_Bool is_core_adt(struct Resolver *R, Str const *name)
+{
+    return R->current->modno == PRELUDE_MODNO && (
+            pawS_eq(name, SCAN_STR(R->C, "unit"))
+            || pawS_eq(name, SCAN_STR(R->C, "bool"))
+            || pawS_eq(name, SCAN_STR(R->C, "char"))
+            || pawS_eq(name, SCAN_STR(R->C, "int"))
+            || pawS_eq(name, SCAN_STR(R->C, "float"))
+            || pawS_eq(name, SCAN_STR(R->C, "str")));
+}
+
 static void collect_adt_decl(struct Resolver *R, struct ImportScope *outer, struct AstAdtDecl *d)
 {
-    if (pawAst_is_unit_struct(d)) {
+    if (pawAst_is_unit_struct(d) && !is_core_adt(R, d->ident.name)) {
         // add name of unit struct to global value namespace
         struct AstDecl *v = K_LIST_FIRST(d->variants);
         add_value(R, outer, d->ident, v->hdr.id, ISYMBOL_EXPLICIT, d->is_pub);
@@ -381,9 +410,10 @@ static void collect_item(struct Resolver *R, struct ImportScope *scope, struct A
 
 static struct ImportScope *collect_items(struct Resolver *R, struct AstDecl *mod, ImportBindings *bindings)
 {
-    struct AstModuleDecl const *m = AstGetModuleDecl(mod);
+    struct AstModuleDecl *m = AstGetModuleDecl(mod);
     struct ImportScope *scope = iscope_new(R, m->id, ISCOPE_MODULE, NULL);
     ImportScopes_insert(R, R->imports, m->id, scope);
+    R->current = m;
 
     struct AstDecl *const *pitem;
     K_LIST_FOREACH (m->items, pitem) {
@@ -552,8 +582,10 @@ static paw_Bool resolve_glob_in(struct Resolver *R, struct ImportScope const *so
                 // fallthrough
             }
             default:
-                IMPORTER_ERROR(R, invalid_glob_target, R->current->name,
-                        pb->source.span.start, pawAst_print_path(R->ast, pb->path));
+                IMPORTER_ERROR(R, InvalidGlobTarget,
+                        .path = pawAst_print_type_path(R->ast, pb->path),
+                        .modname = R->current->name,
+                        .span = pb->source.span);
         }
     }
     return PAW_FALSE;
@@ -588,14 +620,7 @@ static paw_Bool resolve_glob_imports(struct Resolver *R, ImportBindings *binding
         if (pb->kind == ISYMBOL_EXPLICIT) continue; // resolved in previous phase
         struct ImportScope const *source = get_iscope(R, pb->source_id);
         struct ImportScope *target = get_iscope(R, pb->target_id);
-        if (resolve_glob_in(R, source, target, pb)) {
-            changed = PAW_TRUE;
-        } else {
-            // TODO: This causes many more system calls than necessary (to check existence of files)
-            Str *name = K_LIST_FIRST(pb->path.segments).ident.name;
-            if (get_module_by_name(R, name) == NULL)
-                import_module(R, name, bindings);
-        }
+        changed |= resolve_glob_in(R, source, target, pb);
     }
 
     return changed;
@@ -609,8 +634,10 @@ static void validate_bindings(struct Resolver *R, ImportBindings *bindings)
         if (!pb->in_type_ns && !pb->in_value_ns) {
             struct AstIdent const ident = K_LIST_FIRST(pb->path.segments).ident;
             struct AstModuleDecl const *m = GET_NODE(R, pb->source_id);
-            IMPORTER_ERROR(R, unknown_path, m->name, ident.span.start,
-                    pawAst_print_path(R->ast, pb->path));
+            IMPORTER_ERROR(R, UnknownPath,
+                    .path = pawAst_print_type_path(R->ast, pb->path),
+                    .modname = m->name,
+                    .span = ident.span);
         }
     }
 }

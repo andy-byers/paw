@@ -5,32 +5,31 @@ pub trait TestFrom<T> {
 }
 
 pub trait TestInto<T> {
-    fn into(&self) -> T;
+    fn into(*self) -> T;
 }
 
 pub struct CustomType<T> {
-    pub values: [T],
+    pub value: T,
 }
 
-impl<T> TestFrom<[T]> for CustomType<T> {
-    fn from(values: [T]) -> Self {
-        Self{values}
+impl<T> TestFrom<T> for CustomType<T> {
+    fn from(value: T) -> Self {
+        Self{value}
     }
 }
 
-impl<T> TestInto<[T]> for CustomType<T> {
-    fn into(&self) -> [T] {
-        self.values
+impl<T> TestInto<T> for CustomType<T> {
+    fn into(*self) -> T {
+        self.value
     }
 }
 
-fn roundtrip<T>(values: [T]) -> [T] {
-    let t = CustomType::from(values);
+fn roundtrip<T>(value: T) -> T {
+    let t = CustomType::from(value);
     t.into()
 }
 
 #[test]
 pub fn test() {
-    let values = roundtrip([1, 2, 3]);
-    assert(values.eq([1, 2, 3]));
+    assert(roundtrip(123) == 123);
 }

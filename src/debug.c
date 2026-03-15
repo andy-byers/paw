@@ -27,8 +27,10 @@ void pawD_debug_log(paw_Env *P, char const *fmt, ...)
 char const *paw_unop_symbol(enum UnaryOp unop)
 {
     switch (unop) {
-        case UNARY_LEN:
-            return "#";
+        case UNARY_DEREF:
+            return "*";
+        case UNARY_ADDROF:
+            return "&";
         case UNARY_NEG:
             return "-";
         case UNARY_NOT:
@@ -75,8 +77,6 @@ char const *paw_binop_symbol(enum BinaryOp binop)
             return ">";
         case BINARY_GE:
             return ">=";
-        case BINARY_CONCAT:
-            return "++";
     }
 }
 

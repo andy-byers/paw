@@ -22,7 +22,7 @@ add_custom_command(
 add_custom_target(generate_test ALL
     DEPENDS "${TEST_DEST}")
 
-set(TEST_ARGS "${CMAKE_BINARY_DIR}" "${TEST_DIR}" "${PAW_GC_DIR}")
+set(TEST_ARGS "${CMAKE_BINARY_DIR}" "${TEST_DIR}")
 
 add_custom_target(paw_test_scripts
     COMMAND "sh" ${TEST_DEST} ${TEST_ARGS}

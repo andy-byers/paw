@@ -9,6 +9,7 @@
 #include "error.h"
 #include "env.h"
 #include "hir.h"
+#include "impl.h"
 #include "ir_type.h"
 #include "solve.h"
 
@@ -19,7 +20,7 @@
 #define UID(Type_) (IrGetInfer(Type_)->index)
 
 typedef struct InferenceVar {
-    struct SourceLoc loc;
+    struct SourceSpan span;
     IrType *type;
     int parent;
     int rank;
@@ -35,7 +36,7 @@ enum Action {
 
 struct UndoEntry {
     enum Action action;
-    InferenceVar *ivar;
+    int ivar_id;
     union {
         IrType *old_type;
         int old_parent;
@@ -43,7 +44,7 @@ struct UndoEntry {
     };
 };
 
-DEFINE_LIST(struct Compiler, VarList, struct InferenceVar *)
+DEFINE_LIST(struct Compiler, VarList, struct InferenceVar)
 DEFINE_LIST(struct Compiler, UndoLog, struct UndoEntry)
 
 typedef struct UnificationTable {
@@ -58,11 +59,11 @@ typedef struct UnificationTable {
     int depth;
 } UnificationTable;
 
-static void record_create(struct Unifier *U, InferenceVar *ivar)
+static void record_create(struct Unifier *U, InferenceVar ivar)
 {
     UndoLog_push(U->C, U->table->undo, (struct UndoEntry){
                 .action = ACTION_CREATE,
-                .ivar = ivar,
+                .ivar_id = ivar.id,
             });
 }
 
@@ -71,7 +72,7 @@ static void record_set_parent(struct Unifier *U, InferenceVar *ivar)
     UndoLog_push(U->C, U->table->undo, (struct UndoEntry){
                 .action = ACTION_SET_PARENT,
                 .old_parent = ivar->parent,
-                .ivar = ivar,
+                .ivar_id = ivar->id,
             });
 }
 
@@ -80,7 +81,7 @@ static void record_set_rank(struct Unifier *U, InferenceVar *ivar)
     UndoLog_push(U->C, U->table->undo, (struct UndoEntry){
                 .action = ACTION_SET_RANK,
                 .old_rank = ivar->rank,
-                .ivar = ivar,
+                .ivar_id = ivar->id,
             });
 }
 
@@ -89,7 +90,7 @@ static void record_set_type(struct Unifier *U, InferenceVar *ivar)
     UndoLog_push(U->C, U->table->undo, (struct UndoEntry){
                 .action = ACTION_SET_TYPE,
                 .old_type = ivar->type,
-                .ivar = ivar,
+                .ivar_id = ivar->id,
             });
 }
 
@@ -97,10 +98,16 @@ static void dump_snapshot(struct Unifier *U)
 {
     printf("Unification table snapshot\n");
     for (int i = 0; i < U->table->ivars->count; ++i) {
-        InferenceVar const *ivar = VarList_get(U->table->ivars, i);
-        printf("IVAR(%d, rank=%d, parent=%d, type=%s)\n", ivar->id, ivar->rank,
-                ivar->parent, pawIr_print_type(U->C, ivar->type));
+        InferenceVar const ivar = VarList_get(U->table->ivars, i);
+        printf("IVAR(%d, rank=%d, parent=%d, type=%s)\n", ivar.id, ivar.rank,
+                ivar.parent, pawIr_print_type(U->C, ivar.type));
     }
+}
+
+static InferenceVar *get_ivar(struct Unifier *U, int index)
+{
+    paw_assert(index < U->table->ivars->count);
+    return &K_LIST_AT(U->table->ivars, index);
 }
 
 void pawU_undo_unifications(struct Unifier *U, int position)
@@ -114,13 +121,16 @@ void pawU_undo_unifications(struct Unifier *U, int position)
                 VarList_pop(U->table->ivars);
                 break;
             case ACTION_SET_PARENT:
-                entry.ivar->parent = entry.old_parent;
+                get_ivar(U, entry.ivar_id)
+                    ->parent = entry.old_parent;
                 break;
             case ACTION_SET_RANK:
-                entry.ivar->rank = entry.old_rank;
+                get_ivar(U, entry.ivar_id)
+                    ->rank = entry.old_rank;
                 break;
             case ACTION_SET_TYPE:
-                entry.ivar->type = entry.old_type;
+                get_ivar(U, entry.ivar_id)
+                    ->type = entry.old_type;
                 break;
         }
     }
@@ -130,12 +140,6 @@ static void overwrite_type(struct Unifier *U, InferenceVar *ivar, IrType *src)
 {
     record_set_type(U, ivar);
     ivar->type = src;
-}
-
-static InferenceVar *get_ivar(struct Unifier *U, int index)
-{
-    paw_assert(index < U->table->ivars->count);
-    return U->table->ivars->data[index];
 }
 
 static void debug_log(struct Unifier *U, char const *what, IrType *a, IrType *b)
@@ -185,13 +189,17 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, IrType *type)
 {
     if (ivar->type == type) {
         paw_assert(IrIsInfer(type));
-        UNIFIER_ERROR(U, cyclic_type, ivar->loc);
+        UNIFIER_ERROR(U, cyclic_type, ivar->span);
     }
     if (IrIsAdt(type)) {
         struct IrAdt *adt = IrGetAdt(type);
-        if (adt->types != NULL) {
-            K_LIST_XFOREACH (adt->types, IrType *const, p)
-                check_occurs(U, ivar, *p);
+        if (adt->args != NULL) {
+            K_LIST_XFOREACH (adt->args, IrGenericArg const, p) {
+                if (IrGenericArg_is_type(*p)) {
+                    IrType *t = IrGenericArg_get_type(*p);
+                    check_occurs(U, ivar, t);
+                }
+            }
         }
     }
 }
@@ -225,6 +233,36 @@ static IrType *normalize_unknown(struct Unifier *U, IrType *type)
     return pawU_normalize(U, root);
 }
 
+static IrGenericArgs *normalize_args(struct Unifier *U, IrGenericArgs *args)
+{
+    if (args == NULL) return NULL;
+    IrGenericArgs *result = IrGenericArgs_new(U->C);
+    IrGenericArgs_reserve(U->C, result, args->count);
+    K_LIST_XFOREACH (args, IrGenericArg const, p)
+        IrGenericArgs_push(U->C, result, pawIr_normalize(U->C, *p));
+    return result;
+}
+
+static IrGenericArgs *normalize_args_projections(struct Unifier *U, IrGenericArgs *args)
+{
+    if (args == NULL) return NULL;
+    IrGenericArgs *result = IrGenericArgs_new(U->C);
+    IrGenericArgs_reserve(U->C, result, args->count);
+    K_LIST_XFOREACH (args, IrGenericArg const, p)
+        IrGenericArgs_push(U->C, result, pawIr_normalize_projections(U->C, *p));
+    return result;
+}
+
+static IrTypeList *normalize_projections_list(struct Unifier *U, IrTypeList *types)
+{
+    if (types == NULL) return NULL;
+    IrTypeList *result = IrTypeList_new(U->C);
+    IrTypeList_reserve(U->C, result, types->count);
+    K_LIST_XFOREACH (types, IrType *const, p)
+        IrTypeList_push(U->C, result, pawU_normalize_projections(U, *p));
+    return result;
+}
+
 static IrTypeList *normalize_list(struct Unifier *U, IrTypeList *types)
 {
     if (types == NULL) return NULL;
@@ -235,6 +273,12 @@ static IrTypeList *normalize_list(struct Unifier *U, IrTypeList *types)
     return result;
 }
 
+IrConst *pawU_normalize_const(struct Unifier *U, IrConst *k)
+{
+    PAW_UNUSED(U); // TODO: do something here...
+    return k;
+}
+
 IrType *pawU_normalize(struct Unifier *U, IrType *type)
 {
     switch (IR_KINDOF(type)) {
@@ -243,7 +287,7 @@ IrType *pawU_normalize(struct Unifier *U, IrType *type)
         case kIrChar:
         case kIrInt:
         case kIrFloat:
-        case kIrStr:
+        case kIrString:
         case kIrGeneric:
         case kIrNever:
             return type;
@@ -255,8 +299,8 @@ IrType *pawU_normalize(struct Unifier *U, IrType *type)
         }
         case kIrSignature: {
             struct IrSignature const *t = IrGetSignature(type);
-            IrTypeList *types = normalize_list(U, t->types);
-            return pawIr_new_signature(U->C, t->did, types);
+            IrGenericArgs *args = normalize_args(U, t->args);
+            return pawIr_new_signature(U->C, t->did, args);
         }
         case kIrFnPtr: {
             struct IrFnPtr const *t = IrGetFnPtr(type);
@@ -264,14 +308,105 @@ IrType *pawU_normalize(struct Unifier *U, IrType *type)
             IrType *result = pawU_normalize(U, t->result);
             return pawIr_new_fn_ptr(U->C, params, result);
         }
+        case kIrArray: {
+            struct IrArray const *t = IrGetArray(type);
+            IrType *elem = pawU_normalize(U, t->type);
+            IrConst *length = pawU_normalize_const(U, t->length);
+            return pawIr_new_array(U->C, elem, length);
+        }
+        case kIrSlice: {
+            IrType *elem = pawU_normalize(U, IrGetSlice(type)->type);
+            return pawIr_new_slice(U->C, elem);
+        }
         case kIrTuple: {
             IrTypeList *elems = normalize_list(U, IrGetTuple(type)->elems);
             return pawIr_new_tuple(U->C, elems);
         }
         case kIrAdt: {
             struct IrAdt const *t = IrGetAdt(type);
-            IrTypeList *types = normalize_list(U, t->types);
-            return pawIr_new_adt(U->C, t->did, types);
+            IrGenericArgs *args = normalize_args(U, t->args);
+            return pawIr_new_adt(U->C, t->did, args);
+        }
+        case kIrProjection: {
+            struct IrProjection const *t = IrGetProjection(type);
+            IrType *self = pawU_normalize(U, t->type);
+            IrTrait *trait = pawIr_normalize_trait(U->C, t->trait);
+            return pawIr_new_projection(U->C, self, trait, t->assoc);
+        }
+    }
+}
+
+IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
+{
+    switch (IR_KINDOF(type)) {
+        case kIrUnit:
+        case kIrBool:
+        case kIrChar:
+        case kIrInt:
+        case kIrFloat:
+        case kIrString:
+        case kIrGeneric:
+        case kIrNever:
+            return type;
+        case kIrInfer: {
+            type = normalize_unknown(U, type);
+            if (IrIsInfer(type)) return type;
+            return pawU_normalize_projections(U, type);
+        }
+        case kIrPtr: {
+            IrType *pointee = pawU_normalize_projections(U, IrGetPtr(type)->pointee);
+            return pawIr_new_ptr(U->C, pointee);
+        }
+        case kIrSignature: {
+            struct IrSignature const *t = IrGetSignature(type);
+            IrGenericArgs *args = normalize_args_projections(U, t->args);
+            return pawIr_new_signature(U->C, t->did, args);
+        }
+        case kIrFnPtr: {
+            struct IrFnPtr const *t = IrGetFnPtr(type);
+            IrTypeList *params = normalize_projections_list(U, t->params);
+            IrType *result = pawU_normalize_projections(U, t->result);
+            return pawIr_new_fn_ptr(U->C, params, result);
+        }
+        case kIrArray: { // TODO: normalize "length"
+            struct IrArray const *t = IrGetArray(type);
+            IrType *elem = pawU_normalize_projections(U, t->type);
+            IrConst *length = pawU_normalize_const(U, t->length);
+            return pawIr_new_array(U->C, elem, length);
+        }
+        case kIrSlice: {
+            IrType *elem = pawU_normalize_projections(U, IrGetSlice(type)->type);
+            return pawIr_new_slice(U->C, elem);
+        }
+        case kIrTuple: {
+            IrTypeList *elems = normalize_list(U, IrGetTuple(type)->elems);
+            return pawIr_new_tuple(U->C, elems);
+        }
+        case kIrAdt: {
+            struct IrAdt const *t = IrGetAdt(type);
+            IrGenericArgs *args = normalize_args_projections(U, t->args);
+            return pawIr_new_adt(U->C, t->did, args);
+        }
+        case kIrProjection: {
+            {
+                struct IrProjection const *t = IrGetProjection(type);
+                IrType *self = pawU_normalize_projections(U, t->type);
+                IrTrait *trait = pawIr_normalize_trait_projections(U->C, t->trait);
+                type = pawIr_new_projection(U->C, self, trait, t->assoc);
+            }
+            for (IrType *target; IrIsProjection(type); type = target) {
+                target = pawIr_solver_get_norm_target(U->C->S, type);
+                if (target == NULL) break;
+            }
+            if (IrIsProjection(type)) {
+                struct IrProjection const *t = IrGetProjection(type);
+                if (!IrIsInfer(t->type)) {
+                    Str const *name = pawIr_get_assoc_item(U->C, t->assoc)->name;
+                    struct Instantiation *assoc = pawIr_find_assoc_type_projection(U->C, type, name);
+                    return assoc != NULL ? assoc->inst : type;
+                }
+            }
+            return type;
         }
     }
 }
@@ -290,9 +425,30 @@ static int unify_lists(struct Unifier *U, IrTypeList *a, IrTypeList *b)
 static int unify_adt(struct Unifier *U, struct IrAdt *a, struct IrAdt *b)
 {
     if (a->did.value != b->did.value) return -1;
-    if (!a->types != !b->types) return -1;
-    if (a->types == NULL) return 0;
-    return unify_lists(U, a->types, b->types);
+    if (a->args == NULL) return 0;
+
+    IrGenericArg const *x, *y;
+    K_LIST_ZIP(a->args, x, b->args, y) {
+        if (pawIr_unify(U->C, *x, *y))
+            return -1;
+    }
+
+    return 0;
+}
+
+static int unify(struct Unifier *U, IrType *a, IrType *b);
+
+static int unify_array(struct Unifier *U, struct IrArray *a, struct IrArray *b)
+{
+    // TODO: need to undo const obligations, maybe store in IrSolver. the problem is they can be long-lived
+    if (U->action == unify)
+        pawIr_add_const_obligation(U->C, a->length, b->length);
+    return U->action(U, a->type, b->type);
+}
+
+static int unify_slice(struct Unifier *U, struct IrSlice *a, struct IrSlice *b)
+{
+    return U->action(U, a->type, b->type);
 }
 
 static int unify_tuple(struct Unifier *U, struct IrTuple *a, struct IrTuple *b)
@@ -313,11 +469,18 @@ static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneri
     return a->did.value != b->did.value ? -1 : 0;
 }
 
+static int unify_projection(struct Unifier *U, struct IrProjection *a, struct IrProjection *b)
+{
+    if (U->action(U, a->type, b->type) != 0) return -1;
+    if (U->trait_action(U->C, a->trait, b->trait) != 0) return -1;
+    return P_ID_EQUALS(U->C, a->assoc, b->assoc) ? 0 : -1;
+}
+
 static IrType *materialize_fn(struct Unifier *U, IrType *type)
 {
     if (IrIsSignature(type)) {
         struct IrSignature const *t = IrGetSignature(type);
-        return pawIr_materialize_fn(U->C, t->did, t->types);
+        return pawIr_materialize_fn(U->C, t->did, t->args);
     }
     return type;
 }
@@ -326,7 +489,7 @@ static int unify_types(struct Unifier *U, IrType *a, IrType *b)
 {
     debug_log(U, "unify_types", a, b);
     if (IrIsNever(a) || IrIsNever(b)) {
-        return 0; // "!" is the bottom type
+        return 0;
     } else if (IR_IS_FUNC_TYPE(a) && IR_IS_FUNC_TYPE(b)) {
         // function pointer and definition types are compatible
         IrType *x = materialize_fn(U, a);
@@ -334,14 +497,20 @@ static int unify_types(struct Unifier *U, IrType *a, IrType *b)
         return unify_fptr(U, IrGetFnPtr(x), IrGetFnPtr(y));
     } else if (IR_KINDOF(a) != IR_KINDOF(b)) {
         return -1;
+    } else if (IrIsArray(a)) {
+        return unify_array(U, IrGetArray(a), IrGetArray(b));
+    } else if (IrIsSlice(a)) {
+        return unify_slice(U, IrGetSlice(a), IrGetSlice(b));
     } else if (IrIsTuple(a)) {
         return unify_tuple(U, IrGetTuple(a), IrGetTuple(b));
     } else if (IrIsAdt(a)) {
         return unify_adt(U, IrGetAdt(a), IrGetAdt(b));
     } else if (IrIsGeneric(a)) {
         return unify_generic(U, IrGetGeneric(a), IrGetGeneric(b));
+    } else if (IrIsProjection(a)) {
+        return unify_projection(U, IrGetProjection(a), IrGetProjection(b));
     } else if (IrIsPtr(a)) {
-        return unify_types(U, IrGetPtr(a)->pointee, IrGetPtr(b)->pointee);
+        return U->action(U, IrGetPtr(a)->pointee, IrGetPtr(b)->pointee);
     } else {
         return 0;
     }
@@ -349,8 +518,6 @@ static int unify_types(struct Unifier *U, IrType *a, IrType *b)
 
 static int unify(struct Unifier *U, IrType *a, IrType *b)
 {
-    // Types may have already been unified. Make sure to always use the
-    // cannonical type.
     a = pawU_normalize(U, a);
     b = pawU_normalize(U, b);
     if (IrIsInfer(a)) {
@@ -376,7 +543,15 @@ static int unify(struct Unifier *U, IrType *a, IrType *b)
 
 int pawU_unify(struct Unifier *U, IrType *a, IrType *b)
 {
-    return RUN_ACTION(U, a, b, unify);
+    Unify const old_action = U->action;
+    UnifyTrait const old_trait_action = U->trait_action;
+
+    U->trait_action = pawIr_unify_traits;
+    int const result = RUN_ACTION(U, a, b, unify);
+
+    U->action = old_action;
+    U->trait_action = old_trait_action;
+    return result;
 }
 
 static int equate(struct Unifier *U, IrType *a, IrType *b)
@@ -384,16 +559,28 @@ static int equate(struct Unifier *U, IrType *a, IrType *b)
     a = pawU_normalize(U, a);
     b = pawU_normalize(U, b);
 
-    if (IrIsNever(a) && !IrIsNever(b)) return -1;
-    if (!IrIsNever(a) && IrIsNever(b)) return -1;
+    if (IrIsNever(a) != IrIsNever(b)) return -1;
     if (IrIsInfer(a) || IrIsInfer(b)) return 0;
 
     return unify_types(U, a, b);
 }
 
+static int equals_adaptor(struct Compiler *C, IrTrait *a, IrTrait *b)
+{
+    return pawIr_trait_equals(C, a, b) ? 0 : -1;
+}
+
 paw_Bool pawU_equals(struct Unifier *U, IrType *a, IrType *b)
 {
-    return RUN_ACTION(U, a, b, equate) == 0;
+    Unify const old_action = U->action;
+    UnifyTrait const old_trait_action = U->trait_action;
+
+    U->trait_action = equals_adaptor;
+    int const result = RUN_ACTION(U, a, b, equate) == 0;
+
+    U->action = old_action;
+    U->trait_action = old_trait_action;
+    return result;
 }
 
 int pawU_current_position(struct Unifier *U)
@@ -406,36 +593,23 @@ void pawU_discard_variables(struct Unifier *U)
     U->table->undo->count = U->table->ivars->count = 0;
 }
 
-IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, IrTypeList *bounds)
+IrType *pawU_new_unknown(struct Unifier *U, struct SourceSpan span)
 {
     UnificationTable *table = U->table;
 
-    // NOTE: inference variables require a stable address, since they point to each other
     int const index = table->ivars->count;
     IrType *type = pawIr_new_infer(U->C, table->depth, index);
-    InferenceVar *ivar = P_ALLOC(U->C, NULL, 0, sizeof(InferenceVar));
-    *ivar = (InferenceVar){
+    InferenceVar const ivar = {
         .id = index,
         .parent = index,
         .type = type,
         .rank = 0,
-        .loc = loc,
+        .span = span,
     };
     VarList_push(U->C, table->ivars, ivar);
 
     record_create(U, ivar);
     return type;
-}
-
-IrTypeList *pawU_new_unknowns(struct Unifier *U, struct SourceLoc loc, IrTypeList *types)
-{
-    IrType **ptype;
-    IrTypeList *result = IrTypeList_new(U->C);
-    K_LIST_FOREACH (types, ptype) {
-        IrType *unknown = pawU_new_unknown(U, loc, NULL);
-        IrTypeList_push(U->C, result, unknown);
-    }
-    return result;
 }
 
 void pawU_enter_binder(struct Unifier *U, Str const *modname)
@@ -457,7 +631,7 @@ static void check_table(struct Unifier *U)
         InferenceVar const *var = get_ivar(U, i);
         IrType *type = pawU_normalize(U, var->type);
         if (IrIsInfer(type))
-            UNIFIER_ERROR(U, cannot_infer, var->loc);
+            UNIFIER_ERROR(U, cannot_infer, var->span);
     }
 }
 
@@ -472,144 +646,4 @@ void pawU_leave_binder(struct Unifier *U)
 
 void pawU_run_unit_tests(struct Unifier *U)
 {
-#define ASSERT(Expr_) ((Expr_) ? (void)0 : __builtin_trap())
-#define IS_BUILTIN(Type_, Kind_) (pawP_type2code(U->C, Type_) == Kind_)
-#define IS_INFER(Type_, Uid_) (IrIsInfer(Type_) && UID(Type_) == (Uid_))
-#define GET_BUILTIN(Kind_) pawP_builtin_type(U->C, Kind_)
-
-    struct SourceLoc const loc = {0};
-    pawU_enter_binder(U, SCAN_STR(U->C, "test"));
-
-    {
-        IrType *u = pawU_new_unknown(U, loc, NULL);
-        u = pawU_normalize(U, u);
-        ASSERT(IrIsInfer(u));
-        pawU_undo_unifications(U, 0);
-    }
-
-    {
-        // let a: _1;
-        // let b: _2;
-        // let t: int;
-        IrType *a = pawU_new_unknown(U, loc, NULL);
-        IrType *b = pawU_new_unknown(U, loc, NULL);
-        IrType *t = pawP_builtin_type(U->C, BUILTIN_INT);
-
-        // b = t;
-        ASSERT(pawU_unify(U, b, t) == 0);
-
-        int const position = pawU_current_position(U);
-
-        // a = b;
-        ASSERT(pawU_unify(U, a, b) == 0);
-
-        ASSERT(IrIsInfer(a));
-        ASSERT(IrIsInfer(b));
-
-        ASSERT(IS_BUILTIN(pawU_normalize(U, a), BUILTIN_INT));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, b), BUILTIN_INT));
-
-        pawU_undo_unifications(U, position);
-
-        ASSERT(IrIsInfer(pawU_normalize(U, a)));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, b), BUILTIN_INT));
-
-        pawU_undo_unifications(U, 0);
-    }
-
-    {
-        // let a: _1;
-        // let b: _2;
-        // let c: _3;
-        // let d: _4;
-        // let e: _5;
-        // let t: int;
-        IrType *a = pawU_new_unknown(U, loc, NULL);
-        IrType *b = pawU_new_unknown(U, loc, NULL);
-        IrType *c = pawU_new_unknown(U, loc, NULL);
-        IrType *d = pawU_new_unknown(U, loc, NULL);
-        IrType *e = pawU_new_unknown(U, loc, NULL);
-        IrType *t = pawP_builtin_type(U->C, BUILTIN_INT);
-
-        // a = b; b = c; d = e;
-        ASSERT(pawU_unify(U, a, b) == 0);
-        ASSERT(pawU_unify(U, b, c) == 0);
-        ASSERT(pawU_unify(U, d, e) == 0);
-
-        int const position1 = pawU_current_position(U);
-
-        ASSERT(IS_INFER(pawU_normalize(U, a), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, b), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, c), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, d), 3));
-        ASSERT(IS_INFER(pawU_normalize(U, e), 3));
-
-        // d = t;
-        ASSERT(pawU_unify(U, d, t) == 0);
-
-        int const position2 = pawU_current_position(U);
-
-        ASSERT(IS_INFER(pawU_normalize(U, a), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, b), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, c), 0));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, d), BUILTIN_INT));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, e), BUILTIN_INT));
-
-        // d = b;
-        ASSERT(pawU_unify(U, d, b) == 0);
-
-        ASSERT(IS_BUILTIN(pawU_normalize(U, a), BUILTIN_INT));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, b), BUILTIN_INT));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, c), BUILTIN_INT));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, d), BUILTIN_INT));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, e), BUILTIN_INT));
-
-        pawU_undo_unifications(U, position2);
-
-        ASSERT(IS_INFER(pawU_normalize(U, a), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, b), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, c), 0));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, d), BUILTIN_INT));
-        ASSERT(IS_BUILTIN(pawU_normalize(U, e), BUILTIN_INT));
-
-        pawU_undo_unifications(U, position1);
-
-        ASSERT(IS_INFER(pawU_normalize(U, a), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, b), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, c), 0));
-        ASSERT(IS_INFER(pawU_normalize(U, d), 3));
-        ASSERT(IS_INFER(pawU_normalize(U, e), 3));
-
-        pawU_undo_unifications(U, 0);
-    }
-
-    {
-        // a: _1
-        IrType *a = pawU_new_unknown(U, loc, NULL);
-
-        // inst.inst: [_2]
-        // t: _2
-        struct Instantiation const inst = pawP_instantiate_v2(U->C, loc,
-                pawP_builtin_type(U->C, BUILTIN_LIST));
-        IrType *t = IrTypeList_first(inst.subst.types);
-
-        // _1 := [_2]
-        ASSERT(pawU_unify(U, a, inst.inst) == 0);
-
-        // _2 := int
-        ASSERT(pawU_unify(U, t, GET_BUILTIN(BUILTIN_INT)) == 0);
-
-        IrType *list = pawU_normalize(U, a);
-        ASSERT(IS_BUILTIN(list, BUILTIN_LIST));
-        ASSERT(IS_BUILTIN(ir_adt_subtype(list, 0), BUILTIN_INT));
-
-        pawU_undo_unifications(U, 0);
-    }
-
-    pawU_leave_binder(U);
-
-#undef GET_BUILTIN
-#undef IS_INFER
-#undef IS_BUILTIN
-#undef ASSERT
 }

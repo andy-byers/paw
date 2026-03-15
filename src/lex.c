@@ -12,30 +12,29 @@
 #define SOURCE(X_) ((X_)->dm->source)
 
 #define SAVE_AND_NEXT(X_) save(X_, next(X_))
-#define IS_EOF(X_) (CAST(uint8_t, *(X_)->ptr) == TK_END)
+#define IS_EOF(X_) ((paw_Uint8)*(X_)->ptr == TK_END)
 #define IS_NEWLINE(X_) (*(X_)->ptr == '\r' || *(X_)->ptr == '\n')
 #define IS_LINE_END(X_) (IS_NEWLINE(X_) || IS_EOF(X_))
 
-#define LEX_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->modname, __VA_ARGS__)
+#define RANGE(From_, To_) SourceSpan_from_range(From_, To_)
+#define RANGE1(Loc_) RANGE(Loc_, Loc_)
 
-// TODO: remove other versions/rename these versions
-#define LEX_ERROR_(X_, Loc_, ...) pawErr_generic_error(ENV(X_), (X_)->modname, Loc_, __VA_ARGS__)
-#define LIMIT_ERROR(X_, Loc_, What_, Limit_) pawErr_exceeded_limit(ENV(X_), (X_)->modname, Loc_, What_, Limit_)
+#define LEXER_ERROR(X_, Kind_, ...) THROW_ERROR((X_)->C, \
+        Kind_, .modname = (X_)->modname, __VA_ARGS__)
 
 // Check for inclusion in one of the character classes
-#define ISDIGIT(Char_) (kCharClassTable[(uint8_t)(Char_)] & 1)
-#define ISHEX(Char_) (kCharClassTable[(uint8_t)(Char_)] & 2)
-#define ISSPACE(Char_) (kCharClassTable[(uint8_t)(Char_)] & 4)
-#define ISLETTER(Char_) (kCharClassTable[(uint8_t)(Char_)] & 8)
-#define ISNONASCII(Char_) (kCharClassTable[(uint8_t)(Char_)] & 16)
-#define ISASCIIEND(Char_) (kCharClassTable[(uint8_t)(Char_)] & 32)
+#define ISDIGIT(Char_) (kCharClassTable[(paw_Uint8)(Char_)] & 1)
+#define ISHEX(Char_) (kCharClassTable[(paw_Uint8)(Char_)] & 2)
+#define ISSPACE(Char_) (kCharClassTable[(paw_Uint8)(Char_)] & 4)
+#define ISLETTER(Char_) (kCharClassTable[(paw_Uint8)(Char_)] & 8)
+#define ISNONASCII(Char_) (kCharClassTable[(paw_Uint8)(Char_)] & 16)
+#define ISASCIIEND(Char_) (kCharClassTable[(paw_Uint8)(Char_)] & 32)
 #define ISNEWLINE(Char_) ((Char_) == '\r' || (Char_) == '\n')
 
 // Get the integer representation of a hex digit
-#define HEXVAL(Char_) (kHexValueTable[(uint8_t)(Char_)])
+#define HEXVAL(Char_) (kHexValueTable[(paw_Uint8)(Char_)])
 
-// clang-format off
-const uint8_t kCharClassTable[256] = {
+const paw_Uint8 kCharClassTable[256] = {
      32, 32, 32, 32, 32, 32, 32, 32, 32, 36, 36, 36, 36, 36, 32, 32,
      32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
       4,  0, 32,  0,  0,  0,  0, 32,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -54,7 +53,7 @@ const uint8_t kCharClassTable[256] = {
      16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 48,
 };
 
-const uint8_t kHexValueTable[256] = {
+const paw_Uint8 kHexValueTable[256] = {
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -72,14 +71,10 @@ const uint8_t kHexValueTable[256] = {
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
 };
-// clang-format on
 
 static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
 {
-    return (struct SourceSpan){
-        .start = start,
-        .end = lex->loc,
-    };
+    return RANGE(start, lex->loc);
 }
 
 static void increment_line(struct Lex *X)
@@ -87,7 +82,9 @@ static void increment_line(struct Lex *X)
     paw_assert(ISNEWLINE(*X->ptr));
 
     if (X->loc.line == INT_MAX)
-        LIMIT_ERROR(X, X->loc, "lines in source file", INT_MAX);
+        LEXER_ERROR(X, TooManyLines,
+                .filename = X->modname,
+                .max_lines = INT_MAX);
 
     X->loc.column = 1;
     ++X->loc.line;
@@ -96,10 +93,19 @@ static void increment_line(struct Lex *X)
 static void increment_column(struct Lex *X)
 {
     if (X->loc.column == INT_MAX)
-        LIMIT_ERROR(X, X->loc, "columns in source file", INT_MAX);
+        LEXER_ERROR(X, TooManyColumns,
+                .filename = X->modname,
+                .max_columns = INT_MAX);
 
     ++X->loc.column;
 }
+
+static Str const *scan_str(struct Lex *X, char const *str)
+{
+    return SCAN_STR(X->C, str);
+}
+
+#define SCAN_FMT(X_, ...) pawP_format_string((X_)->C, __VA_ARGS__)
 
 static void adjust_braces(struct Lex *X, int adjust)
 {
@@ -188,10 +194,7 @@ static paw_Bool test_next2(struct Lex *X, char const *c2)
 static struct Token make_token(TokenKind kind, struct SourceLoc start, struct SourceLoc end)
 {
     return (struct Token){
-        .span = {
-            .start = start,
-            .end = end,
-        },
+        .span = SourceSpan_from_range(start, end),
         .kind = kind,
     };
 }
@@ -203,7 +206,6 @@ static struct Token make_string(struct Lex *X, struct SourceLoc start, TokenKind
         .span = span_from(X, start),
         .kind = kind,
     };
-    // create and anchor arbitrary interned string
     Str *str = pawP_scan_nstr(X->C, b->data, CAST_SIZE(b->count));
     V_SET_OBJECT(&t.value, str);
     return t;
@@ -219,25 +221,42 @@ static struct Token consume_name(struct Lex *X, struct SourceLoc start)
     if (IS_KEYWORD(s)) {
         t.kind = CAST(TokenKind, s->flag);
     } else if (s->length > PAW_NAME_MAX) {
-        LIMIT_ERROR(X, start, "characters in identifier", PAW_NAME_MAX);
+        LEXER_ERROR(X, NameTooLong,
+                .max_chars = PAW_NAME_MAX,
+                .span = t.span);
     }
     return t;
 }
 
-static unsigned get_codepoint(struct Lex *X, struct SourceLoc loc)
+static unsigned get_codepoint(struct Lex *X, struct SourceLoc slash)
 {
-    if (!test_next(X, '{') || test_next(X, '}'))
-        LEX_ERROR(X, unexpected_symbol, X->loc);
+    if (!test_next(X, '{'))
+        LEXER_ERROR(X, InvalidUnicodeEscape,
+                .reason = SCAN_FMT(X, "expected start of unicode codepoint payload '{'"),
+                .span = RANGE(slash, X->loc));
+
+    if (test(X, '}'))
+        LEXER_ERROR(X, EmptyUnicodeEscape,
+                .span = RANGE(slash, X->loc));
 
     enum {MAX_DIGITS = 6};
-    char digits[MAX_DIGITS] = {0};
+    char digits[MAX_DIGITS];
     int n = 0;
 
     do {
-        if (IS_LINE_END(X) || !ISHEX(*X->ptr))
-            LEX_ERROR(X, unterminated_unicode_escape, loc);
+        if (IS_LINE_END(X))
+            // the whole literal must be unterminated so just return with
+            // an arbitrary codepoint and allow the caller to report an
+            // error
+            return 0;
+
+        if (!ISHEX(*X->ptr))
+            LEXER_ERROR(X, InvalidCharInUnicodeEscape,
+                    .span = RANGE1(X->loc));
+
         if (n == MAX_DIGITS)
-            LEX_ERROR(X, unicode_escape_too_long, loc);
+            LEXER_ERROR(X, UnicodeEscapeTooLong,
+                    .span = RANGE(slash, X->loc));
 
         digits[n++] = next(X);
     } while (!test_next(X, '}'));
@@ -249,41 +268,43 @@ static unsigned get_codepoint(struct Lex *X, struct SourceLoc loc)
     return codepoint;
 }
 
-static void hex_escape(struct Lex *X, struct SourceLoc start)
+static int get_hexcode(struct Lex *X)
 {
     enum {MAX_DIGITS = 2};
-    char digits[MAX_DIGITS + 1] = {0};
+    char digits[MAX_DIGITS];
     int n = 0;
 
     do {
-        if (IS_LINE_END(X) || test(X, ';')) {
-            paw_Env *P = ENV(X);
-            pawErr_start(P);
-            pawErr_set_source_loc(P, start);
-            pawErr_set_message(P, "hex escape too short");
-            pawErr_set_hint(P, "must be 2 characters in length");
-            pawErr_finish(P);
-            pawC_throw(P, -1);
-        }
+        if (IS_LINE_END(X))
+            // see comment in get_codepoint()
+            return 0;
+
+        if (!ISHEX(*X->ptr))
+            LEXER_ERROR(X, InvalidCharInHexEscape,
+                    .span = RANGE1(X->loc));
 
         digits[n++] = next(X);
     } while (n < MAX_DIGITS);
 
-    if (!ISHEX(digits[0]) || !ISHEX(digits[1]))
-        LEX_ERROR(X, invalid_hex_escape, start);
+    return (HEXVAL(digits[0]) << 4) | HEXVAL(digits[1]);
+}
 
-    int const value = (HEXVAL(digits[0]) << 4) | HEXVAL(digits[1]);
+static void hex_escape(struct Lex *X)
+{
+    int const value = get_hexcode(X);
     save(X, (char)value);
 }
 
-static void unicode_escape(struct Lex *X, struct SourceLoc start)
+static void unicode_escape(struct Lex *X, struct SourceLoc slash)
 {
-    unsigned const codepoint = get_codepoint(X, start);
+    unsigned const codepoint = get_codepoint(X, slash);
     if ((0xD800 <= codepoint && codepoint <= 0xDFFF)
             || (0xFDD0 <= codepoint && codepoint <= 0xFDEF)
             || (codepoint & 0xFFFE) == 0xFFFE
             || codepoint > 0x10FFFF)
-        LEX_ERROR(X, invalid_unicode_codepoint, start, codepoint);
+        LEXER_ERROR(X, InvalidUnicodeCodepoint,
+                .span = RANGE(slash, X->loc),
+                .codepoint = codepoint);
 
     // Translate a UTF-32 codepoint into bytes. Modified from @Tencent/rapidjson.
     if (codepoint <= 0x7F) {
@@ -304,7 +325,7 @@ static void unicode_escape(struct Lex *X, struct SourceLoc start)
     }
 }
 
-static void escape_character(struct Lex *X, struct SourceLoc start)
+static void escape_character(struct Lex *X, struct SourceLoc slash)
 {
     char const c = next(X);
     switch (c) {
@@ -339,49 +360,55 @@ static void escape_character(struct Lex *X, struct SourceLoc start)
             save(X, '\t');
             break;
         case 'x':
-            hex_escape(X, start);
+            hex_escape(X);
             break;
         case 'u':
-            unicode_escape(X, start);
+            unicode_escape(X, slash);
             break;
         default:
-            LEX_ERROR(X, invalid_escape, X->loc, c);
+            LEXER_ERROR(X, UnknownEscapeChar,
+                        .span = RANGE1(X->loc));
     }
 }
 
-static paw_Char single_byte(struct Lex *X, struct SourceLoc start)
+static struct Token single_byte(struct Lex *X, struct SourceLoc quote)
 {
     for (;;) {
+        struct SourceLoc const current = X->loc;
         if (IS_LINE_END(X)) {
-            LEX_ERROR(X, unterminated_char, start);
+            LEXER_ERROR(X, UnterminatedCharLiteral,
+                        .span = RANGE(quote, current));
         } else if (test_next(X, '\\')) {
-            escape_character(X, start);
-        } else if (test_next(X, '\'')) {
+            escape_character(X, current);
+        } else if (test(X, '\'')) {
             break;
         } else {
             SAVE_AND_NEXT(X);
         }
     }
 
-    struct StringBuffer *b = &SCRATCH(X);
-    if (b->count == 0) {
-        LEX_ERROR(X, empty_char, start);
-    } else if (b->count > 1) {
-        LEX_ERROR(X, char_too_long, start);
-    }
+    struct SourceLoc const quote2 = X->loc;
+    next(X); // skip second quote
 
-    return (paw_Char)b->data[0];
+    struct StringBuffer const *b = &SCRATCH(X);
+    if (b->count == 0)
+        LEXER_ERROR(X, EmptyCharLiteral,
+                .span = RANGE(quote, quote2));
+    if (b->count > 1)
+        LEXER_ERROR(X, CharLiteralTooLong,
+                .span = RANGE(quote, quote2));
+
+    return (struct Token){
+        // make sure the bytes used by larger scalars get cleared
+        .value.u = (paw_Uint)(paw_Uint8)b->data[0],
+        .span = RANGE(quote, quote2),
+        .kind = TK_CHAR,
+    };
 }
 
-static struct Token consume_byte(struct Lex *X, struct SourceLoc start)
+static struct Token consume_byte(struct Lex *X, struct SourceLoc quote)
 {
-    paw_Char const x = single_byte(X, start);
-    return (struct Token){
-        .span = span_from(X, start),
-        .kind = TK_CHAR,
-        // make sure the bytes used by larger scalars get cleared
-        .value.u = (paw_Uint)x,
-    };
+    return single_byte(X, quote);
 }
 
 static struct Token consume_string_part(struct Lex *X, struct SourceLoc start_loc)
@@ -408,26 +435,52 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start_lo
     } else if (test_next(X, '"')) {
         pop_state(X);
         return make_string(X, start_loc, TK_STRING_TEXT);
-    } else if (ISNEWLINE(*X->ptr)) {
-        LEX_ERROR(X, unterminated_string, X->loc);
-    } else if (IS_EOF(X)) {
-        LEX_ERROR(X, unexpected_symbol, X->loc);
+    } else if (IS_LINE_END(X)) {
+        LEXER_ERROR(X, UnterminatedStrLiteral,
+                .span = RANGE(start_loc, X->loc));
     } else {
         SAVE_AND_NEXT(X);
     }
     goto handle_ascii;
 }
 
-static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int base, char const *base_name)
+static struct Token consume_str(struct Lex *X, struct SourceLoc start_loc)
 {
-    struct StringBuffer *b = &SCRATCH(X);
+    for (;;) {
+    handle_ascii:
+        if (ISASCIIEND(*X->ptr))
+            break;
+        SAVE_AND_NEXT(X);
+    }
+
+    struct SourceLoc current_loc = X->loc;
+    if (test_next(X, '\\')) {
+        escape_character(X, current_loc);
+    } else if (test_next(X, '"')) {
+        return make_string(X, start_loc, TK_STR);
+    } else if (IS_LINE_END(X)) {
+        LEXER_ERROR(X, UnterminatedStrLiteral,
+                .span = RANGE(start_loc, X->loc));
+    } else {
+        SAVE_AND_NEXT(X);
+    }
+    goto handle_ascii;
+}
+
+static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int base)
+{
+    struct StringBuffer const *b = &SCRATCH(X);
     paw_Uint u;
 
     int const rc = pawX_parse_uint(b->data, base, &u);
     if (rc == PAW_EOVERFLOW) {
-        LEX_ERROR(X, integer_too_big_to_parse, start, b->data);
+        LEXER_ERROR(X, IntegerTooBigToParse,
+                .span = RANGE(start, X->loc),
+                .base = base);
     } else if (rc == PAW_ESYNTAX) {
-        LEX_ERROR(X, invalid_integer, start, base_name, b->data);
+        LEXER_ERROR(X, InvalidIntegerLiteral,
+                .span = RANGE(start, X->loc),
+                .base = base);
     }
     return (struct Token){
         .span = span_from(X, start),
@@ -439,58 +492,70 @@ static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int b
 static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start)
 {
     if (!test2(X, "01"))
-        LEX_ERROR(X, expected_integer_digit, X->loc, "binary");
+        LEXER_ERROR(X, ExpectedIntegerDigit,
+                .span = RANGE(start, X->loc),
+                .base = 2);
 
     while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
         if (test_next(X, '_')) {
             // ignore digit separators
         } else if (!test2(X, "01")) {
-            LEX_ERROR(X, unexpected_integer_char, X->loc, *X->ptr, "binary");
+            LEXER_ERROR(X, InvalidCharInInteger,
+                    .span = RANGE(start, X->loc),
+                    .base = 2);
         } else {
             SAVE_AND_NEXT(X);
         }
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, 2, "binary");
+    return consume_int_aux(X, start, 2);
 }
 
 static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start)
 {
     if (*X->ptr < '0' || *X->ptr > '7')
-        LEX_ERROR(X, expected_integer_digit, X->loc, "octal");
+        LEXER_ERROR(X, ExpectedIntegerDigit,
+                .span = RANGE(start, X->loc),
+                .base = 8);
 
     while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
         if (test_next(X, '_')) {
             // ignore digit separators
         } else if (*X->ptr < '0' || *X->ptr > '7') {
-            LEX_ERROR(X, unexpected_integer_char, X->loc, *X->ptr, "octal");
+            LEXER_ERROR(X, InvalidCharInInteger,
+                    .span = RANGE(start, X->loc),
+                    .base = 8);
         } else {
             SAVE_AND_NEXT(X);
         }
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, 8, "octal");
+    return consume_int_aux(X, start, 8);
 }
 
 static struct Token consume_hex_int(struct Lex *X, struct SourceLoc start)
 {
     if (!ISHEX(*X->ptr))
-        LEX_ERROR(X, expected_integer_digit, X->loc, "hexadecimal");
+        LEXER_ERROR(X, ExpectedIntegerDigit,
+                .span = RANGE(start, X->loc),
+                .base = 16);
 
     while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
         if (test_next(X, '_')) {
             // ignore digit separators
         } else if (!ISHEX(*X->ptr)) {
-            LEX_ERROR(X, unexpected_integer_char, X->loc, *X->ptr, "hexadecimal");
+            LEXER_ERROR(X, InvalidCharInInteger,
+                    .span = RANGE(start, X->loc),
+                    .base = 16);
         } else {
             SAVE_AND_NEXT(X);
         }
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, 16, "hexadecimal");
+    return consume_int_aux(X, start, 16);
 }
 
 static void save_parsed_digits(struct Lex *X, const char *begin)
@@ -505,19 +570,19 @@ static void save_parsed_digits(struct Lex *X, const char *begin)
 static struct Token consume_decimal_int(struct Lex *X, struct SourceLoc start, const char *begin)
 {
     save_parsed_digits(X, begin);
-    return consume_int_aux(X, start, 10, "decimal");
+    return consume_int_aux(X, start, 10);
 }
 
 static struct Token consume_float(struct Lex *X, struct SourceLoc start, const char *begin)
 {
     save_parsed_digits(X, begin);
-
     struct StringBuffer b = SCRATCH(X);
     paw_Float f;
 
     int const rc = pawX_parse_float(b.data, &f);
     if (rc != PAW_OK)
-        LEX_ERROR(X, invalid_float, start, b.data);
+        LEXER_ERROR(X, InvalidFloatLiteral,
+                .span = RANGE(start, X->loc));
     return (struct Token){
         .span = span_from(X, start),
         .kind = TK_FLOAT,
@@ -558,7 +623,9 @@ static struct Token consume_number(struct Lex *X, struct SourceLoc start)
     if (test_next2(X, "eE")) {
         test_next2(X, "+-");
         if (!ISDIGIT(*X->ptr))
-            LEX_ERROR(X, unexpected_symbol, start);
+            LEXER_ERROR(X, InvalidFloatLiteral,
+                    .reason = scan_str(X, "expected exponent part"),
+                    .span = RANGE(start, X->loc));
     }
 
     while (ISDIGIT(*X->ptr) || test(X, '_'))
@@ -601,11 +668,9 @@ try_again:
             next(X);
             token = consume_byte(X, start);
             break;
-        case '"':
-            // found arbitrary string
+        case '\"':
             next(X);
-            push_state(X, STATE_STRING);
-            token = consume_string_part(X, start);
+            token = consume_str(X, start);
             break;
         case '{':
             next(X);
@@ -740,6 +805,16 @@ try_again:
                 token = T(TK_HASHBANG);
             } else if (test_next(X, '[')) {
                 token = T(TK_HASH_BRACKET);
+            }
+            break;
+        case 's':
+            next(X);
+            if (test_next(X, '\"')) {
+                push_state(X, STATE_STRING);
+                token = consume_string_part(X, start);
+            } else {
+                save(X, 's');
+                token = consume_name(X, start);
             }
             break;
         default:

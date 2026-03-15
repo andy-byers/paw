@@ -4,17 +4,20 @@
 
 #include "context.h"
 
+// TODO: remove DEFERRED_INIT thing, not necessary now that reference types don't exist
 #define DEFERRED_INIT ((llvm::Type *)42)
 
 namespace paw::cg {
 
-unsigned long static constexpr HASH_SEED = 0x9E3779B97F4A7C15ULL;
+namespace {
+
+unsigned long static constexpr const HASH_SEED = 0x9E3779B97F4A7C15ULL;
 
 // Splitmix64 PRNG
 template<class T>
-static T splitmix64(T &state)
+T splitmix64(T &state)
 {
-    state += 0x9E3779B97F4A7C15ULL;
+    state += HASH_SEED;
 
     auto t = state;
     t = (t ^ (t >> 30)) * 0xBF58476D1CE4E5B9ULL;
@@ -23,19 +26,60 @@ static T splitmix64(T &state)
 }
 
 template<class T>
-static T hash_combine(T x, T y) {
+T hash_combine(T x, T y) {
     T t = x ^ y;
     return splitmix64(t);
 }
 
+struct FieldCounter {
+    int floats;
+    int total;
+};
 
-bool Type::is_boxed_type() const
+FieldCounter count_fields(llvm::Type *ty)
 {
-    return is_str_type()
-        || is_list_type()
-        || is_map_type()
-        || (is_object_type() && static_cast<ObjectType const *>(this)->is_inline());
+    if (ty->isDoubleTy()) return FieldCounter{1, 1};
+    if (!ty->isStructTy()) return FieldCounter{0, 1};
+
+    struct FieldCounter counter = {};
+    auto *st = llvm::cast<llvm::StructType>(ty);
+    for (auto i = 0U; i < st->getNumElements(); ++i) {
+        auto *field_ty = st->getElementType(i);
+        auto const [floats, total] = count_fields(field_ty);
+        counter.floats += floats;
+        counter.total += total;
+    }
+    return counter;
 }
+
+// Return true if the given type is a homogeneous floating-point aggregate (HFA)
+// or a homogeneous short vector aggregate (HVA), false otherwise
+// TODO: only works for HFA
+bool is_hxa_struct_ty(llvm::Type *ty)
+{
+    if (!ty->isStructTy()) return false;
+    auto const [floats, total] = count_fields(ty);
+    return 0 < total && total == floats && total <= 4;
+}
+
+// TODO: modify to handle any llvm::Type and call in constructor of Type
+ABIClass abi_class_for_object(Context &X, llvm::Type *ty)
+{
+    if (is_hxa_struct_ty(ty)) {
+        return ABIClass::HXA_STRUCT;
+    } else if (X.size_of(ty) == 0) {
+        return ABIClass::EMPTY;
+    } else if (X.size_of(ty) <= 8) {
+        return ABIClass::SMALL_STRUCT;
+    } else if (X.size_of(ty) <= 16) {
+        return ABIClass::BINARY_STRUCT;
+    } else {
+        return ABIClass::LARGE_STRUCT;
+    }
+}
+
+} // (anonymous namespace)
+
 
 UnitType::UnitType(Context &X)
     : PrimitiveType(X, X.get_unit_ty(), Kind::UNIT, ABIClass::EMPTY)
@@ -73,14 +117,59 @@ FloatType::FloatType(Context &X)
 }
 
 
+SliceType::SliceType(Context &X, Type *element_type)
+    : Type(X, X.get_slice_ty(), Kind::SLICE, ABIClass::BINARY_STRUCT)
+    , element_type_(element_type)
+{
+}
+
+llvm::StructType *SliceType::get_struct_ty() const
+{
+    return X->get_slice_ty();
+}
+
+llvm::Type *SliceType::get_abi_ty() const
+{
+    return X->get_array_ty(X->get_int_ty(), 2);
+}
+
+unsigned long SliceType::hash() const
+{
+    auto const h = hash_combine((unsigned long)get_kind(), HASH_SEED);
+    return hash_combine(h, element_type_->hash());
+}
+
+bool SliceType::equals(Type const *rhs) const
+{
+    return rhs->is_slice_type()
+        && element_type_->equals(
+                ((SliceType *)rhs)->element_type_);
+}
+
+
 StrType::StrType(Context &X)
-    : PrimitiveType(X, X.get_ptr_ty(), Kind::STR, ABIClass::SCALAR)
+    : Type(X, X.get_str_ty(), Kind::STR, ABIClass::BINARY_STRUCT)
 {
 }
 
 llvm::StructType *StrType::get_struct_ty() const
 {
     return X->get_str_ty();
+}
+
+llvm::Type *StrType::get_abi_ty() const
+{
+    return X->get_array_ty(X->get_int_ty(), 2);
+}
+
+unsigned long StrType::hash() const
+{
+    return hash_combine((unsigned long)get_kind(), HASH_SEED);
+}
+
+bool StrType::equals(Type const *rhs) const
+{
+    return rhs->is_str_type();
 }
 
 
@@ -253,115 +342,56 @@ std::string PtrType::to_string() const
 }
 
 
-ListType::ListType(Context &X, Type *element_type)
-    : Type(X, X.get_ptr_ty(), Kind::LIST, ABIClass::SCALAR)
+static ABIClass abi_class_for_array(Context &X, Type *element_type, uint64_t length)
+{
+    return abi_class_for_object(X, X.get_array_ty(element_type->get_ty(), length));
+}
+
+ArrayType::ArrayType(Context &X, Type *element_type, uint64_t length)
+    : Type(X, X.get_array_ty(element_type->get_ty(), length),
+            Kind::ARRAY, abi_class_for_array(X, element_type, length))
     , element_type_(element_type)
+    , length_(length)
 {
 }
 
-llvm::StructType *ListType::get_struct_ty() const
-{
-    return X->get_list_ty();
-}
-
-unsigned long ListType::hash() const
+unsigned long ArrayType::hash() const
 {
     auto h = hash_combine((unsigned long)get_kind(), HASH_SEED);
-    return hash_combine(h, element_type_->hash());
+    h = hash_combine(h, element_type_->hash());
+    return hash_combine(h, (unsigned long)length_);
 }
 
-bool ListType::equals(Type const *rhs) const
+bool ArrayType::equals(Type const *rhs) const
 {
-    return rhs->is_list_type()
-        && element_type_ == ((ListType *)rhs)->element_type_;
-}
-
-
-std::string ListType::to_string() const
-{
-    return "[" + element_type_->to_string() + "]";
-}
-
-MapType::MapType(Context &X, Type *key_type, Type *value_type)
-    : Type(X, X.get_ptr_ty(), Kind::MAP, ABIClass::SCALAR)
-    , key_type_(key_type)
-    , value_type_(value_type)
-{
-}
-
-llvm::StructType *MapType::get_struct_ty() const
-{
-    return X->get_map_ty();
-}
-
-unsigned long MapType::hash() const
-{
-    auto h = hash_combine((unsigned long)get_kind(), HASH_SEED);
-    h = hash_combine(h, key_type_->hash());
-    h = hash_combine(h, value_type_->hash());
-    return h;
-}
-
-bool MapType::equals(Type const *rhs) const
-{
-    return rhs->is_map_type()
-        && key_type_ == ((MapType *)rhs)->key_type_
-        && value_type_ == ((MapType *)rhs)->value_type_;
-}
-
-std::string MapType::to_string() const
-{
-    return "[" + key_type_->to_string()
-        + ": " + value_type_->to_string() + "]";
-}
-
-
-struct FieldCounter {
-    int floats;
-    int total;
-};
-
-static FieldCounter count_fields(llvm::Type *ty)
-{
-    if (ty->isDoubleTy()) return FieldCounter{1, 1};
-    if (!ty->isStructTy()) return FieldCounter{0, 1};
-
-    struct FieldCounter counter = {};
-    auto *st = llvm::cast<llvm::StructType>(ty);
-    for (auto i = 0U; i < st->getNumElements(); ++i) {
-        auto *field_ty = st->getElementType(i);
-        auto const [floats, total] = count_fields(field_ty);
-        counter.floats += floats;
-        counter.total += total;
+    if (rhs->get_kind() == Kind::ARRAY) {
+        auto const *r = (ArrayType *)rhs;
+        return element_type_->equals(r->get_element_type())
+            && length_ == r->get_length();
     }
-    return counter;
+    return false;
 }
 
-// Return true if the given type is a homogeneous floating-point aggregate (HFA)
-// or a homogeneous short vector aggregate (HVA), false otherwise
-// TODO: only works for HFA
-static bool is_hxa_struct_ty(llvm::Type *ty)
+// TODO: Functionality of object_to_abi() should be performed in default version of this function
+llvm::Type *ArrayType::get_abi_ty() const
 {
-    if (!ty->isStructTy()) return false;
-    auto const [floats, total] = count_fields(ty);
-    return 0 < total && total == floats && total <= 4;
+    return object_to_abi(*X, get_ty(), get_abi_class());
 }
 
-ObjectType::ObjectType(Context &X, llvm::ArrayRef<ObjectType::FieldTypes> variants, Location location)
+std::string ArrayType::to_string() const
+{
+    return "[" + std::to_string(length_) + "]"
+        + element_type_->to_string();
+}
+
+
+ObjectType::ObjectType(Context &X, llvm::ArrayRef<ObjectType::FieldTypes> variants, std::string name)
     : Type(X, DEFERRED_INIT, Type::Kind::OBJECT, (ABIClass)0)
-    , is_inline_(location == Location::STACK)
+    , name_(std::move(name))
 {
     set_variants(variants);
 }
 
-ObjectType::ObjectType(Context &X, std::string name, Location location)
-    : Type(X, llvm::StructType::create(*X.get_context(), name),
-            Type::Kind::OBJECT, (ABIClass)0)
-    , name_(std::move(name))
-    , is_inline_(location == Location::STACK)
-{
-    paw_assert(!name_.empty());
-}
 
 void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
 {
@@ -375,7 +405,7 @@ void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
     } largest_variant;
 
     paw_assert(!variants.empty());
-    for (auto i = 0; i < variants.size(); ++i) {
+    for (auto i = 0U; i < variants.size(); ++i) {
         auto const field_types = variants[i];
         std::vector<llvm::Type *> field_tys;
         llvm::StructType *variant_ty;
@@ -399,16 +429,6 @@ void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
         }
     }
 
-    // set the underlying type to that of the largest variant
-
-//    for (auto const &v: variants_) {
-//        auto const size = X->size_of(v.ty);
-//        if (size > largest_variant.size) {
-//            largest_variant.size = size;
-//            largest_variant.ty = v.ty;
-//        }
-//    }
-
     if (ty_ != DEFERRED_INIT) {
         llvm::cast<llvm::StructType>(ty_)
             ->setBody(largest_variant.field_tys);
@@ -416,29 +436,12 @@ void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
         ty_ = largest_variant.ty;
     }
 
-    if (!is_inline_) {
-        abi_class_ = ABIClass::SCALAR;
-    } else if (is_hxa_struct_ty(ty_)) {
-        abi_class_ = ABIClass::HXA_STRUCT;
-    } else if (X->size_of(ty_) == 0) {
-        abi_class_ = ABIClass::EMPTY;
-    } else if (X->size_of(ty_) <= 8) {
-        abi_class_ = ABIClass::SMALL_STRUCT;
-    } else if (X->size_of(ty_) <= 16) {
-        abi_class_ = ABIClass::BINARY_STRUCT;
-    } else {
-        abi_class_ = ABIClass::LARGE_STRUCT;
-    }
-}
-
-bool ObjectType::is_opaque() const
-{
-    return ((llvm::StructType *)ty_)->isOpaque();
+    abi_class_ = abi_class_for_object(*X, ty_);
 }
 
 llvm::Type *ObjectType::get_ty() const
 {
-    return is_inline_ ? ty_ : X->get_ptr_ty();
+    return ty_;
 }
 
 llvm::Type *ObjectType::get_abi_ty() const
@@ -448,9 +451,6 @@ llvm::Type *ObjectType::get_abi_ty() const
 
 unsigned long ObjectType::hash() const
 {
-    if (!name_.empty())
-        return std::hash<std::string>{}(name_);
-
     auto h = hash_combine((unsigned long)get_kind(), HASH_SEED);
     for (auto const &variant: variants_) {
         for (auto *field_type: variant.field_types)
@@ -464,10 +464,6 @@ bool ObjectType::equals(Type const *rhs) const
     if (!rhs->is_object_type()) return false;
 
     auto *obj = (ObjectType *)rhs;
-    if (!name_.empty() || !obj->name_.empty())
-        return !name_.empty() && !obj->name_.empty()
-            && name_ == obj->name_;
-
     if (variants_.size() != obj->variants_.size())
         return false;
 

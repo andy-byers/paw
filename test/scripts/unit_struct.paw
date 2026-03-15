@@ -2,6 +2,8 @@
 
 struct Unit;
 
+impl Copy for Unit {}
+
 impl Unit {
     pub fn method(self) {}
     pub fn assoc_function() {}
@@ -23,13 +25,14 @@ pub fn test_copy() {
     let u2 = u;
 }
 
+fn noop(_: Unit) {}
+
 #[test]
 pub fn test_as_argument() {
     let u = Unit;
-    let f = |x| {};
 
-    f(u);
-    f(Unit);
+    noop(u);
+    noop(Unit);
 }
 
 #[test]

@@ -19,6 +19,7 @@
 #include "error.h"
 #include "ir_type.h"
 #include "map.h"
+#include "solve.h"
 #include "type_folder.h"
 #include "unify.h"
 
@@ -33,66 +34,49 @@ struct InstanceState {
     int modno;
 };
 
-static IrTypeList *collect_generic_types(struct InstanceState *I, struct HirDeclList *generics)
-{
-    if (generics == NULL) return NULL;
-    return pawHir_collect_decl_types(I->C, generics);
-}
-
-static IrTypeList *collect_field_types(struct InstanceState *I, struct HirDeclList *fields)
-{
-    return pawHir_collect_decl_types(I->C, fields);
-}
-
-static IrType *fn_result(struct InstanceState *I, struct HirFnDecl *d)
-{
-    IrType *type = pawIr_get_type(I->C, d->id);
-    return ir_fn_result(I->C, type);
-}
-
-IrTypeList *pawP_instantiate_typelist(struct Compiler *C, IrTypeList *before,
-                                             IrTypeList *after, IrTypeList *target)
+IrGenericArgs *pawP_instantiate_typelist(struct Compiler *C, IrGenericArgs *before,
+                                             IrGenericArgs *after, IrGenericArgs *target)
 {
     struct IrTypeFolder F;
     struct Substitution subst;
     pawP_init_substitution_folder(&F, C, &subst, before, after);
-    return pawIr_fold_type_list(&F, target);
+    return pawIr_fold_generic_args(&F, target);
 }
 
-static void prep_fn_instance(struct InstanceState *I, IrTypeList *before, IrTypeList *after,
+static void prep_fn_instance(struct InstanceState *I, IrGenericArgs *before, IrGenericArgs *after,
                                struct IrSignature *t)
 {
     struct IrTypeFolder F;
     struct Substitution subst;
     pawP_init_substitution_folder(&F, I->C, &subst, before, after);
-    t->types = pawIr_fold_type_list(&F, t->types);
+    t->args = pawIr_fold_generic_args(&F, t->args);
 }
 
-static IrType *instantiate_fn_aux(struct InstanceState *I, struct IrSignature *base, IrTypeList *types)
+static IrType *instantiate_fn_aux(struct InstanceState *I, struct IrSignature *base, IrGenericArgs *args)
 {
-    struct Substitution const subst = {base->types, types};
-    return pawP_substitute(I->C, TODO, IR_CAST_TYPE(base), subst);
+    struct Substitution const subst = {base->args, args};
+    return pawP_substitute(I->C, IR_CAST_TYPE(base), subst);
 }
 
-static void check_type_param(struct InstanceState *I, IrTypeList *params, IrTypeList *args)
+static void check_type_param(struct InstanceState *I, IrGenericArgs *params, IrGenericArgs *args)
 {
     if (params->count != args->count)
-        INSTANTIATION_ERROR(I, incorrect_type_arity, (struct SourceLoc){0}, params->count, args->count);
+        INSTANTIATION_ERROR(I, incorrect_type_arity, (struct SourceSpan){0}, params->count, args->count);
 }
 
-static void normalize_type_list(struct InstanceState *I, IrTypeList *types)
+static void normalize_type_list(struct InstanceState *I, IrGenericArgs *types)
 {
-    IrType *const *ptype;
-    K_LIST_FOREACH (types, ptype)
-        pawU_normalize(I->U, *ptype);
+    IrGenericArg const *p;
+    K_LIST_FOREACH (types, p)
+        pawIr_normalize(I->C, *p);
 }
 
-static IrTrait *instantiate_trait(struct InstanceState *I, struct IrTrait *base, IrTypeList *types)
+static IrTrait *instantiate_trait(struct InstanceState *I, struct IrTrait *base, IrGenericArgs *types)
 {
-    IrTypeList *generics = base->types;
+    IrGenericArgs *generics = base->args;
     if (generics == NULL) {
         struct HirDecl *decl = pawHir_get_decl(I->C->hir, base->did);
-        INSTANTIATION_ERROR(I, unexpected_type_arguments, (struct SourceLoc){0},
+        INSTANTIATION_ERROR(I, unexpected_type_arguments, (struct SourceSpan){0},
                 "trait", HirGetTraitDecl(decl)->ident.name->text);
     }
     check_type_param(I, generics, types);
@@ -100,90 +84,20 @@ static IrTrait *instantiate_trait(struct InstanceState *I, struct IrTrait *base,
     return pawIr_new_trait(I->C, base->did, types);
 }
 
-static IrType *instantiate_adt(struct InstanceState *I, struct IrAdt *base, IrTypeList *types)
+static IrType *instantiate_adt(struct InstanceState *I, struct IrAdt *base, IrGenericArgs *types)
 {
-    paw_assert(base->types != NULL);
-    check_type_param(I, base->types, types);
+    paw_assert(base->args != NULL);
+    check_type_param(I, base->args, types);
     normalize_type_list(I, types);
     return pawIr_new_adt(I->C, base->did, types);
 }
 
-static IrType *instantiate_fn(struct InstanceState *I, struct IrSignature *base, IrTypeList *types)
+static IrType *instantiate_fn(struct InstanceState *I, struct IrSignature *base, IrGenericArgs *types)
 {
-    paw_assert(base->types != NULL);
-    check_type_param(I, base->types, types);
+    paw_assert(base->args != NULL);
+    check_type_param(I, base->args, types);
     normalize_type_list(I, types);
     return instantiate_fn_aux(I, base, types);
-}
-
-static IrType *instantiate_method_aux(struct InstanceState *I, IrTypeList *generics, IrTypeList *types, IrType *method)
-{
-    struct IrSignature *fn = IrGetSignature(method);
-    IrType *inst = pawIr_new_signature(I->C, fn->did, fn->types);
-    prep_fn_instance(I, generics, types, IrGetSignature(inst));
-    return inst;
-}
-
-static IrType *instantiate_method(struct InstanceState *I, IrType *obj, IrTypeList *types, IrType *method)
-{
-    paw_assert(types != NULL);
-    IrTypeList *generics = IR_TYPE_SUBTYPES_(obj);
-    paw_assert(types->count == generics->count);
-    IrTypeList *unknowns = pawU_new_unknowns(I->U, (struct SourceLoc){0}, generics);
-
-    IrTypeList *subst = pawP_instantiate_typelist(I->C, generics, unknowns, IR_TYPE_SUBTYPES_(obj));
-
-    IrType *const *pa, *const *pb;
-    K_LIST_ZIP (subst, pa, types, pb) {
-        // unification with an IrInfer never fails due to incompatible types
-        int const rc = pawU_unify(I->U, *pa, *pb);
-        paw_assert(rc == 0); PAW_UNUSED(rc);
-    }
-
-    IrType *inst = pawP_instantiate(I->C, obj, subst);
-    IrType *r = instantiate_method_aux(I, generics, unknowns, method);
-    return pawU_normalize(I->U, r);
-}
-
-IrType *pawP_instantiate_method(struct Compiler *C, IrType *base, IrTypeList *types, IrType *method)
-{
-    struct InstanceState I = {
-        .modno = (int)IR_TYPE_DID(base).modno,
-        .P = ENV(C),
-        .U = C->U,
-        .C = C,
-    };
-
-    return instantiate_method(&I, base, types, method);
-}
-
-IrType *pawP_instantiate(struct Compiler *C, IrType *base, IrTypeList *types)
-{
-    paw_assert(types != NULL);
-    struct InstanceState I = {
-        .modno = (int)IR_TYPE_DID(base).modno,
-        .P = ENV(C),
-        .U = C->U,
-        .C = C,
-    };
-
-    if (IrIsAdt(base)) {
-        return instantiate_adt(&I, IrGetAdt(base), types);
-    } else {
-        return instantiate_fn(&I, IrGetSignature(base), types);
-    }
-}
-
-// Replace generic parameters with inference variables (struct IrInfer). The
-// resulting type can be unified with another type in order to fill in a type
-// for each inference variable.
-IrType *pawP_generalize(struct Compiler *C, struct SourceLoc loc, IrType *type)
-{
-    IrTypeList *generics = IR_TYPE_SUBTYPES_(type);
-    if (generics == NULL) return type;
-
-    IrTypeList *unknowns = pawU_new_unknowns(C->U, loc, generics);
-    return pawP_instantiate(C, type, unknowns);
 }
 
 static IrTypeList *substitute_list(struct IrTypeFolder *F, IrTypeList *list)
@@ -212,15 +126,21 @@ static IrType *substitute_fn_ptr(struct IrTypeFolder *F, struct IrFnPtr *t)
 static IrType *substitute_signature(struct IrTypeFolder *F, struct IrSignature *t)
 {
     // TODO: cannot be NULL
-    IrTypeList *types = t->types == NULL ? NULL : pawIr_fold_type_list(F, t->types);
-    return pawIr_new_signature(F->C, t->did, types);
+    IrGenericArgs *args = t->args == NULL ? NULL : pawIr_fold_generic_args(F, t->args);
+    return pawIr_new_signature(F->C, t->did, args);
 }
 
 static IrType *substitute_adt(struct IrTypeFolder *F, struct IrAdt *t)
 {
-    if (t->types == NULL) return IR_CAST_TYPE(t);
-    IrTypeList *types = pawIr_fold_type_list(F, t->types);
-    return pawP_instantiate(F->C, IR_CAST_TYPE(t), types);
+    if (t->args == NULL) return IR_CAST_TYPE(t);
+    IrGenericArgs *args = pawIr_fold_generic_args(F, t->args);
+    return pawIr_solver_instantiate_type_with(F->C->S, t->did, args);
+}
+
+static IrType *substitute_slice(struct IrTypeFolder *F, struct IrSlice *t)
+{
+    IrType *elem = pawIr_fold_type(F, t->type);
+    return pawIr_new_slice(F->C, elem);
 }
 
 static IrType *substitute_tuple(struct IrTypeFolder *F, struct IrTuple *t)
@@ -231,41 +151,39 @@ static IrType *substitute_tuple(struct IrTypeFolder *F, struct IrTuple *t)
 
 static IrTrait *substitute_trait(struct IrTypeFolder *F, struct IrTrait *t)
 {
-    if (t->types == NULL) return t;
-    IrTypeList *types = pawIr_fold_type_list(F, t->types);
-    return pawIr_new_trait(F->C, t->did, types);
+    if (t->args == NULL) return t;
+    IrGenericArgs *args = pawIr_fold_generic_args(F, t->args);
+    return pawIr_new_trait(F->C, t->did, args);
 }
 
 static IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneric *t)
 {
     struct Substitution *subst = F->ud;
 
-    IrType *const *pg, *const *pt;
-    K_LIST_ZIP (subst->generics, pg, subst->types, pt) {
-        struct IrGeneric *g = IrGetGeneric(*pg);
-        if (t->did.value == g->did.value)
-            return *pt;
+    IrGenericArg const *pg, *pt;
+    K_LIST_ZIP (subst->params, pg, subst->args, pt) {
+        if (IrGenericArg_is_type(*pg)) {
+            IrType *type = IrGenericArg_get_type(*pg);
+            struct IrGeneric *g = IrGetGeneric(type);
+            if (t->did.value == g->did.value)
+                return IrGenericArg_get_type(*pt);
+        }
     }
     return IR_CAST_TYPE(t);
 }
 
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
-                                   IrTypeList *generics, IrTypeList *types)
+                                   IrGenericArgs *generics, IrGenericArgs *types)
 {
     *subst = (struct Substitution){
-        .generics = generics,
-        .types = types,
+        .params = generics,
+        .args = types,
     };
     pawIr_type_folder_init(F, C, subst);
-    F->FoldAdt = substitute_adt;
-    F->FoldFnPtr = substitute_fn_ptr;
-    F->FoldSignature = substitute_signature;
     F->FoldGeneric = substitute_generic;
-    F->FoldTuple = substitute_tuple;
-    F->FoldTypeList = substitute_list;
 }
 
-static IrTypeList *instantiate_variant_fields(struct Compiler *C, struct IrVariantDef *def, IrTypeList *before, IrTypeList *after)
+static IrTypeList *instantiate_variant_fields(struct Compiler *C, struct IrVariantDef *def, IrGenericArgs *before, IrGenericArgs *after)
 {
     struct IrFieldDef *const *pfield;
     IrTypeList *fields = IrTypeList_new(C);
@@ -275,7 +193,10 @@ static IrTypeList *instantiate_variant_fields(struct Compiler *C, struct IrVaria
         IrTypeList_push(C, fields, field);
     }
 
-    return pawP_instantiate_typelist(C, before, after, fields);
+    struct IrTypeFolder F;
+    struct Substitution subst;
+    pawP_init_substitution_folder(&F, C, &subst, before, after);
+    return pawIr_fold_type_list(&F, fields);
 }
 
 IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst)
@@ -284,7 +205,7 @@ IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *ins
     struct IrAdtDef *def = pawIr_get_adt_def(C, inst->did);
     struct IrVariantDef *variant = K_LIST_FIRST(def->variants);
 
-    return instantiate_variant_fields(C, variant, base->types, inst->types);
+    return instantiate_variant_fields(C, variant, base->args, inst->args);
 }
 
 IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index)
@@ -294,68 +215,89 @@ IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *in
     struct IrAdtDef *def = pawIr_get_adt_def(C, inst->did);
     struct IrVariantDef *variant = IrVariantDefs_get(def->variants, index);
 
-    return instantiate_variant_fields(C, variant, base->types, inst->types);
+    return instantiate_variant_fields(C, variant, base->args, inst->args);
 }
 
-#define TODO (struct SourceLoc){0}
-
-struct Instantiation pawP_instantiate_v2(struct Compiler *C, struct SourceLoc loc, IrType *type)
+struct Instantiation pawP_instantiate_v2(struct Compiler *C, IrType *type)
 {
-    IrTypeList *before = IR_TYPE_SUBTYPES_(type);
+    IrGenericArgs *before = IR_GENERIC_ARGS(type);
     if (before == NULL) return (struct Instantiation){.inst = type};
-    IrTypeList *after = pawU_new_unknowns(C->U, loc, before);
+    IrGenericArgs *after = pawIr_instantiate_args(C, IR_TYPE_DID(type));
     struct Substitution const subst = {before, after};
-    IrType *instance = pawP_substitute(C, loc, type, subst);
+    IrType *instance = pawP_substitute(C, type, subst);
     return (struct Instantiation){
         .inst = instance,
         .subst = subst,
     };
 }
 
-IrTrait *pawP_substitute_trait(struct Compiler *C, struct SourceLoc loc, IrTrait *trait, struct Substitution subst)
+IrTrait *pawP_substitute_trait(struct Compiler *C, IrTrait *trait, struct Substitution subst)
 {
-    IrTypeList *types = NULL;
-    if (trait->types != NULL) {
-        types = IrTypeList_new(C);
-        IrTypeList_reserve(C, types, trait->types->count);
-        K_LIST_XFOREACH (trait->types, IrType *const, p)
-            IrTypeList_push(C, types, pawP_substitute(C, loc, *p, subst));
+    IrGenericArgs *types = NULL;
+    if (trait->args != NULL) {
+        types = IrGenericArgs_new(C);
+        IrGenericArgs_reserve(C, types, trait->args->count);
+        K_LIST_XFOREACH (trait->args, IrGenericArg const, p)
+            IrGenericArgs_push(C, types, pawP_substitute_arg(C, *p, subst));
     }
 
     return pawIr_new_trait(C, trait->did, types);
 }
 
-IrType *pawP_substitute(struct Compiler *C, struct SourceLoc loc, IrType *type, struct Substitution subst)
+IrType *pawP_substitute(struct Compiler *C, IrType *type, struct Substitution subst)
 {
     struct IrTypeFolder F;
     pawIr_type_folder_init(&F, C, &subst);
-    F.FoldAdt = substitute_adt;
-    F.FoldFnPtr = substitute_fn_ptr;
-    F.FoldSignature = substitute_signature;
     F.FoldGeneric = substitute_generic;
-    F.FoldTuple = substitute_tuple;
-    F.FoldTypeList = substitute_list;
     return pawIr_fold_type(&F, type);
 }
 
-struct Instantiation pawP_instantiate_assoc(struct Compiler *C, struct SourceLoc loc, IrType *type, IrType *method)
+IrGenericArg pawP_substitute_arg(struct Compiler *C, IrGenericArg arg, struct Substitution subst)
+{
+    if (IrGenericArg_is_type(arg)) {
+        IrType *t = IrGenericArg_get_type(arg);
+        return IrGenericArg_from_type(
+                pawP_substitute(C, t, subst));
+    } else {
+        IrConst *k = IrGenericArg_get_const(arg);
+        return IrGenericArg_from_const(
+                pawP_substitute_const(C, k, subst));
+    }
+}
+
+IrConst *pawP_substitute_const(struct Compiler *C, IrConst *k, struct Substitution subst)
+{
+    switch (k->kind) {
+        case IR_CONST_DECL:
+            return pawIr_new_const_decl(C, k->decl.did);
+        case IR_CONST_PENDING:
+            return pawIr_new_const_pending(C, k->pending.did);
+        case IR_CONST_VALUE:
+            return pawIr_new_const_value(C, k->value.value,
+                    pawP_substitute(C, k->value.type, subst));
+        case IR_CONST_INFER:
+            return pawIr_new_const_infer(C);
+    }
+}
+
+struct Instantiation pawP_instantiate_assoc(struct Compiler *C, IrType *type, IrType *method)
 {
     IrType *base = pawIr_get_context(C, method);
 
     struct Substitution subst;
     if (IrIsGeneric(base)) {
-        subst.generics = IrTypeList_new(C);
-        subst.types = IrTypeList_new(C);
-        IrTypeList_push(C, subst.generics, base);
-        IrTypeList_push(C, subst.types, type);
+        subst.params = IrGenericArgs_new(C);
+        subst.args = IrGenericArgs_new(C);
+        IrGenericArgs_push(C, subst.params, IrGenericArg_from_type(base));
+        IrGenericArgs_push(C, subst.args, IrGenericArg_from_type(type));
     } else {
-        subst.generics = IR_TYPE_SUBTYPES_(base);
-        subst.types = IR_TYPE_SUBTYPES_(type);
+        subst.params = IR_GENERIC_ARGS(base);
+        subst.args = IR_GENERIC_ARGS(type);
     }
 
-    if (subst.generics != NULL) {
-        paw_assert(subst.types != NULL);
-        method = pawP_substitute(C, loc, method, subst);
+    if (subst.params != NULL) {
+        paw_assert(subst.args != NULL);
+        method = pawP_substitute(C, method, subst);
     }
 
     return (struct Instantiation){

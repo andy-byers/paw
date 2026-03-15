@@ -3,24 +3,24 @@
 > NOTE: Paw is under active development and is not ready for production use.
 > See the [roadmap](#roadmap) to get an idea of where things are going.
 > Also see [known issues](#known-issues) for a list of known problems that will eventually be fixed.
+> Finally, this README needs to be updated (e.g. dynamic containers were repalced in the core language by arrays and slices, we are likely violating move semantics in some examples, etc.)
 
 A general-purpose programming language
 
-Paw is a high-level, statically-typed, ahead-of-time compiled, general-purpose programming language.
-Currently, the frontend is written in C and the LLVM interface in C++.
+Paw is a statically-typed, ahead-of-time compiled, general-purpose programming language.
 
 ## Features
 + Static strong typing
 + AOT compiled using LLVM
 + Bidirectional type checking
-+ Block expressions
++ Destructive move semantics
++ Manual memory management, RAII
 + Module system
 + Exhaustive pattern matching and sum types
 + Traits (interfaces checked at compile time)
 + Generics and generic bounds
-+ Unboxed objects using "inline" keyword
-+ "inout" function parameters
-+ Container literals (`[T]` and `[K: V]`)
++ Core language never uses dynamic memory
++ Standard library is optional
 
 ## Examples
 
@@ -33,24 +33,26 @@ pub fn main() {
 
 ### FizzBuzz
 ```paw
-pub fn main() {
+use io;
+
+pub fn main() -> Result<(), mem::OutOfMemory> {
     // Create a closure. The type of "n" is inferred as "int" and the 
-    // return type as "str".
+    // return type as "String".
     let fizzbuzz = |n| {
         if n % 15 == 0 { 
-            "FizzBuzz" 
+            "FizzBuzz".to_string() 
         } else if n % 3 == 0 {
-            "Fizz"
+            "Fizz".to_string()
         } else if n % 5 == 0 {
-            "Buzz" 
+            "Buzz".to_string() 
         } else { 
-            n.to_str() 
+            n.to_string() 
         }
     };
 
     // Call the closure for each integer 1 to 100, exclusive.
     for i in 1..100 {
-        println("fizzbuzz(\{i}) = \{fizzbuzz(i)}");
+        io::println(s"fizzbuzz(\{i}) = \{fizzbuzz(i)?}");
     }
 }
 ```
@@ -58,7 +60,7 @@ pub fn main() {
 ### Containers
 ```paw
 pub fn main() {
-    let list = []; // [int]
+    let list = Vec::new(); // [int]
 
     // add a single element to the end
     list.push(1); // [1]
@@ -67,7 +69,7 @@ pub fn main() {
     list ++= [2, 3, 4]; // [1, 2, 3, 4]
 
 
-    let map = [:]; // [char: int]
+    let map = Map::new(); // [char: int]
 
     // add a few key-value pairs
     map['a'] = 1;
@@ -92,12 +94,13 @@ In both cases, the datatype definition specifies only the data layout of the typ
 Methods and associated functions can be attached using an [`impl` block](#impl-blocks).
 ```paw
 struct Statistic {
-    pub name: str, // accessible from anywhere
+    pub name: String, // accessible from anywhere
     value: float, // only accessible from a method
 }
 ```
 
 ### Sum types
+> TODO: the example below is wrong. Expr has infinite size, need indirection
 Sum types in Paw consist of tagged unions created by an `enum` definition.
 Conceptually, an enum is an object that takes the value of one of its variants depending on the value of the discriminant field.
 In the example below, an instance of `Expr` must contain space for an integer large enough to distinguish 3 variants, as well as space for the largest of the possible variants (`Expr::Add` here).
@@ -137,10 +140,10 @@ Paw supports parametric polymorphism, a.k.a. generic type parameters.
 
 ```paw
 // type aliases can accept type arguments
-type VecList2<T> = [(T, T)];
+type PairSlice<T> = [](T, T);
 
-fn map2<X, Y>(f: fn(X, X) -> Y, xs: VecList2<X>) -> [Y] {
-    let ys = [];
+fn map2<X, Y>(f: fn(X, X) -> Y, xs: PairSlice<X>) -> [Y] {
+    let ys = Vec::new();
     // destructuring is supported in "for" loops and "let" declarations
     for (a, b) in xs {
         ys.push(f(a, b));
@@ -157,7 +160,7 @@ pub fn main() {
         (5, 6),
     ];
 
-    let data = map2(|x: int, y| x + y, data);
+    let data = map2(|x: int, y| x + y, data.to_slice());
 
     let total = 0;
     for value in data {
@@ -208,51 +211,16 @@ pub fn main() {
 }
 ```
 
-### Inout parameters
-Function arguments are normally passed by value in Paw.
-This behavior can be changed by using an inout parameter.
-An parameter is specified inout by writing a `&` before its name.
-In the example below, accesses to the `value` variable are made through a reference.
-Note, however, that the reference is never allowed to escape, as this would allow memory to be accessed outside of its lifetime.
+### Pointers
 ```paw
-pub fn increment(&value: int) {
-    value += 1;
+pub fn increment(value: *int) {
+    *value += 1;
 }
 
 pub fn main() {
     let value = 0;
-    increment(value);
+    increment(&value);
     assert(value == 1);
-}
-```
-
-### Value types
-Structures and enumerations have reference semantics by default.
-The `inline` keyword can be used to give a type value semantics.
-Primitives (`int`, `float`, etc.) and tuples are always value types.
-Inline types can be used to reduce memory consumption in programs containing many small objects.
-They can also be used to implement "newtype" wrappers with no additional runtime overhead.
-Note that `inline` cannot be used on a recursive type as this would cause resulting objects to have a size of infinity.
-```paw
-inline struct Data<T> {
-    pub value: T,
-}
-
-impl<T> Data<T> {
-    // Value types can be modified using inout parameters.
-    pub fn swap(&self, &rhs: Data<T>) {
-        let temp = self.value;
-        self.value = rhs.value;
-        rhs.value = temp;
-    }
-}
-
-pub fn main() {
-    // "data" consists of exactly 3 integers stored on the stack or in registers
-    let data = Data{value: Data{value: (1, (2, 3))}};
-
-    // all fields are copied: "copy" is independent from "data"
-    let copy = data;
 }
 ```
 
@@ -268,7 +236,7 @@ A panic can also be caused by calling the `panic` builtin function.
 |Precedence|Operator                 |Description                                  |Associativity|
 |:---------|:------------------------|:--------------------------------------------|:------------|
 |14        |`() [] . ?`              |Call, Subscript, Member access, Question mark|Left         |
-|13        |`! - ~ #`                |Not, Negate, Bitwise not, length             |Right        |
+|13        |`! - ~`                  |Not, Negate, Bitwise not                     |Right        |
 |12        |`as`                     |Cast                                         |Left         |
 |11        |`* / %`                  |Multiply, Divide, Modulus                    |Left         |
 |10        |`+ -`                    |Add, Subtract                                |Left         |
@@ -283,28 +251,20 @@ A panic can also be caused by calling the `panic` builtin function.
 |1         |`= op=`                  |Assignment, operator assignment              |Right        |
 
 ## Roadmap
-+ [ ] ensure mangling produces a unique name
++ [ ] add `mut` keyword
++ [ ] associated types (needed especially for iterator ergonomics)
++ [ ] const generics
++ [ ] `#[must_use]` or similar annotation on type declarations
++ [ ] allow linking in a custom "panic handler" for platforms where the default panic handler doesn't make sense (no OS to return back to, nowhere for error messages to go, etc.)
 + [ ] prevent duplicate methods across compatible inherent impl blocks
-+ [ ] support operators # and [] on slices
-+ [ ] make slice a builtin type (better syntax, allow creation with `container[range]` syntax, use mutability of container to determine slice mutablilty, etc.)
-+ [ ] make a note about "gotcha" situations involving slices (For example, if the container a slice is referencing is modified while the slice is live, it is possible for the container to be reallocated, leaving the slice pointing to the old allocation. The GC will keep the old allocation alive via an internal pointer, so while this won't cause a "use after free", it is likely to cause unexpected behavior.)
-+ [x] parameterize methods and associated functions on the type parameters of their containing impl blocks, as well as their own type parameters, then get rid of IrSignature::self member
-+ [x] consider collecting generic bounds into predicate lists to be validated after the main unification routine
-+ [ ] add check to make sure implemented trait methods are compatible with trait declarations
 + [ ] make sure to complain when generic params not mentioned on context of impl block. i.e. `impl<T> Trait<T> for Type {...}` is an error if `Type` has generic parameters.
-+ [ ] consider using `mut` to indicate mutability and make immutable the default for locals and arguments
-+ [ ] consider implementing either RAII or "defer" for cleaning up resources
 + [ ] add overflow checks for `paw_Int` operations during constant folding and codegen
 
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
 + Edge cases exist related to impl blocks and traits
-+ Fix concatenation-assignment operator
 + Need to keep track of source-to-source mappings that result from IR transformations (e.g. when ForExpr AST node is lowered into a Loop + Match)
 + Don't throw errors in 'lex.c'. Return a token of type `TK_ERROR` and let the parser handle it. Allows for more sensible error messages.
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
     + See TODO comment in `test_error.c` `test_divergence` function
-+ Need to prevent inout parameters from binding to container elements
-    + If the container is modified, the pointer will point to freed memory
-    + This rule must be applied transitively, e.g. modify(list[0].field) should not be allowed if list[0] is an inline type
 + Remove dependency on clang (as a linker driver) and invoke linker manually

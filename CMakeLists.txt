@@ -14,7 +14,6 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 endif()
 
 set(PAW_LLVM_PATH "" CACHE PATH "Path to LLVM library")
-set(PAW_GC_DIR "" CACHE PATH "Path to BDWGC directory")
 set(PAW_CLANG_PATH "" CACHE PATH "Path to clang binary")
 set(PAW_BINARY_DIR "" CACHE PATH "Location of compilation artifacts")
 
@@ -40,7 +39,7 @@ if(${CMAKE_C_COMPILER_ID} STREQUAL MSVC)
             INTERFACE /W2)
 else()
     target_compile_options(paw_context
-            INTERFACE -Wall -Wextra -Wpedantic -Wsign-conversion 
+            INTERFACE -Wall -Wextra -Wpedantic -Wsign-conversion
                       -Wno-unused-function)
     target_link_libraries(paw_context
             INTERFACE m)
@@ -67,6 +66,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/layout.h
     ${PAW_SOURCE_DIR}/lex.h
     ${PAW_SOURCE_DIR}/lib.h
+    ${PAW_SOURCE_DIR}/mangle.h
     ${PAW_SOURCE_DIR}/map.h
     ${PAW_SOURCE_DIR}/match.h
     ${PAW_SOURCE_DIR}/mem.h
@@ -100,6 +100,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/debug.c
     ${PAW_SOURCE_DIR}/decision.c
     ${PAW_SOURCE_DIR}/dominance.c
+    ${PAW_SOURCE_DIR}/dropgen.c
     ${PAW_SOURCE_DIR}/env.c
     ${PAW_SOURCE_DIR}/error.c
     ${PAW_SOURCE_DIR}/exhaustiveness.c
@@ -118,6 +119,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/lower_ast.c
     ${PAW_SOURCE_DIR}/lower_hir.c
     ${PAW_SOURCE_DIR}/lower_type.c
+    ${PAW_SOURCE_DIR}/mangle.c
     ${PAW_SOURCE_DIR}/map.c
     ${PAW_SOURCE_DIR}/mem.c
     ${PAW_SOURCE_DIR}/mir.c
@@ -155,7 +157,6 @@ target_compile_definitions(paw
            PAW_STDLIB_PATH="${PAW_STDLIB_PATH}"
            PAW_CLANG_PATH="${PAW_CLANG_PATH}"
            PAW_ROOT_DIR="${PAW_ROOT_DIR}"
-           PAW_GC_DIR="${PAW_GC_DIR}"
            PAW_STRESS=${PAW_STRESS})
 target_link_libraries(paw
     PRIVATE paw_context paw_codegen)

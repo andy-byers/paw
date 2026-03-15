@@ -48,11 +48,11 @@ pub fn test_indirect_element() {
 pub fn test_indirect_element_2() {
     let t = [1];
 
-    // index is result of stack operation
+    // index is rvalue
     t[black_box(0)] += 10;
     assert(t[0] == 11);
 
-    // index is a local variable
+    // index is a lvalue
     let i = black_box(0);
     t[i] += 1;
     assert(t[0] == 12);

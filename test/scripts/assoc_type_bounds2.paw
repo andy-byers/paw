@@ -1,0 +1,28 @@
+// assoc_type_bounds2.paw
+
+// <Self as A<Self>>::T: B<<Self as A<Self>>::T>
+//
+// <Self as A>::T: B
+pub trait A {
+    type T: B;
+}
+
+pub trait B {}
+
+struct TA;
+
+// <TA as A<TA>>::T := TB
+// <TA as A<TA>>::T: B<<TA as A<TA>>::T>
+// TB: B<TB>
+//
+// <TA as A>::T := TB
+// <TA as A>::T: B
+// TB: B
+impl A for TA {
+    type T = TB;
+}
+
+struct TB;
+
+//impl B for TB {}
+

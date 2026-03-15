@@ -2,20 +2,33 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// TODO: need to use addrof to get address of local instead of using it directly so using a local as "self" before init. can be detected
+// analysis.c: Implements definite assignment analysis over MIR, preventing
+//   scoped/"automatic" variables from being accessed outside their lifetimes.
+//   The lifetime of such a variable starts at the point of initialization and
+//   lasts until the variable goes out of scope or is moved (a destructive
+//   move).
+//
+//   Note that the type checker has already prevented moves from pointed-to
+//   objects, as well as moves from subobjects. Only complete objects stored
+//   in local variables need to be considered.
 
 #include "analysis.h"
 #include "ir_type.h"
 #include "mir.h"
+#include "unify.h"
 
 struct Variable {
     IrType *type;
+    struct Variable *parent;
     struct VariableList *subvars;
     int id;
 };
 
-struct BlockSet {
-    BitSet *da;
+enum VariableState {
+    VAR_INIT,
+    VAR_MOVED,
+    VAR_UNINIT,
+    VAR_MAYBE_MOVED,
 };
 
 struct VariableAnalyzer {
@@ -23,36 +36,43 @@ struct VariableAnalyzer {
     struct Pool *pool;
     struct Mir *mir;
 
-    struct BlockSet *current_block;
+    struct ConditionalMoves *cmoves;
+
+    struct VariableStates *current;
     struct VarCache *varcache;
 
-    struct BlockSets *blocks;
+    struct BlockStates *blocks;
     struct WorkPool *work;
 
-    // corresponds to MIR locals
+    // corresponds to MIR registers
     struct VariableList *locals;
 
     // counter to help generate variable IDs
     int num_vars;
 };
 
-static inline paw_Uint place_hash(void *ctx, struct MirPlace place)
+static paw_Uint place_hash(void *ctx, struct MirPlace place)
 {
     PAW_UNUSED(ctx);
     return (place.kind + 1) * (paw_Uint)place.value;
 }
 
-static inline paw_Bool place_equals(void *ctx, struct MirPlace lhs, struct MirPlace rhs)
+static paw_Bool place_equals(void *ctx, struct MirPlace lhs, struct MirPlace rhs)
 {
     PAW_UNUSED(ctx);
     return lhs.kind == rhs.kind
         && lhs.value == rhs.value;
 }
+
+// TODO: I think VarCache could be keyed on MirRegister instead of MirPlace
+DEFINE_MAP(struct VariableAnalyzer, BlockSet, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *)
+DEFINE_MAP(struct VariableAnalyzer, ConditionalMoves, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirPlace)
 DEFINE_MAP(struct VariableAnalyzer, VarCache, pawP_alloc, place_hash, place_equals, struct MirPlace, struct Variable *)
 DEFINE_MAP(struct VariableAnalyzer, WorkPool, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *)
 DEFINE_MAP_ITERATOR(WorkPool, MirBlock, void *)
+DEFINE_LIST(struct VariableAnalyzer, VariableStates, unsigned char)
 DEFINE_LIST(struct VariableAnalyzer, VariableList, struct Variable *)
-DEFINE_LIST(struct VariableAnalyzer, BlockSets, struct BlockSet)
+DEFINE_LIST(struct VariableAnalyzer, BlockStates, VariableStates *)
 
 static IrTypeList *get_subtypes(struct Mir *mir, IrType *type)
 {
@@ -60,7 +80,7 @@ static IrTypeList *get_subtypes(struct Mir *mir, IrType *type)
         case kIrAdt: {
             struct IrAdt *adt = IrGetAdt(type);
             struct IrAdtDef const *def = pawIr_get_adt_def(mir->C, adt->did);
-            if (def->is_inline && def->is_struct)
+            if (def->is_struct)
                 return pawP_instantiate_struct_fields(mir->C, adt);
             return NULL;
         }
@@ -72,22 +92,12 @@ static IrTypeList *get_subtypes(struct Mir *mir, IrType *type)
     }
 }
 
-static struct Variable *new_variable(struct VariableAnalyzer *V, IrType *type)
+static struct Variable *new_variable(struct VariableAnalyzer *V, IrType *type, struct Variable *parent)
 {
-    struct Mir *mir = V->mir;
-    VariableList *subvars = VariableList_new(V);
-    IrTypeList *subtypes = get_subtypes(mir, type);
-    if (subtypes != NULL) {
-        IrType *const *ptype;
-        K_LIST_FOREACH (subtypes, ptype) {
-            struct Variable *subvar = new_variable(V, *ptype);
-            VariableList_push(V, subvars, subvar);
-        }
-    }
     struct Variable *var = pawP_alloc(V->mir->pool, NULL, 0, sizeof *var);
     *var = (struct Variable){
         .id = V->num_vars++,
-        .subvars = subvars,
+        .parent = parent,
         .type = type,
     };
     return var;
@@ -110,68 +120,80 @@ static void remove_work_item(struct VariableAnalyzer *V, MirBlock w)
     WorkPool_remove(V, V->work, w);
 }
 
-static struct Variable *get_local(struct VariableAnalyzer *V, MirLocal L)
+static struct Variable *get_local(struct VariableAnalyzer *V, MirRegister r)
 {
-    return K_LIST_AT(V->locals, L.value);
+    return K_LIST_AT(V->locals, r.value);
 }
 
 static struct Variable **find_variable(struct VariableAnalyzer *V, struct MirPlace p)
 {
-    if (p.kind == MIR_PLACE_LOCAL) {
-        return &K_LIST_AT(V->locals, p.L.value);
+    if (p.kind == MIR_PLACE_REGISTER) {
+        return &K_LIST_AT(V->locals, p.r.value);
     } else {
         return VarCache_get(V, V->varcache, p);
     }
 }
 
-static struct BlockSet *get_block(struct VariableAnalyzer *V, MirBlock b)
+static struct VariableStates *get_block(struct VariableAnalyzer *V, MirBlock b)
 {
-    return &K_LIST_AT(V->blocks, b.value);
+    return K_LIST_AT(V->blocks, b.value);
 }
 
-static BitSet *new_set(struct VariableAnalyzer *V, int count)
+static void clear_states(VariableStates *states, enum VariableState value)
 {
-    return pawP_bitset_new(V->C, count);
+    memset(states->data, (int)value, (size_t)states->count * sizeof(states->data[0]));
 }
 
-static int set_count(BitSet const *set)
+static VariableStates *new_states(struct VariableAnalyzer *V, int count)
 {
-    return pawP_bitset_count(set);
+    VariableStates *states = VariableStates_new(V);
+    VariableStates_resize(V, states, count);
+    clear_states(states, VAR_INIT);
+    return states;
 }
 
-static BitSet *copy_set(struct VariableAnalyzer *V, BitSet const *set)
+static int states_count(VariableStates const *states)
 {
-    return pawP_bitset_copy(V->C, set);
+    return states->count;
 }
 
-static void clear_set(BitSet *set)
+static void copy_states(VariableStates const *from, VariableStates *to)
 {
-    pawP_bitset_clear_range(set, 0, set_count(set));
+    paw_assert(from->count == to->count);
+    memcpy(to->data, from->data, (size_t)from->count * sizeof(from->data[0]));
 }
 
-static paw_Bool set_contains(BitSet const *set, int id)
+static enum VariableState states_get(VariableStates const *states, int id)
 {
-    return pawP_bitset_get(set, id);
+    return VariableStates_get(states, id);
 }
 
-static void set_insert(BitSet *bs, int id)
+static void states_set(VariableStates *bs, int id, enum VariableState value)
 {
-    pawP_bitset_set(bs, id);
+    VariableStates_set(bs, id, (unsigned char)value);
 }
 
-static BitSet *intersect_sets(struct VariableAnalyzer *V, BitSet const *x, BitSet const *y)
+static void meet_states(struct VariableAnalyzer *V, VariableStates const *x, VariableStates *y)
 {
-    return pawP_bitset_and(V->mir->C, x, y);
+    paw_assert(states_count(x) == states_count(y));
+
+    unsigned char const *a;
+    unsigned char *b;
+    K_LIST_ZIP (x, a, y, b) {
+        *b = *a == VAR_UNINIT || *b == VAR_UNINIT ? VAR_UNINIT :
+            *a == VAR_MOVED || *b == VAR_MOVED ? VAR_MOVED :
+            VAR_INIT;
+    }
 }
 
 #include <stdio.h>
 
-void visualize_block(struct BlockSet const *bs)
+void visualize_block(struct VariableStates const *bs)
 {
-    if (bs->da != NULL) {
-        for (int i = 0; i < set_count(bs->da); ++i) {
-            int const b = set_contains(bs->da, i);
-            printf("%s", b ? "* " : ". ");
+    if (bs != NULL) {
+        for (int i = 0; i < states_count(bs); ++i) {
+            enum VariableState const state = states_get(bs, i);
+            printf("%s", state == VAR_INIT ? "* " : ". ");
         }
     } else {
         printf("(null)");
@@ -183,38 +205,37 @@ void visualize_blocks(struct VariableAnalyzer const *V)
 {
     for (int i = 0; i < V->locals->count; ++i) {
         struct Variable const *var = V->locals->data[i];
-        struct MirLocalData const *data = mir_local_data(V->mir, MIR_LOCAL(i));
+        struct MirRegisterData const *data = mir_reg_data(V->mir, MIR_REG(i));
         char const *type = pawIr_print_type(V->mir->C, data->type);
         printf("Variable #%d = L%d (%s)\n", var->id, i, type);
     }
     for (int i = 0; i < V->blocks->count; ++i) {
         printf("%%bb%d  ", i);
-        visualize_block(&V->blocks->data[i]);
+        visualize_block(V->blocks->data[i]);
     }
 }
 
 static void indicate_variable_use(struct VariableAnalyzer *V, struct Variable const *v)
 {
-    if (v->subvars->count == 0 && !set_contains(V->current_block->da, v->id)) {
+    if (states_get(V->current, v->id) != VAR_INIT) {
         // TODO: better error message including name of local
         struct Mir *mir = V->mir;
+        enum VariableState const state = states_get(V->current, v->id);
         Str const *modname = ModuleInfo_get(mir->C->modinfo, mir->modno).name;
-        pawErr_generic_error(ENV(V->mir), modname, (struct SourceLoc){0}, "use before initialization");
+        pawErr_generic_error(ENV(V->mir), modname, (struct SourceSpan){0},
+                state == VAR_UNINIT ? "use before initialization" : "use after move");
     }
-
-    struct Variable *const *subvar;
-    K_LIST_FOREACH (v->subvars, subvar)
-        indicate_variable_use(V, *subvar);
 }
 
-static void indicate_variable_def(struct VariableAnalyzer *V, struct Variable *var)
+static void indicate_variable_def(struct VariableAnalyzer *V, struct Variable const *var)
 {
-    struct Variable *const *subvar;
-    K_LIST_FOREACH (var->subvars, subvar)
-        indicate_variable_def(V, *subvar);
+    states_set(V->current, var->id, VAR_INIT);
+}
 
-    if (var->subvars->count == 0)
-        set_insert(V->current_block->da, var->id);
+static void indicate_variable_move(struct VariableAnalyzer *V, struct Variable const *var)
+{
+    if (!pawIr_is_copyable(V->C, var->type))
+        states_set(V->current, var->id, VAR_MOVED);
 }
 
 static void maybe_indicate_use(struct VariableAnalyzer *V, struct MirPlace p)
@@ -229,136 +250,122 @@ static void maybe_indicate_def(struct VariableAnalyzer *V, struct MirPlace p)
     if (pvar != NULL) indicate_variable_def(V, *pvar);
 }
 
+static void maybe_indicate_move(struct VariableAnalyzer *V, struct MirPlace p)
+{
+    maybe_indicate_use(V, p);
+
+    IrType *pointee = ir_auto_deref(p.type);
+    if (!pawIr_is_copyable(V->C, pointee)) {
+        struct Variable *const *pvar = find_variable(V, p);
+        if (pvar != NULL) indicate_variable_move(V, *pvar);
+    }
+}
+
 static void bind_addr_to_var(struct VariableAnalyzer *V, struct MirPlace addr, struct Variable *var)
 {
     VarCache_insert(V, V->varcache, addr, var);
 }
 
-static paw_Bool is_inline_enum_type(struct VariableAnalyzer *V, IrType *type)
+static paw_Bool is_enum_type(struct VariableAnalyzer *V, IrType *type)
 {
     if (IrIsAdt(type)) {
         struct IrAdtDef const *def = pawIr_get_adt_def(V->mir->C, IR_TYPE_DID(type));
-        return !def->is_struct && def->is_inline;
-    }
-    return PAW_FALSE;
-}
-
-static paw_Bool is_boxed_adt(struct VariableAnalyzer *V, IrType *type)
-{
-    if (IrIsAdt(type)) {
-        struct IrAdtDef const *def = pawIr_get_adt_def(V->mir->C, IR_TYPE_DID(type));
-        return !def->is_inline;
+        return !def->is_struct;
     }
     return PAW_FALSE;
 }
 
 static void visit_block(struct VariableAnalyzer *V, MirBlock b)
 {
-    struct BlockSet *bs = &K_LIST_AT(V->blocks, b.value);
+    struct VariableStates **bs = &K_LIST_AT(V->blocks, b.value);
     struct MirBlockData *bb = mir_bb_data(V->mir, b);
-    V->current_block = bs;
+    V->current = *bs;
 
     // set of variables that were definitely assigned the last time this
     // block was considered
-    BitSet const *last_da = bs->da;
+    VariableStates const *last_da = *bs;
 
     if (b.value == 0) {
-        clear_set(bs->da);
+        clear_states(*bs, VAR_UNINIT);
         // write to function arguments in entry block
         int const num_args = ir_fn_params(V->C, V->mir->type)->count;
         for (int i = 0; i < num_args; ++i) {
-            struct Variable *var = VariableList_get(V->locals, 1 + i);
+            struct Variable const *var = VariableList_get(V->locals, 1 + i);
             indicate_variable_def(V, var);
         }
     } else {
-        // "before" set starts as the intersection of "after" sets from
-        // predecessors. All basic blocks except for the entry block have
-        // at least 1 predecessor.
-        MirBlock const *pp;
-        BitSet *result = NULL;
-        K_LIST_FOREACH (bb->predecessors, pp) {
-            // only consider predecessors that have already been visited
-            // so definite assignments can propagate across loop headers
-            BitSet *after = get_block(V, *pp)->da;
-            result = result == NULL ? after
-                : intersect_sets(V, result, after);
+        // compute meet of predecessor block states
+        int index = 0;
+        K_LIST_XFOREACH (bb->predecessors, MirBlock const, pp) {
+            VariableStates const *states = get_block(V, *pp);
+            if (index++ == 0) {
+                copy_states(states, V->current);
+            } else {
+                meet_states(V, states, V->current);
+            }
         }
-        bs->da = copy_set(V, result);
     }
 
     // must run before SSA conversion
     paw_assert(bb->joins->count == 0);
 
-    struct MirInstruction *const *pinstr;
-    K_LIST_FOREACH (bb->instructions, pinstr) {
-        struct MirInstruction *instr = *pinstr;
-        switch (MIR_KINDOF(instr)) {
+    K_LIST_XFOREACH (bb->instructions, struct MirInstruction *const, pinstr) {
+        switch (MIR_KINDOF(*pinstr)) {
             case kMirAddrOf: {
-                struct MirAddrOf *x = MirGetAddrOf(instr);
-                struct Variable *const *pvar = find_variable(V, x->input);
-                if (pvar != NULL) bind_addr_to_var(V, x->output, *pvar);
+                struct MirAddrOf *x = MirGetAddrOf(*pinstr);
+                maybe_indicate_use(V, x->input);
+                maybe_indicate_def(V, x->output);
                 break;
             }
 
-            case kMirLoad:
-                maybe_indicate_use(V, MirGetLoad(instr)->pointer);
+            case kMirLoad: {
+                struct MirLoad const *x = MirGetLoad(*pinstr);
+                maybe_indicate_move(V, x->pointer);
+                maybe_indicate_def(V, x->output);
                 break;
-            case kMirStore:
-                maybe_indicate_def(V, MirGetStore(instr)->pointer);
+            }
+
+            case kMirStore: {
+                struct MirStore const *x = MirGetStore(*pinstr);
+                maybe_indicate_use(V, x->value);
+                maybe_indicate_def(V, x->pointer);
+                break;
+            }
+
+            case kMirKill:
+                maybe_indicate_move(V, MirGetKill(*pinstr)->target);
+                break;
+
+            case kMirDrop:
                 break;
 
             case kMirStructGEP: {
-                struct MirStructGEP *x = MirGetStructGEP(instr);
-                if (IrIsPtr(x->object.type)) {
-                    struct IrType *pointee = IrGetPtr(x->object.type)->pointee;
-                    if (is_inline_enum_type(V, pointee)) {
-                        if (x->field == 0) {
-                            struct Variable *const *pvar = find_variable(V, x->object);
-                            if (pvar != NULL) bind_addr_to_var(V, x->output, *pvar);
-                        }
-                        break;
-                    }
-                }
-                if (is_boxed_adt(V, x->object.type)) {
-                    struct Variable *const *pvar = find_variable(V, x->object);
-                    if (pvar != NULL && !set_contains(bs->da, (*pvar)->id)) {
-                        struct Mir *mir = V->mir;
-                        Str const *modname = ModuleInfo_get(mir->C->modinfo, mir->modno).name;
-                        pawErr_generic_error(ENV(V->mir), modname, (struct SourceLoc){0}, "boxed ADT requires initializer");
-                    }
-                    break;
-                }
-                struct Variable *const *pvar = find_variable(V, x->object);
-                if (pvar != NULL) {
-                    struct Variable *subvar = VariableList_get((*pvar)->subvars, x->field);
-                    bind_addr_to_var(V, x->output, subvar);
-                }
+                struct MirStructGEP const *x = MirGetStructGEP(*pinstr);
+                maybe_indicate_use(V, x->object);
+                maybe_indicate_def(V, x->output);
                 break;
             }
 
-            case kMirCall: {
-                struct MirCall *x = MirGetCall(instr);
-                maybe_indicate_use(V, x->target);
-
-                struct MirPlace const *pplace;
-                K_LIST_FOREACH (x->args, pplace)
-                    maybe_indicate_use(V, *pplace);
+            case kMirArrayGep: {
+                struct MirArrayGep const *x = MirGetArrayGep(*pinstr);
+                maybe_indicate_use(V, x->array);
+                maybe_indicate_use(V, x->index);
+                maybe_indicate_def(V, x->output);
                 break;
             }
 
-            case kMirCapture: {
-                struct MirCapture *x = MirGetCapture(instr);
-                maybe_indicate_use(V, x->target);
+            default: {
+                struct MirPlacePtrList const *loads = pawMir_get_loads(V->mir, *pinstr);
+                struct MirPlacePtrList const *stores = pawMir_get_stores(V->mir, *pinstr);
+                K_LIST_XFOREACH (loads, struct MirPlace *const, p) maybe_indicate_move(V, **p);
+                K_LIST_XFOREACH (stores, struct MirPlace *const, p) maybe_indicate_def(V, **p);
                 break;
             }
-
-            default:
-                break;
         }
     }
 
-    paw_assert(bs->da->count <= last_da->count);
-    if (bs->da->count < last_da->count) {
+    paw_assert(states_count(*bs) <= last_da->count);
+    if (states_count(*bs) < last_da->count) {
         MirBlock const *pb;
         K_LIST_FOREACH (bb->successors, pb)
             add_work_item(V, *pb);
@@ -366,37 +373,278 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
     }
 }
 
-static void initialize_data_structures(struct VariableAnalyzer *V)
+static struct MirPlace get_drop_flag(struct VariableAnalyzer *V, int id)
 {
-    VariableList_resize(V, V->locals, V->mir->locals->count);
+    return *ConditionalMoves_get(V, V->cmoves, MIR_REG(id));
+}
 
-    int index;
-    struct MirLocalData const *pdata;
-    K_LIST_ENUMERATE (V->mir->local_data, index, pdata) {
-        struct Variable *local = new_variable(V, pdata->type);
-        K_LIST_AT(V->locals, index) = local;
+static paw_Bool is_known_cmove(struct VariableAnalyzer *V, int id)
+{
+    return ConditionalMoves_get(V, V->cmoves, MIR_REG(id)) != NULL;
+}
+
+static struct MirPlace add_drop_flag(struct Mir *mir, MirRegister r)
+{
+    int const num_registers = mir->registers->count;
+    IrType *bool_type = pawP_builtin_type(mir->C, BUILTIN_BOOL);
+    Str const *name = pawP_format_string(mir->C, "%%drop_flag_%d)", r.value);
+    MirRegisterDataList_push(mir, mir->registers, (struct MirRegisterData){
+                .is_nontrivial = PAW_FALSE,
+                .is_captured = PAW_FALSE,
+                .type = bool_type,
+                .name = name,
+            });
+
+    return pawMir_get_register(mir, MIR_REG(num_registers));
+}
+
+static void determine_cmoves_aux(struct VariableAnalyzer *V, VariableStates const *x, VariableStates const *y)
+{
+    unsigned char const *a;
+    unsigned char const *b;
+    MirRegister local = MIR_RESULT_REG;
+    K_LIST_ZIP (x, a, y, b) {
+        if (*a != *b && (*a == VAR_MOVED || *b == VAR_MOVED)) {
+            if (!is_known_cmove(V, local.value)) {
+                struct MirPlace const flag = add_drop_flag(V->mir, local);
+                ConditionalMoves_insert(V, V->cmoves, local, flag);
+            }
+        }
+        ++local.value;
+    }
+}
+
+static struct MirInstruction *drop_flag_setter(struct VariableAnalyzer *V, int id, paw_Bool value)
+{
+    struct MirPlace const kbool = {
+        .type = pawP_builtin_type(V->C, BUILTIN_BOOL),
+        .k = V->mir->kcache->boolk[value],
+        .kind = MIR_PLACE_CONSTANT,
+    };
+    return pawMir_new_move(V->mir, (struct SourceSpan){0},
+            get_drop_flag(V, id), kbool);
+}
+
+static struct MirPlace new_register(struct Mir *mir, IrType *type)
+{
+    MirRegisterDataList_push(mir, mir->registers,
+            (struct MirRegisterData){
+                .type = type,
+            });
+    return (struct MirPlace){
+        .r.value = mir->registers->count - 1,
+        .kind = MIR_PLACE_REGISTER,
+        .type = type,
+    };
+}
+
+static MirBlock new_basic_block(struct VariableAnalyzer *V)
+{
+    VariableStates *states = new_states(V, V->num_vars);
+    BlockStates_push(V, V->blocks, states);
+
+    struct MirBlockData *after_data = pawMir_new_block(V->mir, (MirScope){0});
+    MirBlockDataList_push(V->mir, V->mir->blocks, after_data);
+    return MIR_BB(V->mir->blocks->count - 1);
+}
+
+static void push_instruction(struct Mir *mir, struct MirBlockData const *data, struct MirInstruction *instr)
+{
+    MirInstructionList_push(mir, data->instructions, instr);
+}
+
+static void terminate_goto(struct Mir *mir, struct MirBlockData const *data, MirBlock target)
+{
+    data->successors->count = 0;
+    MirBlockList_push(mir, data->successors, target);
+
+    push_instruction(mir, data,
+            pawMir_new_goto(mir, (struct SourceSpan){0}));
+}
+
+static void terminate_branch(struct Mir *mir, struct MirBlockData const *data, struct MirPlace condition, MirBlock if_true, MirBlock if_false)
+{
+    data->successors->count = 0;
+    MirBlockList_push(mir, data->successors, if_true);
+    MirBlockList_push(mir, data->successors, if_false);
+
+    push_instruction(mir, data,
+            pawMir_new_branch(mir, (struct SourceSpan){0}, condition));
+}
+
+static struct MirPlace push_move(struct Mir *mir, struct MirBlockData const *data, struct MirPlace pointer)
+{
+    struct MirPlace const value = new_register(mir, ir_deref(pointer.type));
+    push_instruction(mir, data,
+            pawMir_new_move(mir, (struct SourceSpan){0}, pointer, value));
+    return value;
+}
+
+static void determine_cmoves(struct VariableAnalyzer *V)
+{
+    struct Mir *mir = V->mir;
+    K_LIST_XFOREACH (mir->blocks, struct MirBlockData *const, pbb) {
+        struct MirBlockData *bb = *pbb;
+
+        VariableStates const *current = NULL;
+        K_LIST_XFOREACH (bb->predecessors, MirBlock const, pp) {
+            VariableStates const *next = get_block(V, *pp);
+            if (current != NULL) {
+                determine_cmoves_aux(V, current, next);
+            } else {
+                current = next;
+            }
+        }
     }
 
-    BlockSets_resize(V, V->blocks, V->mir->blocks->count);
+    K_LIST_XFOREACH (mir->blocks, struct MirBlockData *const, pbb) {
+        struct MirBlockData *bb = *pbb;
+
+        for (int i = 0; i < bb->instructions->count; ++i) {
+#define SET_DROP_FLAG(Id_, Value_, Index_) do { \
+            struct MirInstruction *setter = drop_flag_setter(V, Id_, Value_); \
+            MirInstructionList_insert(mir, bb->instructions, Index_, setter); \
+        } while (0)
+
+            struct MirInstruction *instr = MirInstructionList_get(bb->instructions, i);
+            if (!MirIsKill(instr)) {
+                struct MirPlacePtrList const *loads = pawMir_get_loads(mir, instr);
+                K_LIST_XFOREACH (loads, struct MirPlace *const, p) {
+                    struct Variable *const *pvar = find_variable(V, **p);
+                    if (pvar != NULL && is_known_cmove(V, (*pvar)->id))
+                        SET_DROP_FLAG((*pvar)->id, PAW_FALSE, i++);
+                }
+
+                struct MirPlacePtrList const *stores = pawMir_get_loads(mir, instr);
+                K_LIST_XFOREACH (stores, struct MirPlace *const, p) {
+                    struct Variable *const *pvar = find_variable(V, **p);
+                    if (pvar != NULL && is_known_cmove(V, (*pvar)->id))
+                        SET_DROP_FLAG((*pvar)->id, PAW_TRUE, i++);
+                }
+            }
+
+#undef SET_DROP_FLAG
+        }
+    }
+    // BEFORE
+    //
+    //     %before:
+    //       drop %local
+    //       ...
+    //
+    // AFTER
+    //
+    //     %before:
+    //       br %flag, %drop, %join
+    //
+    //     %drop:
+    //       drop %local
+    //       goto %join
+    //
+    //     %join:
+    //       ...
+    //
+    BlockSet *omit_blocks = BlockSet_new(V);
+    for (int i = 0; i < mir->blocks->count; ++i) {
+        MirBlock const before = MIR_BB(i);
+        if (BlockSet_get(V, omit_blocks, before) != NULL)
+            continue; // block contains generated drop
+        struct MirBlockData const *before_data = mir_bb_data(mir, before);
+        for (int j = 0; j < before_data->instructions->count; ++j) {
+            struct MirInstruction *drop_instr = MirInstructionList_get(before_data->instructions, j);
+            if (MirIsDrop(drop_instr)) {
+                struct Variable *const *pvar = find_variable(V, MirGetDrop(drop_instr)->target);
+                if (pvar != NULL && is_known_cmove(V, (*pvar)->id)) {
+                    // Add new basic blocks at the end of the list so they will be visited in
+                    // a future iteration.
+                    MirBlock const join = new_basic_block(V);
+                    MirBlock const drop = new_basic_block(V);
+                    struct MirBlockData *join_data = mir_bb_data(mir, join);
+                    struct MirBlockData *drop_data = mir_bb_data(mir, drop);
+
+                    K_LIST_XFOREACH (before_data->successors, MirBlock const, after) {
+                        struct MirBlockData const *after_data = mir_bb_data(mir, *after);
+                        int const pred = mir_which_pred(mir, *after, before);
+                        MirBlockList_set(after_data->predecessors, pred, join);
+                        MirBlockList_push(mir, join_data->successors, *after);
+                    }
+
+                    MirBlockList_push(mir, join_data->predecessors, before);
+                    MirBlockList_push(mir, join_data->predecessors, drop);
+                    MirBlockList_push(mir, drop_data->predecessors, before);
+
+                    push_instruction(mir, drop_data, drop_instr);
+                    terminate_goto(mir, drop_data, join);
+
+                    // add the instructions from "before" that need to be executed after the
+                    // "drop" instruction, including the terminator
+                    for (int j2 = j + 1; j2 < before_data->instructions->count; ++j2) {
+                        struct MirInstruction *instr2 = MirInstructionList_get(before_data->instructions, j2);
+                        MirInstructionList_push(mir, join_data->instructions, instr2);
+                    }
+                    before_data->instructions->count = j; // omit "drop" instruction
+                    // if *flag { goto drop; } else { goto join; }
+                    struct MirPlace const drop_flag = get_drop_flag(V, (*pvar)->id);
+                    terminate_branch(mir, before_data, drop_flag, drop, join);
+
+                    BlockSet_insert(V, omit_blocks, drop, NULL);
+                }
+            }
+        }
+    }
+}
+
+static void initialize_data_structures(struct VariableAnalyzer *V)
+{
+    VariableList_reserve(V, V->locals, V->mir->registers->count);
+
+    int index;
+    struct MirRegisterData const *pdata;
+    K_LIST_ENUMERATE (V->mir->registers, index, pdata) {
+        struct Variable *local = new_variable(V, pdata->type, NULL);
+        VariableList_push(V, V->locals, local);
+    }
+
+    BlockStates_reserve(V, V->blocks, V->mir->blocks->count);
 
     struct MirBlockData *const *pbb;
     K_LIST_ENUMERATE (V->mir->blocks, index, pbb) {
-        struct BlockSet *bs = get_block(V, MIR_BB(index));
-        bs->da = new_set(V, V->num_vars);
-        pawP_bitset_set_range(bs->da, 0, V->num_vars);
+        VariableStates *states = new_states(V, V->num_vars);
+        BlockStates_push(V, V->blocks, states);
         add_work_item(V, MIR_BB(index));
+    }
+}
+
+static void remove_unnecessary_drops(struct VariableAnalyzer *V, MirBlock b)
+{
+    struct VariableStates **bs = &K_LIST_AT(V->blocks, b.value);
+    struct MirBlockData *bb = mir_bb_data(V->mir, b);
+    V->current = *bs;
+
+    K_LIST_XFOREACH (bb->instructions, struct MirInstruction *, pinstr) {
+        if (MirIsDrop(*pinstr)) {
+            struct MirDrop const drop = *MirGetDrop(*pinstr);
+            struct Variable const *var = *find_variable(V, drop.target);
+            enum VariableState const state = states_get(V->current, var->id);
+            if ((state != VAR_INIT && !is_known_cmove(V, var->id))
+                    || !pawIr_needs_drop(V->C, ir_auto_deref(var->type)))
+                *pinstr = pawMir_new_noop(V->mir, drop.span);
+        }
     }
 }
 
 static void ensure_variable_initialization_before_use(struct Mir *mir)
 {
     struct Compiler *C = mir->C;
+    pawU_enter_binder(C->U, SCAN_STR(mir->C, "TODO"));
+
     struct VariableAnalyzer *V = &(struct VariableAnalyzer){
         .pool = pawP_pool_new(C, C->aux_stats),
         .mir = mir,
         .C = C,
     };
-    V->blocks = BlockSets_new(V);
+    V->cmoves = ConditionalMoves_new(V);
+    V->blocks = BlockStates_new(V);
     V->locals = VariableList_new(V);
     V->varcache = VarCache_new(V);
     V->work = WorkPool_new(V);
@@ -407,115 +655,19 @@ static void ensure_variable_initialization_before_use(struct Mir *mir)
         visit_block(V, w);
         remove_work_item(V, w);
     }
+
+    determine_cmoves(V);
+
+    for (int b = 0; b < mir->blocks->count; ++b)
+        remove_unnecessary_drops(V, MIR_BB(b));
+
+    pawU_leave_binder(C->U);
 }
 
 void pawA_validate(struct Mir *mir)
 {
+    pawMir_merge_redundant_blocks(mir);
+
     ensure_variable_initialization_before_use(mir);
 }
 
-
-//Mir {
-//  bb0 {
-//    alloc L0 ("&int")
-//    alloc L1 ("&int")
-//    alloc L2 ("&bool")
-//    goto bb1
-//  }
-//  bb1 {
-//    alloc L3 ("&int")
-//    _0 = *L1
-//    switch _0 => [1: bb2, 3: bb4, _: bb8]
-//  }
-//  bb2 {
-//    goto bb3
-//  }
-//  bb3 {
-//    *L3 = 10
-//    goto bb15
-//  }
-//  bb4 {
-//    _1 = *L1
-//    alloc L4 ("&int")
-//    *L4 = _1
-//    _2 = *L2
-//    branch _2 => [0: bb5, 1: bb6]
-//  }
-//  bb5 {
-//    goto bb10
-//  }
-//  bb6 {
-//    goto bb7
-//  }
-//  bb7 {
-//    *L3 = 30
-//    goto bb11
-//  }
-//  bb8 {
-//    _4 = *L1
-//    alloc L5 ("&int")
-//    *L5 = _4
-//    _5 = *L2
-//    branch _5 => [0: bb9, 1: bb12]
-//  }
-//  bb9 {
-//    goto bb10
-//  }
-//  bb10 {
-//    _3 = *L4
-//    *L3 = _3
-//    goto bb11
-//  }
-//  bb11 {
-//    goto bb15
-//  }
-//  bb12 {
-//    goto bb13
-//  }
-//  bb13 {
-//    _6 = *L1
-//    alloc L6 ("&int")
-//    *L6 = _6
-//    _7 = *L6
-//    _8 = INEG _7
-//    *L3 = _8
-//    goto bb14
-//  }
-//  bb14 {
-//    goto bb15
-//  }
-//  bb15 {
-//    _9 = *L3
-//    *L0 = _9
-//    goto bb16
-//  }
-//  bb16 {
-//    return
-//  }
-//  registers {
-//    _0: int
-//    _1: int
-//    _2: bool
-//    _3: int
-//    _4: int
-//    _5: bool
-//    _6: int
-//    _7: int
-//    _8: int
-//    _9: int
-//  }
-//  locals {
-//    0: _0: &int
-//    1: _1: &int
-//    2: _2: &bool
-//    3: _3: &int
-//    4: _4: &int
-//    5: _5: &int
-//    6: _6: &int
-//  }
-//  upvalues {
-//  }
-//  captured {
-//  }
-//}
-//

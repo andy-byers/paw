@@ -6,23 +6,94 @@
 #include "ir_type.h"
 #include "map.h"
 #include "solve.h"
+#include "type_folder.h"
 #include "unify.h"
 
 #define NEW_NODE(C, T) (T *)P_ALLOC(C, NULL, 0, sizeof(T))
 #define IR_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleInfo_get((C_)->modinfo, Modno_).name, __VA_ARGS__)
 
-#define TODO (struct SourceLoc){0}
+#define TODO (struct SourceSpan){0}
+
+static paw_Bool is_unsized_type(IrType *type)
+{
+    return 0;
+    return IrIsSlice(type)
+        || IrIsString(type);
+}
+
+paw_Bool pawIr_is_unsized_type(struct Compiler *C, IrType *type)
+{
+    return 0;
+    if (!IrIsAdt(type))
+        return IrIsSlice(type) || IrIsString(type);
+
+    paw_Bool is_unsized = PAW_FALSE;
+    struct IrAdt *t = IrGetAdt(type);
+    struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
+    for (int discr = 0; discr < def->variants->count; ++discr) {
+        IrTypeList *fields = pawP_instantiate_variant_fields(C, t, discr);
+        paw_Bool is_unsized_variant = PAW_FALSE;
+        K_LIST_XFOREACH (fields, IrType *const, p) {
+            if (pawIr_is_unsized_type(C, *p)) {
+                if (is_unsized_variant)
+                   pawErr_generic_error(ENV(C), SCAN_STR(C, ""), (struct SourceSpan){0},
+                           "only a single unsized type is allowed in an ADT variant");
+            } else if (is_unsized_variant) {
+               pawErr_generic_error(ENV(C), SCAN_STR(C, ""), (struct SourceSpan){0},
+                       "unsized field must be last");
+            }
+        }
+        is_unsized |= is_unsized_variant;
+    }
+    return is_unsized;
+}
+
+IrType *pawIr_remove_indirection(struct Compiler *C, IrType *type)
+{
+    while (IrIsPtr(type)) {
+        IrType *pointee = IrGetPtr(type)->pointee;
+        if (pawIr_is_unsized_type(C, pointee)) break;
+        type = pointee;
+    }
+    return type;
+}
+
+static void add_deref_chain(struct Compiler *C, IrType *type, IrTypeList *chain)
+{
+    IrTypeList_push(C, chain, type);
+    while (IrIsPtr(type)) {
+        type = ir_deref(type);
+        IrTypeList_push(C, chain, type);
+    }
+}
+
+IrTypeList *pawIr_autoptr_chain(struct Compiler *C, IrType *type)
+{
+    IrTypeList *chain = IrTypeList_new(C);
+    IrTypeList_push(C, chain, type);
+    if (IrIsPtr(type)) {
+        add_deref_chain(C, type, chain);
+    } else {
+        IrTypeList_push(C, chain, pawIr_new_ptr(C, type));
+    }
+    return chain;
+}
 
 void pawIr_set_def_kind(struct Compiler *C, DeclId did, enum IrDefKind kind)
 {
+    paw_assert(DECL_ID_EXISTS(did));
+
     IrDefKinds_insert(C, C->ir_def_kinds, did, kind);
 }
 
-IrTrait *pawIr_new_trait(struct Compiler *C, DeclId did, IrTypeList *types)
+IrTrait *pawIr_new_trait(struct Compiler *C, DeclId did, IrGenericArgs *args)
 {
+    paw_assert(DECL_ID_EXISTS(did));
+    paw_assert(args != NULL);
+
     IrTrait *trait = NEW_NODE(C, IrTrait);
     *trait = (IrTrait){
-        .types = types,
+        .args = args,
         .did = did,
     };
     return trait;
@@ -73,11 +144,11 @@ IrType *pawIr_new_float(struct Compiler *C)
     return t;
 }
 
-IrType *pawIr_new_str(struct Compiler *C)
+IrType *pawIr_new_string(struct Compiler *C)
 {
     IrType *t = NEW_NODE(C, IrType);
-    t->Str_ = (struct IrStr){
-        .kind = kIrStr,
+    t->String_ = (struct IrString){
+        .kind = kIrString,
     };
     return t;
 }
@@ -92,13 +163,14 @@ IrType *pawIr_new_ptr(struct Compiler *C, IrType *pointee)
     return t;
 }
 
-IrType *pawIr_new_adt(struct Compiler *C, DeclId did, IrTypeList *types)
+IrType *pawIr_new_adt(struct Compiler *C, DeclId did, IrGenericArgs *args)
 {
+    paw_assert(args != NULL);
     IrType *t = NEW_NODE(C, IrType);
     t->Adt_ = (struct IrAdt){
         .kind = kIrAdt,
         .did = did,
-        .types = types,
+        .args = args,
     };
     return t;
 }
@@ -114,13 +186,24 @@ IrType *pawIr_new_fn_ptr(struct Compiler *C, IrTypeList *params, IrType *result)
     return t;
 }
 
-IrType *pawIr_new_signature(struct Compiler *C, DeclId did, IrTypeList *types)
+IrType *pawIr_new_signature(struct Compiler *C, DeclId did, IrGenericArgs *args)
 {
+    paw_assert(args != NULL);
     IrType *t = NEW_NODE(C, IrType);
     t->Signature_ = (struct IrSignature){
         .kind = kIrSignature,
         .did = did,
-        .types = types,
+        .args = args,
+    };
+    return t;
+}
+
+IrType *pawIr_new_slice(struct Compiler *C, IrType *type)
+{
+    IrType *t = NEW_NODE(C, IrType);
+    t->Slice_ = (struct IrSlice){
+        .kind = kIrSlice,
+        .type = type,
     };
     return t;
 }
@@ -133,6 +216,57 @@ IrType *pawIr_new_tuple(struct Compiler *C, IrTypeList *elems)
         .elems = elems,
     };
     return t;
+}
+
+IrType *pawIr_new_array(struct Compiler *C, IrType *type, IrConst *length)
+{
+    IrType *t = NEW_NODE(C, IrType);
+    t->Array_ = (struct IrArray){
+        .kind = kIrArray,
+        .type = type,
+        .length = length,
+    };
+    return t;
+}
+
+IrConst *pawIr_new_const_value(struct Compiler *C, union IrValue value, IrType *type)
+{
+    IrConst *k = NEW_NODE(C, IrConst);
+    *k = (struct IrConst){
+        .kind = IR_CONST_VALUE,
+        .value.value = value,
+        .value.type = type,
+    };
+    return k;
+}
+
+IrConst *pawIr_new_const_pending(struct Compiler *C, DeclId did)
+{
+    IrConst *k = NEW_NODE(C, IrConst);
+    *k = (struct IrConst){
+        .kind = IR_CONST_PENDING,
+        .pending.did = did,
+    };
+    return k;
+}
+
+IrConst *pawIr_new_const_decl(struct Compiler *C, DeclId did)
+{
+    IrConst *k = NEW_NODE(C, IrConst);
+    *k = (struct IrConst){
+        .kind = IR_CONST_DECL,
+        .decl.did = did,
+    };
+    return k;
+}
+
+IrConst *pawIr_new_const_infer(struct Compiler *C)
+{
+    IrConst *k = NEW_NODE(C, IrConst);
+    *k = (struct IrConst){
+        .kind = IR_CONST_INFER,
+    };
+    return k;
 }
 
 IrType *pawIr_new_never(struct Compiler *C)
@@ -165,13 +299,154 @@ IrType *pawIr_new_generic(struct Compiler *C, DeclId did)
     return t;
 }
 
-struct IrGenericDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, Str *name, struct IrTraitList *bounds)
+IrType *pawIr_new_projection(struct Compiler *C, IrType *type, IrTrait *trait, DeclId assoc)
+{
+    IrType *t = NEW_NODE(C, IrType);
+    t->Projection_ = (struct IrProjection){
+        .kind = kIrProjection,
+        .type = type,
+        .trait = trait,
+        .assoc = assoc,
+    };
+    return t;
+}
+
+
+#define GA_TYPE_BIT 1ULL
+
+IrGenericArg IrGenericArg_from_type(IrType *t)
+{
+    return (IrGenericArg){
+        .inner = (IrType *)((uintptr_t)t | GA_TYPE_BIT),
+    };
+}
+
+IrGenericArg IrGenericArg_from_const(IrConst *k)
+{
+    return (IrGenericArg){
+        .inner = k,
+    };
+}
+
+paw_Bool IrGenericArg_is_type(IrGenericArg ga)
+{
+    return (uintptr_t)ga.inner & GA_TYPE_BIT;
+}
+
+IrType *IrGenericArg_get_type(IrGenericArg ga)
+{
+    paw_assert(IrGenericArg_is_type(ga));
+    return (IrType *)((uintptr_t)ga.inner & ~GA_TYPE_BIT);
+}
+
+IrConst *IrGenericArg_get_const(IrGenericArg ga)
+{
+    paw_assert(IrGenericArg_is_const(ga));
+    return ga.inner;
+}
+
+IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did)
+{
+    IrGenericArgs *args = pawIr_get_generic_args(C, did);
+
+    IrGenericArgs *result = IrGenericArgs_new(C);
+    IrGenericArgs_reserve(C, result, args->count);
+    K_LIST_XFOREACH (args, IrGenericArg const, p) {
+        IrGenericArg r;
+        if (IrGenericArg_is_type(*p)) {
+            IrType *t = pawU_new_unknown(C->U, TODO);
+            r = IrGenericArg_from_type(t);
+        } else {
+            IrConst *k = pawIr_new_const_infer(C);
+            r = IrGenericArg_from_const(k);
+        }
+        IrGenericArgs_push(C, result, r);
+    }
+    return result;
+}
+
+IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did)
+{
+    IrGenericArg arg = *pawIr_get_generic_arg(C, did);
+
+    IrGenericArg r;
+    if (IrGenericArg_is_type(arg)) {
+        IrType *t = pawU_new_unknown(C->U, TODO);
+        r = IrGenericArg_from_type(t);
+    } else {
+        IrConst *k = pawIr_new_const_infer(C);
+        r = IrGenericArg_from_const(k);
+    }
+    return r;
+}
+
+
+int pawIr_unify(struct Compiler *C, IrGenericArg a, IrGenericArg b)
+{
+    if (IrGenericArg_is_type(a) != IrGenericArg_is_type(b))
+        return -1;
+
+    if (IrGenericArg_is_type(a)) {
+        IrType *x = IrGenericArg_get_type(a);
+        IrType *y = IrGenericArg_get_type(b);
+        return pawU_unify(C->U, x, y);
+    } else {
+        IrConst *x = IrGenericArg_get_const(a);
+        IrConst *y = IrGenericArg_get_const(b);
+        return 0; // TODO
+    }
+
+    return 0;
+}
+
+IrGenericArg pawIr_normalize(struct Compiler *C, IrGenericArg g)
+{
+    if (IrGenericArg_is_type(g)) {
+        IrType *x = IrGenericArg_get_type(g);
+        return IrGenericArg_from_type(
+                pawU_normalize(C->U, x));
+    } else {
+        IrConst *x = IrGenericArg_get_const(g);
+        return IrGenericArg_from_const(
+                x); // TODO: normalize constant (i.e. normalize contained types if present?)
+    }
+}
+
+IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g)
+{
+    if (IrGenericArg_is_type(g)) {
+        IrType *x = IrGenericArg_get_type(g);
+        return IrGenericArg_from_type(
+                pawU_normalize_projections(C->U, x));
+    } else {
+        IrConst *x = IrGenericArg_get_const(g);
+        return IrGenericArg_from_const(
+                x); // TODO: normalize constant (i.e. normalize contained types if present?)
+    }
+}
+
+
+struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str *name, struct IrTraitList *bounds)
 {
     struct IrGenericDef *def = (struct IrGenericDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrGenericDef){
         .did = did,
-        .name = name,
-        .bounds = bounds,
+        .is_type = PAW_TRUE,
+        .type.name = name,
+        .type.bounds = bounds,
+    };
+    pawIr_set_def_kind(C, did, IR_GENERIC_DEF);
+    return def;
+}
+
+struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str *name)
+{
+    struct IrGenericDef *def = (struct IrGenericDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
+    *def = (struct IrGenericDef){
+        .did = did,
+        .is_type = PAW_FALSE,
+        .konst.type = type,
+        .konst.name = name,
     };
     pawIr_set_def_kind(C, did, IR_GENERIC_DEF);
     return def;
@@ -204,7 +479,7 @@ struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclI
     return def;
 }
 
-struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub)
+struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub)
 {
     struct IrFnDef *def = (struct IrFnDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrFnDef){
@@ -221,14 +496,13 @@ struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, stru
     return def;
 }
 
-struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
+struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, IrGenericDefs *generics, IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct)
 {
     struct IrAdtDef *def = (struct IrAdtDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrAdtDef){
         .did = did,
         .generics = generics,
         .variants = variants,
-        .is_inline = is_inline,
         .is_struct = is_struct,
         .is_pub = is_pub,
         .name = name,
@@ -237,13 +511,26 @@ struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, st
     return def;
 }
 
-struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrTypeList *methods, paw_Bool is_pub)
+struct IrAssocItem *pawIr_new_assoc_item(struct Compiler *C, DeclId did, Str const *name, DeclId parent, paw_Bool is_pub)
+{
+    struct IrAssocItem *item = (struct IrAssocItem *)P_ALLOC(C, NULL, 0, sizeof(*item));
+    *item = (struct IrAssocItem){
+        .did = did,
+        .name = name,
+        .parent = parent,
+        .is_pub = is_pub,
+    };
+    return item;
+}
+
+struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str *name, IrGenericDefs *generics, IrTypeList *methods, IrAssocItems *items, paw_Bool is_pub)
 {
     struct IrTraitDef *def = (struct IrTraitDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrTraitDef){
         .did = did,
         .generics = generics,
         .methods = methods,
+        .items = items,
         .is_pub = is_pub,
         .name = name,
     };
@@ -251,7 +538,7 @@ struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str *name
     return def;
 }
 
-struct IrImpl *pawIr_new_impl(struct Compiler *C, DeclId did, IrType *type, IrTrait *trait, struct IrGenericDefs *generics, struct IrTypeList *methods)
+struct IrImpl *pawIr_new_impl(struct Compiler *C, DeclId did, IrType *type, IrTrait *trait, IrGenericDefs *generics, IrTypeList *methods, IrAssocItems *items)
 {
     struct IrImpl *impl = (struct IrImpl *)P_ALLOC(C, NULL, 0, sizeof(*impl));
     *impl = (struct IrImpl){
@@ -260,6 +547,7 @@ struct IrImpl *pawIr_new_impl(struct Compiler *C, DeclId did, IrType *type, IrTr
         .trait = trait,
         .generics = generics,
         .methods = methods,
+        .items = items,
     };
     pawIr_set_def_kind(C, did, IR_IMPL_DEF);
     return impl;
@@ -271,10 +559,21 @@ IrType *pawIr_get_type(struct Compiler *C, NodeId id)
     return ptype != NULL ? *ptype : NULL;
 }
 
+IrGenericArg *pawIr_get_generic_arg(struct Compiler *C, DeclId did)
+{
+    return IrDeclArgs_get(C, C->ir_decl_args, did);
+}
+
 void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type)
 {
     paw_assert(type != NULL);
     HirTypeMap_insert(C, C->hir_types, id, type);
+}
+
+struct IrAssocItem *pawIr_get_assoc_item(struct Compiler *C, DeclId did)
+{
+    struct IrAssocItem *const *pdef = IrAssocItemMap_get(C, C->ir_assoc_items, did);
+    return pdef != NULL ? *pdef : NULL;
 }
 
 struct IrFnDef *pawIr_get_fn_def(struct Compiler *C, DeclId did)
@@ -314,9 +613,14 @@ IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
     return *DefTypeMap_get(C, C->def_types, did);
 }
 
+IrGenericArg pawIr_get_def_arg(struct Compiler *C, DeclId did)
+{
+    __builtin_trap(); // TODO
+}
+
 IrTrait *pawIr_get_trait(struct Compiler *C, DeclId did)
 {
-    return pawIr_new_trait(C, did, pawIr_get_generic_types(C, did));
+    return pawIr_new_trait(C, did, pawIr_get_generic_args(C, did));
 }
 
 // TODO: use pawP_find_method instead of calling this function, which doesn't handle "multiple applicable methods"
@@ -324,25 +628,23 @@ IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target,
 {
     IrTraitList *bounds = pawIr_get_trait_bounds(C, target->did);
 
-    if (bounds == NULL) {
-        struct HirGenericDecl const *d = HirGetGenericDecl(pawHir_get_decl(C->hir, target->did));
-        IR_ERROR(C, missing_trait_bounds, (int)d->did.modno, d->span.start, d->ident.name->text);
-    }
-
-    K_LIST_XFOREACH (bounds, IrTrait *const, b) {
-        struct IrTraitDef const *bound = pawIr_get_trait_def(C, (*b)->did);
-        K_LIST_XFOREACH (bound->methods, IrType *const, m) {
-            struct IrFnDef const *fn = pawIr_get_fn_def(C, IR_TYPE_DID(*m));
-            if (pawS_eq(fn->name, name)) {
-                IrType *type = pawIr_solver_instantiate_type(C->S, fn->did);
-                IrType *type_ctx = pawIr_get_context(C, type);
-                IrTrait *trait_ctx = pawIr_get_trait_context(C, type);
-                pawIr_unify_traits_unchecked(C, trait_ctx, *b);
-                pawU_unify_unchecked(C->U, type_ctx, (IrType *)target);
-                return type;
+    if (bounds != NULL) {
+        K_LIST_XFOREACH (bounds, IrTrait *const, b) {
+            struct IrTraitDef const *bound = pawIr_get_trait_def(C, (*b)->did);
+            K_LIST_XFOREACH (bound->methods, IrType *const, m) {
+                struct IrFnDef const *fn = pawIr_get_fn_def(C, IR_TYPE_DID(*m));
+                if (pawS_eq(fn->name, name)) {
+                    IrType *type = pawIr_solver_instantiate_type(C->S, fn->did);
+                    IrType *type_ctx = pawIr_get_context(C, type);
+                    IrTrait *trait_ctx = pawIr_get_trait_context(C, type);
+                    pawIr_unify_traits_unchecked(C, trait_ctx, *b);
+                    pawU_unify_unchecked(C->U, type_ctx, (IrType *)target);
+                    return type;
+                }
             }
         }
     }
+
     return NULL;
 }
 
@@ -351,9 +653,15 @@ enum IrDefKind pawIr_get_kind(struct Compiler *C, DeclId did)
     return *IrDefKinds_get(C, C->ir_def_kinds, did);
 }
 
-IrTypeList *pawIr_get_generic_types(struct Compiler *C, DeclId did)
+IrGenericArgs *pawIr_get_generic_args(struct Compiler *C, DeclId did)
 {
-    IrTypeList *const *p = IrGenericTypes_get(C, C->ir_generic_types, did);
+    IrGenericArgs *const *p = IrGenericTypes_get(C, C->ir_generic_args, did);
+    return p != NULL ? *p : NULL;
+}
+
+IrConstraints *pawIr_get_constraints(struct Compiler *C, DeclId did)
+{
+    IrConstraints *const *p = IrConstraintsMap_get(C, C->ir_constraints, did);
     return p != NULL ? *p : NULL;
 }
 
@@ -363,9 +671,9 @@ IrTraitList *pawIr_get_trait_bounds(struct Compiler *C, DeclId did)
     return p != NULL ? *p : NULL;
 }
 
-void pawIr_set_generic_types(struct Compiler *C, DeclId did, IrTypeList *types)
+void pawIr_set_generic_args(struct Compiler *C, DeclId did, IrGenericArgs *types)
 {
-    paw_Bool const exists = IrGenericTypes_insert(C, C->ir_generic_types, did, types);
+    paw_Bool const exists = IrGenericTypes_insert(C, C->ir_generic_args, did, types);
     paw_assert(!exists); PAW_UNUSED(exists);
 }
 
@@ -396,7 +704,8 @@ IrType *pawIr_get_context(struct Compiler *C, IrType *fn)
 
     enum IrDefKind const parent_kind = pawIr_get_kind(C, parent_did);
     if (parent_kind == IR_TRAIT_DEF)
-        return IrTypeList_first(IR_TYPE_SUBTYPES_(fn));
+        return IrGenericArg_get_type(
+                IrGenericArgs_first(IR_GENERIC_ARGS(fn)));
 
     IrType *parent;
     if (parent_kind == IR_IMPL_DEF) {
@@ -407,32 +716,164 @@ IrType *pawIr_get_context(struct Compiler *C, IrType *fn)
         parent = pawIr_get_def_type(C, parent_did);
     }
 
-    IrTypeList *params = pawIr_get_generic_types(C, IR_TYPE_DID(fn));
+    IrGenericArgs *params = pawIr_get_generic_args(C, IR_TYPE_DID(fn));
     if (params == NULL) return parent;
 
-    IrTypeList *args = IR_TYPE_SUBTYPES_(fn);
+    IrGenericArgs *args = IR_GENERIC_ARGS(fn);
     struct Substitution const subst = {params, args};
-    return pawP_substitute(C, TODO, parent, subst);
+    return pawP_substitute(C, parent, subst);
 }
 
+// TODO: wrong, only works in some situations...
 IrTrait *pawIr_get_trait_context(struct Compiler *C, IrType *fn)
 {
     struct IrFnDef const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(fn));
     if (!DECL_ID_EXISTS(fn_def->parent)) return NULL;
-    return pawIr_solver_instantiate_trait_with(C->S,
-            fn_def->parent, IR_TYPE_SUBTYPES_(fn));
+    enum IrDefKind const kind = pawIr_get_kind(C, fn_def->parent);
+    if (kind == IR_TRAIT_DEF)
+        return pawIr_solver_instantiate_trait_with(C->S,
+                fn_def->parent, IR_GENERIC_ARGS(fn));
+
+    paw_assert(kind == IR_IMPL_DEF);
+    struct IrImpl const *impl_def = pawIr_get_impl_def(C, fn_def->parent);
+    return pawIr_solver_instantiate_impl_with(C->S,
+            impl_def->did, IR_GENERIC_ARGS(fn)).trait;
+}
+
+
+void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs)
+{
+    IrConstObligations_push(C, C->const_obligations, (struct IrConstObligation){
+                .lhs = lhs,
+                .rhs = rhs,
+            });
+}
+
+static paw_Bool const_equals(union IrValue x, union IrValue y, IrType *type)
+{
+    switch (IR_KINDOF(type)) {
+        case kIrBool:
+            return x.b == y.b;
+        case kIrChar:
+            return x.c == y.c;
+        case kIrInt:
+            return x.i == y.i;
+        default:
+            paw_assert(IrIsFloat(type));
+            return x.f == y.f;
+    }
+}
+
+static enum ObligationResult {
+    OR_ERROR,
+    OR_SOLVED,
+    OR_UNKNOWN,
+} solve_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs)
+{
+    if (lhs->kind == IR_CONST_VALUE
+            && rhs->kind == IR_CONST_VALUE) {
+        struct IrConstValue const x = lhs->value;
+        struct IrConstValue const y = rhs->value;
+        paw_assert(pawIr_type_equals(C, x.type, y.type));
+        return const_equals(x.value, y.value, x.type);
+    }
+    return OR_UNKNOWN;
+}
+
+int pawIr_solve_const_obligations(struct Compiler *C)
+{
+    for (int index = 0; index < C->const_obligations->count; ) {
+        struct IrConstObligation const o = IrConstObligations_get(C->const_obligations, index);
+        enum ObligationResult const status = solve_const_obligation(C, o.lhs, o.rhs);
+        if (status == OR_SOLVED) {
+            IrConstObligations_swap_remove(C->const_obligations, index);
+        } else if (status == OR_ERROR) {
+            return -1;
+        } else {
+            ++index;
+        }
+    }
+
+    return C->const_obligations->count;
+}
+
+static void report_inference_var(struct IrTypeVisitor *V, struct IrInfer *t)
+{
+    PAW_UNUSED(t);
+    *((paw_Bool *)V->ud) = PAW_TRUE;
+}
+
+paw_Bool pawIr_type_contains_inference_var(struct Compiler *C, IrType *type)
+{
+    paw_Bool found_inference_var = PAW_FALSE;
+
+    struct IrTypeVisitor V;
+    pawIr_type_visitor_init(&V, C, &found_inference_var);
+    V.VisitInfer = report_inference_var;
+
+    pawIr_visit_type(&V, type);
+    return found_inference_var;
+}
+
+paw_Bool pawIr_trait_contains_inference_var(struct Compiler *C, IrTrait *trait)
+{
+    paw_Bool found_inference_var = PAW_FALSE;
+
+    struct IrTypeVisitor V;
+    pawIr_type_visitor_init(&V, C, &found_inference_var);
+    V.VisitInfer = report_inference_var;
+
+    pawIr_visit_trait(&V, trait);
+    return found_inference_var;
 }
 
 
 static paw_Uint hash_type(IrType *type);
+static paw_Uint hash_arg(IrGenericArg arg);
 
-static paw_Uint hash_type_list(IrTypeList *types)
+static paw_Uint hash_type_list(IrTypeList const *types)
 {
     paw_Uint hash = 0;
-    IrType **ptype;
     if (types != NULL) {
-        K_LIST_FOREACH (types, ptype)
-            hash = hash_combine(hash, hash_type(*ptype));
+        K_LIST_XFOREACH (types, IrType *const, p)
+            hash = hash_combine(hash, hash_type(*p));
+    }
+    return hash;
+}
+
+static paw_Uint hash_arg_list(IrGenericArgs const *args)
+{
+    paw_Uint hash = 0;
+    K_LIST_XFOREACH (args, IrGenericArg const, p)
+        hash = hash_combine(hash, hash_arg(*p));
+    return hash;
+}
+
+static paw_Uint hash_trait(IrTrait const *trait)
+{
+    paw_Uint hash = 0x42;
+    hash = hash_combine(hash, trait->did.value);
+    hash = hash_combine(hash, hash_arg_list(trait->args));
+    return hash;
+}
+
+static paw_Uint hash_const(IrConst *k)
+{
+    paw_Uint hash = 0;
+    switch (k->kind) {
+        case IR_CONST_PENDING:
+            hash = hash_combine(hash, P_ID_HASH(NULL, k->pending.did));
+            break;
+        case IR_CONST_VALUE:
+            hash = hash_combine(hash, hash_type(k->value.type));
+            hash = hash_combine(hash, (paw_Uint)k->value.value.i);
+            break;
+        case IR_CONST_DECL:
+            hash = hash_combine(hash, k->decl.did.value);
+            break;
+        case IR_CONST_INFER:
+            hash = hash_combine(hash, k->infer.unimplemented); // TODO
+            break;
     }
     return hash;
 }
@@ -446,7 +887,7 @@ static paw_Uint hash_type(IrType *type)
         case kIrChar:
         case kIrInt:
         case kIrFloat:
-        case kIrStr:
+        case kIrString:
             break;
         case kIrPtr: {
             struct IrPtr const *t = IrGetPtr(type);
@@ -456,7 +897,7 @@ static paw_Uint hash_type(IrType *type)
         case kIrAdt: {
             struct IrAdt const *t = IrGetAdt(type);
             hash = hash_combine(hash, t->did.value);
-            hash = hash_combine(hash, hash_type_list(t->types));
+            hash = hash_combine(hash, hash_arg_list(t->args));
             break;
         }
         case kIrFnPtr: {
@@ -468,7 +909,18 @@ static paw_Uint hash_type(IrType *type)
         case kIrSignature: {
             struct IrSignature const *t = IrGetSignature(type);
             hash = hash_combine(hash, t->did.value);
-            hash = hash_combine(hash, hash_type_list(t->types));
+            hash = hash_combine(hash, hash_arg_list(t->args));
+            break;
+        }
+        case kIrSlice: {
+            struct IrSlice const *t = IrGetSlice(type);
+            hash = hash_combine(hash, hash_type(t->type));
+            break;
+        }
+        case kIrArray: {
+            struct IrArray const *t = IrGetArray(type);
+            hash = hash_combine(hash, hash_type(t->type));
+            hash = hash_combine(hash, hash_const(t->length));
             break;
         }
         case kIrTuple: {
@@ -481,12 +933,41 @@ static paw_Uint hash_type(IrType *type)
             hash = hash_combine(hash, t->did.value);
             break;
         }
+        case kIrProjection: {
+            struct IrProjection const *t = IrGetProjection(type);
+            hash = hash_combine(hash, hash_type(t->type));
+            hash = hash_combine(hash, hash_trait(t->trait));
+            hash = hash_combine(hash, t->assoc.value);
+            break;
+        }
         default:
             paw_assert(IrIsNever(type));
             hash = hash_combine(hash, 0x21); // '!'
             break;
     }
     return hash;
+}
+
+static paw_Uint hash_arg(IrGenericArg arg)
+{
+    return IrGenericArg_is_type(arg)
+        ? hash_type(IrGenericArg_get_type(arg))
+        : hash_const(IrGenericArg_get_const(arg));
+}
+
+static paw_Bool arglist_equals(struct Compiler *C, IrGenericArgs *a, IrGenericArgs *b)
+{
+    if (a->count != b->count)
+        return PAW_FALSE;
+
+    for (int i = 0; i < a->count; ++i) {
+        IrGenericArg const ga = IrGenericArgs_get(a, i);
+        IrGenericArg const gb = IrGenericArgs_get(b, i);
+        if (!pawIr_arg_equals(C, ga, gb))
+            return PAW_FALSE;
+    }
+
+    return PAW_TRUE;
 }
 
 static paw_Bool typelist_equals(struct Compiler *C, IrTypeList *a, IrTypeList *b)
@@ -511,26 +992,76 @@ static paw_Bool sig_equals_extra(struct Compiler *C, IrType *a, IrType *b)
     struct IrSignature const *sa = IrGetSignature(a);
     struct IrSignature const *sb = IrGetSignature(b);
     if (sa->did.value != sb->did.value) return PAW_FALSE;
-    if (!sa->types != !sb->types) { // TODO: should not be necessary, here to patch some bug I need to fix...
+    if (!sa->args != !sb->args) { // TODO: should not be necessary, here to patch some bug I need to fix...
         return PAW_TRUE; // TODO: whenever this happens, one has empty .types_ and the other has .types_=NULL
     } // TODO: should not be necessary
-    if (sa->types == NULL) return PAW_TRUE;
-    paw_assert(sb->types != NULL);
-    return typelist_equals(C, sa->types, sb->types);
+    if (sa->args == NULL) return PAW_TRUE;
+    paw_assert(sb->args != NULL);
+    return arglist_equals(C, sa->args, sb->args);
 }
 
-// TODO: probably should distinguish between pawIr_type_equals where we care about function names
-//       and pawIr_type_equals where we do not (in the latter case, "fn assert(bool)" is the same
-//       as "fn(bool)", like what happens during type unification)
-paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
+static paw_Bool type_equals(struct Compiler *C, IrType *lhs, IrType *rhs)
 {
-    if (IR_KINDOF(a) != IR_KINDOF(b))
+    if (IR_KINDOF(lhs) != IR_KINDOF(rhs))
         return PAW_FALSE;
 
-    if (IrIsSignature(a))
-        return sig_equals_extra(C, a, b);
+    switch (IR_KINDOF(lhs)) {
+        case kIrPtr:
+            return type_equals(C, ir_deref(lhs), ir_deref(rhs));
+        case kIrAdt: {
+            struct IrAdt const *x = IrGetAdt(lhs);
+            struct IrAdt const *y = IrGetAdt(rhs);
+            return P_ID_EQUALS(NULL, x->did, y->did)
+                && arglist_equals(C, x->args, y->args);
+        }
+        case kIrFnPtr: {
+            struct IrFnPtr const *x = IrGetFnPtr(lhs);
+            struct IrFnPtr const *y = IrGetFnPtr(rhs);
+            return typelist_equals(C, x->params, y->params)
+                && type_equals(C, x->result, y->result);
+        }
+        case kIrSignature: {
+            struct IrSignature const *x = IrGetSignature(lhs);
+            struct IrSignature const *y = IrGetSignature(rhs);
+            return P_ID_EQUALS(NULL, x->did, y->did)
+                && arglist_equals(C, x->args, y->args);
+        }
+        case kIrSlice: {
+            struct IrSlice const *x = IrGetSlice(lhs);
+            struct IrSlice const *y = IrGetSlice(rhs);
+            return type_equals(C, x->type, y->type);
+        }
+        case kIrArray: {
+            struct IrArray const *x = IrGetArray(lhs);
+            struct IrArray const *y = IrGetArray(rhs);
+            return type_equals(C, x->type, y->type)
+                && pawIr_const_equals(C, x->length, y->length);
+        }
+        case kIrTuple: {
+            struct IrTuple const *x = IrGetTuple(lhs);
+            struct IrTuple const *y = IrGetTuple(rhs);
+            return typelist_equals(C, x->elems, y->elems);
+        }
+        case kIrGeneric: {
+            struct IrGeneric const *x = IrGetGeneric(lhs);
+            struct IrGeneric const *y = IrGetGeneric(rhs);
+            return P_ID_EQUALS(C, x->did, y->did);
+        }
+        case kIrProjection: {
+            struct IrProjection const *x = IrGetProjection(lhs);
+            struct IrProjection const *y = IrGetProjection(rhs);
+            return type_equals(C, x->type, y->type)
+                && pawIr_trait_equals(C, x->trait, y->trait)
+                && P_ID_EQUALS(C, x->assoc, y->assoc);
+        }
+        default:
+            return PAW_TRUE;
+    }
+}
 
-    return pawU_equals(C->U, a, b);
+paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
+{
+    return type_equals(C, a, b);
 }
 
 paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t)
@@ -539,17 +1070,214 @@ paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t)
     return hash_type(t);
 }
 
+paw_Uint pawIr_type2_hash(struct Compiler *C, struct IrType2 t)
+{
+    paw_Uint const first = pawIr_type_hash(C, t.first);
+    paw_Uint const second = pawIr_type_hash(C, t.second);
+    return hash_combine(first, second);
+}
+
+paw_Bool pawIr_type2_equals(struct Compiler *C, struct IrType2 a, struct IrType2 b)
+{
+    return pawIr_type_equals(C, a.first, b.first)
+        && pawIr_type_equals(C, a.second, b.second);
+}
+
+paw_Uint pawIr_const_hash(struct Compiler *C, IrConst *k)
+{
+    PAW_UNUSED(C);
+    return hash_const(k);
+}
+
+paw_Bool pawIr_const_equals(struct Compiler *C, IrConst *a, IrConst *b)
+{
+    if (a->kind != b->kind)
+        return PAW_FALSE;
+
+    switch (a->kind) {
+        case IR_CONST_PENDING:
+            return P_ID_EQUALS(C, a->pending.did, b->pending.did);
+        case IR_CONST_VALUE:
+            return pawIr_type_equals(C, a->value.type, b->value.type)
+                && a->value.value.i == b->value.value.i;
+        case IR_CONST_INFER:
+            return a->infer.unimplemented == b->infer.unimplemented;
+        case IR_CONST_DECL:
+            return P_ID_EQUALS(C, a->decl.did, b->decl.did);
+    }
+}
+
 paw_Uint pawIr_trait_hash(struct Compiler *C, IrTrait *trait)
 {
     PAW_UNUSED(C);
-    paw_Uint hash = 0x42;
-    hash = hash_combine(hash, trait->did.value);
-    hash = hash_combine(hash, hash_type_list(trait->types));
-    return hash;
+    return hash_trait(trait);
+}
+
+paw_Uint pawIr_arg_hash(struct Compiler *C, IrGenericArg arg)
+{
+    PAW_UNUSED(C);
+    return hash_arg(arg);
+}
+
+paw_Bool pawIr_arg_equals(struct Compiler *C, IrGenericArg a, IrGenericArg b)
+{
+    if (IrGenericArg_is_type(a) != IrGenericArg_is_type(b))
+        return PAW_FALSE;
+
+    return IrGenericArg_is_type(a)
+        ? pawIr_type_equals(C, IrGenericArg_get_type(a), IrGenericArg_get_type(b))
+        : pawIr_const_equals(C, IrGenericArg_get_const(a), IrGenericArg_get_const(b));
+}
+
+IrType *pawIr_get_custom_drop_type(struct Compiler *C, IrType *type)
+{
+    DeclId const drop_did = C->core_traits[CORE_TRAIT_DROP];
+    K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
+        struct IrImpl const *def = pawIr_get_impl_def(C, *p);
+        if (pawIr_type_equals(C, def->type, type)
+                && MIR_ID_EQUALS(def->trait->did, drop_did))
+            return IrTypeList_first(def->methods);
+    }
+    return NULL;
 }
 
 
-IrType *pawIr_materialize_fn(struct Compiler *C, DeclId did, IrTypeList *type_args)
+static paw_Bool field_needs_drop_aux(struct Compiler *C, IrTypeList *types, IrTypeList *result)
+{
+    K_LIST_XFOREACH (types, IrType *const, p) {
+        if (pawIr_needs_drop(C, *p)) return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+static DeclId next_did(struct Compiler *C)
+{
+    return (DeclId){
+        .modno = (unsigned)0, // TODO
+        .value = (unsigned)++C->decl_count,
+    };
+}
+
+IrType *pawIr_materialize_drop_type(struct Compiler *C, IrType *type)
+{
+    IrTypeList *methods = IrTypeList_new(C);
+    DeclId const drop_did = C->core_traits[CORE_TRAIT_DROP];
+    IrTrait *trait = pawIr_new_trait(C, drop_did, IrGenericArgs_new(C));
+    struct IrImpl *impl = pawIr_new_impl(C, next_did(C), type, trait,
+            IrGenericDefs_new(C), methods, IrAssocItems_new(C));
+    ImplMap_insert(C, C->impl_defs, impl->did, impl);
+    IrDefs_push(C, C->impls.trait, impl->did);
+
+    IrParams *params = IrParams_new(C);
+    IrParams_push(C, params, (struct IrParam){
+                .type = pawIr_new_ptr(C, type),
+                .name = SCAN_STR(C, "self"),
+            });
+    struct IrFnDef *fn = pawIr_new_fn_def(C, next_did(C),
+            SCAN_STR(C, "drop"), IrGenericDefs_new(C),
+            pawIr_new_unit(C), params, type, impl->did,
+            PAW_TRUE);
+    FnDefMap_insert(C, C->fn_defs, fn->did, fn);
+    IrType *drop = pawIr_new_signature(C, fn->did, IrGenericArgs_new(C));
+    IrTypeList_push(C, methods, drop);
+    return drop;
+}
+
+static paw_Bool needs_drop_in_list(struct Compiler *C, IrTypeList *types)
+{
+    K_LIST_XFOREACH (types, IrType *const, p) {
+        if (pawIr_needs_drop(C, *p)) return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+static paw_Bool has_field_with_drop(struct Compiler *C, IrType *type)
+{
+    if (IrIsTuple(type)) {
+        struct IrTuple const *t = IrGetTuple(type);
+        return needs_drop_in_list(C, t->elems);
+    } else if (IrIsAdt(type)) {
+        struct IrAdt *t = IrGetAdt(type);
+        struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
+        if (def->is_struct) {
+            IrTypeList *fields = pawP_instantiate_struct_fields(C, t);
+            return needs_drop_in_list(C, fields);
+        } else {
+            K_LIST_XFOREACH (def->variants, struct IrVariantDef *const, v) {
+                IrTypeList *fields = pawP_instantiate_variant_fields(C, t, (*v)->discr);
+                if (needs_drop_in_list(C, fields)) return PAW_TRUE;
+            }
+        }
+    } else if (IrIsArray(type)) {
+        return pawIr_needs_drop(C, IrGetArray(type)->type);
+    }
+    return PAW_FALSE;
+}
+
+IrType *pawIr_get_drop_type(struct Compiler *C, IrType *type)
+{
+    IrType *drop = pawIr_get_custom_drop_type(C, type);
+    if (drop == NULL && has_field_with_drop(C, type))
+        return pawIr_materialize_drop_type(C, type);
+    return drop;
+}
+
+static paw_Bool field_needs_drop(struct Compiler *C, IrType *type)
+{
+    IrTypeList *result = IrTypeList_new(C);
+    if (IrIsTuple(type)) {
+        struct IrTuple const *t = IrGetTuple(type);
+        return field_needs_drop_aux(C, t->elems, result);
+    } else if (IrIsAdt(type)) {
+        struct IrAdt *t = IrGetAdt(type);
+        struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
+        if (def->is_struct) {
+            IrTypeList *fields = pawP_instantiate_struct_fields(C, t);
+            return field_needs_drop_aux(C, fields, result);
+        } else {
+            K_LIST_XFOREACH (def->variants, struct IrVariantDef *const, v) {
+                IrTypeList *fields = pawP_instantiate_variant_fields(C, t, (*v)->discr);
+                if (field_needs_drop_aux(C, fields, result)) return PAW_TRUE;
+            }
+            return PAW_FALSE;
+        }
+    }
+    return PAW_FALSE;
+}
+
+paw_Bool pawIr_needs_drop(struct Compiler *C, IrType *type)
+{
+    if (IrIsGeneric(type)) return PAW_TRUE;
+    IrType *drop = pawIr_get_custom_drop_type(C, type);
+    if (drop != NULL) return PAW_TRUE;
+    return field_needs_drop(C, type);
+}
+
+paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type)
+{
+    if (IrIsAdt(type)) {
+        IrSolver *S = pawIr_push_solver(C);
+        DeclId const copy_did = C->core_traits[CORE_TRAIT_COPY];
+        IrGenericArgs *copy_args = IrGenericArgs_new(C);
+        IrGenericArgs_push(C, copy_args, IrGenericArg_from_type(type));
+        IrTrait *copy = pawIr_solver_instantiate_trait_with(S, copy_did, copy_args);
+        paw_Bool const result = pawIr_type_implements_trait(S, type, copy);
+        pawIr_pop_solver(C);
+        return result;
+    } else if (IrIsTuple(type)) {
+        // a tuple is copyable if all of its elements are copyable
+        struct IrTuple const *t = IrGetTuple(type);
+        paw_Bool accum = PAW_TRUE;
+        K_LIST_XFOREACH (t->elems, IrType *const, p)
+            accum &= pawIr_is_copyable(C, *p);
+        return accum;
+    } else if (IrIsArray(type)) {
+        return pawIr_is_copyable(C, IrGetArray(type)->type);
+    }
+    return PAW_TRUE;
+}
+
+IrType *pawIr_materialize_fn(struct Compiler *C, DeclId did, IrGenericArgs *type_args)
 {
     IrType *result;
     IrTypeList *params = IrTypeList_new(C);
@@ -571,14 +1299,15 @@ IrType *pawIr_materialize_fn(struct Compiler *C, DeclId did, IrTypeList *type_ar
         result = def->result;
     }
 
-    IrTypeList *type_params = pawIr_get_generic_types(C, did);
+    IrGenericArgs *type_params = pawIr_get_generic_args(C, did);
     struct Substitution const subst = {type_params, type_args};
 
     K_LIST_XFOREACH (params, IrType *, p)
-        *p = pawP_substitute(C, TODO, *p, subst);
-    result = pawP_substitute(C, TODO, result, subst);
+        *p = pawP_substitute(C, *p, subst);
+    result = pawP_substitute(C, result, subst);
 
-    return pawIr_new_fn_ptr(C, params, result);
+    return pawU_normalize_projections(C->U,
+            pawIr_new_fn_ptr(C, params, result));
 }
 
 
@@ -596,6 +1325,7 @@ struct Printer {
 #define PRINT_CHAR(P, c) pawL_add_char(ENV(P), (P)->buf, c)
 
 static void print_type(struct Printer *, IrType *);
+static void print_const(struct Printer *, IrConst *);
 static void print_type_list(struct Printer *P, IrTypeList *list)
 {
     for (int i = 0; i < list->count; ++i) {
@@ -619,15 +1349,44 @@ static void print_bounds(struct Printer *P, IrTypeList *bounds)
     }
 }
 
-static void print_binder(struct Printer *P, IrTypeList *binder)
+static void print_generic_arg(struct Printer *P, IrGenericArg arg)
+{
+    if (IrGenericArg_is_type(arg)) {
+        print_type(P, IrGenericArg_get_type(arg));
+    } else {
+        print_const(P, IrGenericArg_get_const(arg));
+    }
+}
+
+static void print_binder(struct Printer *P, IrGenericArgs *binder)
 {
     // TODO: be consistent semantics: does `.binder = NULL` or `.binder.count = 0` mean monomorphic
-    if (binder != NULL && binder->count > 0) {
-        PRINT_CHAR(P, '<');
+    if (binder->count > 0) {
         P->print_bounds = PAW_TRUE;
-        print_type_list(P, binder);
-        P->print_bounds = PAW_FALSE;
+        PRINT_CHAR(P, '<');
+        for (int i = 0; i < binder->count; ++i) {
+            if (i > 0) PRINT_LITERAL(P, ", ");
+            print_generic_arg(P, IrGenericArgs_get(binder, i));
+        }
         PRINT_CHAR(P, '>');
+        P->print_bounds = PAW_FALSE;
+    }
+}
+
+static void print_trait_omitting_self(struct Printer *P, IrTrait *t)
+{
+    paw_assert(t->args->count > 0);
+    struct IrTraitDef const *def = pawIr_get_trait_def(P->C, t->did);
+    PRINT_STRING(P, def->name);
+    if (t->args->count > 1) {
+        P->print_bounds = PAW_TRUE;
+        PRINT_CHAR(P, '<');
+        for (int i = 1; i < t->args->count; ++i) {
+            if (i > 1) PRINT_LITERAL(P, ", ");
+            print_generic_arg(P, IrGenericArgs_get(t->args, i));
+        }
+        PRINT_CHAR(P, '>');
+        P->print_bounds = PAW_FALSE;
     }
 }
 
@@ -635,11 +1394,7 @@ static void print_trait(struct Printer *P, IrTrait *t)
 {
     struct IrTraitDef const *def = pawIr_get_trait_def(P->C, t->did);
     PRINT_STRING(P, def->name);
-    if (t->types != NULL) {
-        PRINT_CHAR(P, '<');
-        print_type_list(P, t->types);
-        PRINT_CHAR(P, '>');
-    }
+    print_binder(P, t->args);
 }
 
 static void print_type(struct Printer *P, IrType *type)
@@ -660,13 +1415,28 @@ static void print_type(struct Printer *P, IrType *type)
         case kIrFloat:
             PRINT_LITERAL(P, "float");
             break;
-        case kIrStr:
+        case kIrString:
             PRINT_LITERAL(P, "str");
             break;
         case kIrPtr: {
             struct IrPtr *ptr = IrGetPtr(type);
-            PRINT_CHAR(P, '&');
+            PRINT_CHAR(P, '*');
             print_type(P, ptr->pointee);
+            break;
+        }
+        case kIrSlice: {
+            struct IrSlice *t = IrGetSlice(type);
+            PRINT_CHAR(P, '[');
+            PRINT_CHAR(P, ']');
+            print_type(P, t->type);
+            break;
+        }
+        case kIrArray: {
+            struct IrArray *arr = IrGetArray(type);
+            PRINT_CHAR(P, '[');
+            print_const(P, arr->length);
+            PRINT_CHAR(P, ']');
+            print_type(P, arr->type);
             break;
         }
         case kIrTuple: {
@@ -684,8 +1454,8 @@ static void print_type(struct Printer *P, IrType *type)
             if (kind == IR_FN_DEF) {
                 struct IrFnDef *def = pawIr_get_fn_def(P->C, fsig->did);
                 PRINT_STRING(P, def->name);
-                print_binder(P, fsig->types);
-                IrType *fn = pawIr_materialize_fn(P->C, fsig->did, fsig->types);
+                print_binder(P, fsig->args);
+                IrType *fn = pawIr_materialize_fn(P->C, fsig->did, fsig->args);
                 PRINT_FORMAT(P, "{%s}", pawIr_print_type(P->C, fn));
             } else {
                 paw_assert(kind == IR_VARIANT_DEF);
@@ -715,10 +1485,26 @@ static void print_type(struct Printer *P, IrType *type)
             break;
         }
         case kIrGeneric: {
-            // TODO: get IR generic def, not HIR decl, which may not exist anymore
-            struct IrGeneric *gen = IrGetGeneric(type);
-            struct HirDecl *decl = pawHir_get_decl(P->C->hir, gen->did);
-            PRINT_STRING(P, HirGetGenericDecl(decl)->ident.name);
+            struct IrGeneric *t = IrGetGeneric(type);
+            struct IrGenericDef const *def = pawIr_get_generic_def(P->C, t->did);
+            if (def->is_type) {
+                PRINT_STRING(P, def->type.name);
+            } else {
+                PRINT_LITERAL(P, "const ");
+                PRINT_STRING(P, def->konst.name);
+                PRINT_LITERAL(P, ": ");
+                print_type(P, def->konst.type);
+            }
+            break;
+        }
+        case kIrProjection: {
+            struct IrProjection *t = IrGetProjection(type);
+            struct IrAssocItem *item = pawIr_get_assoc_item(P->C, t->assoc);
+            PRINT_CHAR(P, '<');
+            print_type(P, t->type);
+            PRINT_LITERAL(P, " as ");
+            print_trait_omitting_self(P, t->trait);
+            PRINT_FORMAT(P, ">::%s", item->name->text);
             break;
         }
         case kIrInfer: {
@@ -730,24 +1516,42 @@ static void print_type(struct Printer *P, IrType *type)
             break;
         case kIrAdt: {
             struct IrAdt *adt = IrGetAdt(type);
-            const enum BuiltinKind code = pawP_type2code(P->C, type);
-            if (code == BUILTIN_LIST) {
-                PRINT_CHAR(P, '[');
-                print_type(P, IrTypeList_get(adt->types, 0));
-                PRINT_CHAR(P, ']');
-            } else if (code == BUILTIN_MAP) {
-                PRINT_CHAR(P, '[');
-                print_type(P, IrTypeList_get(adt->types, 0));
-                PRINT_LITERAL(P, ": ");
-                print_type(P, IrTypeList_get(adt->types, 1));
-                PRINT_CHAR(P, ']');
-            } else {
-                struct IrAdtDef *def = pawIr_get_adt_def(P->C, adt->did);
-                PRINT_STRING(P, def->name);
-                print_binder(P, adt->types);
-            }
+            struct IrAdtDef *def = pawIr_get_adt_def(P->C, adt->did);
+            PRINT_STRING(P, def->name);
+            print_binder(P, adt->args);
             break;
         }
+    }
+}
+
+static void print_const(struct Printer *P, IrConst *konst)
+{
+    switch (konst->kind) {
+        case IR_CONST_VALUE:
+            if (IrIsBool(konst->value.type)) {
+                if (konst->value.value.b) {
+                    PRINT_LITERAL(P, "true");
+                } else {
+                    PRINT_LITERAL(P, "false");
+                }
+            } else if (IrIsChar(konst->value.type)) {
+                PRINT_CHAR(P, konst->value.value.c);
+            } else if (IrIsInt(konst->value.type)) {
+                pawL_add_int(ENV(P), P->buf, konst->value.value.i);
+            } else {
+                paw_assert(IrIsFloat(konst->value.type));
+                pawL_add_float(ENV(P), P->buf, konst->value.value.f);
+            }
+            break;
+        case IR_CONST_PENDING:
+            PRINT_LITERAL(P, "?");
+            break;
+        case IR_CONST_DECL:
+            PRINT_FORMAT(P, "DeclId(%d)", konst->decl.did.value);
+            break;
+        case IR_CONST_INFER:
+            PRINT_LITERAL(P, "_");
+            break;
     }
 }
 
@@ -785,3 +1589,71 @@ char const *pawIr_print_trait(struct Compiler *C, IrTrait *trait)
     return s->text;
 }
 
+char const *pawIr_print_impl_trait_obligation(struct Compiler *C, IrType *type, IrTrait *trait)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &buf);
+
+    struct Printer p = {
+        .P = ENV(C),
+        .buf = &buf,
+        .C = C,
+    };
+    print_type(&p, type);
+    PRINT_LITERAL(&p, ": ");
+    print_trait_omitting_self(&p, trait);
+
+    Str const *s = pawL_buffer_finish(P, &buf);
+    return s->text;
+}
+
+Str const *pawIr_print_type_v2(struct Compiler *C, IrType *type)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &buf);
+
+    print_type(&(struct Printer){
+                   .P = ENV(C),
+                   .buf = &buf,
+                   .C = C,
+               },
+               type);
+
+    return pawL_buffer_finish(P, &buf);
+}
+
+Str const *pawIr_print_trait_v2(struct Compiler *C, IrTrait *trait)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &buf);
+
+    print_trait_omitting_self(&(struct Printer){
+                   .P = ENV(C),
+                   .buf = &buf,
+                   .C = C,
+               },
+               trait);
+
+    return pawL_buffer_finish(P, &buf);
+}
+
+Str const *pawIr_print_impl_trait_obligation_v2(struct Compiler *C, IrType *type, IrTrait *trait)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &buf);
+
+    struct Printer p = {
+        .P = ENV(C),
+        .buf = &buf,
+        .C = C,
+    };
+    print_type(&p, type);
+    PRINT_LITERAL(&p, ": ");
+    print_trait_omitting_self(&p, trait);
+
+    return pawL_buffer_finish(P, &buf);
+}

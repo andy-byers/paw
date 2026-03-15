@@ -1,0 +1,150 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+// A mutable string
+pub struct String {
+    inner: List<char>
+}
+
+pub use list::InsertError;
+
+use list::List;
+use slice;
+
+impl String {
+    pub fn new() -> Self {
+        Self{inner: List::new()}
+    }
+
+    pub fn len(*self) -> int {
+        self.inner.len()
+    }
+
+    pub fn is_empty(*self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn capacity(*self) -> int {
+        self.inner.capacity()
+    }
+
+    pub fn from_raw_parts(start: *char, length: int, capacity: int) -> Self {
+        Self{inner: List::from_raw_parts(start, length, capacity)}
+    }
+
+    pub fn into_raw_parts(self) -> (*char, int, int) {
+        let Self{inner} = self; // decompose
+        inner.into_raw_parts()
+    }
+
+    pub fn get(*self, index: int) -> Option<*char> {
+        self.inner.get(index)
+    }
+
+    pub fn set(*self, index: int, value: char) -> Option<char> {
+        self.inner.set(index, value)
+    }
+
+    pub fn push(*self, value: char) -> mem::Result<()> {
+        self.inner.push(value)
+    }
+
+    pub fn insert(*self, index: int, value: char) -> Result<(), InsertError> {
+        self.inner.insert(index, value)
+    }
+
+    pub fn remove(*self, index: int) -> char {
+        self.inner.remove(index)
+    }
+
+    pub fn pop(*self) -> char {
+        self.inner.pop()
+    }
+
+    pub fn reserve(*self, len: int) -> mem::Result<()> {
+        self.inner.reserve(len)
+    }
+
+    pub fn extend(*self, data: []char) -> mem::Result<()> {
+        self.inner.extend_from_slice(data)
+    }
+}
+
+impl AsPtr<char> for String {
+    fn as_ptr(*self) -> *char {
+        if self.is_empty() {
+            "".as_ptr()
+        } else {
+            self.inner.as_ptr()
+        }
+    }
+}
+
+impl ToSlice<char> for String {
+    fn to_slice(*self) -> []char {
+        slice::from_raw_parts(self.as_ptr(), self.len())
+    }
+}
+
+impl Index<int> for String {
+    type Output = char;
+    fn index(*self, index: int) -> *char {
+        &self.to_slice()[index]
+    }
+}
+
+impl Hash for String {
+    fn hash(*self) -> int {
+        self.to_slice().hash()
+    }
+}
+
+impl Equals<Self> for String {
+    fn eq(*self, rhs: *Self) -> bool {
+        self.to_slice().eq(&rhs.to_slice())
+    }
+}
+
+impl Compare<Self> for String {
+    fn lt(*self, rhs: *Self) -> bool {
+        self.to_slice().lt(&rhs.to_slice())
+    }
+
+    fn le(*self, rhs: *Self) -> bool {
+        self.to_slice().le(&rhs.to_slice())
+    }
+}
+
+pub use list::Iter;
+//pub use list::IterMut;
+pub use list::IntoIter;
+
+impl IntoIterator for String {
+    type Item = char;
+    type IntoIter = IntoIter<char>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let Self{inner} = self;
+        inner.into_iter()
+    }
+}
+
+impl IntoIterator for *String {
+    type Item = *char;
+    type IntoIter = Iter<char>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.to_slice().into_iter()
+    }
+}
+
+//impl IntoIterator_ for *mut String {
+//    type Item = *mut char;
+//    type IntoIter = slice::IteratorMut<char>;
+//
+//    fn into_iter(self) -> Self::IntoIter {
+//        self.to_slice_mut().into_iter()
+//    }
+//}
+

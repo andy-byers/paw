@@ -23,8 +23,8 @@
 
 #define GET_MODNAME(Mir_) (ModuleInfo_get((Mir_)->C->modinfo, (Mir_)->modno).name)
 #define KPROP_ERROR(K_, Kind_, ...) pawErr_##Kind_((K_)->C, GET_MODNAME((K_)->mir), __VA_ARGS__)
-#define DIVIDE_BY_0(K, loc) KPROP_ERROR(K, constant_divide_by_zero, loc);
-#define SHIFT_BY_NEGATIVE(K, loc) KPROP_ERROR(K, constant_negative_shift_count, loc);
+#define DIVIDE_BY_0(K, span) KPROP_ERROR(K, constant_divide_by_zero, span);
+#define SHIFT_BY_NEGATIVE(K, span) KPROP_ERROR(K, constant_negative_shift_count, span);
 
 enum CellKind {
     CELL_TOP,
@@ -150,8 +150,7 @@ static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
 }
 
 #define LATTICE_KEY(K_, Place_) \
-        CHECK_EXP((Place_).kind != MIR_PLACE_LOCAL \
-                && (Place_).kind != MIR_PLACE_UPVALUE, \
+        CHECK_EXP((Place_).kind != MIR_PLACE_UPVALUE, \
             (Place_).kind == MIR_PLACE_REGISTER ? (Place_).r.value \
             : (Place_).k.value + (K_)->mir->registers->count)
 
@@ -254,13 +253,13 @@ static struct CellInfo constant_unary_op(struct KProp *K, struct Cell *val, stru
     return BOTTOM_INFO();
 }
 
-static struct CellInfo constant_binary_op(struct KProp *K, struct SourceLoc loc, struct Cell *lhs, struct Cell *rhs, struct Cell const *output, enum MirBinaryOpKind op)
+static struct CellInfo constant_binary_op(struct KProp *K, struct SourceSpan span, struct Cell *lhs, struct Cell *rhs, struct Cell const *output, enum MirBinaryOpKind op)
 {
     Value const x = lhs->info.v;
     Value const y = rhs->info.v;
     Value r;
 
-    if (pawP_fold_binary_op(K->C, GET_MODNAME(K->mir), loc, op, x, y, &r)) {
+    if (pawP_fold_binary_op(K->C, GET_MODNAME(K->mir), span, op, x, y, &r)) {
         enum BuiltinKind const kind = pawP_type2code(K->C, output->type);
         int const k = add_constant(K, r, kind);
         return CONST_INFO(k, r);
@@ -353,7 +352,7 @@ static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, stru
             break;
         case MIR_BINARY_IDIV:
             if (EQUALS_CONST_INT(rhs, 0)) {
-                DIVIDE_BY_0(K, binop->loc);
+                DIVIDE_BY_0(K, binop->span);
             } else if (EQUALS_CONST_INT(lhs, 0)) {
                 return const_zero(K, BUILTIN_INT);
             } else if (EQUALS_CONST_INT(rhs, 1)) {
@@ -364,21 +363,21 @@ static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, stru
             // NOTE: the result of "0.0 / f" cannot be folded, since it depends on the
             //       sign of "f"
             if (EQUALS_CONST_FLOAT(rhs, 0.0)) {
-                DIVIDE_BY_0(K, binop->loc);
+                DIVIDE_BY_0(K, binop->span);
             } else if (EQUALS_CONST_FLOAT(rhs, 1.0)) {
                 return lhs->info;
             }
             break;
         case MIR_BINARY_IMOD:
             if (EQUALS_CONST_INT(rhs, 0)) {
-                DIVIDE_BY_0(K, binop->loc);
+                DIVIDE_BY_0(K, binop->span);
             } else if (EQUALS_CONST_INT(lhs, 0) || EQUALS_CONST_INT(rhs, 1)) {
                 return const_zero(K, BUILTIN_INT);
             }
             break;
         case MIR_BINARY_FMOD:
             if (EQUALS_CONST_FLOAT(rhs, 0.0)) {
-                DIVIDE_BY_0(K, binop->loc);
+                DIVIDE_BY_0(K, binop->span);
             }
             break;
         case MIR_BINARY_IBITAND:
@@ -396,7 +395,7 @@ static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, stru
         case MIR_BINARY_ISHL:
         case MIR_BINARY_ISHR:
             if (rhs->info.kind == CELL_CONSTANT && V_INT(rhs->info.v) < 0) {
-                SHIFT_BY_NEGATIVE(K, binop->loc);
+                SHIFT_BY_NEGATIVE(K, binop->span);
             } else if (EQUALS_CONST_INT(lhs, 0)) { // 0 shift n == 0
                 return const_zero(K, BUILTIN_INT);
             } else if (EQUALS_CONST_INT(rhs, 0)) { // n shift 0 == n
@@ -449,7 +448,7 @@ static MirBlock single_branch_target(struct Cell *pcell, struct MirBlockData con
 static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struct Cell *pcell, struct MirBlockData const *bb)
 {
     paw_assert(pcell->info.kind == CELL_CONSTANT);
-    enum BuiltinKind kind = pawP_type2code(K->C, pcell->type);
+    enum BuiltinKind const kind = pawP_type2code(K->C, pcell->type);
     Value const target = pcell->info.v;
 
     MirBlock const *pb;
@@ -479,7 +478,7 @@ static void into_goto(struct KProp *K, struct MirInstruction *instr)
 {
     instr->Goto_ = (struct MirGoto){
         .kind = kMirGoto,
-        .loc = instr->hdr.loc,
+        .span = instr->hdr.span,
         .mid = instr->hdr.mid,
     };
 
@@ -507,7 +506,9 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             struct Cell const *target = get_cell(K, x->target);
             struct Cell *output = get_cell(K, x->output);
             enum CellKind const old = output->info.kind;
-            if (target->info.kind == CELL_CONSTANT) {
+            if (old == CELL_BOTTOM) {
+                // do nothing: cell refers to an argument or the return value slot
+            } else if (target->info.kind == CELL_CONSTANT) {
                 output->info = target->info;
             } else {
                 output->info = BOTTOM_INFO();
@@ -538,7 +539,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             enum CellKind const old = output->info.kind;
             if (lhs->info.kind == CELL_CONSTANT && rhs->info.kind == CELL_CONSTANT) {
                 // handle "const1 op const2"
-                output->info = constant_binary_op(K, instr->hdr.loc, lhs, rhs, output, x->op);
+                output->info = constant_binary_op(K, instr->hdr.span, lhs, rhs, output, x->op);
             } else if (lhs->info.kind == CELL_CONSTANT || rhs->info.kind == CELL_CONSTANT) {
                 // handle "reg op const" or "const op reg"
                 output->info = special_binary_op(K, lhs, rhs, x);
@@ -573,10 +574,15 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
                 FlowWorklist_push(K, K->flow, FLOW_EDGE(b, s));
             } else {
                 paw_assert(discr->info.kind == CELL_BOTTOM);
-                MirBlock const *pb;
-                K_LIST_FOREACH (bb->successors, pb)
+                K_LIST_XFOREACH (bb->successors, MirBlock const, pb)
                     FlowWorklist_push(K, K->flow, FLOW_EDGE(b, *pb));
             }
+            break;
+        }
+        case kMirAddrOf: {
+            struct MirAddrOf *x = MirGetAddrOf(instr);
+            get_cell(K, x->input)->info = BOTTOM_INFO();
+            get_cell(K, x->output)->info = BOTTOM_INFO();
             break;
         }
         default: {
@@ -772,11 +778,17 @@ static void init_lattice(struct KProp *K)
     int key = 0;
     int index;
 
+    struct IrFnPtr const *fptr = IrIsSignature(mir->type)
+        ? IrGetFnPtr(IR_SIGNATURE_FN(K->C, mir->type))
+        : IrGetFnPtr(mir->type);
+
     struct MirRegisterData *pdata;
     K_LIST_ENUMERATE (mir->registers, index, pdata) {
+        enum CellKind const kind = index <= fptr->params->count
+                ? CELL_BOTTOM : CELL_TOP;
         Lattice_set(K->lattice, key++,
             (struct Cell){
-                .info.kind = CELL_TOP,
+                .info.kind = kind,
                 .type = pdata->type,
                 .r = MIR_REG(index),
             });
@@ -800,12 +812,16 @@ static void init_lattice(struct KProp *K)
 
 static void account_for_uses(struct KProp *K, struct MirInstruction *instr, UseCountMap *uses)
 {
-    struct MirPlace *const *ppp;
-    struct MirPlacePtrList *loads = pawMir_get_loads(K->mir, instr);
-    K_LIST_FOREACH (loads, ppp) {
-        if ((*ppp)->kind == MIR_PLACE_REGISTER) {
-            int *pcount = UseCountMap_get(K, uses, (*ppp)->r);
-            ++*pcount;
+    struct MirPlacePtrList const *accesses[] = {
+        pawMir_get_loads(K->mir, instr),
+        pawMir_get_stores(K->mir, instr),
+    };
+    for (size_t i = 0; i < PAW_COUNTOF(accesses); ++i) {
+        K_LIST_XFOREACH (accesses[i], struct MirPlace *const, p) {
+            if ((*p)->kind == MIR_PLACE_REGISTER) {
+                int *count_ptr = UseCountMap_get(K, uses, (*p)->r);
+                ++*count_ptr;
+            }
         }
     }
 }
@@ -921,9 +937,13 @@ static void propagate_copy(struct KProp *K, struct MirMove const *move)
     }
 }
 
-static paw_Bool can_propagate(struct MirMove const *move)
+static paw_Bool can_propagate(struct KProp *K, struct MirMove const *move)
 {
-    return move->target.kind != MIR_PLACE_CONSTANT;
+    paw_assert(move->output.kind == MIR_PLACE_REGISTER);
+    return move->target.kind == MIR_PLACE_REGISTER
+        && move->output.r.value > 0
+        && !mir_reg_data(K->mir, move->target.r)->is_nontrivial
+        && !mir_reg_data(K->mir, move->output.r)->is_nontrivial;
 }
 
 static void propagate_copies(struct KProp *K)
@@ -936,7 +956,7 @@ static void propagate_copies(struct KProp *K)
         MirInstructionList_reserve(K->mir, instrs, block->instructions->count);
         K_LIST_FOREACH (block->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
-            if (MirIsMove(instr) && can_propagate(MirGetMove(instr))) {
+            if (MirIsMove(instr) && can_propagate(K, MirGetMove(instr))) {
                 propagate_copy(K, MirGetMove(instr));
             } else if (!MirIsNoop(instr)) {
                 MirInstructionList_push(K->mir, instrs, instr);

@@ -40,18 +40,9 @@ State::State(Context &X, Fn *fn)
 
     for (auto i = 0U; i < fn_->get_num_args(); ++i) {
         auto *param_type = type->get_param_type(i);
-        if (!param_type->is_ptr_type())
-            args_[i] = B->CreateAlloca(*param_type);
-    }
-
-    for (auto i = 0U; i < fn_->get_num_args(); ++i) {
-        auto *param_type = type->get_param_type(i);
-        auto *arg = fn_->get_arg(i);
-        if (!param_type->is_ptr_type()) {
-            X.store_value(arg, args_[i]);
-        } else {
-            args_[i] = arg;
-        }
+        auto *stack_slot = B->CreateAlloca(*param_type);
+        X.store_value(fn_->get_arg(i), stack_slot);
+        args_[i] = stack_slot;
     }
 }
 

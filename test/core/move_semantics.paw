@@ -1,0 +1,26 @@
+// move_semantics.paw
+
+struct MoveOnly {
+    fn counter: *int,
+}
+
+impl MoveOnly {
+    pub fn new(counter: *int) -> Self {
+        Self{counter}
+    }
+}
+
+impl Drop for MoveOnly {
+    fn drop(*self) {
+        *self.counter += 1;
+    }
+}
+
+#[test]
+pub fn test() {
+    int num_drops = 0;
+    {
+        let mo = MoveOnly::new(&num_drops);
+    }
+    assert(num_drops == 1);
+}

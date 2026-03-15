@@ -71,6 +71,21 @@ DEFINE_LIST_ACCEPTOR(stmt, Stmt)
 DEFINE_LIST_ACCEPTOR(type, Type)
 DEFINE_LIST_ACCEPTOR(pat, Pat)
 
+static void accept_generic_arg(struct AstVisitor *V, struct AstGenericArg arg)
+{
+    if (arg.is_type) {
+        AcceptType(V, arg.t);
+    } else {
+        AcceptExpr(V, arg.k);
+    }
+}
+
+static void accept_generic_args(struct AstVisitor *V, struct AstGenericArgs *args)
+{
+    K_LIST_XFOREACH (args, struct AstGenericArg const, p)
+        accept_generic_arg(V, *p);
+}
+
 static void AcceptBlock(struct AstVisitor *V, struct AstBlock *e)
 {
     accept_stmt_list(V, e->stmts);
@@ -78,11 +93,6 @@ static void AcceptBlock(struct AstVisitor *V, struct AstBlock *e)
 }
 
 static void AcceptParenExpr(struct AstVisitor *V, struct AstParenExpr *e)
-{
-    AcceptExpr(V, e->expr);
-}
-
-static void AcceptAddrOfExpr(struct AstVisitor *V, struct AstAddrOfExpr *e)
 {
     AcceptExpr(V, e->expr);
 }
@@ -163,12 +173,9 @@ static void AcceptMatchExpr(struct AstVisitor *V, struct AstMatchExpr *e)
 
 static void AcceptSegment(struct AstVisitor *V, struct AstSegment *seg)
 {
-    if (VISITOR_CALL(V, Segment, seg)
-            && seg->types != NULL) {
-        struct AstType *const *ptype;
-        K_LIST_FOREACH (seg->types, ptype) {
-            AcceptType(V, *ptype);
-        }
+    if (VISITOR_CALL(V, Segment, seg)) {
+        if (seg->args != NULL)
+            accept_generic_args(V, seg->args);
         VISITOR_POSTCALL(V, Segment, seg);
     }
 }
@@ -191,11 +198,11 @@ static void AcceptLiteralExpr(struct AstVisitor *V, struct AstLiteralExpr *e)
             AcceptPath(V, &e->comp.path);
             accept_expr_list(V, e->comp.items);
             break;
-        case kAstContainerLit:
-            accept_expr_list(V, e->cont.items);
-            break;
         case kAstTupleLit:
             accept_expr_list(V, e->tuple.elems);
+            break;
+        case kAstArrayLit:
+            accept_expr_list(V, e->array.elems);
             break;
         case kAstBasicLit:
             break;
@@ -261,16 +268,19 @@ static void AcceptParamDecl(struct AstVisitor *V, struct AstParamDecl *d)
 static void AcceptTypeDecl(struct AstVisitor *V, struct AstTypeDecl *d)
 {
     accept_decl_list(V, d->generics);
-    AcceptType(V, d->rhs);
+    if (d->rhs != NULL)
+        AcceptType(V, d->rhs);
 }
 
 static void AcceptGenericDecl(struct AstVisitor *V, struct AstGenericDecl *d)
 {
-    if (d->bounds != NULL) {
-        struct AstGenericBound *pbound;
-        K_LIST_FOREACH (d->bounds, pbound) {
-            AcceptPath(V, &pbound->path);
+    if (d->is_type) {
+        if (d->t.bounds != NULL) {
+            K_LIST_XFOREACH (d->t.bounds, struct AstGenericBound, p)
+                AcceptPath(V, &p->path);
         }
+    } else {
+        AcceptType(V, d->k.type);
     }
 }
 
@@ -282,8 +292,11 @@ static void AcceptVariantDecl(struct AstVisitor *V, struct AstVariantDecl *d)
 static void AcceptImplDecl(struct AstVisitor *V, struct AstImplDecl *d)
 {
     accept_decl_list(V, d->generics);
-    if (d->trait != NULL) AcceptType(V, d->trait);
+    if (d->trait != NULL)
+        AcceptType(V, d->trait);
     AcceptType(V, d->type);
+    accept_decl_list(V, d->types);
+    accept_decl_list(V, d->constants);
     accept_decl_list(V, d->methods);
 }
 
@@ -296,6 +309,7 @@ static void AcceptAdtDecl(struct AstVisitor *V, struct AstAdtDecl *d)
 static void AcceptTraitDecl(struct AstVisitor *V, struct AstTraitDecl *d)
 {
     accept_decl_list(V, d->generics);
+    accept_decl_list(V, d->types);
     accept_decl_list(V, d->methods);
 }
 
@@ -320,7 +334,8 @@ static void AcceptCallExpr(struct AstVisitor *V, struct AstCallExpr *e)
 
 static void AcceptConversionExpr(struct AstVisitor *V, struct AstConversionExpr *e)
 {
-    AcceptExpr(V, e->arg);
+    AcceptExpr(V, e->from);
+    AcceptType(V, e->to);
 }
 
 static void AcceptPathExpr(struct AstVisitor *V, struct AstPathExpr *e)
@@ -374,16 +389,20 @@ static void AcceptFnType(struct AstVisitor *V, struct AstFnType *t)
     if (t->result != NULL) AcceptType(V, t->result);
 }
 
+static void AcceptSliceType(struct AstVisitor *V, struct AstSliceType *t)
+{
+    AcceptType(V, t->type);
+}
+
+static void AcceptArrayType(struct AstVisitor *V, struct AstArrayType *t)
+{
+    AcceptExpr(V, t->length);
+    AcceptType(V, t->type);
+}
+
 static void AcceptTupleType(struct AstVisitor *V, struct AstTupleType *t)
 {
     accept_type_list(V, t->types);
-}
-
-static void AcceptContainerType(struct AstVisitor *V, struct AstContainerType *t)
-{
-    AcceptType(V, t->first);
-    if (t->second != NULL)
-        AcceptType(V, t->second);
 }
 
 static void AcceptNeverType(struct AstVisitor *V, struct AstNeverType *t)
@@ -405,15 +424,25 @@ static void AcceptRefType(struct AstVisitor *V, struct AstRefType *t)
 
 static void AcceptPathType(struct AstVisitor *V, struct AstPathType *t)
 {
-    struct AstSegment const *pseg;
-    K_LIST_FOREACH (t->path.segments, pseg) {
-        accept_type_list(V, pseg->types);
+    K_LIST_XFOREACH (t->path.segments, struct AstSegment const, p) {
+        if (p->args != NULL)
+            accept_generic_args(V, p->args);
     }
 }
 
 static void AcceptOrPat(struct AstVisitor *V, struct AstOrPat *e)
 {
     accept_pat_list(V, e->pats);
+}
+
+static void AcceptRefPat(struct AstVisitor *V, struct AstRefPat *e)
+{
+    AcceptPat(V, e->referent);
+}
+
+static void AcceptPtrPat(struct AstVisitor *V, struct AstPtrPat *e)
+{
+    AcceptPat(V, e->pointee);
 }
 
 static void AcceptFieldPat(struct AstVisitor *V, struct AstFieldPat *p)
@@ -640,6 +669,16 @@ void pawAst_visitor_init(struct AstVisitor *V, struct Ast *ast, void *ud)
     };
 }
 
+void pawAst_visit_generic_arg(struct AstVisitor *V, struct AstGenericArg arg)
+{
+    accept_generic_arg(V, arg);
+}
+
+void pawAst_visit_generic_args(struct AstVisitor *V, struct AstGenericArgs *args)
+{
+    accept_generic_args(V, args);
+}
+
 #define DEFINE_VISITORS(name, T)                                                     \
     void pawAst_visit_##name(struct AstVisitor *V, struct Ast##T *node)              \
     {                                                                                \
@@ -660,6 +699,37 @@ DEFINE_VISITORS(stmt, Stmt)
 DEFINE_VISITORS(type, Type)
 DEFINE_VISITORS(pat, Pat)
 #undef DEFINE_VISITORS
+
+
+static char const *kAstTypeNames[] = {
+#define X(Name_) "Ast" #Name_,
+    AST_TYPE_LIST(X)
+#undef X
+};
+
+static char const *kAstExprNames[] = {
+#define X(Name_) "Ast" #Name_,
+    AST_EXPR_LIST(X)
+#undef X
+};
+
+static char const *kAstPatNames[] = {
+#define X(Name_) "Ast" #Name_,
+    AST_PAT_LIST(X)
+#undef X
+};
+
+static char const *kAstStmtNames[] = {
+#define X(Name_) "Ast" #Name_,
+    AST_STMT_LIST(X)
+#undef X
+};
+
+static char const *kAstDeclNames[] = {
+#define X(Name_) "Ast" #Name_,
+    AST_DECL_LIST(X)
+#undef X
+};
 
 
 typedef struct Printer {
@@ -732,17 +802,33 @@ DEFINE_KIND_PRINTER(stmt, AstStmt)
 
 static void add_span(Printer *P, struct SourceSpan span)
 {
-    pawSrc_add_location(P->P, P->buf, span.start);
-    DUMP_LITERAL(P, "-");
-    pawSrc_add_location(P->P, P->buf, span.end);
 }
 
+static void dump_generic_args(struct Printer *P, struct AstGenericArgs *args)
+{
+    if (args != NULL) {
+        DUMP_CSTR(P, "<");
+
+        int index;
+        struct AstGenericArg const *p;
+        K_LIST_ENUMERATE (args, index, p) {
+            if (index > 0) DUMP_CSTR(P, ", ");
+            if (p->is_type) {
+                dump_type(P, p->t);
+            } else {
+                dump_expr(P, p->k);
+            }
+        }
+
+        DUMP_CSTR(P, "<");
+    }
+}
 static void dump_path(Printer *P, struct AstPath *p)
 {
     struct AstSegment *pseg;
     K_LIST_FOREACH(p->segments, pseg) {
         DUMP_NAME(P, pseg->ident.name);
-        dump_type_list(P, pseg->types, "types");
+        dump_generic_args(P, pseg->args);
     }
 }
 
@@ -765,6 +851,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             DUMP_FMT(P, "name: %s\n", d->ident.name->text);
             DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             dump_decl_list(P, d->generics, "generics");
+            dump_decl_list(P, d->types, "types");
             dump_decl_list(P, d->methods, "methods");
             break;
         }
@@ -834,6 +921,8 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             DUMP_CSTR(P, "type: ");
             dump_type(P, d->type);
             dump_decl_list(P, d->generics, "generics");
+            dump_decl_list(P, d->types, "types");
+            dump_decl_list(P, d->constants, "constants");
             dump_decl_list(P, d->methods, "methods");
             break;
         }
@@ -848,16 +937,25 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
         }
         case kAstGenericDecl: {
             struct AstGenericDecl *d = AstGetGenericDecl(decl);
-            DUMP_NAME(P, d->ident.name);
+            if (d->is_type) {
+                DUMP_NAME(P, d->t.ident.name);
+            } else {
+                DUMP_CSTR(P, "const ");
+                DUMP_NAME(P, d->k.ident.name);
+                DUMP_CSTR(P, ": ");
+                dump_type(P, d->k.type);
+            }
             break;
         }
         case kAstTypeDecl: {
             struct AstTypeDecl *d = AstGetTypeDecl(decl);
             DUMP_NAME(P, d->ident.name);
-            DUMP_CSTR(P, "rhs: ");
-            dump_type(P, d->rhs);
             dump_decl_list(P, d->generics, "generics");
             DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
+            if (d->rhs != NULL) {
+                DUMP_CSTR(P, "rhs: ");
+                dump_type(P, d->rhs);
+            }
             break;
         }
     }
@@ -914,6 +1012,7 @@ static void dump_type(Printer *P, struct AstType *type)
             struct AstRefType *t = AstGetRefType(type);
             DUMP_CSTR(P, "type: ");
             dump_type(P, t->type);
+            DUMP_FMT(P, "is_mut: %d", t->is_mut);
             break;
         }
         case kAstPathType: {
@@ -922,17 +1021,23 @@ static void dump_type(Printer *P, struct AstType *type)
             dump_path(P, &t->path);
             break;
         }
+        case kAstSliceType: {
+            struct AstSliceType *t = AstGetSliceType(type);
+            DUMP_CSTR(P, "type: ");
+            dump_type(P, t->type);
+            break;
+        }
+        case kAstArrayType: {
+            struct AstArrayType *t = AstGetArrayType(type);
+            DUMP_CSTR(P, "type: ");
+            dump_type(P, t->type);
+            DUMP_CSTR(P, "length: ");
+            dump_expr(P, t->length);
+            break;
+        }
         case kAstTupleType: {
             struct AstTupleType *t = AstGetTupleType(type);
             dump_type_list(P, t->types, "elems");
-            break;
-        }
-        case kAstContainerType: {
-            struct AstContainerType *t = AstGetContainerType(type);
-            DUMP_CSTR(P, "first: ");
-            dump_type(P, t->first);
-            DUMP_CSTR(P, "second: ");
-            dump_type(P, t->second);
             break;
         }
         case kAstNeverType:
@@ -961,10 +1066,6 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
     switch (AST_KINDOF(expr)) {
         case kAstParenExpr: {
             struct AstParenExpr *e = AstGetParenExpr(expr);
-            break;
-        }
-        case kAstAddrOfExpr: {
-            struct AstAddrOfExpr *e = AstGetAddrOfExpr(expr);
             break;
         }
         case kAstLogicalExpr: {
@@ -1035,13 +1136,13 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
                             break;
                     }
                     break;
+                case kAstArrayLit:
+                    DUMP_CSTR(P, "lit_kind: ARRAY\n");
+                    dump_expr_list(P, e->array.elems, "elems");
+                    break;
                 case kAstTupleLit:
                     DUMP_CSTR(P, "lit_kind: TUPLE\n");
-                    dump_expr_list(P, e->tuple.elems, "elems");
-                    break;
-                case kAstContainerLit:
-                    DUMP_CSTR(P, "lit_kind: CONTAINER\n");
-                    dump_expr_list(P, e->cont.items, "items");
+                    dump_expr_list(P, e->tuple.elems, "fields");
                     break;
                 case kAstCompositeLit:
                     DUMP_CSTR(P, "lit_kind: COMPOSITE\n");
@@ -1212,3 +1313,144 @@ char const *pawAst_print_path(struct Ast *ast, struct AstPath path)
     Str const *result = pawL_buffer_finish(P, &buf);
     return result->text;
 }
+
+static void print_type(paw_Env *P, Buffer *buf, struct AstType *type);
+static void print_expr(paw_Env *P, Buffer *buf, struct AstExpr *expr);
+
+static void print_generic_arg(paw_Env *P, Buffer *buf, struct AstGenericArg arg)
+{
+    if (arg.is_type && arg.item != NULL) {
+        pawL_add_fstring(P, buf, "%s = ", arg.item->text);
+        print_type(P, buf, arg.t);
+    } else if (arg.is_type) {
+        print_type(P, buf, arg.t);
+    } else {
+        print_expr(P, buf, arg.k);
+    }
+}
+
+static void print_generic_args(paw_Env *P, Buffer *buf, struct AstGenericArgs const *args)
+{
+    pawL_add_char(P, buf, '<');
+
+    int index = 0;
+    K_LIST_XFOREACH (args, struct AstGenericArg const, parg) {
+        if (index++ > 0) L_ADD_LITERAL(P, buf, ", ");
+        print_generic_arg(P, buf, *parg);
+    }
+
+    pawL_add_char(P, buf, '>');
+}
+
+static void print_path(paw_Env *P, Buffer *buf, struct AstPath path, paw_Bool is_type)
+{
+    int index = 0;
+    K_LIST_XFOREACH (path.segments, struct AstSegment const, psegment) {
+        if (index++ > 0) L_ADD_LITERAL(P, buf, "::");
+        L_ADD_STRING(P, buf, psegment->ident.name);
+        if (psegment->args != NULL) {
+            if (!is_type) L_ADD_LITERAL(P, buf, "::");
+            print_generic_args(P, buf, psegment->args);
+        }
+    }
+}
+
+static void print_types(paw_Env *P, Buffer *buf, struct AstTypeList *types, char const *separator)
+{
+    int index = 0;
+    K_LIST_XFOREACH (types, struct AstType *const, p) {
+        if (index++ > 0) pawL_add_string(P, buf, separator);
+        print_type(P, buf, *p);
+    }
+}
+
+static void print_type(paw_Env *P, Buffer *buf, struct AstType *type)
+{
+    switch (AST_KINDOF(type)) {
+        case kAstRefType: {
+            struct AstRefType *t = AstGetRefType(type);
+            pawL_add_char(P, buf, '*');
+            if (t->is_mut)
+                L_ADD_LITERAL(P, buf, "mut ");
+            print_type(P, buf, t->type);
+            break;
+        }
+        case kAstPathType: {
+            struct AstPathType const *t = AstGetPathType(type);
+            print_path(P, buf, t->path, PAW_TRUE);
+            break;
+        }
+        case kAstSliceType: {
+            struct AstSliceType const *t = AstGetSliceType(type);
+            L_ADD_LITERAL(P, buf, "[]");
+            //if (t->is_mut)
+            //    L_ADD_LITERAL(P, buf, "mut ");
+            print_type(P, buf, t->type);
+            break;
+        }
+        case kAstArrayType: {
+            struct AstArrayType const *t = AstGetArrayType(type);
+            pawL_add_char(P, buf, '[');
+            print_expr(P, buf, t->length);
+            pawL_add_char(P, buf, ']');
+            //if (t->is_mut)
+            //    L_ADD_LITERAL(P, buf, "mut ");
+            print_type(P, buf, t->type);
+            break;
+        }
+        case kAstTupleType: {
+            struct AstTupleType const *t = AstGetTupleType(type);
+            pawL_add_char(P, buf, '(');
+            if (t->types->count > 0) {
+                print_types(P, buf, t->types, ", ");
+                if (t->types->count == 1)
+                    // type in 1-tuple written with trailing comma, i.e. "(Type,)"
+                    pawL_add_char(P, buf, ',');
+            }
+            pawL_add_char(P, buf, ')');
+            break;
+        }
+        case kAstNeverType:
+            pawL_add_char(P, buf, '!');
+            break;
+        case kAstInferType:
+            pawL_add_char(P, buf, '_');
+            break;
+        case kAstFnType: {
+            struct AstFnType *t = AstGetFnType(type);
+            print_types(P, buf, t->params, ", ");
+            if (t->result != NULL) {
+                L_ADD_LITERAL(P, buf, " -> ");
+                print_type(P, buf, t->result);
+            }
+            break;
+        }
+    }
+}
+
+static void print_expr(paw_Env *P, Buffer *buf, struct AstExpr *expr)
+{
+}
+
+Str const *pawAst_print_type_path(struct Ast *ast, struct AstPath path)
+{
+    Buffer buf;
+    paw_Env *P = ENV(ast);
+    pawL_init_buffer(P, &buf);
+
+    print_path(P, &buf, path, PAW_TRUE);
+
+    return pawL_buffer_finish(P, &buf);
+}
+
+Str const *pawAst_print_value_path(struct Ast *ast, struct AstPath path)
+{
+    Buffer buf;
+    paw_Env *P = ENV(ast);
+    pawL_init_buffer(P, &buf);
+
+    print_path(P, &buf, path, PAW_FALSE);
+
+    return pawL_buffer_finish(P, &buf);
+}
+

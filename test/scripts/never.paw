@@ -281,7 +281,6 @@ fn custom_divergence() -> ! {
 #[test]
 pub fn test_diverging_expressions() {
     let _: int = !return;
-    let _: int = #return;
 
     let _: int = 1 + return;
     let _: int = return + 1;

@@ -219,7 +219,8 @@ pub fn test_singleton_struct_field() {
 #[test]
 pub fn test_nested_singleton_struct_field() {
     let s = SingletonStruct{t: ((0,),)};
-    black_box(s);
+    // "s" cannot be copied. Pass its address to "black_box" so it doesn't get moved.
+    black_box(&s); 
 
     s.t = ((123,),);
     assert(s.t.0.0 == 123);

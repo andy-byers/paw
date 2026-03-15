@@ -29,11 +29,11 @@ typedef struct DeclId {
 
 // ORDER UnaryOp
 enum UnaryOp {
-    UNARY_LEN,
     UNARY_NEG,
     UNARY_NOT,
     UNARY_BNOT,
     UNARY_DEREF,
+    UNARY_ADDROF,
 };
 
 // ORDER BinaryOp
@@ -55,7 +55,6 @@ enum BinaryOp {
     BINARY_BOR,
     BINARY_SHL,
     BINARY_SHR,
-    BINARY_CONCAT,
 };
 
 enum JumpKind {
@@ -71,8 +70,8 @@ enum BuiltinKind {
     BUILTIN_INT,
     BUILTIN_FLOAT,
     BUILTIN_STR,
-    BUILTIN_LIST,
-    BUILTIN_MAP,
+    BUILTIN_SLICE,
+    BUILTIN_PTR,
     BUILTIN_OPTION,
     BUILTIN_RESULT,
     BUILTIN_RANGE,
@@ -81,24 +80,22 @@ enum BuiltinKind {
     BUILTIN_RANGE_FULL,
     BUILTIN_RANGE_INCLUSIVE,
     BUILTIN_RANGE_TO_INCLUSIVE,
-    BUILTIN_LIST_ITERATOR,
-    BUILTIN_MAP_ITERATOR,
-    BUILTIN_HASH,
-    BUILTIN_EQUALS,
-    BUILTIN_COMPARE,
 
     NBUILTINS,
 };
 
-#define NBUILTIN_SCALARS (BUILTIN_FLOAT + 1)
-
-enum TraitKind {
-    TRAIT_HASH, // "Hash" trait
-    TRAIT_EQUALS, // "Equals" trait
-    TRAIT_USER, // user-defined trait
+enum CoreTrait {
+    CORE_TRAIT_COPY,
+    CORE_TRAIT_DROP,
+    CORE_TRAIT_DEFAULT,
+    CORE_TRAIT_HASH,
+    CORE_TRAIT_EQUALS,
+    CORE_TRAIT_COMPARE,
+    CORE_TRAIT_INDEX,
+    CORE_TRAIT_FROM,
+    NUM_CORE_TRAITS
 };
 
-#define NBUILTIN_TRAITS TRAIT_USER
 
 enum FnKind {
     FUNC_MODULE,

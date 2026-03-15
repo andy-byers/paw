@@ -24,34 +24,41 @@ pub fn recursive(n: int) -> int {
     return 0;
 }
 
-pub fn poly_recursive<T>(n: int, t: T, list: [T]) -> int {
-    if n > 0 {
-        list.push(t);
-        mod_b::poly_recursive(n - 1, t, list);
-    }
-    return #list;
+pub trait GetValue {
+    fn get_value(*self) -> int;
 }
 
-fn check_poly_recursive(n: int) -> int {
-    let ilist = [];
-    let icount = poly_recursive(n, 123, ilist);
-    let blist = [];
-    let bcount = poly_recursive(n, false, blist);
-    assert(icount == #ilist);
-    assert(icount == #blist);
-    assert(icount == bcount);
-    return icount;
+pub fn poly_recursive<T: GetValue>(n: int, t: T, value: int) -> int {
+    if n > 0 {
+        return mod_b::poly_recursive(n - 1, t, value + t.get_value());
+    }
+    value
+}
+
+pub struct Test;
+
+impl GetValue for Test {
+    fn get_value(*self) -> int {
+        123
+    }
+}
+
+fn check_poly_recursive(n: int) {
+    let result = poly_recursive(n, Test, 0);
+    let expected = Test.get_value() 
+        * (if n < 0 {0} else {n});
+    assert(result == expected);
 }
 
 #[test]
 pub fn test_recursive() {
-    assert(recursive(-1) == 0);
-    assert(recursive(1) == 1);
-    assert(recursive(10) == 10);
+    check_poly_recursive(-1);
+    check_poly_recursive(1);
+    check_poly_recursive(10);
+}
 
-    assert(check_poly_recursive(-1) == 0);
-    assert(check_poly_recursive(1) == 1);
-    assert(check_poly_recursive(10) == 10);
+pub fn should_never_run() {
+    panic("this function should never be called");
 }
 
 pub fn get_test(k: str) -> fn() {
@@ -60,7 +67,7 @@ pub fn get_test(k: str) -> fn() {
     } else if k == "recursive" {
         return test_recursive;
     } else {
-        return || assert(false);
+        return should_never_run;
     }
 }
 

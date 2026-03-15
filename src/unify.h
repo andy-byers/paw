@@ -9,9 +9,11 @@ struct IrTypeList;
 
 typedef struct UnificationTable UnificationTable;
 typedef int (*Unify)(struct Unifier *, struct IrType *, struct IrType *);
+typedef int (*UnifyTrait)(struct Compiler *, struct IrTrait *, struct IrTrait *);
 
 struct Unifier {
     Unify action;
+    UnifyTrait trait_action;
     UnificationTable *table;
     Str const *modname;
     struct Compiler *C;
@@ -19,6 +21,8 @@ struct Unifier {
 };
 
 struct IrType *pawU_normalize(struct Unifier *U, struct IrType *a);
+struct IrType *pawU_normalize_projections(struct Unifier *U, struct IrType *type);
+struct IrConst *pawU_normalize_const(struct Unifier *U, IrConst *k);
 
 struct IrObligations *pawU_steal_obligations(struct Unifier *U);
 
@@ -29,10 +33,7 @@ paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b);
 int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
 
 // Create a new type variable
-struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, struct IrTypeList *bounds);
-
-// TODO: get rid of this function and create lists of unknowns wherever they are needed and add source locations
-struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct SourceLoc loc, struct IrTypeList *types);
+struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceSpan span);
 
 // Inference context handling
 void pawU_enter_binder(struct Unifier *U, Str const *modname);

@@ -1,13 +1,14 @@
 // Translated from https://github.com/attractivechaos/plb2/blob/master/src/lua/matmul.lua
 
-fn matgen(n: int) -> [[float]] {
+use list::List;
+
+fn matgen(n: int) -> List<List<float>> {
     let tmp = 1.0 /
               n as float /
               n as float;
-    let a = [];
-    let i = 0;
-    while i < n {
-        let b = [];
+    let a = List::new();
+    for i in 0..n {
+        let b = List::new();
         for j in 0..n {
             let x = tmp
                   * (i - j) as float
@@ -15,16 +16,15 @@ fn matgen(n: int) -> [[float]] {
             b.push(x);
         }
         a.push(b);
-        i = i + 1;
     }
-    return a;
+    a
 }
 
-fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
-    let c = [];
+fn matmul(n: int, a: List<List<float>>, b: List<List<float>>) -> List<List<float>> {
+    let c = List::new();
     let i = 0;
     while i < n {
-        let ci = [];
+        let ci = List::new();
         let j = 0;
         while j < n {
             ci.push(0.0);
@@ -33,7 +33,7 @@ fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
         let k = 0;
         while k < n {
             let aik = a[i][k];
-            let bk = b[k];
+            let bk = &b[k];
             let j = 0;
             while j < n {
                 ci[j] = ci[j] + aik * bk[j];
@@ -47,14 +47,73 @@ fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
     return c;
 }
 
-pub fn main(args: [str]) {
-    let n = 100;
-    if #args > 1 {
-        n = args[1].parse_int().unwrap();
+
+#[test]
+pub fn test() {
+    let a = List::new();
+    {
+        let row = List::new();
+        row.push(0.0);
+        row.push(2.0);
+        row.push(3.0);
+        a.push(row);
+
+        let row = List::new();
+        row.push(1.0);
+        row.push(2.0);
+        row.push(3.0);
+        a.push(row);
+
+        let row = List::new();
+        row.push(1.0);
+        row.push(2.0);
+        row.push(3.0);
+        a.push(row);
     }
+
+    let b = List::new();
+    {
+        let row = List::new();
+        row.push(1.0);
+        row.push(1.0);
+        row.push(1.0);
+        b.push(row);
+
+        let row = List::new();
+        row.push(2.0);
+        row.push(2.0);
+        row.push(2.0);
+        b.push(row);
+
+        let row = List::new();
+        row.push(3.0);
+        row.push(3.0);
+        row.push(0.0);
+        b.push(row);
+    }
+
+    let c = matmul(3, a, b);
+    assert(c[0][0] == 13.0);
+    assert(c[0][1] == 13.0);
+    assert(c[0][2] == 4.0);
+    assert(c[1][0] == 14.0);
+    assert(c[1][1] == 14.0);
+    assert(c[1][2] == 5.0);
+    assert(c[2][0] == 14.0);
+    assert(c[2][1] == 14.0);
+    assert(c[2][2] == 5.0);
+}
+
+use io;
+
+pub fn main() {
+    let n = 100;
+//    if #args > 1 {
+//        n = args[1].parse_int().unwrap();
+//    }
     let a = matgen(n);
     let b = matgen(n);
     let c = matmul(n, a, b);
 
-    print("\{c[n / 2][n / 2]}\n");
+//    print("\{c[n / 2][n / 2]}\n");
 }

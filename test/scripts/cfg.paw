@@ -211,7 +211,7 @@ pub fn test_while_guard() {
 }
 
 #[test]
-pub fn test_while_header_var_unused_in_body() {
+pub fn test_while_cond_var_unused_in_body() {
     let n = 42;
     let m = 0;
     // "n" is used in the loop header but not in the body, meaning it must be

@@ -82,9 +82,7 @@ target_sources(paw_stdc
             ${STD_SRC}/pmath.c
             ${STD_SRC}/str.c)
 target_include_directories(paw_stdc
-    PUBLIC ${STD_SRC} ${PAW_GC_DIR}/include)
-target_link_libraries(paw_stdc
-    PUBLIC ${PAW_GC_DIR}/lib/libgc.a)
+    PUBLIC ${STD_SRC})
 
 #file(GLOB STD_SRC_FILES "${STD_SRC}/*.paw")
 #add_custom_command(

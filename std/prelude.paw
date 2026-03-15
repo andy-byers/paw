@@ -3,228 +3,55 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 pub use ops::*;
-pub use list::*;
-pub use map::*;
 pub use option::*;
 pub use result::*;
 
 
-impl unit {
-    pub fn to_str(self) -> str { 
-        "()" 
+pub const CHAR_MAX: char = '\xFF';
+pub const CHAR_MIN: char = '\x00';
+
+
+pub const INT_MAX: int = 0x7FFFFFFFFFFFFFFF;
+pub const INT_MIN: int = -INT_MAX - 1;
+
+impl str {
+    #[extern = "paw_str_from_raw_parts"] 
+    pub fn from_raw_parts(ptr: *char, len: int) -> Self;
+
+    #[extern = "paw_str_len"] 
+    pub fn len(self) -> int;
+
+    #[extern = "paw_str_parse_int"] 
+    pub fn parse_int(self) -> Option<int>;
+
+    #[extern = "paw_str_parse_int_radix"] 
+    pub fn parse_int_radix(self, base: int) -> Option<int>;
+
+    #[extern = "paw_str_parse_float"] 
+    pub fn parse_float(self) -> Option<float>;
+
+    #[extern = "paw_str_find"] 
+    pub fn find(self, target: Self) -> Option<int>;
+
+    #[extern = "paw_str_starts_with"] 
+    pub fn starts_with(self, prefix: Self) -> bool;
+
+    #[extern = "paw_str_ends_with"] 
+    pub fn ends_with(self, suffix: Self) -> bool;
+}
+
+use slice::ToSlice;
+
+pub fn panic<T: ToSlice<char>>(message: T) -> ! {
+    panic_handler(message.to_slice());
+}
+
+#[extern = "paw_panic_handler"] 
+pub fn panic_handler(message: []char) -> !;
+
+pub fn assert(cond: bool) {
+    if !cond {
+        panic("assertion failure");
     }
 }
 
-impl Hash for unit {
-    fn hash(self) -> int { 
-        0 
-    }
-}
-
-impl Equals for unit {
-    fn eq(self, rhs: Self) -> bool { 
-        true 
-    }
-}
-
-impl Default for unit {
-    fn default() -> Self {
-        ()
-    }
-}
-
-
-impl bool {
-    pub fn to_str(self) -> str {
-        if self {
-            "true"
-        } else {
-            "false"
-        }
-    }
-}
-
-impl Hash for bool {
-    fn hash(self) -> int { 
-        self as int 
-    }
-}
-
-impl Equals for bool {
-    fn eq(self, rhs: Self) -> bool { 
-        self == rhs 
-    }
-}
-
-impl Default for bool {
-    fn default() -> Self {
-        false
-    }
-}
-
-
-impl char { 
-    #[extern_std] pub fn to_str(self) -> str;
-}
-
-impl Hash for char { 
-    fn hash(self) -> int { 
-        self as int 
-    }
-}
-
-impl Equals for char { 
-    fn eq(self, rhs: Self) -> bool { 
-        self == rhs 
-    }
-}
-
-impl Compare for char {
-    fn lt(self, rhs: Self) -> bool { 
-        self < rhs 
-    }
-
-    fn le(self, rhs: Self) -> bool { 
-        self <= rhs 
-    }
-}
-
-impl Increment for char {
-    fn increment(&self) { 
-        self = (self as int + 1) as char; 
-    }
-}
-
-impl Default for char {
-    fn default() -> Self {
-        '\0'
-    }
-}
-
-
-impl int {
-    #[extern_std] pub fn to_str(self) -> str;
-}
-
-impl Hash for int { 
-    fn hash(self) -> int { 
-        self 
-    }
-}
-
-impl Equals for int { 
-    fn eq(self, rhs: Self) -> bool { 
-        self == rhs 
-    }
-}
-
-impl Compare for int { 
-    fn lt(self, rhs: Self) -> bool { 
-        self < rhs 
-    }
-
-    fn le(self, rhs: Self) -> bool { 
-        self <= rhs 
-    }
-}
-
-impl Increment for int {
-    fn increment(&self) { 
-        self += 1; 
-    }
-}
-
-impl Default for int {
-    fn default() -> Self {
-        0
-    }
-}
-
-
-impl float { 
-    #[extern_std] pub fn to_str(self) -> str;
-}
-
-impl Hash for float { 
-    #[extern_std] fn hash(self) -> int;
-}
-
-impl Equals for float { 
-    fn eq(self, rhs: Self) -> bool { 
-        self == rhs 
-    }
-}
-
-impl Compare for float {
-    fn lt(self, rhs: Self) -> bool { 
-        self < rhs 
-    }
-
-    fn le(self, rhs: Self) -> bool { 
-        self <= rhs 
-    }
-}
-
-impl Default for float {
-    fn default() -> Self {
-        0.0
-    }
-}
-
-
-impl str { 
-    #[extern_std] pub fn parse_int(self) -> Option<int>;
-    #[extern_std] pub fn parse_int_radix(self, base: int) -> Option<int>;
-    #[extern_std] pub fn parse_float(self) -> Option<float>;
-    #[extern_std] pub fn split(self, sep: str) -> [str];
-    #[extern_std] pub fn join(self, seq: [str]) -> str;
-    #[extern_std] pub fn find(self, target: str) -> Option<int>;
-    #[extern_std] pub fn starts_with(self, prefix: str) -> bool;
-    #[extern_std] pub fn ends_with(self, suffix: str) -> bool;
-    #[extern_std] pub fn substr(self, offset: int, length: int) -> str;
-
-    pub fn to_str(self) -> str { 
-        self 
-    }
-}
-
-impl Hash for str { 
-    #[extern_std] fn hash(self) -> int;
-}
-
-impl Equals for str { 
-    fn eq(self, rhs: Self) -> bool { 
-        self == rhs 
-    }
-}
-
-impl Compare for str {
-    fn lt(self, rhs: Self) -> bool { 
-        self < rhs 
-    }
-
-    fn le(self, rhs: Self) -> bool { 
-        self <= rhs 
-    }
-}
-
-impl Default for str {
-    fn default() -> Self {
-        ""
-    }
-}
-
-
-
-
-pub fn __private_instantiate_dependencies() {
-    let m: [str: ()] = [:];
-    m.iterator().next();
-    let _: [char] = [];
-}
-
-
-#[extern_std] pub fn print(message: str);
-#[extern_std] pub fn println(message: str);
-#[extern_std] pub fn assert(cond: bool);
-#[extern_std] pub fn panic(message: str) -> !;

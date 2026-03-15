@@ -239,7 +239,7 @@ static struct MatchVars *variables_for_types(struct Usefulness *U, struct Source
 
     IrType *const *ptype;
     K_LIST_FOREACH (types, ptype) {
-        struct MatchVar const var = new_variable(U, span, *ptype);
+        struct MatchVar var = new_variable(U, span, *ptype);
         MatchVars_push(U->C, result, var);
     }
     return result;
@@ -321,8 +321,26 @@ static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
 {
     // filter list of columns while building list of variable declarations
     struct ColumnList *columns = ColumnList_new(U);
-    struct Column const *pcol;
+    struct Column *pcol;
     K_LIST_FOREACH (row->columns, pcol) {
+        if (HirIsPtrPat(pcol->pat)) {
+            pcol->var.deref = PAW_TRUE;
+            struct HirPtrPat *pp = HirGetPtrPat(pcol->pat);
+            if (HirIsBindingPat(pp->pointee)) {
+                IrType *pointee = GET_NODE_TYPE(U->C, pp->pointee);
+                if (!pawIr_is_copyable(U->C, pointee))
+                    pawErr_generic_error(ENV(U), U->modname, pp->span,
+                            "cannot move out of pointer");
+                struct HirBindingPat const *p = HirGetBindingPat(pp->pointee);
+                BindingList_push(U->C, row->body.bindings, (struct Binding){
+                    .name = p->ident.name,
+                    .var = pcol->var,
+                    .id = p->id,
+                });
+            } else if (!HirIsWildcardPat(pp->pointee)) {
+                ColumnList_push(U, columns, *pcol);
+            }
+        } else
         if (HirIsBindingPat(pcol->pat)) {
             struct HirBindingPat const *p = HirGetBindingPat(pcol->pat);
             BindingList_push(U->C, row->body.bindings, (struct Binding){
@@ -395,6 +413,11 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
         struct HirPat *pat = col.pat;
         struct Row const r = copy_row(U, *prow);
 
+        if (HirIsPtrPat(pat)) {
+            pat = HirGetPtrPat(pat)->pointee;
+            col.var.deref = PAW_TRUE;
+        }
+
         // pattern matrix specialization
         int index = 0;
         HirPatList *fields;
@@ -456,6 +479,11 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
 
         struct HirPat *pat = col.pat;
         struct Row const r = copy_row(U, *prow);
+
+        if (HirIsPtrPat(col.pat)) {
+            pat = HirGetPtrPat(pat)->pointee;
+            col.var.deref = PAW_TRUE;
+        }
 
         struct HirLiteralPat *p = HirGetLiteralPat(pat);
         struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
@@ -542,13 +570,14 @@ static IrTypeList *collect_field_types(struct Usefulness *U, struct HirDecl *dec
 
 struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar var)
 {
-    struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(var.type));
+    IrType *struct_type = pawIr_remove_indirection(U->C, var.type);
+    struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(struct_type));
 
-    IrTypeList *fields = collect_field_types(U, decl, var.type);
+    IrTypeList *fields = collect_field_types(U, decl, struct_type);
     struct MatchVars *subvars = variables_for_types(U, var.span, fields);
     struct Constructor cons = {
         .kind = CONS_STRUCT,
-        .struct_.type = var.type,
+        .struct_.type = struct_type,
     };
 
     struct RawCaseList *result = RawCaseList_new(U);
@@ -562,9 +591,10 @@ struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar var)
 
 struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar var)
 {
+    IrType *tuple_type = pawIr_remove_indirection(U->C, var.type);
     struct RawCaseList *result = RawCaseList_new(U);
-    IrTypeList *elems = IrIsTuple(var.type)
-        ? IrGetTuple(var.type)->elems // tuple
+    IrTypeList *elems = IrIsTuple(tuple_type)
+        ? IrGetTuple(tuple_type)->elems // tuple
         : IrTypeList_new(U->C); // unit
     struct MatchVars *subvars = variables_for_types(U, var.span, elems);
     struct Constructor cons = {
@@ -582,7 +612,8 @@ struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar var)
 
 struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar var)
 {
-    struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(var.type));
+    IrType *adt_type = pawIr_remove_indirection(U->C, var.type);
+    struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(adt_type));
     struct HirDeclList *variants = HirGetAdtDecl(decl)->variants;
     paw_assert(!HirGetAdtDecl(decl)->is_struct);
 
@@ -593,7 +624,7 @@ struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar var)
     struct HirDecl *const *pvariant;
     K_LIST_ENUMERATE (variants, index, pvariant) {
         IrType *type = GET_NODE_TYPE(U->C, *pvariant);
-        type = pawP_instantiate_field(U->C, var.type, type);
+        type = pawP_instantiate_field(U->C, adt_type, type);
         struct MatchVars *subvars = variables_for_types(U,
                 var.span, ir_fn_params(U->C, type));
         struct Constructor const cons = {
@@ -618,14 +649,15 @@ enum BranchMode {
     BRANCH_LITERAL,
 };
 
-static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar var)
+static enum BranchMode branch_mode(struct Usefulness *U, IrType *type)
 {
-    if (IrIsTuple(var.type) || IrIsUnit(var.type))
+    type = pawIr_remove_indirection(U->C, type);
+    if (IrIsTuple(type) || IrIsUnit(type))
         return BRANCH_TUPLE;
-    enum BuiltinKind code = pawP_type2code(U->C, var.type);
+    enum BuiltinKind code = pawP_type2code(U->C, type);
     if (IS_BASIC_TYPE(code))
         return BRANCH_LITERAL;
-    struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(var.type));
+    struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(type));
     if (!HirGetAdtDecl(decl)->is_struct)
         return BRANCH_VARIANT;
     return BRANCH_STRUCT;
@@ -643,7 +675,7 @@ static struct RawCase bool_case(struct Usefulness *U, struct SourceSpan span, pa
 static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
 {
     if (rows->count == 0)
-        USEFULNESS_ERROR(U, nonexhaustive_pattern_match, U->span.start);
+        USEFULNESS_ERROR(U, nonexhaustive_pattern_match, U->span);
 
     expand_or_patterns(U, rows);
     for (int i = 0; i < rows->count; ++i) {
@@ -660,7 +692,7 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     }
 
     struct Column branch_col = find_branch_col(U, first_row.columns);
-    switch (branch_mode(U, branch_col.var)) {
+    switch (branch_mode(U, branch_col.var.type)) {
         case BRANCH_VARIANT: {
             RawCaseList *raw_cases = cases_for_variant(U, branch_col.var);
             CaseList *cases = compile_constructor_cases(U, rows, branch_col.var, raw_cases);
@@ -706,12 +738,12 @@ struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, S
     };
 
     struct RowList *rows = RowList_new(&U);
-    struct SourceSpan span = match->target->hdr.span;
-    struct MatchVar var = new_variable(&U, span, GET_NODE_TYPE(C, match->target));
+    struct SourceSpan const span = match->target->hdr.span;
+    struct MatchVar const var = new_variable(&U, span, GET_NODE_TYPE(C, match->target));
 
     struct HirExpr *const *parm;
     K_LIST_FOREACH (match->arms, parm) {
-        struct HirMatchArm *arm = HirGetMatchArm(*parm);
+        struct HirMatchArm const *arm = HirGetMatchArm(*parm);
         struct ColumnList *cols = ColumnList_new(&U);
         ColumnList_push(&U, cols, (struct Column){
             .var = var,

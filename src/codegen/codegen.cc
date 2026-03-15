@@ -3,11 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
 // TODO: Prevent reference arguments from being captured in closures
-// TODO: Restrict reference parameters so they cannot be bound to container elements, including recursive (inline)
-// TODO:     sub-fields of container elements. Otherwise it is possible to have a dangling reference after the container
-// TODO:     has been resized. Boehm GC should prevent the use-after-free, but it would still cause unexpected behavior.
-// TODO:     Could also use "fat" pointers containing a tag, maybe a pointer-to-container and index/key, or a pointer-to-
-// TODO:     local variable.
 // TODO: For enum, use strictest alignment among all variants
 
 #include <algorithm>
@@ -53,6 +48,7 @@
 
 #include "context.h"
 #include "linker.h"
+#include "mangle.h"
 #include "state.h"
 #include "type.h"
 
@@ -74,10 +70,8 @@ static Ty *cast(Type *type)
         paw_assert(type->is_float_type());
     } else if (std::is_same_v<Ty, StrType>) {
         paw_assert(type->is_str_type());
-    } else if (std::is_same_v<Ty, ListType>) {
-        paw_assert(type->is_list_type());
-    } else if (std::is_same_v<Ty, MapType>) {
-        paw_assert(type->is_map_type());
+    } else if (std::is_same_v<Ty, ArrayType>) {
+        paw_assert(type->is_array_type());
     } else if (std::is_same_v<Ty, FnType>) {
         paw_assert(type->is_fn_type());
     } else if (std::is_same_v<Ty, ObjectType>) {
@@ -95,110 +89,29 @@ static bool is_empty_irtype(Compiler *C, IrType *irtype)
 
     auto const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
     if (!def->is_struct) return false;
-    if (!def->is_inline) return false;
 
     paw_assert(def->variants->count == 1);
     auto const *variant = def->variants->data[0];
     return variant->fields->count == 0;
 }
 
-static ::Str *core_name(struct Compiler *C, IrType *type)
-{
-    switch (IR_KINDOF(type)) {
-        case kIrUnit:
-            return SCAN_STR(C, "unit");
-        case kIrBool:
-            return SCAN_STR(C, "bool");
-        case kIrChar:
-            return SCAN_STR(C, "char");
-        case kIrInt:
-            return SCAN_STR(C, "int");
-        case kIrFloat:
-            return SCAN_STR(C, "float");
-        case kIrStr:
-            return SCAN_STR(C, "str");
-        case kIrTuple:
-            // TODO: redo name mangling
-            return pawP_format_string(C, "tuple%d", IrGetTuple(type)->elems->count);
-        default:
-            return pawIr_get_adt_def(C, IR_TYPE_DID(type))->name;
-    }
-}
-
-// TODO: Ensure mangling produces a unique name.
-static std::string mangle_fn_name(Compiler *C, ::Str const *modname, IrType *type, IrType *self)
-{
-    paw_assert(type->hdr.kind == kIrSignature);
-    auto const fsig = *IrGetSignature(type);
-
-    auto const *fdef = pawIr_get_fn_def(C, fsig.did);
-    if (self == nullptr) return to_string(pawP_mangle_name(C, modname, fdef->name, fsig.types));
-    if (IrIsAdt(self)) {
-        auto const *adef = pawIr_get_adt_def(C, IR_TYPE_DID(self));
-
-        IrTypeList *types = NULL;
-        if (fdef->generics != NULL) {
-            types = IrTypeList_new(C);
-            IrTypeList_reserve(C, types, fdef->generics->count);
-            paw_assert(fsig.types->count >= fdef->generics->count);
-            IrType *const *p = &K_LIST_AT(fsig.types, fsig.types->count - fdef->generics->count);
-            while (p != K_LIST_END(fsig.types)) IrTypeList_push(C, types, *p++);
-        }
-
-        return to_string(pawP_mangle_attr(C, modname, adef->name, IR_TYPE_SUBTYPES_(self), fdef->name, types));
-    }
-    auto *self_name = core_name(C, self);
-    return to_string(pawP_mangle_attr(C, modname, self_name, NULL, fdef->name, NULL));
-}
-
-static std::string mangle_adt_name(Compiler *C, ::Str const *modname, IrType *type)
-{
-    paw_assert(type->hdr.kind == kIrAdt);
-    auto const adt = type->Adt_;
-
-    auto const *def = pawIr_get_adt_def(C, adt.did);
-    return to_string(pawP_mangle_name(C, modname, def->name, adt.types));
-}
-
-static std::string format_core_name(char const *mod, char const *self, char const *item)
-{
-    char buffer[4096] = "";
-    if (self != nullptr) {
-        strcpy(buffer + 1, self);
-        buffer[0] = '_';
-    }
-    // format name as "paw_mod[_self]_item"
-    std::string const PREFIX = "paw_";
-    return PREFIX + mod + buffer + "_" + item;
-}
-
 static std::string mangle_mir_name(Mir const *mir)
 {
-    if (mir->fn_kind == FUNC_CLOSURE)
-        return "closure";
-
-    auto const *modname = ModuleInfo_get(mir->C->modinfo, mir->modno).name;
-
     Annotation annotation;
     if (pawP_check_extern(mir->C, mir->annotations, &annotation)) {
         if (annotation.has_value) {
+            // #[extern = "function_name"]
             paw_assert(annotation.kind == BUILTIN_STR);
-            auto const *a = (::Str const *)annotation.value.p;
-            if (a->length == 1 && (a->text[0] == 'c' || a->text[0] == 'C'))
-                return to_string(mir->name); // skip mangling for C functions
+            return to_string((::Str const *)annotation.value.p);
         }
-    } else if (pawP_contains_core_annotation(mir->C, mir->annotations)) {
-        char const *self = mir->self == nullptr ? nullptr
-            : core_name(mir->C, mir->self)->text;
-        return format_core_name(modname->text, self, mir->name->text);
     }
-    return mangle_fn_name(mir->C, modname, mir->type, mir->self);
+
+    return to_string(mangle_type(mir->C, mir->type));
 }
 
 static std::string mangle_internal_method_name(Compiler *C, IrType *self, std::string name)
 {
-    auto const *modname = ModuleInfo_get(C->modinfo, (int)IR_TYPE_DID(self).modno).name;
-    return mangle_adt_name(C, modname, self)
+    return to_string(mangle_type(C, self))
             + std::to_string(name.size())
             + name;
 }
@@ -283,173 +196,94 @@ public:
     {
     }
 
-    void declare_builtin(IrType *irtype)
+    Type *get_or_create_type(IrType *irtype)
     {
-        if (IrIsNever(irtype)) {
-            types_->insert(irtype, X->get_unit_type());
-            return;
-        }
-
-        Type *type;
-        auto const kind = pawP_type2code(C, irtype);
-        switch (kind) {
-            case BUILTIN_UNIT:
-                type = X->get_unit_type();
-                break;
-            case BUILTIN_BOOL:
-                type = X->get_bool_type();
-                break;
-            case BUILTIN_CHAR:
-                type = X->get_char_type();
-                break;
-            case BUILTIN_INT:
-                type = X->get_int_type();
-                break;
-            case BUILTIN_FLOAT:
-                type = X->get_float_type();
-                break;
-            case BUILTIN_STR:
-                type = X->get_str_type();
-                break;
-            case BUILTIN_LIST:
-                type = X->get_list_type(
-                        get_or_declare_type(ir_list_elem(irtype)));
-                break;
-            default:
-                paw_assert(kind == BUILTIN_MAP);
-                type = X->get_map_type(
-                        get_or_declare_type(ir_map_key(irtype)),
-                        get_or_declare_type(ir_map_value(irtype)));
-                break;
-        }
-        if (get_type(irtype) == nullptr)
-            types_->insert(irtype, type);
-    }
-
-    void declare_adt(IrType *irtype)
-    {
-        if (get_type(irtype) == nullptr) {
-            auto const did = IR_TYPE_DID(irtype);
-            IrAdtDef const *def = pawIr_get_adt_def(C, did);
-            auto const location = def->is_inline
-                ? ObjectType::Location::STACK
-                : ObjectType::Location::HEAP;
-            auto const *modname = C->modinfo->data[did.modno].name;
-            auto const name = mangle_adt_name(C, modname, irtype);
-            auto *type = X->get_named_type(name, location);
-            types_->insert(irtype, type);
-        }
-    }
-
-    Type *define_adt(IrType *irtype)
-    {
-        auto *type = cast<ObjectType>(get_type(irtype));
-        if (!type->is_opaque()) return type;
-
-        // define ADT variants and fields
-        IrAdtDef const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
-        std::vector<ObjectType::FieldTypes> variant_types;
-        variant_types.reserve(unsigned(def->variants->count));
-        if (def->is_struct) {
-            define_struct_variant(irtype, variant_types);
-        } else {
-            define_enum_variants(irtype, variant_types);
-        }
-
-        type->set_variants(variant_types);
-        // NOTE: "type" already in "types_"
+        auto *const *type_ptr = types_->lookup(irtype);
+        if (type_ptr != nullptr) return *type_ptr;
+        auto *type = create_type(irtype);
+        types_->insert(irtype, type);
         return type;
     }
-
-    Type *define_type(IrType *irtype)
-    {
-        if (IrIsAdt(irtype)) {
-            return define_adt_(irtype);
-        } else {
-            return get_type(irtype);
-        }
-//        switch (irtype->hdr.kind) {
-//            case kIrAdt:
-//                return define_adt_(irtype);
-//            case kIrSignature:
-//            case kIrFnPtr:
-//                return get_fn_type(irtype);
-//            case kIrTuple:
-//                return get_tuple_type(irtype);
-//            case kIrNever:
-//                return get_type(irtype);
-//            case kIrTraitObj:
-//            case kIrGeneric:
-//            case kIrInfer:
-//                // these types never appear at this phase of compilation
-//                PAW_UNREACHABLE();
-//        }
-    }
-
 
 private:
-    Type *get_or_declare_type(IrType *irtype)
+    Type *create_type(IrType *irtype)
     {
-        auto *type = get_type(irtype);
-        if (type == nullptr) {
-            declare_builtin(irtype);
-            return get_type(irtype);
+        switch (IR_KINDOF(irtype)) {
+            case kIrNever:
+            case kIrUnit:
+                return X->get_unit_type();
+            case kIrBool:
+                return X->get_bool_type();
+            case kIrChar:
+                return X->get_char_type();
+            case kIrInt:
+                return X->get_int_type();
+            case kIrFloat:
+                return X->get_float_type();
+            case kIrPtr:
+                return create_ptr_type(irtype);
+            case kIrString:
+                return X->get_str_type();
+            case kIrSlice:
+                return create_slice_type(irtype);
+            case kIrTuple:
+                return create_tuple_type(irtype);
+            case kIrArray:
+                return create_array_type(irtype);
+            case kIrAdt:
+                return create_adt(irtype);
+            default:
+                paw_assert(IR_IS_FUNC_TYPE(irtype));
+                return create_fn_type(irtype);
         }
-        return type;
     }
 
-    Type *get_type(IrType *irtype)
+    Type *create_fn_type(IrType *irtype)
     {
-        if (IR_IS_FUNC_TYPE(irtype)) {
-            return get_fn_type(irtype);
-        } else if (IrIsTuple(irtype)) {
-            return get_tuple_type(irtype);
-        } else if (IrIsPtr(irtype)) {
-            return get_ptr_type(irtype);
-        }
-        auto *const *type_ptr = types_->lookup(irtype);
-        if (type_ptr == nullptr) return nullptr;
-        return *type_ptr;
-    }
-
-    Type *get_fn_type(IrType *irtype)
-    {
-        auto *itr = types_->lookup(irtype);
-        if (itr != nullptr) return *itr;
         auto *params = ir_fn_params(C, irtype);
         auto *result = ir_fn_result(C, irtype);
         auto const is_closure = !IrIsSignature(irtype);
         auto const is_method = is_method_type(irtype);
-        auto *return_type = define_type(result);
-        auto *type = X->get_fn_type(return_type,
-                define_irtypes(params),
+        auto *return_type = get_or_create_type(result);
+        return X->get_fn_type(return_type,
+                get_or_create_types(params),
                 is_closure ? FUNC_CLOSURE :
                     is_method ? FUNC_METHOD :
                     FUNC_FUNCTION,
                 true /* has_env */,
                 IrIsNever(result));
-        types_->insert(irtype, type);
-        return type;
     }
 
-    Type *get_tuple_type(IrType *irtype)
+    Type *create_tuple_type(IrType *irtype)
     {
-        auto *itr = types_->lookup(irtype);
-        if (itr != nullptr) return *itr;
-        auto const field_types = define_irtypes(irtype->Tuple_.elems);
-        auto *type = X->get_tuple_type(field_types);
-        types_->insert(irtype, type);
-        return type;
+        auto const field_types = get_or_create_types(IrGetTuple(irtype)->elems);
+        return X->get_tuple_type(field_types);
     }
 
-    Type *get_ptr_type(IrType *irtype)
+    Type *create_ptr_type(IrType *irtype)
     {
-        auto *itr = types_->lookup(irtype);
-        if (itr != nullptr) return *itr;
-        auto const pointee_type = define_type(irtype->Ptr_.pointee);
-        auto *type = X->get_ptr_type(pointee_type);
-        types_->insert(irtype, type);
-        return type;
+        auto const pointee_type = get_or_create_type(ir_deref(irtype));
+        return X->get_ptr_type(pointee_type);
+    }
+
+    Type *create_array_type(IrType *irtype)
+    {
+        auto const *t = IrGetArray(irtype);
+        paw_assert(t->length->kind == IR_CONST_VALUE);
+        auto const length = t->length->value;
+        paw_assert(IrIsInt(length.type));
+        return X->get_array_type(
+                    get_or_create_type(t->type),
+                    uint64_t(length.value.i));
+    }
+
+    Type *create_slice_type(IrType *irtype)
+    {
+        auto const elem_type = get_or_create_type(IrGetSlice(irtype)->type);
+        return X->get_struct_type({
+                    X->get_ptr_type(elem_type),
+                    X->get_int_type(),
+                });
     }
 
     bool is_method_type(IrType *irtype)
@@ -473,15 +307,12 @@ private:
         std::vector<ObjectType::FieldTypes> variant_types(unsigned(def->variants->count));
         for (int i = 0; i < def->variants->count; ++i) {
             auto *field_irtypes = pawP_instantiate_variant_fields(C, &irtype->Adt_, i);
-            auto field_types = define_irtypes(field_irtypes);
+            auto field_types = get_or_create_types(field_irtypes);
             field_types.insert(begin(field_types), discr_type);
             variant_types[unsigned(i)] = field_types;
         }
 
-        auto const location = def->is_inline
-            ? ObjectType::Location::STACK
-            : ObjectType::Location::HEAP;
-        return X->get_object_type(variant_types, location);
+        return X->get_object_type(variant_types);
     }
 
     Type *define_discr_type(int num_variants)
@@ -497,56 +328,36 @@ private:
 //           get_i64_ty();
     }
 
-    Type *define_adt_(IrType *irtype)
-    {
-        switch (pawP_type2code(C, irtype)) {
-            case BUILTIN_UNIT:
-            case BUILTIN_BOOL:
-            case BUILTIN_CHAR:
-            case BUILTIN_INT:
-            case BUILTIN_FLOAT:
-            case BUILTIN_STR:
-            case BUILTIN_LIST:
-            case BUILTIN_MAP:
-                return get_type(irtype);
-            default: {
-                auto *type = cast<ObjectType>(get_type(irtype));
-                if (!type->is_inline()) return type; // indirection, maybe recursive
-                if (!type->is_opaque()) return type; // already computed variants
-                return define_adt(irtype);
-            }
-        }
-    }
-
-    void define_enum_variants(IrType *irtype, std::vector<ObjectType::FieldTypes> &variant_types)
+    Type *create_adt(IrType *irtype)
     {
         auto const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
-        auto *discr_type = define_discr_type(def->variants->count);
-        paw_assert(def->variants->count > 0);
+        auto variant_types = create_adt_variants(irtype, def->variants->count);
+        if (!def->is_struct) {
+            // add the discriminant to the start of each variant
+            auto *discr_type = define_discr_type(def->variants->count);
+            for (auto &field_types: variant_types)
+                field_types.insert(begin(field_types), discr_type);
+        }
+        return X->get_object_type(variant_types);
+    }
 
-        for (int i = 0; i < def->variants->count; ++i) {
-            auto *field_irtypes = pawP_instantiate_variant_fields(C, &irtype->Adt_, i);
-            auto field_types = define_irtypes(field_irtypes);
-            field_types.insert(begin(field_types), discr_type);
+    std::vector<ObjectType::FieldTypes> create_adt_variants(IrType *irtype, int num_variants)
+    {
+        std::vector<ObjectType::FieldTypes> variant_types;
+        for (int discr = 0; discr < num_variants; ++discr) {
+            auto const *field_irtypes = pawP_instantiate_variant_fields(C, IrGetAdt(irtype), discr);
+            auto field_types = get_or_create_types(field_irtypes);
             variant_types.push_back(field_types);
         }
+        return variant_types;
     }
 
-    void define_struct_variant(IrType *irtype, std::vector<ObjectType::FieldTypes> &variant_types)
+    std::vector<Type *> get_or_create_types(IrTypeList const *irtypes)
     {
-        auto const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
-        paw_assert(def->variants->count == 1);
-
-        auto *field_irtypes = pawP_instantiate_struct_fields(C, &irtype->Adt_);
-        auto field_types = define_irtypes(field_irtypes);
-        variant_types.push_back(field_types);
-    }
-
-    std::vector<Type *> define_irtypes(IrTypeList const *irtypes)
-    {
-        std::vector<Type *> types(unsigned(irtypes->count));
-        for (int i = 0; i < irtypes->count; ++i)
-            types[unsigned(i)] = define_type(irtypes->data[i]);
+        std::vector<Type *> types;
+        types.reserve(size_t(irtypes->count));
+        K_LIST_XFOREACH (irtypes, IrType *const, p)
+            types.push_back(get_or_create_type(*p));
         return types;
     }
 
@@ -580,6 +391,15 @@ struct Closure {
     llvm::Type *env_ty;
 };
 
+enum class ValueKind {
+    // Value is a static single assignment (SSA) variable, i.e. it is assigned exactly
+    // once and can be used 0 or more times. Used for scalar values that do not require
+    // an address.
+    SSA,
+
+    // Value is backed by either an "alloca" or a heap-allocated "upvalue" slot.
+    MEMORY,
+};
 
 struct PhiInput {
     llvm::PHINode *phi;
@@ -599,6 +419,26 @@ public:
         return &closures_.at(index);
     }
 
+    ValueKind get_value_kind(MirRegister r) const
+    {
+        return value_kinds_.at(unsigned(r.value));
+    }
+
+    bool has_address(MirRegister r) const
+    {
+        return get_value_kind(r) == ValueKind::MEMORY;
+    }
+
+    void set_raw_value(MirRegister r, llvm::Value *value)
+    {
+        values_.at(unsigned(r.value)) = value;
+    }
+
+    llvm::Value *get_raw_value(MirRegister r) const
+    {
+        return values_.at(unsigned(r.value));
+    }
+
     llvm::Value *get_local_ptr(unsigned index);
     llvm::Value *get_upvalue_ptr(unsigned index);
 
@@ -615,14 +455,12 @@ private:
     std::vector<PhiInput> phi_inputs_;
 
     std::vector<llvm::BasicBlock *> blocks_;
-    std::vector<llvm::Value *> locals_;
-    std::vector<llvm::Value *> registers_;
+    std::vector<llvm::Value *> values_;
+    std::vector<ValueKind> value_kinds_;
     std::vector<llvm::Value *> constants_;
     std::vector<llvm::Value *> captured_;
     std::vector<Upvalue> *upvalues_;
     std::vector<Closure> closures_;
-
-    llvm::DISubprogram *disub_;
 };
 
 static void remove_function_if_exists(llvm::Module &M, std::string name)
@@ -693,9 +531,13 @@ static void compile_object(Context &X, llvm::TargetMachine &machine, std::string
     auto *M = X.get_module();
     auto *m = M->get_module();
 
-    if (options.verify_module && llvm::verifyModule(*m, &llvm::errs())) {
-        print_ir(*m, modname + "_failure.ll");
-        fatal_error("module verification failed");
+    if (options.verify_module) {
+        std::string error;
+        llvm::raw_string_ostream os(error);
+        if (llvm::verifyModule(*m, &os)) {
+            print_ir(*m, modname + "_failure.ll");
+            fatal_error("module verification failed:\n" + error);
+        }
     }
 
     llvm::PassBuilder pb;
@@ -712,8 +554,8 @@ static void compile_object(Context &X, llvm::TargetMachine &machine, std::string
 
     auto const opt = opt_level(options.opt_suffix);
     auto mpm = pb.buildPerModuleDefaultPipeline(opt);
-//TODO    if (options.enable_asan)
-//TODO        mpm.addPass(llvm::AddressSanitizerPass({}));
+    if (options.enable_asan)
+        mpm.addPass(llvm::AddressSanitizerPass({}));
     mpm.run(*m, mam);
 
     if (options.print_ir)
@@ -750,7 +592,6 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
 
     remove_function_if_exists(*m, "paw_main");
     remove_function_if_exists(*m, "main");
-    remove_function_if_exists(*m, "_PN4code4main");
 
     auto *main_fn = llvm::Function::Create(
             llvm::FunctionType::get(X->get_i32_ty(),
@@ -765,10 +606,10 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
         B->SetInsertPoint(block);
 
         for (auto const &name: test_names) {
-            auto *print_fn = m->getFunction("paw_prelude_println");
-            B->CreateCall(print_fn, {
-                        X->create_null_ptr(), // environment
-                        X->create_temp_str(CG_STRING("TEST " + name)),
+            auto *fn_ty = llvm::FunctionType::get(B->getInt32Ty(), B->getPtrTy(), true);
+            auto callee = m->getOrInsertFunction("printf", fn_ty);
+            B->CreateCall(callee, {
+                        B->CreateGlobalString("TEST " + name + '\n'),
                     });
             B->CreateCall(m->getFunction(name),
                     X->create_null_ptr());
@@ -796,8 +637,6 @@ public:
         , types_(*C)
         , fns_(*C)
         , methods_(*C)
-        , list_methods_(*C)
-        , map_methods_(*C)
     {
         llvm::InitializeNativeTarget();
         llvm::InitializeNativeTargetAsmPrinter();
@@ -826,6 +665,92 @@ public:
     Context *get_context() { return &X; }
     Context const *get_context() const { return &X; }
 
+    bool is_core_op(Mir const *mir, char const *module_name, char const *name)
+    {
+        if (mir->self == nullptr && IrIsSignature(mir->type)) {
+            // TODO: could cause problems if a user module is called "ptr"
+            auto const modno = (int)IR_TYPE_DID(mir->type).modno;
+            auto const *modname = ModuleInfo_get(C->modinfo, modno).name;
+            return pawS_eq(modname, SCAN_STR(C, module_name))
+                && pawS_eq(mir->name, SCAN_STR(C, name));
+        }
+        return false;
+    }
+
+    bool is_builtin(Mir const *mir, char const *name)
+    {
+        return mir->self == nullptr && IrIsSignature(mir->type)
+            && IR_TYPE_DID(mir->type).modno == PRELUDE_MODNO
+            && pawS_eq(mir->name, SCAN_STR(C, name));
+    }
+
+    // fn ptr::read<T>(p: *T) -> T
+    void generate_ptr_read(Mir const *mir, Fn *fn)
+    {
+        auto *pointee_type = get_type(IrGenericArg_get_type(
+                    IR_FIRST_GENERIC_ARG(mir->type)));
+
+        State state(X, fn);
+        auto *result = B->CreateLoad(pointee_type->get_ty(), fn->get_arg(0));
+        state.create_return(result);
+    }
+
+    // fn ptr::write<T>(p: *T, value: T)
+    void generate_ptr_write(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        B->CreateStore(fn->get_arg(1), fn->get_arg(0));
+        state.create_return();
+    }
+
+    // fn ptr::add<T>(p: *T, n: int) -> *T
+    void generate_ptr_add(Mir const *mir, Fn *fn)
+    {
+        auto *pointee_type = get_type(IrGenericArg_get_type(
+                    IR_FIRST_GENERIC_ARG(mir->type)));
+
+        State state(X, fn);
+
+        auto *result = B->CreateInBoundsGEP(
+                pointee_type->get_ty(),
+                fn->get_arg(0),
+                fn->get_arg(1));
+
+        state.create_return(result);
+    }
+
+    // fn ptr::drop<T>(p: *T)
+    void generate_ptr_drop(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+
+        // TODO: if "T: Drop", then call "<T as Drop>::drop()"
+
+        state.create_return();
+    }
+
+    // fn sizeof<T>() -> int
+    void generate_sizeof_intrinsic(Mir const *mir, Fn *fn)
+    {
+        auto *type = get_type(IrGenericArg_get_type(
+                    IR_FIRST_GENERIC_ARG(mir->type)));
+
+        State state(X, fn);
+        auto *result = X.create_int(X.size_of(*type));
+        state.create_return(result);
+    }
+
+    // fn alignof<T>() -> int
+    void generate_alignof_intrinsic(Mir const *mir, Fn *fn)
+    {
+        auto *type = get_type(IrGenericArg_get_type(
+                    IR_FIRST_GENERIC_ARG(mir->type)));
+
+        State state(X, fn);
+        auto *result = X.create_int(X.align_of(*type).value());
+        state.create_return(result);
+    }
+
     void define_fn(Mir const *mir)
     {
         Fn *fn;
@@ -840,10 +765,27 @@ public:
 
         if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {
             auto const *fptr = IrGetFnPtr(IR_GET_FN(C, mir->type));
-            paw_Bool const materialize_args = fptr->params->count > 0;
             paw_Bool const materialize_return = builtin_kind(fptr->result) != BUILTIN_INT;
-            create_main_fn_wrapper(*fn, materialize_args, materialize_return);
+            create_main_fn_wrapper(*fn, materialize_return);
         }
+
+        if (is_core_op(mir, "ptr", "read"))
+            generate_ptr_read(mir, fn);
+
+        if (is_core_op(mir, "ptr", "write"))
+            generate_ptr_write(mir, fn);
+
+        if (is_core_op(mir, "ptr", "add"))
+            generate_ptr_add(mir, fn);
+
+        if (is_core_op(mir, "ptr", "drop"))
+            generate_ptr_drop(mir, fn);
+
+        if (is_core_op(mir, "mem", "sizeof"))
+            generate_sizeof_intrinsic(mir, fn);
+
+        if (is_core_op(mir, "mem", "alignof"))
+            generate_alignof_intrinsic(mir, fn);
 
         if (mir->blocks->count == 0)
             return;
@@ -882,44 +824,11 @@ public:
     } while (0)
 
         TypeTranslator translator(X, types_);
-
-        // Declare ADTs, which require 2-phase initialization to support
-        // recursive types. Recursive types require indirection, otherwise
-        // the size cannot be computed (enforced by the frontend).
-        FOREACH_TYPE(C->typesystem.adts, irtype, {
-                    translator.declare_adt(irtype);
-                });
-
-        translator.declare_builtin(C->typesystem.primitives.never_t);
-        translator.declare_builtin(C->typesystem.primitives.unit_t);
-        translator.declare_builtin(C->typesystem.primitives.bool_t);
-        translator.declare_builtin(C->typesystem.primitives.char_t);
-        translator.declare_builtin(C->typesystem.primitives.int_t);
-        translator.declare_builtin(C->typesystem.primitives.float_t);
-        translator.declare_builtin(C->typesystem.primitives.str_t);
-        FOREACH_TYPE(C->typesystem.lists, irtype, {
-                    translator.declare_builtin(irtype);
-                });
-        FOREACH_TYPE(C->typesystem.maps, irtype, {
-                    translator.declare_builtin(irtype);
-                });
-        FOREACH_TYPE(C->typesystem.iterators.list, irtype, {
-                    translator.declare_builtin(irtype);
-                    IrType *iterator = (IrType *)*TypeCollectionIterator_valuep(&iter_);
-                    translator.declare_adt(iterator);
-                });
-        FOREACH_TYPE(C->typesystem.iterators.map, irtype, {
-                    IrType *iterator = (IrType *)*TypeCollectionIterator_valuep(&iter_);
-                    translator.declare_builtin(irtype);
-                    translator.declare_adt(iterator);
-                });
-
-        FOREACH_TYPE(C->typesystem.adts, irtype, {
-                    translator.define_adt(irtype);
-                });
         FOREACH_TYPE(C->typesystem.types, irtype, {
-                    translator.define_type(irtype);
+                    translator.get_or_create_type(irtype);
                 });
+
+#undef FOREACH_TYPE
 
         // declare all toplevel functions
         for (int i = 0; i < mir_count; ++i) {
@@ -931,15 +840,6 @@ public:
         // generated code
         generate_builtins();
 
-        FOREACH_TYPE(C->typesystem.lists, irtype, {
-                    generate_list_methods(irtype);
-                });
-        FOREACH_TYPE(C->typesystem.maps, irtype, {
-                    generate_map_methods(irtype);
-                });
-
-#undef FOREACH_TYPE
-
         FnType constructor_type(X, X.get_unit_type(), {}, FUNC_FUNCTION);
         auto constructor_fn = Fn(
                 X, "paw_constructor",
@@ -948,33 +848,25 @@ public:
         {
             State state(X, &constructor_fn);
 
-            // call GC_init() to initialize BDWGC collector
-            X.create_gc_init();
-
             StringMapIterator iter;
             StringMapIterator_init(C->strings, &iter);
             while (StringMapIterator_is_valid(&iter)) {
                 auto const *s = StringMapIterator_key(&iter);
                 auto *array = llvm::ConstantDataArray::getString(*c, s->text, true);
 
-                // TODO: allocatae once outside loop, use longest string length
-                auto *temp = B->CreateAlloca(array->getType());
-                B->CreateStore(array, temp);
-
                 auto *global = new llvm::GlobalVariable(
-                        **M, X.get_ptr_ty(), false,
+                        **M, array->getType(), false,
                         llvm::GlobalValue::PrivateLinkage,
-                        X.create_null_ptr(), "str");
+                        array, "str");
+                global->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+                global->setAlignment(llvm::Align(1));
 
-                Str str(state, temp, X.create_i32((int32_t)s->hash),
-                        X.create_int((paw_Int)s->length),
-                        get_str_methods(), Str::CreationTag());
-                B->CreateStore(str.get_value(), global);
-                strings_[s] = global;
+                strings_[s] = StringDescriptor{
+                    .text = llvm::ConstantExpr::getGetElementPtr(
+                        global->getType(), global, X.create_int(0)),
+                    .length = X.create_uint(s->length),
+                };
 
-//                // NOTE: strings are intern'd by the compiler, so "str" is guaranteed
-//                //       to be absent from the string table
-//                map.create_set(str, X.get_unit());
                 StringMapIterator_next(&iter);
             }
 
@@ -982,8 +874,7 @@ public:
         }
 
         FnType destructor_type(X, X.get_unit_type(), {}, FUNC_FUNCTION);
-        auto destructor_fn = Fn(
-                X, "paw_destructor",
+        auto destructor_fn = Fn(X, "paw_destructor",
                 llvm::GlobalValue::InternalLinkage,
                 &destructor_type);
         {
@@ -1001,22 +892,17 @@ public:
     {
     }
 
-    llvm::Value *create_cstr_to_str(State &state, llvm::Value *cstr)
+    llvm::Value *create_cstr_to_str(llvm::Value *cstr)
     {
-        auto *length = B->CreateCall(X.get_strlen_callee(), {cstr});
-        Str str(state, cstr, length, get_str_methods(), Str::CreationTag());
-        return str.get_value();
+        auto *len = B->CreateCall(X.get_strlen_callee(), {cstr});
+        llvm::Value *str = llvm::UndefValue::get(X.get_str_ty());
+        str = B->CreateInsertValue(str, cstr, 0);
+        str = B->CreateInsertValue(str, len, 1);
+        return str;
     }
 
-    void create_main_fn_wrapper(llvm::Function *inner, bool materialize_args, bool materialize_return)
+    void create_main_fn_wrapper(llvm::Function *inner, bool materialize_return)
     {
-        auto *c = X.get_context();
-        auto *C = X.get_compiler();
-
-        // Set up the entrypoint function. The entrypoint code converts the standard
-        // arguments ("argc"/"argv") into a single variable of type "[str]", then calls
-        // the user-defined "main" (renamed to "paw_main") and forwards its integer
-        // return value.
         inner->setName("paw_main");
         inner->setLinkage(llvm::Function::PrivateLinkage);
 
@@ -1027,55 +913,7 @@ public:
         Fn main_fn(X, "main", llvm::Function::ExternalLinkage, &main_type);
         State state(X, &main_fn);
 
-        auto *entry = state.get_entry();
-        llvm::Value *args = X.create_null_ptr();
-        if (materialize_args) {
-            // Convert the "argc"/"argv" pair into a list of type "[str]"
-            // to pass to "paw_main".
-            auto *header = llvm::BasicBlock::Create(*c, "header", main_fn);
-            auto *body = llvm::BasicBlock::Create(*c, "body", main_fn);
-            auto *exit = llvm::BasicBlock::Create(*c, "exit", main_fn);
-
-            auto *index1 = X.create_int(0);
-            auto *argc32 = main_fn.get_arg(0);
-            auto *argv = main_fn.get_arg(1);
-
-            auto *argc1 = B->CreateSExt(argc32, X.get_int_ty());
-            auto *args_irtype = C->main_args_type;
-            List list(state, argc1, cast<ListType>(get_type(args_irtype)),
-                    get_list_methods(args_irtype),
-                    List::CreationTag());
-            args = list.get_value();
-            B->CreateBr(header);
-
-            B->SetInsertPoint(header);
-            auto *argc = B->CreatePHI(X.get_int_ty(), 2);
-            auto *index = B->CreatePHI(X.get_int_ty(), 2);
-            argc->addIncoming(argc1, entry);
-            index->addIncoming(index1, entry);
-
-            auto *condition = B->CreateCmp(llvm::CmpInst::ICMP_SGT,
-                    argc, X.create_int(0));
-            B->CreateCondBr(condition, body, exit);
-
-            B->SetInsertPoint(body);
-            auto *element_ptr = list.get_element_ptr(index);
-            auto *cstr = B->CreateLoad(X.get_ptr_ty(),
-                    B->CreateInBoundsGEP(X.get_ptr_ty(), argv, {index}));
-            auto *str = create_cstr_to_str(state, cstr);
-            B->CreateStore(str, element_ptr); // write "str" element of "[str]"
-            auto *index2 = B->CreateAdd(index, X.create_int(1), "index");
-            auto *argc2 = B->CreateSub(argc, X.create_int(1), "argc");
-
-            B->CreateBr(header);
-
-            argc->addIncoming(argc2, body);
-            index->addIncoming(index2, body);
-
-            B->SetInsertPoint(exit);
-        }
-
-        auto *ret = B->CreateCall(inner, {X.create_null_ptr(), args});
+        auto *ret = B->CreateCall(inner, {X.create_null_ptr(), X.create_null_ptr()});
         state.create_return(materialize_return ? X.create_i32(0)
                 : B->CreateTrunc(ret, X.get_i32_ty()));
     }
@@ -1097,34 +935,12 @@ public:
         return nullptr;
     }
 
-    std::vector<Type *> get_types(IrTypeList const *irtypes) const
-    {
-        std::vector<Type *> types(irtypes->count);
-        for (int i = 0; i < irtypes->count; ++i)
-            types[i] = get_type(irtypes->data[i]);
-        return types;
-    }
-
     Unit::Methods const *get_unit_methods() const { return &scalar_info_.u.methods; }
     Bool::Methods const *get_bool_methods() const { return &scalar_info_.b.methods; }
     Char::Methods const *get_char_methods() const { return &scalar_info_.c.methods; }
     Int::Methods const *get_int_methods() const { return &scalar_info_.i.methods; }
     Float::Methods const *get_float_methods() const { return &scalar_info_.f.methods; }
     Str::Methods const *get_str_methods() const { return &scalar_info_.s.methods; }
-
-    List::Methods const *get_list_methods(IrType *irtype) const
-    {
-        auto *itr = list_methods_.lookup(irtype);
-        paw_assert(itr != nullptr);
-        return itr;
-    }
-
-    Map::Methods const *get_map_methods(IrType *irtype) const
-    {
-        auto *itr = map_methods_.lookup(irtype);
-        paw_assert(itr != nullptr);
-        return itr;
-    }
 
     Fn *get_fn(IrType *irtype) const
     {
@@ -1188,35 +1004,94 @@ private:
     void generate_builtins()
     {
         auto *c = X.get_context();
+        auto *m = M->get_module();
 
-        // declare "void @GC_init()" builtin
+        // TODO: Define a minimal panic handler to be shipped with the core and a more informative one to be
+        //   linked in when using the standard library. Just trap or enter an infinite loop in the minimal
+        //   version. Write the message to stderr and exit(1) in the stdlib version.
+
+        // define default panic handler
         {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_void_ty(), false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::GC_INIT),
-                    *M);
+            static constexpr char const *const STDERR_NAME =
+#if defined(PAW_OS_MACOS)
+                "__stderrp"
+#else
+                "stderr"
+#endif
+                ;
+
+            // extern FILE *stderr;
+            auto *stream_ptr = new llvm::GlobalVariable(
+                *m, B->getPtrTy(), false,
+                llvm::GlobalValue::ExternalLinkage,
+                nullptr, STDERR_NAME);
+
+            // size_t fwrite(const void* restrict buffer, size_t size, size_t count, FILE* restrict stream);
+            auto *write = llvm::cast<llvm::Function>(
+                    m->getOrInsertFunction("fwrite",
+                        llvm::FunctionType::get(X.get_i64_ty(),
+                        {X.get_ptr_ty(), X.get_i64_ty(),
+                         X.get_i64_ty(), X.get_ptr_ty()}, false))
+                    .getCallee());
+
+            // ABI type of "*[char]" in argument position
+            auto *payload_ty = X.get_slice_type(
+                    X.get_char_type())->get_abi_ty();
+            auto callee = M->get_module()
+                ->getOrInsertFunction("paw_panic_handler",
+                    llvm::FunctionType::get(X.get_void_ty(),
+                        {X.get_ptr_ty(), payload_ty}, false));
+            auto *fn = llvm::cast<llvm::Function>(callee.getCallee());
             fn->setDoesNotThrow();
+            fn->setDoesNotReturn();
+
+            auto *block = llvm::BasicBlock::Create(*c, "block", fn);
+            B->SetInsertPoint(block);
+
+            auto *stream = B->CreateLoad(
+                B->getPtrTy(),
+                stream_ptr,
+                "stream");
+
+            auto *ptr = B->CreateExtractValue(fn->getArg(1), 0ULL);
+            auto *len = B->CreateExtractValue(fn->getArg(1), 1ULL);
+            B->CreateCall(write, {ptr, X.create_i64(1), len, stream});
+
+            auto *trap = llvm::Intrinsic::getOrInsertDeclaration(*M, llvm::Intrinsic::trap);
+            B->CreateCall(trap);
+
+            B->CreateUnreachable();
         }
 
-        // declare "ptr @GC_malloc(i64)" builtin
+        // declare "ptr @paw_mem_alloc(i64)" builtin
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_ptr_ty(),
-                        {X.get_i64_ty()}, false),
+                        {X.get_ptr_ty(), X.get_i64_ty()}, false),
                     llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::GC_MALLOC),
+                    get_builtin_name(BuiltinFn::PAW_ALLOC),
                     *M);
             fn->setDoesNotThrow();
         }
 
-        // declare "void @GC_free(ptr)" builtin
+        // declare "ptr @paw_mem_realloc(ptr, i64)" builtin
+        {
+            auto *fn = llvm::Function::Create(
+                    llvm::FunctionType::get(X.get_ptr_ty(),
+                        {X.get_ptr_ty(), X.get_ptr_ty(), X.get_i64_ty()}, false),
+                    llvm::GlobalValue::ExternalLinkage,
+                    get_builtin_name(BuiltinFn::PAW_REALLOC),
+                    *M);
+            fn->setDoesNotThrow();
+        }
+
+        // declare "void @paw_mem_dealloc(ptr)" builtin
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_void_ty(),
-                        {X.get_ptr_ty()}, false),
+                        {X.get_ptr_ty(), X.get_ptr_ty()}, false),
                     llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::GC_FREE),
+                    get_builtin_name(BuiltinFn::PAW_DEALLOC),
                     *M);
             fn->setDoesNotThrow();
         }
@@ -1236,6 +1111,19 @@ private:
             B->CreateRetVoid();
         }
 
+        // declare "void @paw_builtin_check_bounds(i64, i64)" builtin
+        {
+            auto *fn = llvm::Function::Create(
+                    llvm::FunctionType::get(X.get_void_ty(), {
+                        X.get_i64_ty(),
+                        X.get_i64_ty(),
+                    }, false),
+                    llvm::GlobalValue::ExternalLinkage,
+                    get_builtin_name(BuiltinFn::CHECK_BOUNDS),
+                    *M);
+            fn->setDoesNotThrow();
+        }
+
         // declare "i32 @paw_builtin_hash_bytes(ptr, i64, i32)" builtin
         {
             auto *fn = llvm::Function::Create(
@@ -1250,23 +1138,11 @@ private:
             fn->setDoesNotThrow();
         }
 
-        // declare "i64 @abs_index(i64, i64)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_i64_ty(), {
-                        X.get_i64_ty(),
-                        X.get_i64_ty(),
-                    }, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::ABS_INDEX),
-                    *M);
-            fn->setDoesNotThrow();
-        }
-
         // declare "i64 @paw_builtin_rawcmp(ptr, i64, ptr, i64)" builtin
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_i64_ty(), {
+                        X.get_ptr_ty(),
                         X.get_ptr_ty(),
                         X.get_i64_ty(),
                         X.get_ptr_ty(),
@@ -1277,6 +1153,9 @@ private:
                     *M);
             fn->setDoesNotThrow();
         }
+
+        // TODO: ckd_i* are broken b/c panic() cannot be easily called anymore (it takes a
+        // TODO: slice by value which needs to have type "i64[2]" per the ABI), implement directly in Paw
 
         // generate "i64 @ckd_iadd(i64, i64)" builtin
         {
@@ -1347,58 +1226,11 @@ private:
         }
     }
 
-    void generate_list_methods(IrType *irself)
-    {
-        auto *self_type = cast<ListType>(get_type(irself));
-
-        List::Methods m;
-        m.push = get_method(irself, "push");
-        m.pop = get_method(irself, "pop");
-        m.insert = get_method(irself, "insert");
-        m.remove = get_method(irself, "remove");
-        m.get_element_ptr = get_method(irself, "get_element_ptr");
-
-        List::generate_methods(X, self_type, m);
-        list_methods_.insert(irself, std::move(m));
-    }
-
-    void generate_map_methods(IrType *irself)
-    {
-        auto *self_type = cast<MapType>(get_type(irself));
-        auto *key_type = self_type->get_key_type();
-
-        Map::Methods m;
-        m.key_hash = get_method(irself, "key_hash");
-        m.key_eq = get_method(irself, "key_eq");
-        m.get = get_method(irself, "get");
-        m.remove = get_method(irself, "remove");
-        m.gep = create_internal_method(irself, "gep", X.get_ptr_type(), {self_type, key_type});
-        m.nep = create_internal_method(irself, "nep", X.get_ptr_type(), {self_type, key_type});
-        m.gep1 = create_internal_method(irself, "gep1", X.get_ptr_type(), {self_type, key_type});
-        m.grow = create_internal_method(irself, "grow", X.get_unit_type(), {self_type});
-        {
-            // { ptr %flag_ptr, ptr %value_ptr }
-            auto *result_type = X.get_tuple_type({X.get_ptr_type(), X.get_ptr_type()});
-            m.lookup = create_internal_method(irself, "lookup", result_type, {self_type, key_type});
-            m.access = create_internal_method(irself, "access", result_type, {self_type, key_type});
-        }
-
-        m.iterator_type = NULL;
-        m.iterator_next = NULL;
-        void *iterator_irtype = TypeCollection_get(C, C->typesystem.iterators.map, irself);
-        paw_assert(iterator_irtype != nullptr);
-        m.iterator_type = cast<ObjectType>(get_type(*(IrType **)iterator_irtype));
-        m.iterator_next = get_method(*(IrType **)iterator_irtype, "next");
-
-        Map::generate_methods(X, self_type, m);
-        map_methods_.insert(irself, std::move(m));
-    }
-
     Fn *get_method(IrType *self, std::string name)
     {
         auto &methods = methods_[self];
         auto const itr = methods.find(name);
-        return itr != end(methods) ? itr->second : NULL;
+        return itr != end(methods) ? itr->second : nullptr;
     }
 
     void declare_fn(Mir const *mir)
@@ -1419,13 +1251,22 @@ private:
         fns_.insert(mir->type, std::move(fn));
     }
 
+    bool is_thin_ptr(IrType *type)
+    {
+        return IrIsPtr(type) && !IrIsString(ir_deref(type)) && !IrIsSlice(ir_deref(type));
+    }
+
     void create_instruction(MirInstruction *instr)
     {
         switch (MIR_KINDOF(instr)) {
             case kMirNoop:
+            case kMirKill:
                 return;
             case kMirPhi:
                 create_phi(instr->Phi_);
+                break;
+            case kMirDrop:
+                create_drop(instr->Drop_);
                 break;
             case kMirMove:
                 create_move(instr->Move_);
@@ -1448,26 +1289,14 @@ private:
             case kMirAggregate:
                 create_aggregate(instr->Aggregate_);
                 break;
-            case kMirContainer:
-                create_container(instr->Container_);
+            case kMirArray:
+                create_array(instr->Array_);
+                break;
+            case kMirArrayGep:
+                create_arraygep(instr->ArrayGep_);
                 break;
             case kMirStructGEP:
                 create_structgep(instr->StructGEP_);
-                break;
-            case kMirStrGEP:
-                create_strgep(instr->StrGEP_);
-                break;
-            case kMirListGEP:
-                create_listgep(instr->ListGEP_);
-                break;
-            case kMirMapGEP:
-                create_mapgep(instr->MapGEP_);
-                break;
-            case kMirGetRange:
-                create_getrange(instr->GetRange_);
-                break;
-            case kMirSetRange:
-                create_setrange(instr->SetRange_);
                 break;
             case kMirCall:
                 create_call(instr->Call_);
@@ -1490,9 +1319,6 @@ private:
             case kMirBinaryOp:
                 create_binaryop(instr->BinaryOp_);
                 break;
-            case kMirConcat:
-                create_concat(instr->Concat_);
-                break;
             case kMirUnreachable:
                 create_unreachable(instr->Unreachable_);
                 break;
@@ -1508,6 +1334,9 @@ private:
             case kMirGoto:
                 create_goto(instr->Goto_);
                 break;
+            case kMirGetRange:
+            case kMirSetRange:
+                PAW_UNREACHABLE();
         }
     }
 
@@ -1532,7 +1361,12 @@ private:
     {
         auto const itr = strings_.find(k);
         paw_assert(itr != end(strings_));
-        return B->CreateLoad(X.get_ptr_ty(), itr->second);
+
+        auto const [text, len] = itr->second;
+        llvm::Value *str = llvm::UndefValue::get(X.get_str_ty());
+        str = B->CreateInsertValue(str, text, 0);
+        str = B->CreateInsertValue(str, len, 1);
+        return str;
     }
 
     void create_phi(MirPhi const &x)
@@ -1551,22 +1385,36 @@ private:
         set_result(x.output, phi);
     }
 
+    // TODO: locals that became SSA registers need their drops removed, then use ir_deref instead of ir_auto_deref
+    // TODO: also remove check for pawIr_needs_drop
+    void create_drop(MirDrop const &x)
+    {
+        auto *target_type = x.target.type;
+        llvm::Value *target;
+        if (is_thin_ptr(target_type)) {
+            // must be dropping a field
+            target_type = ir_deref(target_type);
+            target = operand(x.target);
+        } else {
+            target = state_->get_raw_value(x.target.r);
+        }
+        if (pawIr_needs_drop(C, target_type)) {
+            auto *irtype = pawIr_get_custom_drop_type(C, target_type);
+            B->CreateCall(get_fn(irtype)->get_fn(), {
+                    X.create_null_ptr(), target});
+        }
+    }
+
     void create_move(MirMove const &x)
     {
-        if (x.output.kind == MIR_PLACE_LOCAL) {
-            // only used when storing local corresponding to reference argument
-            auto const L = unsigned(x.output.L.value);
-            state_->locals_.at(L) = operand(x.target);
-        } else {
-            paw_assert(x.output.kind == MIR_PLACE_REGISTER);
-            set_result(x.output, operand(x.target));
-        }
+        set_result(x.output, operand(x.target));
     }
 
     void create_addrof(MirAddrOf const &x)
     {
-        PAW_UNUSED(x);
-        PAW_UNREACHABLE();
+        paw_assert(x.input.kind == MIR_PLACE_REGISTER);
+        paw_assert(state_->has_address(x.input.r));
+        set_result(x.output, state_->get_raw_value(x.input.r));
     }
 
     void create_load(MirLoad const &x)
@@ -1581,7 +1429,7 @@ private:
     {
         auto *value = operand(x.value);
         auto *pointer = operand(x.pointer);
-        B->CreateStore(value, pointer);
+        X.store_value(value, pointer);
     }
 
     void create_global(MirGlobal const &x)
@@ -1593,100 +1441,78 @@ private:
         set_result(x.output, fn);
     }
 
-    void create_alloclocal(MirAllocLocal const &x)
+    bool needs_upvalue_slot(MirRegister r)
     {
         auto *fn = state_->fn_;
-        auto const L = unsigned(x.output.L.value);
 
-        auto const data = state_->mir_->local_data->data[x.output.L.value];
-        if (data.is_captured && L > fn->get_num_args()) {
-            // NOTE: the return value (L0) cannot be captured and slots for captured
-            //   arguments (L1..LN) are allocated and initialized at the start of the
-            //   function.
-            auto &local = state_->locals_.at(L);
-            auto *slot = X.create_alloc(*get_type(data.type));
-            local = slot;
+        // NOTE: the return value (%0) cannot be captured and slots for captured
+        //   arguments (%1..%N) are allocated and initialized at the start of the
+        //   function.
+        auto const data = *mir_reg_data((Mir *)state_->mir_, r);
+        return data.is_captured && unsigned(r.value) > fn->get_num_args();
+    }
+
+    void create_alloclocal(MirAllocLocal const &x)
+    {
+        if (needs_upvalue_slot(x.output.r)) {
+            paw_assert(state_->has_address(x.output.r));
+            auto *slot = X.create_alloc(*get_type(x.output.type));
+            state_->set_raw_value(x.output.r, slot);
         }
     }
 
     void create_aggregate(MirAggregate const &x)
     {
-        auto *obj_type = cast<ObjectType>(get_type(x.output.type));
-        Object obj(*state_, obj_type, Object::CreationTag());
-
-        Discriminant const discr(x.discr);
-        for (auto i = 0; i < x.fields->count; ++i) {
-            auto *value = operand(x.fields->data[i]);
-            obj.set_field(discr, unsigned(i), value);
+        auto *object_type = cast<ObjectType>(get_type(x.output.type));
+        auto *variant_ty = object_type->get_variant_ty(Discriminant(x.discr));
+        llvm::Value *object = llvm::UndefValue::get(variant_ty);
+        for (auto i = 0U; i < unsigned(x.fields->count); ++i) {
+            auto *element = operand(x.fields->data[i]);
+            object = B->CreateInsertValue(object, element, i);
         }
-
-        auto *object = !x.is_boxed
-            ? B->CreateLoad(*obj_type, obj.get_value())
-            : obj.get_value();
         set_result(x.output, object);
     }
 
     llvm::Value *operand(MirPlace const place)
     {
         switch (place.kind) {
-            case MIR_PLACE_LOCAL:
-                return state_->get_local_ptr(unsigned(place.L.value));
             case MIR_PLACE_REGISTER:
-                return state_->registers_.at(unsigned(place.r.value));
+                switch (state_->get_value_kind(place.r)) {
+                    case ValueKind::SSA:
+                        return state_->get_raw_value(place.r);
+                    case ValueKind::MEMORY:
+                        return B->CreateLoad(*get_type(place.type),
+                                state_->get_raw_value(place.r));
+                }
+            case MIR_PLACE_UPVALUE:
+                return B->CreateLoad(*get_type(place.type),
+                        state_->get_upvalue_ptr(unsigned(place.up)));
             case MIR_PLACE_CONSTANT:
                 return state_->constants_.at(unsigned(place.k.value));
-            case MIR_PLACE_UPVALUE:
-                return state_->get_upvalue_ptr(unsigned(place.up));
         }
     }
 
-    llvm::Value *create_literal_list(MirContainer const &x)
+    void create_array(MirArray const &x)
     {
-        paw_assert(x.b_kind == BUILTIN_LIST);
-        auto *list_type = cast<ListType>(get_type(x.output.type));
-        List list(*state_, X.create_int(x.elems->count), list_type,
-                get_list_methods(x.output.type), List::CreationTag());
-
-        for (int i = 0; i < x.elems->count; ++i) {
-            auto *value = operand(x.elems->data[i]);
-            list.set_element(X.create_int(i), value);
+        auto *array_type = cast<ArrayType>(get_type(x.output.type));
+        llvm::Value *array = llvm::UndefValue::get(array_type->get_ty());
+        for (unsigned i = 0; i < (unsigned)x.elems->count; ++i) {
+            auto *elem = operand(x.elems->data[i]);
+            array = B->CreateInsertValue(array, elem, i);
         }
-
-        return list.get_value();
-    }
-
-    llvm::Value *create_literal_map(MirContainer const &x)
-    {
-        paw_assert(x.b_kind == BUILTIN_MAP);
-        auto *map_type = cast<MapType>(get_type(x.output.type));
-        Map map(*state_, X.create_int(x.elems->count), map_type,
-                get_map_methods(x.output.type), Map::CreationTag());
-
-        for (int i = 0; i < x.elems->count; i += 2) {
-            auto *key = operand(x.elems->data[i]);
-            auto *value = operand(x.elems->data[i + 1]);
-            map.set_element(key, value);
-        }
-
-        return map.get_value();
-    }
-
-    void create_container(MirContainer const &x)
-    {
-        auto *result = x.b_kind == BUILTIN_LIST
-            ? create_literal_list(x)
-            : create_literal_map(x);
-        set_result(x.output, result);
+        set_result(x.output, array);
     }
 
     Type *get_deref_type(IrType *irtype)
     {
-        return get_type(ir_remove_indirection(irtype));
+        return get_type(pawIr_remove_indirection(C, irtype));
     }
 
     void create_structgep(struct MirStructGEP const &x)
     {
-        auto *value = operand(x.object);
+        auto *value = !is_thin_ptr(x.object.type)
+            ? state_->get_raw_value(x.object.r)
+            : operand(x.object);
         auto *obj_type = (ObjectType *)get_deref_type(x.object.type);
         Object obj(*state_, value, obj_type);
 
@@ -1695,54 +1521,21 @@ private:
         set_result(x.output, field_ptr);
     }
 
-    void create_strgep(MirStrGEP const &x)
+    void create_arraygep(MirArrayGep const &x)
     {
-        Str str(*state_, operand(x.object), get_str_methods());
-        auto *index = X.create_abs_index(operand(x.index), str.get_length());
-        auto *element_ptr = str.get_element_ptr(index);
+        auto *array = operand(x.array);
+        auto *index = operand(x.index);
+
+        {
+            auto *konst = IrGetArray(ir_deref(x.array.type))->length;
+            paw_assert(konst->kind == IR_CONST_VALUE);
+            auto const length = konst->value.value.i;
+            X.create_check_bounds(index, X.create_int(length));
+        }
+
+        auto *element_type = get_type(ir_deref(x.output.type));
+        auto *element_ptr = B->CreateInBoundsGEP(element_type->get_ty(), array, index);
         set_result(x.output, element_ptr);
-    }
-
-    void create_listgep(MirListGEP const &x)
-    {
-        auto *list_type = (ListType *)get_deref_type(x.object.type);
-        List list(*state_, operand(x.object), list_type,
-                get_list_methods(x.object.type));
-        auto *index = X.create_abs_index(operand(x.index), list.get_length());
-        auto *element_ptr = list.get_element_ptr(index);
-        set_result(x.output, element_ptr);
-    }
-
-    void create_mapgep(MirMapGEP const &x)
-    {
-        auto *map_type = (MapType *)get_deref_type(x.object.type);
-        Map map(*state_, operand(x.object), map_type,
-                get_map_methods(x.object.type));
-
-        auto *value_ptr = x.create_if_missing
-            ? map.new_element_ptr(operand(x.key))
-            : map.get_element_ptr(operand(x.key));
-        set_result(x.output, value_ptr);
-    }
-
-    void create_setrange(MirSetRange const &x)
-    {
-        PAW_UNREACHABLE();
-    }
-
-    void create_getrange(struct MirGetRange const &x)
-    {
-        PAW_UNREACHABLE();
-    }
-
-    bool is_boxed_aggregate(IrType *type)
-    {
-        return mir_is_boxed_aggregate(C, type);
-    }
-
-    bool is_inline_aggregate(IrType *type)
-    {
-        return mir_is_inline_aggregate(C, type);
     }
 
     BuiltinKind builtin_kind(IrType *type)
@@ -1757,7 +1550,7 @@ private:
             if (fn_def->parent.value != (unsigned)-1) {
                 if (pawIr_get_kind(C, fn_def->parent) == IR_IMPL_DEF) {
                     auto const *impl_def = pawIr_get_impl_def(C, fn_def->parent);
-                    if (impl_def->trait == NULL && IrIsAdt(impl_def->type)) {
+                    if (impl_def->trait == nullptr && IrIsAdt(impl_def->type)) {
                         auto const *adt_def = pawIr_get_adt_def(C, IR_TYPE_DID(impl_def->type));
                         return to_string(adt_def->name);
                     }
@@ -1797,8 +1590,9 @@ private:
     void create_call(MirCall const &x)
     {
         if (get_inherent_context_name(x.target.type) == "Pointer") {
-            auto *element_type = get_type(IrTypeList_first(
-                        IR_TYPE_SUBTYPES(pawIr_get_context(C, x.target.type))));
+            auto const arg = IR_FIRST_GENERIC_ARG(
+                        pawIr_get_context(C, x.target.type));
+            auto *element_type = get_type(IrGenericArg_get_type(arg));
             auto const pointer = operand(MirPlaceList_get(x.args, 0));
             if (get_fn_name(x.target.type) == "add") {
                 auto const index = operand(MirPlaceList_get(x.args, 1));
@@ -1819,9 +1613,10 @@ private:
         auto *fn_type = cast<FnType>(get_type(x.target.type));
         Callable callable(*state_, fn, env, fn_type);
 
-        std::vector<llvm::Value *> args((size_t)x.args->count);
-        for (int i = 0; i < x.args->count; ++i)
-            args[(size_t)i] = operand(x.args->data[i]);
+        std::vector<llvm::Value *> args;
+        args.reserve((size_t)x.args->count);
+        K_LIST_XFOREACH (x.args, MirPlace const, p)
+            args.push_back(operand(*p));
 
         auto *result = state_->create_call(callable, args);
         set_result(x.output, result);
@@ -1911,7 +1706,7 @@ private:
             // Otherwise, it refers to an upvalue in the current function backed by a local in one of
             // its callers.
             auto *source = up.is_local
-                ? state_->get_local_ptr(up.index)
+                ? state_->values_.at(up.index)
                 : state_->get_upvalue_ptr(up.index);
             auto *source_ptr = B->CreateStructGEP(env_ty, env_ptr, unsigned(i));
             B->CreateStore(source, source_ptr);
@@ -1931,15 +1726,6 @@ private:
         paw_assert(value != nullptr);
 
         switch (op) {
-            case MIR_UNARY_STRLEN:
-                value = B->CreateStructGEP(X.get_str_ty(), value, 0);
-                return B->CreateLoad(X.get_int_ty(), value);
-            case MIR_UNARY_LISTLEN:
-                value = B->CreateStructGEP(X.get_list_ty(), value, 1);
-                return B->CreateLoad(X.get_int_ty(), value);
-            case MIR_UNARY_MAPLEN:
-                value = B->CreateStructGEP(X.get_map_ty(), value, 1);
-                return B->CreateLoad(X.get_int_ty(), value);
             case MIR_UNARY_IBITNOT:
                 return B->CreateNot(value);
             case MIR_UNARY_INEG:
@@ -1964,6 +1750,7 @@ private:
         Str a(*state_, lhs, get_str_methods());
         Str b(*state_, rhs, get_str_methods());
         return B->CreateCall(X.get_rawcmp_callee(), {
+                X.create_null_ptr(),
                 a.get_text(), a.get_length(),
                 b.get_text(), b.get_length()});
     }
@@ -2050,84 +1837,22 @@ private:
         set_result(x.output, result);
     }
 
-    llvm::Value *create_strcat(llvm::Value *a, llvm::Value *b)
-    {
-        Str lhs(*state_, a, get_str_methods());
-        Str rhs(*state_, b, get_str_methods());
-        auto *lhs_length = lhs.get_length();
-        auto *rhs_length = rhs.get_length();
-
-        auto *length = X.create_ckd_iadd(lhs_length, rhs_length);
-        Str result(*state_, length, get_str_methods(), Str::CreationTag());
-
-        // NOTE: sizeof(char) == 1
-        X.create_memcpy(
-                result.get_text(),
-                lhs.get_text(),
-                lhs_length);
-        X.create_memcpy(
-                result.get_element_ptr(lhs_length),
-                rhs.get_text(),
-                rhs_length);
-        result.finalize();
-        return result.get_value();
-    }
-
-    llvm::Value *create_listcat(IrType *irtype, llvm::Value *a, llvm::Value *b)
-    {
-        auto *type = cast<ListType>(get_type(irtype));
-        List lhs(*state_, a, type, get_list_methods(irtype));
-        List rhs(*state_, b, type, get_list_methods(irtype));
-        auto *lhs_length = lhs.get_length();
-        auto *rhs_length = rhs.get_length();
-
-        auto *length = X.create_ckd_iadd(lhs_length, rhs_length);
-        List result(*state_, length, type, get_list_methods(irtype),
-                List::CreationTag());
-
-        auto const element_size = paw_Int(X.size_of(*type->get_element_type()));
-        auto *lhs_size = X.create_ckd_imul(lhs_length, X.create_int(element_size));
-        auto *rhs_size = X.create_ckd_imul(rhs_length, X.create_int(element_size));
-
-        X.create_memcpy(
-                result.get_data(),
-                lhs.get_data(),
-                lhs_size);
-        X.create_memcpy(
-                result.get_element_ptr(lhs_length),
-                rhs.get_data(),
-                rhs_size);
-        return result.get_value();
-    }
-
-    void create_concat(MirConcat const &x)
-    {
-        auto *result = operand(x.inputs->data[0]);
-        for (int i = 1; i < x.inputs->count; ++i) {
-            auto *value = operand(x.inputs->data[i]);
-            result = x.b_kind == BUILTIN_LIST
-                ? create_listcat(x.output.type, result, value)
-                : create_strcat(result, value);
-        }
-        set_result(x.output, result);
-    }
-
     void create_unreachable(MirUnreachable const &x)
     {
         B->CreateUnreachable();
     }
 
-    llvm::Value *load_result(llvm::Value *value)
-    {
-        auto *result_type = get_type(ir_fn_result(C, state_->mir_->type));
-        return B->CreateLoad(*result_type, value);
-    }
+//TODO    llvm::Value *load_result(llvm::Value *value)
+//TODO    {
+//TODO        auto *result_type = get_type(ir_fn_result(C, state_->mir_->type));
+//TODO        return B->CreateLoad(*result_type, value);
+//TODO    }
 
-    void create_return(MirReturn const &x)
+    void create_return(MirReturn const &)
     {
-        auto const ret = K_LIST_FIRST(state_->mir_->locals);
-        state_->create_return(is_empty_irtype(C, ret.type)
-                ? nullptr : load_result(operand(ret)));
+        auto const result = pawMir_get_register(state_->mir_, MirRegister{0});
+        state_->create_return(is_empty_irtype(C, result.type)
+                ? nullptr : operand(result));
     }
 
     void create_branch(MirBranch const &x)
@@ -2172,7 +1897,9 @@ private:
     void create_direct_switch(MirSwitch const &x)
     {
         auto *discr = operand(x.discr);
-        if (builtin_kind(x.discr.type) == BUILTIN_FLOAT)
+//TODO        if (is_thin_ptr(x.discr.type)) // TODO: hack
+//TODO            discr = B->CreateLoad(get_type(ir_deref(x.discr.type))->get_ty(), discr);
+        if (IrIsFloat(x.discr.type))
             discr = B->CreateBitCast(discr, X.get_int_ty());
         auto *node = B->CreateSwitch(discr, x.has_otherwise
                     ? get_successor_block(x.arms->count)
@@ -2182,11 +1909,6 @@ private:
             auto *k = into_constant_integral(x.arms->data[i].k);
             node->addCase(k, get_successor_block(i));
         }
-    }
-
-    Str get_str(llvm::Value *value)
-    {
-        return Str(*state_, value, get_str_methods());
     }
 
     void create_indirect_switch(MirSwitch const &x)
@@ -2213,11 +1935,12 @@ private:
 
     bool can_switch_directly(IrType *irtype)
     {
-        switch (pawP_type2code(C, irtype)) {
-            case BUILTIN_BOOL:
-            case BUILTIN_CHAR:
-            case BUILTIN_INT:
-            case BUILTIN_FLOAT:
+        irtype = pawIr_remove_indirection(C, irtype);
+        switch (IR_KINDOF(irtype)) {
+            case kIrBool:
+            case kIrChar:
+            case kIrInt:
+            case kIrFloat:
                 return true;
             default:
                 return false;
@@ -2240,13 +1963,20 @@ private:
     void set_result(MirPlace place, llvm::Value *value)
     {
         paw_assert(place.kind == MIR_PLACE_REGISTER);
-        state_->registers_.at(place.r.value) = value;
+        switch (state_->get_value_kind(place.r)) {
+            case ValueKind::SSA:
+                state_->values_.at(unsigned(place.r.value)) = value;
+                break;
+            case ValueKind::MEMORY:
+                B->CreateStore(value, state_->get_raw_value(place.r));
+                break;
+        }
     }
 
 
     std::unique_ptr<llvm::LLVMContext> ctx_;
 
-    Context X;
+    mutable Context X;
     Module *M;
     Compiler *C;
     llvm::IRBuilder<> *B;
@@ -2256,7 +1986,8 @@ private:
     PawState *state_;
 
     // mapping from IR strings to runtime global variables
-    std::unordered_map<::Str const *, llvm::GlobalVariable *> strings_;
+    struct StringDescriptor { llvm::Value *text; llvm::Value *length; };
+    std::unordered_map<::Str const *, StringDescriptor> strings_;
 
     // List of mangled names referring to functions marked with the "test" annotation.
     // When the "CodegenOptions::build_tests" flag is set, an executable is generated
@@ -2285,9 +2016,6 @@ private:
         ScalarInfo<Float> f;
         ScalarInfo<Str> s;
     } scalar_info_;
-
-    IrTypeHashMap<List::Methods> list_methods_;
-    IrTypeHashMap<Map::Methods> map_methods_;
 };
 
 
@@ -2299,8 +2027,8 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
     , before_block_(B->GetInsertBlock())
     , outer_(outer)
     , blocks_(unsigned(mir->blocks->count))
-    , locals_(unsigned(mir->locals->count))
-    , registers_(unsigned(mir->registers->count))
+    , values_(unsigned(mir->registers->count))
+    , value_kinds_(unsigned(mir->registers->count))
     , constants_(unsigned(mir->kcache->data->count))
     , captured_(unsigned(mir->captured->count))
     , upvalues_(upvalues)
@@ -2334,7 +2062,10 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
     }
 
     paw_assert(!blocks_.empty());
-    if (locals_.empty()) locals_.resize(1 + fn->get_num_args());
+    if (values_.empty()) {
+        values_.resize(1 + fn->get_num_args());
+        value_kinds_.resize(1 + fn->get_num_args());
+    }
     B->SetInsertPointPastAllocas(*fn);
 
     {
@@ -2342,18 +2073,25 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
         auto *type = fn->get_type();
         if (type->get_return_kind() != ReturnKind::SRET) {
             auto *return_type = type->get_return_type();
-            locals_.front() = B->CreateAlloca(*return_type);
+            values_.front() = B->CreateAlloca(*return_type);
         } else {
-            locals_.front() = fn->get_fn()->getArg(0);
+            values_.front() = fn->get_fn()->getArg(0);
         }
         // copy arguments from base class
         for (auto i = 0U; i < fn->get_num_args(); ++i)
-            locals_[1 + i] = get_arg(i);
+            values_[1 + i] = get_arg(i);
+        for (auto i = 0U; i <= fn->get_num_args(); ++i)
+            value_kinds_[i] = ValueKind::MEMORY;
         // allocate stack memory for the rest of the locals
-        for (auto i = 1 + fn->get_num_args(); i < mir->locals->count; ++i) {
-            auto const place = MirPlaceList_get(mir->locals, i);
-            auto *type = IrGetPtr(place.type)->pointee;
-            locals_[i] = B->CreateAlloca(*G.get_type(type));
+        for (auto i = 1 + fn->get_num_args(); i < mir->registers->count; ++i) {
+            auto const data = MirRegisterDataList_get(mir->registers, i);
+            if (data.is_nontrivial) {
+                if (!data.is_captured)
+                    values_[i] = B->CreateAlloca(*G.get_type(data.type));
+                value_kinds_[i] = ValueKind::MEMORY;
+            } else {
+                value_kinds_[i] = ValueKind::SSA;
+            }
         }
     }
 
@@ -2364,16 +2102,16 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
     B->SetInsertPoint(get_entry());
 
     for (auto i = 0U; i < captured_.size(); ++i) {
-        auto const L = unsigned(MirCaptureList_get(mir->captured, i).local.value);
-        auto *type = G.get_type(MirLocalDataList_get(mir->local_data, L).type);
-        paw_assert(L > 0);
+        auto const r = unsigned(MirCaptureList_get(mir->captured, i).local.value);
+        auto *type = G.get_type(MirRegisterDataList_get(mir->registers, r).type);
+        paw_assert(r > 0);
 
-        if (L <= fn->get_num_args()) {
+        if (r <= fn->get_num_args()) {
             auto *capture_slot = X->create_alloc(*type);
             // initialize with value of argument
-            auto *arg = X->load_value(*type, get_local_ptr(L));
+            auto *arg = X->load_value(*type, values_.at(r));
             X->store_value(arg, capture_slot);
-            locals_.at(L) = capture_slot;
+            values_.at(r) = capture_slot;
         }
     }
 
@@ -2387,7 +2125,7 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
 
     for (int i = 0; i < mir->captured->count; ++i) {
         auto const capture = mir->captured->data[i];
-        captured_[i] = locals_[capture.local.value];
+        captured_[i] = values_[capture.local.value];
     }
 
     if (mir->fn_kind == FUNC_CLOSURE) {
@@ -2412,16 +2150,18 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
 
 PawState::~PawState()
 {
-    if (llvm::verifyFunction(*fn_->get_fn(), &llvm::errs()))
+    std::string error;
+    llvm::raw_string_ostream os(error);
+    if (llvm::verifyFunction(*fn_->get_fn(), &os))
         llvm::errs() << "\nfunction verification failed for "
-            << fn_->get_fn()->getName() << "\n";
+            << fn_->get_fn()->getName() << ":\n" << error << "\n";
 
     G->state_ = outer_;
 }
 
 llvm::Value *PawState::get_local_ptr(unsigned index)
 {
-    return locals_.at(index);
+    return values_.at(index);
 }
 
 llvm::Value *PawState::get_upvalue_ptr(unsigned index)
@@ -2432,14 +2172,10 @@ llvm::Value *PawState::get_upvalue_ptr(unsigned index)
 static void link_compilation_artifact(paw_Env *P, std::string prefix)
 {
     std::string const root_dir(PAW_ROOT_DIR);
-    std::string const libgc_dir(PAW_GC_DIR);
 
     auto linker = Linker(P)
         .with_object(prefix + ".o")
-        .with_arg("-L" + libgc_dir + "/lib")
-        .with_staticlib("gc")
         .with_arg("-L" + root_dir)
-        .with_arg("--coverage") // TODO
         .with_staticlib("paw_stdc");
 
     auto const o = P->options;
@@ -2485,8 +2221,8 @@ void pawCodegen_generate(Compiler *C, TranslationUnit const *tu)
         .opt_suffix = P->options.opt_suffix,
     };
     std::string prefix, filename;
-    if (P->options.output_filename != NULL) {
-        if (P->options.output_dirname != NULL) {
+    if (P->options.output_filename != nullptr) {
+        if (P->options.output_dirname != nullptr) {
             std::string const dirname(P->options.output_dirname);
             prefix = dirname + PAW_FOLDER_SEPS[0];
         }

@@ -1,45 +1,47 @@
 // poly_impl.paw
 
-pub trait Repr {
-    fn repr(&self) -> str;
+pub trait Key {
+    fn key(*self) -> int;
 }
 
-impl Repr for int {
-    fn repr(&self) -> str {
-        self.to_str()
+impl Key for int {
+    fn key(*self) -> int {
+        *self
     }
 }
 
-impl Repr for str {
-    fn repr(&self) -> str {
-        "\"\{self}\""
+impl Key for str {
+    fn key(*self) -> int {
+        self.len()
     }
 }
 
-pub trait Debug<R: Repr> {
-    fn debug(&self);
+pub trait Key2<K: Key> {
+    fn key2(*self) -> int;
 }
 
 struct Poly<T> {
     pub value: T,
 }
 
-impl<T: Repr> Debug<T> for Poly<T> {
-    fn debug(&self) {
-        println("Poly(\{self.value.repr()})");
+impl<T: Key> Key2<T> for Poly<T> {
+    fn key2(*self) -> int {
+        self.value.key()
     }
 }
 
-pub fn call_debug<R: Repr>(p: Poly<R>) {
-    p.debug();
+pub fn call_key2<K: Key>(p: *Poly<K>) -> int {
+    p.key2()
 }
 
 #[test]
 pub fn test() {
-    let p = Poly{
-        value: "abc",
-    };
-    p.debug();
-    call_debug(p);
+    let p = Poly{value: 123};
+    assert(p.key2() == 123);
+    assert(call_key2(&p) == 123);
+
+    let p = Poly{value: "abc"};
+    assert(p.key2() == 3);
+    assert(call_key2(&p) == 3);
 }
 

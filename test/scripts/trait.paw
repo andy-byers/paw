@@ -1,136 +1,108 @@
-//// trait.paw
-//
-//pub trait InstanceGet {
-//    fn get(self) -> int;
-//}
-//
-//pub trait AssociatedGet {
-//    fn get_default() -> int;
-//}
-//
-//struct Int {
-//    pub value: int,
-//}
-//
-//impl InstanceGet for Int {
-//    fn get(self) -> int {
-//        self.value
-//    }
-//}
-//
-//impl AssociatedGet for Int {
-//    fn get_default() -> int {
-//        42
-//    }
-//}
-//
-//#[test]
-//pub fn test_call_method() {
-//    let i = Int{value: 123};
-//    assert(i.get() == 123);
-//}
-//
-//fn call_method<Ty: InstanceGet>(t: Ty) -> int {
-//    t.get()
-//}
-//
-//fn call_call_method<Ty: InstanceGet>(t: Ty) -> int {
-//    call_method(t)
-//}
-//
-//#[test]
-//pub fn test_indirect_call_method() {
-//    let i = Int{value: 42};
-//    assert(call_method(i) == 42);
-//    assert(call_call_method(i) == 42);
-//}
-//
-//#[test]
-//pub fn test_call_associated_fn() {
-//    assert(Int::get_default() == 42);
-//}
-//
-//fn call_both_functions<Ty: InstanceGet + AssociatedGet>(t: Ty) -> int {
-//    t.get() + Ty::get_default()
-//}
-//
-//fn call_call_both_functions<Ty: AssociatedGet + InstanceGet>(t: Ty) -> int {
-//    call_both_functions::<Ty>(t)
-//}
-//
-//#[test]
-//pub fn test_indirect_call_both_functions() {
-//    let i = Int{value: 123};
-//    assert(call_both_functions(i) == 123 + 42);
-//    assert(call_call_both_functions(i) == 123 + 42);
-//}
-//
-//pub trait TestDefault {
-//    fn default() -> Self;
-//    fn get(self) -> str;
-//}
-//
-//struct TestDefaultStructA {
-//    pub value: str,    
-//}
-//
-//impl TestDefault for TestDefaultStructA {
-//    fn default() -> Self {
-//        Self{value: "A"}
-//    }
-//    fn get(self) -> str {
-//        self.value
-//    }
-//}
-//
-//struct TestDefaultStructB {
-//    pub value: str,    
-//}
-//
-//impl TestDefault for TestDefaultStructB {
-//    fn default() -> Self {
-//        Self{value: "B"}
-//    }
-//    fn get(self) -> str {
-//        self.value
-//    }
-//}
-//
-//// Type parameter "T" appears in the function body, but not the signature
-//fn generics_not_in_signature<T: TestDefault>() -> str {
-//    T::default().get()
-//}
-//
-//#[test]
-//pub fn test_generics_not_in_signature() {
-//    assert(generics_not_in_signature::<TestDefaultStructA>() == "A");
-//    assert(generics_not_in_signature::<TestDefaultStructB>() == "B");
-//}
+// trait.paw
 
 pub trait InstanceGet {
-    fn get(self) -> int;
+    fn get(*self) -> int;
 }
 
 pub trait AssociatedGet {
     fn get_default() -> int;
 }
 
-fn call_inst<Ty: InstanceGet>(t: Ty) -> int {
-    // fn InstanceGet::get(self) -> int
-    // fn Ty::get() -> int
+struct Int {
+    pub value: int,
+}
+
+impl InstanceGet for Int {
+    fn get(*self) -> int {
+        self.value
+    }
+}
+
+impl AssociatedGet for Int {
+    fn get_default() -> int {
+        42
+    }
+}
+
+#[test]
+pub fn test_call_method() {
+    let i = Int{value: 123};
+    assert(i.get() == 123);
+}
+
+fn call_method<Ty: InstanceGet>(t: *Ty) -> int {
     t.get()
 }
 
+fn call_call_method<Ty: InstanceGet>(t: *Ty) -> int {
+    call_method(t)
+}
 
-//fn call_assoc<Ty: AssociatedGet>() -> int {
-//    // fn AssociatedGet::get_default() -> int
-//    // fn Ty::get_default() -> int
-//    Ty::get_default()
-//}
+#[test]
+pub fn test_indirect_call_method() {
+    let i = Int{value: 42};
+    assert(call_method(&i) == 42);
+    assert(call_call_method(&i) == 42);
+}
 
-//#[test]
-//pub fn test() {
-//    let i = Int{value: 123};
-//    assert(call_inst(i) == 123);
-//    assert(call_assoc::<Int>() == 42);
-//}
+#[test]
+pub fn test_call_associated_fn() {
+    assert(Int::get_default() == 42);
+}
+
+fn call_both_functions<Ty: InstanceGet + AssociatedGet>(t: *Ty) -> int {
+    t.get() + Ty::get_default()
+}
+
+fn call_call_both_functions<Ty: AssociatedGet + InstanceGet>(t: *Ty) -> int {
+    call_both_functions::<Ty>(t)
+}
+
+#[test]
+pub fn test_indirect_call_both_functions() {
+    let i = Int{value: 123};
+    assert(call_both_functions(&i) == 123 + 42);
+    assert(call_call_both_functions(&i) == 123 + 42);
+}
+
+pub trait TestDefault {
+    fn default() -> Self;
+    fn get(*self) -> str;
+}
+
+struct TestDefaultStructA {
+    pub value: str,    
+}
+
+impl TestDefault for TestDefaultStructA {
+    fn default() -> Self {
+        Self{value: "A"}
+    }
+    fn get(*self) -> str {
+        self.value
+    }
+}
+
+struct TestDefaultStructB {
+    pub value: str,    
+}
+
+impl TestDefault for TestDefaultStructB {
+    fn default() -> Self {
+        Self{value: "B"}
+    }
+    fn get(*self) -> str {
+        self.value
+    }
+}
+
+// Type parameter "T" appears in the function body, but not the signature
+fn generics_not_in_signature<T: TestDefault>() -> str {
+    T::default().get()
+}
+
+#[test]
+pub fn test_generics_not_in_signature() {
+    assert(generics_not_in_signature::<TestDefaultStructA>() == "A");
+    assert(generics_not_in_signature::<TestDefaultStructB>() == "B");
+}

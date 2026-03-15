@@ -1,0 +1,144 @@
+// pointer.paw
+
+pub trait Trait {
+    fn method(&self) -> int;
+}
+
+struct Type;
+
+impl Trait for Type {
+    fn method(&self) -> int {
+        123
+    }
+}
+
+fn dispatch_method<T: Trait>(p: &T) -> int {
+    p.method()
+}
+
+#[test]
+pub fn dispatch_method_on_pointer() {
+    assert(dispatch_method(&Type) == 123);
+}
+
+fn write_to_pointer<T>(p: &T, t: T) {
+    *p = t;
+}
+
+fn read_from_pointer<T>(p: &T) -> T {
+    *p
+}
+
+#[test]
+pub fn basic_operations() {
+    let a = "abc";
+    let b = &a;
+    let c = &b;
+    let b2 = b;
+    let c2 = c;
+    
+    b = b2;
+    c = c2;
+    *c = b;
+    *b = a;
+
+    assert(a == "abc");
+
+    *b = "def";
+    assert(a == "def");
+    assert(*b == "def");
+    assert(**c == "def");
+}
+
+#[test]
+pub fn access_local_data() {
+    let i = -1;
+    let p = &i;
+
+    write_to_pointer(p, 42);
+    assert(read_from_pointer(p) == 42);
+    assert(i == 42);
+}
+
+#[test]
+pub fn access_upvalue_data() {
+    let i = -1;
+    (|| {
+        write_to_pointer(&i, 42);
+        assert(read_from_pointer(&i) == 42);
+        assert(i == 42);
+    })();
+}
+
+#[test]
+pub fn access_constant_data() {
+    let p = &-1;
+    // TODO: compiler allows writing to a constant through a pointer. happens b/c `&<constant>` writes the constant to a stack slot and returns the address
+    //       prevent by marking pointers resulting from `&<constant>` as `const` or (not `mut`)
+    //       fix is blocked by mutability specifier feature
+    assert(read_from_pointer(p) == -1);
+}
+
+inline struct Int {
+    pub value: int,
+}
+
+#[test]
+pub fn access_field_data() {
+    let i = Int{value: -1};
+    let p = &i.value;
+    assert(*p == -1);
+
+    i.value = 123;
+    assert(i.value == 123);
+    assert(*p == 123);
+
+    *p = 456;
+    assert(i.value == 456);
+    assert(*p == 456);
+}
+
+// TODO: see TODO comment in access_constant_data. the same problem happens here, since str is supposed to be immutable
+#[test]
+pub fn access_element_data() {
+    let s = "abc";
+    let p = &s[1];
+    assert(*p == 'b');
+}
+
+#[test]
+pub fn field_access_auto_deref() {
+    let i = Int{value: -1};
+    let p = &i;
+    let pp = &p;
+
+    // i.value = 123
+    i.value = 123;
+    assert(i.value == 123);
+    assert(p.value == 123);
+    assert(pp.value == 123);
+
+    // (*p).value = 456
+    p.value = 456;
+    assert(i.value == 456);
+    assert(p.value == 456);
+    assert(pp.value == 456);
+
+    // (**pp).value = 789
+    pp.value = 789;
+    assert(i.value == 789);
+    assert(p.value == 789);
+    assert(pp.value == 789);
+}
+
+#[test]
+pub fn element_access_auto_deref() {
+    let s = "abc";
+    let p = &s;
+    let pp = &p;
+
+    assert(s[1] == 'b');
+    assert(p[1] == 'b');
+    assert(pp[1] == 'b');
+}
+

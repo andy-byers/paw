@@ -1,0 +1,77 @@
+// assoc_type_bounds.paw
+
+pub trait DebugPrint {
+    fn debug_print(*self);
+}
+
+pub trait Cursor {
+    type Item;
+    fn next(*self) -> Option<Self::Item>;
+}
+
+pub trait IntoCursor {
+    type Item;
+    type IntoCurs: Cursor<Item = Self::Item>;
+    fn into_cursor(self) -> Self::IntoCurs;
+}
+
+pub struct IntoCurs {
+    pub length: int,
+    pub index: int,
+}
+
+pub struct Container {
+    pub length: int,
+}
+
+impl Cursor for IntoCurs {
+    type Item = int;
+    fn next(*self) -> Option<Self::Item> {
+        if self.index < self.length {
+            self.index += 1;
+            Some(self.index)
+        } else {
+            None
+        }
+    }
+}
+
+impl IntoCursor for Container {
+    type Item = int;
+    type IntoCurs = IntoCurs;
+    fn into_cursor(self) -> Self::IntoCurs {
+        IntoCurs{index: 0, length: self.length}
+    }
+}
+
+
+// <<Self as IntoCursor<Self>>::IntoCurs as Cursor<<Self as IntoCursor<Self>>::IntoCurs>>::Item = <Self as IntoCursor<Self>>::Item
+// <<I as IntoCursor<I>>::IntoCurs as Cursor<<I as IntoCursor<I>>::IntoCurs>>::Item = <I as IntoCursor<I>>::Item
+// <<I as IntoCursor<I>>::IntoCurs as Cursor<<I as IntoCursor<I>>::IntoCurs>>::Item
+
+// <<I as IntoCursor<I>>::IntoCurs as Cursor<<I as IntoCursor<I>>::IntoCurs>>::Item
+// <I as IntoCursor<I>>::Item
+
+pub fn function<I: IntoCursor<Item = int>>(curs: I) -> I::Item {
+    // constraints from function:
+    //   I: IntoCursor<I> (IMPL_TRAIT)
+    //   <I as IntoCursor<I>>::Item = int (TYPE_EQUALS)
+    // preconditions from IntoCursor
+    //   <I as IntoCursor<I>>::IntoCurs: Cursor
+    //   <<I as IntoCursor<I>>::IntoCurs as Cursor>::Item = <I as IntoCursor<I>>::Item
+    curs.into_cursor().next().unwrap()
+}
+
+#[test]
+pub fn test() {
+    let container = Container{length: 3};
+    function(container);
+
+// obligations:
+//   Container: IntoCursor
+//   <Container as IntoCursor>::Item = int
+
+//    let container = Container{length: 3};
+//    let cursor = container.into_cursor();
+}
+

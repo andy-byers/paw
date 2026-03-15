@@ -1,84 +1,92 @@
 // iterator.paw
 
+use list::List;
+use hashmap::HashMap;
+
 #[test]
 pub fn test_iterator_for_loop() {
     let i = 1;
-    for e in [1, 2, 3] {
+    let list = List::new();
+    list.push(1).unwrap();
+    list.push(2).unwrap();
+    list.push(3).unwrap();
+    for e in list {
         assert(e == i);
         i = i + 1;
     }
 
     let i = 0;
-    for k in [1: 1, 2: 2, 3: 3] {
-        i = i + 1 ;
+    let map = HashMap::new();
+    map.insert(1, 1).unwrap().unwrap_none();
+    map.insert(2, 2).unwrap().unwrap_none();
+    map.insert(3, 3).unwrap().unwrap_none();
+    for (k, v) in map {
+        assert(k == v);
+        i = i + v;
     }
-    assert(i == 3);
+    assert(i == 6);
+}
 
-    let a = [1, 2, 3];
-    let b = [];
-    for e in a {
-        b.push(e);
-        a.pop();
-    }
-    assert(#b == 2);
-    assert(b[0] == 1);
-    assert(b[1] == 2);
+fn test_list<I: IntoIterator<Item = int>>(iter: I) -> List<int> {
+    let list = List::new();
+    for i in iter { list.push(i).unwrap() }
+    list
 }
 
 #[test]
 pub fn test_misc() {
     let N = 2;
     {
-        let a = [];
+        let a = List::new();
         for i in 0..N {
-            for j in [0] {
-                a.push(i + j);
+            for j in test_list(0..=0) {
+                a.push(i + j).unwrap();
             }
         }
-        assert(#a == 2);
+        assert(a.len() == 2);
         assert(a[0] == 0);
         assert(a[1] == 1);
     }
     {
-        let a = [];
+        let a = List::new();
         for i in 0..N {
             let j = 0;
             while j < N {
-                a.push(i + j);
+                a.push(i + j).unwrap();
                 j = j + 1;
             }
         }
-        assert(#a == 4);
+        assert(a.len() == 4);
         assert(a[0] == 0);
         assert(a[1] == 1);
         assert(a[2] == 1);
         assert(a[3] == 2);
     }
     {
-        let a = [];
+        let a = List::new();
         for i in 0..N {
-            for j in [0] {
+            for j in test_list(0..=0) {
                 let k = 0;
                 while k < N {
-                    a.push(i + j + k);
+                    a.push(i + j + k).unwrap();
                     k = k + 1;
                 }
             }
         }
-        assert(#a == 4);
+        assert(a.len() == 4);
         assert(a[0] == 0);
         assert(a[1] == 1);
         assert(a[2] == 1);
         assert(a[3] == 2);
     }
     {
-        let I = [0, 1, 2, 3];
+        let I = test_list(0..4);
         for i in 0..4 {
             assert(i == I[i]);
         }
 
         let n = 0;
-        let I = [2, 3];
+        let I = test_list(2..=3);
         for i in 2..4 {
             assert(i == I[n]);
             n = n + 1;
@@ -94,36 +102,6 @@ pub fn test_misc() {
         assert(n == 1);
     }
 
-    {
-        let test = |n| {
-            let f = || -1;
-            for _ in 0..10 {
-                if n == 0 {
-                    let _0 = 0;
-                    f = || n + _0;
-                    break;
-                } else if n == 1 {
-                    if n == 1 {
-                        let _1 = 1;
-                        f = || n + _1;
-                        break;
-                    }
-                } else if n == 2 {
-                    if n == 2 {
-                        if n == 2 {
-                            let _2 = 2;
-                            f = || n + _2;
-                            break;
-                        }
-                    }
-                }
-            }
-            return f();
-        };
-        assert(test(0) == 0);
-        assert(test(1) == 2);
-        assert(test(2) == 4);
-    }
     {
         let a = 42;
         while true {

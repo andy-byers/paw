@@ -1,41 +1,20 @@
 // argument_sequence.paw
 
+fn f<X, Y, Z>(x: X, y: Y, z: Z) -> (X, Y, Z) {
+    (x, y, z)
+}
+
 #[test]
-pub fn test_assignment() {
+pub fn variable_assignment() {
     let v = 1;
-    let f = |a, b, c| (a, b, c);
     let t = f(v, v = 2, v);
     assert(t.0 == 1);
     assert(t.2 == 2);
 }
 
 #[test]
-pub fn test_call() {
-    let v = 1;
-    let g = || v = 2;
-    let f = |a, b, c| (a, b, c);
-    let t = f(v, g(), v);
-    assert(t.0 == 1);
-    assert(t.2 == 2);
-}
-
-struct Box<T> {
-    pub value: T,
-}
-
-#[test]
-pub fn test_boxed_type() {
-    let v = Box{value: 1};
-    let f = |a, b, c| (a, b, c);
-    let t = f(v, v.value = 2, v);
-    assert(t.0.value == 2);
-    assert(t.2.value == 2);
-}
-
-#[test]
-pub fn test_value_type() {
+pub fn field_assignment() {
     let v = (0, 1);
-    let f = |a, b, c| (a, b, c);
     let t = f(v, v.1 = 2, v);
     assert(t.0.1 == 1);
     assert(t.2.1 == 2);

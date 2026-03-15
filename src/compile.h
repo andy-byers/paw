@@ -42,9 +42,6 @@
 #include "stats.h"
 #include "trait.h"
 
-#warning
-#include"stdio.h"
-
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
 #define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))
@@ -76,6 +73,7 @@ struct HirTypeFolder;
 struct HirTypeList;
 struct HirSymtab;
 struct HirType;
+struct HirGenericArg;
 
 struct IrType;
 struct IrTypeList;
@@ -129,6 +127,9 @@ struct Compiler {
     struct Builtin builtins[NBUILTINS];
     struct BuiltinMap *builtin_lookup;
 
+    DeclId core_traits[NUM_CORE_TRAITS];
+    NodeId core_trait_index_id_hack; // TODO
+
     // callbacks for debugging
     Value on_build_ast;
     Value on_build_hir;
@@ -161,7 +162,7 @@ struct Compiler {
 
     struct IrSolver *S;
 
-    struct IrLayoutMap *layouts;
+    struct IrTypeLayouts *layouts;
 
     struct HirTypeMap *hir_types; // NodeId => IrType *
     struct DefTypeMap *def_types; // DefId => IrType *
@@ -172,9 +173,17 @@ struct Compiler {
     struct ImplMap *impl_defs; // DefId => IrImpl *
     struct GenericDefMap *generic_defs; // DefId => IrGenericDef *
     struct IrDefKinds *ir_def_kinds;
-    struct IrGenericTypes *ir_generic_types;
+    struct IrGenericTypes *ir_generic_args; // TODO: rename, these are binders for polymorphic decls
+    struct IrConstraintsMap *ir_constraints;
+    struct IrAssocItemMap *ir_assoc_items;
+    struct IrDeclArgs *ir_decl_args;
     struct IrTraitBounds *ir_trait_bounds;
+    struct IrPendingConstants *pending_constants;
+    struct IrConstObligations *const_obligations;
     struct NodeMap *self_types;
+    struct IrType2Map *indexes;
+
+    struct SourceSpanRefs *source_span_refs;
 
     struct GlobalList *globals;
 
@@ -190,15 +199,9 @@ struct Compiler {
             struct IrType *str_t;
         } primitives;
 
-        struct {
-            // maps [T] to ListIterator<T>
-            struct TypeCollection *list;
-            // maps [K: V] to MapIterator<K, V>
-            struct TypeCollection *map;
-        } iterators;
-
-        struct TypeCollection *lists;
-        struct TypeCollection *maps;
+        struct TypeCollection *ptrs;
+        struct TypeCollection *slices;
+        struct TypeCollection *arrays;
         struct TypeCollection *adts;
         struct TypeCollection *types;
     } typesystem;
@@ -259,6 +262,7 @@ void pawP_lower_ast(struct Compiler *C);
 void pawP_collect_items(struct Compiler *C, struct Pool *pool);
 
 struct IrType *pawP_lower_type(struct Compiler *C, struct HirModule m, struct HirType *type);
+struct IrGenericArg pawP_lower_generic_arg(struct Compiler *C, struct HirModule m, struct HirGenericArg arg);
 
 struct RegisterInfo {
     int value;
@@ -284,12 +288,9 @@ BitSet *pawP_bitset_or(struct Compiler *C, BitSet const *a, BitSet const *b);
 struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct MatchVars *vars);
 void pawP_lower_matches(struct Compiler *C);
 
-struct IrType *pawP_generalize(struct Compiler *C, struct SourceLoc loc, struct IrType *type);
-struct IrType *pawP_generalize_assoc(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct IrType *method);
-
 struct Substitution {
-    struct IrTypeList *generics;
-    struct IrTypeList *types;
+    struct IrGenericArgs *params;
+    struct IrGenericArgs *args;
 };
 
 // Type representing the result of a type instantiation
@@ -301,14 +302,16 @@ struct Instantiation {
 
 // Replace each generic type from the binder on "type" with an inference variable
 // Note that "type" is not modified by this operation.
-struct Instantiation pawP_instantiate_v2(struct Compiler *C, struct SourceLoc loc, struct IrType *type);
+struct Instantiation pawP_instantiate_v2(struct Compiler *C, struct IrType *type);
 
-struct Instantiation pawP_instantiate_assoc(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct IrType *method);
+struct Instantiation pawP_instantiate_assoc(struct Compiler *C, struct IrType *type, struct IrType *method);
 
-// Substitute types in "subst.generics" for types in "subst.types" in the context of the given "type"
+// Substitute types in "subst.params" for types in "subst.args" in the context of the given "type"
 // Note that "type" is not modified by this operation.
-struct IrType *pawP_substitute(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct Substitution subst);
-struct IrTrait *pawP_substitute_trait(struct Compiler *C, struct SourceLoc loc, struct IrTrait *trait, struct Substitution subst);
+struct IrType *pawP_substitute(struct Compiler *C, struct IrType *type, struct Substitution subst);
+struct IrTrait *pawP_substitute_trait(struct Compiler *C, struct IrTrait *trait, struct Substitution subst);
+struct IrGenericArg pawP_substitute_arg(struct Compiler *C, struct IrGenericArg arg, struct Substitution subst);
+struct IrConst *pawP_substitute_const(struct Compiler *C, struct IrConst *k, struct Substitution subst);
 
 // TODO: remove this one and rename _v2
 // Instantiate a polymorphic function or type
@@ -317,13 +320,13 @@ struct IrTrait *pawP_substitute_trait(struct Compiler *C, struct SourceLoc loc, 
 struct IrType *pawP_instantiate(struct Compiler *C, struct IrType *base, struct IrTypeList *types);
 
 struct IrType *pawP_instantiate_method(struct Compiler *C, struct IrType *self, struct IrTypeList *types, struct IrType *method);
-struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
+struct IrGenericArgs *pawP_instantiate_typelist(struct Compiler *C, struct IrGenericArgs *before, struct IrGenericArgs *after, struct IrGenericArgs *target);
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);
 EXTERN_C struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
 EXTERN_C struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
 
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
-                                   struct IrTypeList *generics, struct IrTypeList *types);
+                                   struct IrGenericArgs *params, struct IrGenericArgs *args);
 
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str const *modname, Str const *pathname, Str const *dirname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
@@ -357,7 +360,6 @@ struct Annotation {
 
 DEFINE_LIST(struct Compiler, Annotations, struct Annotation)
 
-EXTERN_C paw_Bool pawP_contains_core_annotation(struct Compiler *C, Annotations const *annotations);
 EXTERN_C paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
 paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, Value *result);
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
@@ -388,6 +390,7 @@ DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *)
 DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Builtin *)
+DEFINE_MAP(struct Compiler, SourceSpanRefs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, SpanRef, struct SourceSpan)
 
 DEFINE_MAP_ITERATOR(StringMap, Str const *, void *)
 DEFINE_MAP_ITERATOR(HirTypeMap, NodeId, struct IrType *)

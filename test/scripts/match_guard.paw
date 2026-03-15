@@ -41,22 +41,22 @@ fn test_guard() {
 
 fn check_guard_2(value: Option<int>) -> int {
     match value {
-        Option::Some(x) if x == 100 => {return 1;},
-        Option::Some(x) if x < -10 => {return 2;},
-        Option::Some(x) if x < 0 => {return 3;},
-        Option::Some(x) => {return 4;},
-        Option::None => {return 5;},
+        Some(x) if x == 100 => {return 1;},
+        Some(x) if x < -10 => {return 2;},
+        Some(x) if x < 0 => {return 3;},
+        Some(x) => {return 4;},
+        None => {return 5;},
     }
 }
 
 #[test]
 pub fn test_guard_2() {
     let check = check_guard_2;
-    assert(check(Option::Some(100)) == 1);
-    assert(check(Option::Some(-11)) == 2);
-    assert(check(Option::Some(-10)) == 3);
-    assert(check(Option::Some(0)) == 4);
-    assert(check(Option::None) == 5);
+    assert(check(Some(100)) == 1);
+    assert(check(Some(-11)) == 2);
+    assert(check(Some(-10)) == 3);
+    assert(check(Some(0)) == 4);
+    assert(check(None) == 5);
 }
 
 fn check_guard_3(value: (int, int)) -> int {

@@ -61,10 +61,11 @@ static inline std::string to_string(::Str const *str)
 
 
 enum class BuiltinFn {
-    // functions from libgc
-    GC_INIT,
-    GC_MALLOC,
-    GC_FREE,
+    // dynamic memory management functions
+    PAW_ALLOC,
+    PAW_REALLOC,
+    PAW_DEALLOC,
+    PAW_ALIGNED_ALLOC,
 
     // checked integer arithmetic
     CKD_IMUL,
@@ -73,6 +74,7 @@ enum class BuiltinFn {
     // miscellaneous helper functions
     PAW_BKPT,
     HASH_BYTES,
+    CHECK_BOUNDS,
     ABS_INDEX,
     RAWCMP,
 
@@ -193,15 +195,9 @@ public:
         B->CreateCall(fn, {ptr});
     }
 
-    void create_gc_init() const
-    {
-        auto *fn = M->get_builtin(BuiltinFn::GC_INIT);
-        B->CreateCall(fn);
-    }
-
     void create_panic(StringView message) const
     {
-        create_panic(create_temp_str(message));
+        create_panic(create_char_slice(message));
     }
 
     // NOTE: it is the caller's responsibility to create an "unreachable" basic block
@@ -210,6 +206,12 @@ public:
     {
         auto *fn = M->get_builtin(BuiltinFn::PANIC);
         B->CreateCall(fn, {create_null_ptr(), message});
+    }
+
+    llvm::Value *create_check_bounds(llvm::Value *index, llvm::Value *length) const
+    {
+        auto *fn = M->get_builtin(BuiltinFn::CHECK_BOUNDS);
+        return B->CreateCall(fn, {index, length});
     }
 
     llvm::Value *create_hash_bytes(llvm::Value *bytes, llvm::Value *length) const
@@ -226,7 +228,7 @@ public:
 
     void create_print(StringView message) const
     {
-        create_print(create_temp_str(message));
+        create_print(create_char_slice(message));
     }
 
     void create_print(llvm::Value *message) const
@@ -237,7 +239,7 @@ public:
 
     void create_println(StringView message) const
     {
-        create_println(create_temp_str(message));
+        create_println(create_char_slice(message));
     }
 
     void create_println(llvm::Value *message) const
@@ -315,30 +317,19 @@ public:
     {
         return M->get_module()->getOrInsertFunction("paw_builtin_rawcmp",
             llvm::FunctionType::get(get_int_ty(), {
-                get_ptr_ty(),
-                get_int_ty(),
-                get_ptr_ty(),
-                get_int_ty(),
+                get_ptr_ty(), // ptr env
+                get_ptr_ty(), // ptr lhs
+                get_int_ty(), // i64 lhs_len
+                get_ptr_ty(), // ptr rhs
+                get_int_ty(), // i64 rhs_len
             }, false));
 
     }
 
-    llvm::FunctionCallee get_abs_index_callee() const
-    {
-        return M->get_module()->getOrInsertFunction("paw_builtin_abs_index",
-            llvm::FunctionType::get(get_int_ty(),
-                {get_int_ty(), get_int_ty()}, false));
-    }
-
-    llvm::Value *create_abs_index(llvm::Value *index, llvm::Value *length)
-    {
-        return B->CreateCall(get_abs_index_callee(), {index, length});
-    }
-
     llvm::Value *create_alloc(llvm::Value *size)
     {
-        auto *fn = M->get_builtin(BuiltinFn::GC_MALLOC);
-        return B->CreateCall(fn, {size});
+        auto *fn = M->get_builtin(BuiltinFn::PAW_ALLOC);
+        return B->CreateCall(fn, {create_null_ptr(), size});
     }
 
     llvm::Value *create_alloc(paw_Int size)
@@ -353,8 +344,8 @@ public:
 
     llvm::Value *create_dealloc(llvm::Value *ptr)
     {
-        auto *fn = M->get_builtin(BuiltinFn::GC_FREE);
-        return B->CreateCall(fn, {ptr});
+        auto *fn = M->get_builtin(BuiltinFn::PAW_DEALLOC);
+        return B->CreateCall(fn, {create_null_ptr(), ptr});
     }
 
     llvm::Value *create_imin(llvm::Value *a, llvm::Value *b)
@@ -489,6 +480,11 @@ public:
         return create_i8(value);
     }
 
+    llvm::ConstantInt *create_uint(paw_Uint value) const
+    {
+        return B->getInt64(value);
+    }
+
     llvm::ConstantInt *create_int(paw_Int value) const
     {
         return create_i64(value);
@@ -547,12 +543,14 @@ public:
 
     llvm::Value *load_value(llvm::Type *ty, llvm::Value *ptr) const
     {
+        paw_assert(ty && ptr);
         return B->CreateLoad(ty, ptr);
     }
 
-    void store_value(llvm::Value *value, llvm::Value *pointer) const
+    void store_value(llvm::Value *value, llvm::Value *ptr) const
     {
-        B->CreateStore(value, pointer);
+        paw_assert(value && ptr);
+        B->CreateStore(value, ptr);
     }
 
     llvm::IntegerType *get_index_ty() const
@@ -637,16 +635,25 @@ public:
         return get_i64_ty();
     }
 
-    llvm::StructType *get_str_ty()
+    llvm::StructType *get_fatptr_ty() const
     {
         return llvm::StructType::get(*ctx_, {
-                get_int_ty(), // length
-                get_i32_ty(), // hash
-                get_array_ty(get_char_ty(), 0), // text[]
+                get_ptr_ty(), // ptr
+                get_int_ty(), // len
             }, false);
     }
 
-    llvm::StructType *get_list_ty()
+    llvm::StructType *get_str_ty() const
+    {
+        return get_fatptr_ty();
+    }
+
+    llvm::StructType *get_slice_ty() const
+    {
+        return get_fatptr_ty();
+    }
+
+    llvm::StructType *get_list_ty() const
     {
         return llvm::StructType::get(*ctx_, {
                 get_ptr_ty(), // data
@@ -655,7 +662,7 @@ public:
             }, false);
     }
 
-    llvm::StructType *get_map_ty()
+    llvm::StructType *get_map_ty() const
     {
         return llvm::StructType::get(*ctx_, {
                 get_ptr_ty(), // data
@@ -710,24 +717,21 @@ public:
     FloatType *get_float_type() const { return &scalar_types_.f; }
     StrType *get_str_type() const { return &scalar_types_.s; }
 
-    ListType *get_list_type(Type *element_type);
-
-    MapType *get_map_type(Type *key_type, Type *value_type);
+    SliceType *get_slice_type(Type *element_type);
+    ArrayType *get_array_type(Type *element_type, uint64_t length);
 
     // TODO: rename to get_enum_type
-    ObjectType *get_object_type(llvm::ArrayRef<ObjectType::FieldTypes> field_types, ObjectType::Location location);
+    ObjectType *get_object_type(llvm::ArrayRef<ObjectType::FieldTypes> field_types);
 
     ObjectType *get_tuple_type(llvm::ArrayRef<Type *> field_types)
     {
-        return get_struct_type(field_types, ObjectType::Location::STACK);
+        return get_struct_type(field_types);
     }
 
-    ObjectType *get_struct_type(llvm::ArrayRef<Type *> field_types, ObjectType::Location location)
+    ObjectType *get_struct_type(llvm::ArrayRef<Type *> field_types)
     {
-        return get_object_type({field_types}, location);
+        return get_object_type({field_types});
     }
-
-    ObjectType *get_named_type(std::string name, ObjectType::Location location);
 
     FnType *get_fn_type(
             Type *return_type,
@@ -742,26 +746,22 @@ public:
     // The lifetime of the returned string is the same as that of the current
     // function (at most). Note that the ".hash" field is not filled out. The
     // returned "str" should only be used for printing error messages.
-    llvm::Value *create_temp_str(StringView view) const
+    llvm::Value *create_char_slice(StringView view) const
     {
         paw_assert(view.length < 100); // short strings only
-        auto *ty = llvm::StructType::create(*ctx_, {
-                get_int_ty(), // length
-                get_i32_ty(), // hash
-                get_array_ty(get_char_ty(), view.length + 1), // text
-            });
-        auto *array = llvm::ConstantDataArray::getString(
+        auto *message = llvm::ConstantDataArray::getString(
                 *ctx_, llvm::StringRef(view.data, view.length), true);
+        auto *storage = new llvm::GlobalVariable(
+                        **M, get_ptr_ty(), false,
+                        llvm::GlobalValue::PrivateLinkage,
+                        create_null_ptr(), "temp_str");
+        B->CreateStore(message, storage);
+        temp_strings_.push_back(0);
 
-        // TODO: don't use alloca
-        auto *str = B->CreateAlloca(ty);
-        auto *length_ptr = B->CreateStructGEP(ty, str, 0);
-        // NOTE: hash is omitted from temporary string
-        auto *text = B->CreateStructGEP(ty, str, 2);
-
-        B->CreateStore(create_int(view.length), length_ptr);
-        B->CreateStore(array, text);
-        return str;
+        llvm::Value *slice = llvm::UndefValue::get(get_slice_ty());
+        slice = B->CreateInsertValue(slice, storage, 0);
+        slice = B->CreateInsertValue(slice, create_uint(view.length), 1);
+        return slice;
     }
 
     llvm::DIFile *get_difile(int modno)
@@ -789,6 +789,7 @@ private:
     std::unique_ptr<Module> M;
     Compiler *C;
 
+    mutable std::vector<void *> temp_strings_;
     std::unique_ptr<llvm::DIBuilder> DI;
     llvm::DICompileUnit *dcu_;
     std::vector<llvm::DIFile *> difiles_;

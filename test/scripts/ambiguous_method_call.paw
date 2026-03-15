@@ -8,7 +8,7 @@
 //       the end of type checking.
 
 pub trait Trait<T> {
-    fn method(&self);
+    fn method(*self);
 }
 
 enum Type<T> {
@@ -16,17 +16,19 @@ enum Type<T> {
 }
 
 impl Trait<int> for Type<int> {
-    fn method(&self) {}
+    fn method(*self) {}
 }
 
 impl Trait<float> for Type<float> {
-    fn method(&self) {}
+    fn method(*self) {}
 }
 
 #[test]
 pub fn test() {
     let e = Type::First;
+    // TODO: should the following line be allowed? need to either resolve the method call in a separate pass over the fn body or keep a candidate list at the time the call site is visited and narrow it down as types are inferred... is it even worth it?
     e.method(); // e: Type<_>
     e = Type::Second(456);
     e.method(); // e: Type<int>
 }
+

@@ -1,0 +1,536 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+//
+// TODO: ITEM_* variables could be made "const" if "mem::*of()" were made into intrinsics or (if this ever gets implemented) trait-associated constants (like <K as StrideOf>::Value)
+
+// HashMap layout:
+//
+// The data buffer backing a HashMap object is split into 2 sections: the
+// metadata region and the items region. Each regiion contains an entry
+// for each available slot in the hash map, i.e. each section has a length
+// equal to the hash map capacity. A metadata entry consists of a flag
+// indicating if the entry is used as well as the highest 7 bits of the
+// key hash for that entry. 
+
+
+use ptr;
+use slice;
+
+const GROWTH_EXPONENT: int = 1;
+const LOAD_LENGTH: int = 7;
+const LOAD_CAPACITY: int = 8;
+
+
+pub struct HashMap<K: Hash + Equals<K>, V> {
+    buffer: *char,
+    length: int,
+    capacity: int,
+}
+
+
+const FINGERPRINT_WIDTH: int = 7;
+const TOMBSTONE_VALUE: int = 1;
+const VACANT_VALUE: int = 0;
+
+struct Metadata {
+    data: char,
+}
+
+impl Copy for Metadata {}
+
+enum State {
+    Occupied,
+    Vacant,
+    Erased,
+}
+
+impl Metadata {
+    pub fn is_used(*self) -> bool {
+        self.data as int & 1 != 0
+    }
+
+    pub fn clear_used_flag(*self) {
+        self.data = Self::encode(self.fingerprint(), false);
+    }
+
+    pub fn set_used_flag(*self) {
+        self.data = Self::encode(self.fingerprint(), true);
+    }
+
+    pub fn fingerprint(*self) -> Fingerprint {
+        Fingerprint::new(self.data as int >> 1)
+    }
+
+    pub fn set_fingerprint(*self, fingerprint: Fingerprint) {
+        self.data = Self::encode(fingerprint, self.is_used());
+    }
+
+    // Determine the state of the entry represented by this metadata
+    pub fn state(self) -> State {
+        if self.is_used() {
+            State::Occupied
+        } else if self.fingerprint().as_int() == TOMBSTONE_VALUE {
+            State::Erased
+        } else {
+            State::Vacant
+        }
+    }
+
+    fn encode(fingerprint: Fingerprint, is_used: bool) -> char {
+        ((fingerprint.as_int() << 1) | is_used as int) as char
+    }
+}
+
+
+struct Fingerprint {
+    value: int,
+}
+
+impl Copy for Fingerprint {}
+
+impl Fingerprint {
+    pub fn new(value: int) -> Self {
+        assert(0 <= value && value < (1 << FINGERPRINT_WIDTH));
+        Self{value}
+    }
+
+    pub fn from_hash(hash: int) -> Self {
+        let SHIFT: int = mem::sizeof::<int>() * 8 - FINGERPRINT_WIDTH;
+        Self::new(hash >> SHIFT)
+    }
+
+    pub fn as_int(self) -> int {
+        self.value
+    }
+}
+
+impl Equals<Self> for Fingerprint {
+    fn eq(*self, rhs: *Self) -> bool {
+        self.as_int() == rhs.as_int()
+    }
+}
+
+
+struct Item<K, V> {
+    pub key: K,
+    pub value: V,
+}
+
+
+struct ItemInfo<K, V> {
+    pub metadata: *Metadata,
+    pub item: Item<K, V>,
+}
+
+
+struct Cursor<K, V> {
+    metadata: *Metadata,
+    items: []Item<K, V>,
+    index: int,
+}
+
+impl<K, V> Copy for Cursor<K, V> {}
+
+impl<K, V> Cursor<K, V> {
+    pub fn new(metadata: *Metadata, items: []Item<K, V>, index: int) -> Self {
+        Self{metadata, items, index}
+    }
+
+    pub fn is_valid(*self) -> bool {
+        self.index < self.items.len()
+    }
+
+    pub fn metadata(*self) -> *Metadata {
+        ptr::add(self.metadata, self.index)
+    }
+
+    pub fn prefix(*self) -> Fingerprint {
+        self.metadata().fingerprint()
+    }
+
+    pub fn key(*self) -> *K {
+        &self.items[self.index].key
+    }
+
+    pub fn value(*self) -> *V {
+        &self.items[self.index].value
+    }
+
+    pub fn state(*self) -> State {
+        self.metadata().state()
+    }
+
+    pub fn is_occupied(*self) -> bool {
+        match self.state() {
+            State::Occupied => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_erased(*self) -> bool {
+        match self.state() {
+            State::Erased => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_vacant(*self) -> bool {
+        match self.state() {
+            State::Vacant => true,
+            _ => false,
+        }
+    }
+
+    pub fn set_key(*self, key: K, hash: int) {
+        let f = Fingerprint::from_hash(hash);
+        self.metadata().set_fingerprint(f);
+        self.metadata().set_used_flag();
+        *self.key() = key;
+    }
+
+    pub fn set_value(*self, value: V) {
+        *self.value() = value;
+    }
+
+    pub fn set_occupied(*self, prefix: Fingerprint) {
+        self.metadata().set_fingerprint(prefix);
+        self.metadata().set_used_flag();
+    }
+
+    pub fn set_vacant(*self) {
+        let prefix = Fingerprint::new(VACANT_VALUE);
+        self.metadata().set_fingerprint(prefix);
+        self.metadata().clear_used_flag();
+    }
+
+    pub fn set_erased(*self) {
+        let prefix = Fingerprint::new(TOMBSTONE_VALUE);
+        self.metadata().set_fingerprint(prefix);
+        self.metadata().clear_used_flag();
+    }
+
+    pub fn next(*self) {
+        if self.index < self.items.len() {
+            self.index += 1;
+        }
+    }
+
+    pub fn next_wrapping(*self) {
+        self.index = (self.index + 1) & (self.items.len() - 1);
+    }
+}
+
+
+impl<K: Hash + Equals<K>, V> HashMap<K, V> {
+    pub fn new() -> Self {
+        Self{
+            buffer: ptr::null::<char>(),
+            length: 0,
+            capacity: 0,
+        }
+    }
+
+    pub fn len(*self) -> int {
+        self.length
+    }
+
+    pub fn capacity(*self) -> int {
+        self.capacity
+    }
+
+    pub fn get(*self, key: *K) -> Option<*V> {
+        match self.lookup(key, key.hash()) {
+            Some(c) => Some(c.value()),
+            None => None,
+        }
+    }
+
+    pub fn insert(*self, key: K, value: V) -> mem::Result<Option<V>> {
+        self.ensure_one()?;
+
+        let erased = None;
+        let hash = key.hash();
+        let cursor = self.cursor(hash);
+        let prefix = Fingerprint::from_hash(hash);
+
+        let counter = 0;
+        while counter < self.capacity 
+                && !cursor.is_vacant() {
+            if cursor.is_erased() {
+                if erased.is_none() {
+                    erased = Some(cursor);
+                }
+            } else if cursor.prefix().eq(&prefix)
+                    && cursor.key().eq(&key) {
+                value = ptr::replace(cursor.value(), value);
+                return Ok(Some(value));
+            }
+            cursor.next_wrapping();
+            counter += 1;
+        }
+        self.length += 1;
+        cursor = match erased {
+            None => cursor,
+            Some(c) => c,
+        };
+        cursor.set_occupied(prefix);
+        ptr::write(cursor.key(), key);
+        ptr::write(cursor.value(), value);
+        Ok(None)
+    }
+
+    pub fn remove(*self, key: *K) -> Option<V> {
+        match self.lookup(key, key.hash()) {
+            Some(c) => {
+                let v = ptr::read(c.value());
+                c.set_erased();
+                self.length -= 1;
+                Some(v)
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_or(*self, key: *K, default: *V) -> *V {
+        match self.get(key) {
+            Some(value) => value,
+            None => default,
+        }
+    }
+
+    pub fn contains(*self, key: *K) -> bool {
+        match self.get(key) {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    // Requires that "capacity" be a valid HashMap capacity (i.e. a power-of-2
+    // for which "compute_buffer_size(capacity)" returns "Ok(...)").
+    fn compute_items_offset(capacity: int) -> int {
+        align_up(capacity, mem::alignof::<Item<K, V>>())
+    }
+
+    fn item_at_index(items: *Item<K, V>, index: int) -> *Item<K, V> {
+        ptr::add(items, index) 
+    }
+
+    fn compute_buffer_size(capacity: int) -> mem::Result<int> {
+        let ITEM_ALIGNMENT: int = mem::alignof::<Item<K, V>>();
+        let ITEM_STRIDE: int = mem::strideof::<Item<K, V>>();
+
+        if capacity > INT_MAX - ITEM_ALIGNMENT {
+            return Err(mem::OutOfMemory);
+        }
+        let offset = Self::compute_items_offset(capacity);
+        if capacity > INT_MAX / ITEM_STRIDE
+                || offset > INT_MAX - capacity * ITEM_STRIDE {
+            return Err(mem::OutOfMemory);
+        }
+        Ok(offset + capacity * ITEM_STRIDE)
+    }
+
+    fn items_region(*self) -> []Item<K, V> {
+        let items_offset = Self::compute_items_offset(self.capacity);
+        let p = ptr::add(self.buffer, items_offset) as *Item<K, V>;
+        slice::from_raw_parts(p, self.capacity)
+    }
+
+    fn cursor(*self, hash: int) -> Cursor<K, V> {
+        let items = self.items_region();
+        let index = hash & (self.capacity - 1);
+        Cursor::new(self.buffer as *Metadata, items, index)
+    }
+
+    fn lookup(*self, key: *K, hash: int) -> Option<Cursor<K, V>> {
+        if self.length == 0 { return None; }
+        let prefix = Fingerprint::from_hash(hash);
+        let cursor = self.cursor(hash);
+        for _ in 0..self.capacity {
+            match cursor.state() {
+                State::Occupied => {
+                    if cursor.prefix().eq(&prefix)
+                            && cursor.key().eq(key) {
+                        return Some(cursor);
+                    }
+                },
+                State::Vacant => break,
+                State::Erased => (),
+            }
+            cursor.next_wrapping();
+        }
+        None
+    }
+
+    fn ensure_one(*self) -> mem::Result<()> {
+        let ITEM_ALIGNMENT: int = mem::alignof::<Item<K, V>>();
+        let ITEM_STRIDE: int = mem::strideof::<Item<K, V>>();
+        let GROWTH_FACTOR: int = 1 << GROWTH_EXPONENT;
+
+        let free_slots = self.capacity / LOAD_CAPACITY 
+            * (LOAD_CAPACITY - LOAD_LENGTH);
+        if self.length < self.capacity - free_slots {
+            return Ok(());
+        }
+        if self.capacity > INT_MAX / GROWTH_FACTOR {
+            return Err(mem::OutOfMemory);
+        }
+        let capacity = if self.capacity > 0 {
+            self.capacity * GROWTH_FACTOR
+        } else {
+            LOAD_CAPACITY
+        };
+
+        // capacity must always be a power of 2
+        assert(is_aligned(capacity, capacity));
+
+        let buffer = mem::alloc(Self::compute_buffer_size(capacity)?)?;
+        ptr::memset(buffer, 0 as char, capacity); // clear metadata
+        let map = HashMap{buffer, capacity, length: self.length};
+
+        let cursor = self.cursor(0);
+        while cursor.is_valid() {
+            if cursor.is_occupied() {
+                let key = ptr::read(cursor.key());
+                let value = ptr::read(cursor.value());
+                
+                map.insert(key, value)
+                    .expect("failed unexpected allocation")
+                    .expect_none("detected hash map corruption");
+            }
+            cursor.next();
+        }
+
+        mem::dealloc(self.buffer);
+        self.buffer = buffer;
+        self.capacity = capacity;
+        Ok(())
+    }
+
+    pub fn __cursor_on_first_item(*self) -> Cursor<K, V> {
+        self.cursor(0)
+    }
+
+    pub fn __set_length_to_zero(*self) {
+        self.length = 0;
+    }
+}
+
+impl<K: Hash + Equals<K>, V> Index<*K> for HashMap<K, V> {
+    type Output = V;
+
+    // Panics if key cannot be found in the hash map.
+    fn index(*self, index: *K) -> *V {
+        self.get(index).unwrap()
+    }
+}
+
+impl<K: Hash + Equals<K>, V> Default for HashMap<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+
+fn is_aligned(x: int, a: int) -> bool {
+    x & (a - 1) == 0
+}
+
+fn align_up(x: int, a: int) -> int {
+    (x + (a - 1)) & ~(a - 1)
+}
+
+
+
+
+pub struct Iter<K: Hash + Equals<K>, V> {
+    cursor: Cursor<K, V>,
+}
+
+impl<K: Hash + Equals<K>, V> Iter<K, V> {
+    pub fn new(inner: *HashMap<K, V>) -> Self {
+        Self{cursor: inner.__cursor_on_first_item()}
+    }
+}
+
+impl<K: Hash + Equals<K>, V> Iterator for Iter<K, V> {
+    type Item = (*K, *V);
+
+    fn next(*self) -> Option<Self::Item> {
+        while self.cursor.is_valid() {
+            let c = self.cursor;
+            self.cursor.next();
+            if c.is_occupied() {
+                return Some((c.key(), c.value()));
+            }
+        }
+        None
+    }
+}
+
+
+pub struct IntoIter<K: Hash + Equals<K>, V> {
+    inner: HashMap<K, V>,
+    cursor: Cursor<K, V>,
+}
+
+impl<K: Hash + Equals<K>, V> IntoIter<K, V> {
+    pub fn new(inner: HashMap<K, V>) -> Self {
+        let cursor = inner.__cursor_on_first_item();
+        Self{inner, cursor}
+    }
+}
+
+impl<K: Hash + Equals<K>, V> Drop for IntoIter<K, V> {
+    fn drop(*self) {
+        // prevent Drop from being called on elements
+        self.inner.__set_length_to_zero();
+    }
+}
+
+impl<K: Hash + Equals<K>, V> Iterator for IntoIter<K, V> {
+    type Item = (K, V);
+
+    fn next(*self) -> Option<Self::Item> {
+        while self.cursor.is_valid() {
+            let c = self.cursor;
+            self.cursor.next();
+            if c.is_occupied() {
+                return Some((
+                    ptr::read(c.key()), 
+                    ptr::read(c.value()),
+                ));
+            }
+        }
+        None
+    }
+}
+
+impl<K: Hash + Equals<K>, V> IntoIterator for HashMap<K, V> {
+    type Item = (K, V);
+    type IntoIter = IntoIter<K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::new(self)
+    }
+}
+
+impl<K: Hash + Equals<K>, V> IntoIterator for *HashMap<K, V> {
+    type Item = (*K, *V);
+    type IntoIter = Iter<K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Iter::new(self)
+    }
+}
+
+//impl<K: Hash + Equals<K>, V> IntoIterator for *mut HashMap<K, V> {
+//    type Item = (*K, *mut V);
+//    type IntoIter = IterMut<K, V>;
+//
+//    fn into_iter(self) -> Self::IntoIter {
+//        IterMut::new(self)
+//    }
+//}
+

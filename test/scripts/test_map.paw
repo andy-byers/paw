@@ -1,96 +1,77 @@
 // test_map.paw
 
+use hashmap::HashMap;
+
 #[test]
-pub fn test_getters() {
-    let map = [
-        1: "abc",
-        2: "def",
-        3: "ghi",
-    ];
-    assert(map[1] == "abc");
-    assert(map[2] == "def");
-    assert(map[3] == "ghi");
+pub fn get_from_empty_map() {
+    let map = HashMap::<int, int>::new();
+    assert(map.len() == 0);
+    assert(map.get(&42).is_none());
 }
 
 #[test]
-pub fn test_empty_maps_with_annotations() {
-    let map: [bool: int] = [:];
-    let map: [float: str] = [:];
-    let map: [str: bool] = [:];
-}
-
-fn call(map: [int: int]) {}
-fn call2(map: [int: [int: int]]) {}
-
-#[test]
-pub fn test_inference() {
-    let map = [1: [2, 3]]; // [int: [int]]
-    let map = [1: [2: 3]]; // [int: [int: int]]
-
-    let map = [1: [2: 3], 4: [:], 5: [:]];
-    let map = [1: [:], 2: [3: 4], 5: [:]];
-    let map = [1: [:], 2: [:], 3: [4: 5]];
-    let map: [int: [int: int]] = [1: [:], 2: [:], 3: [:]];
-
-    let map = [1: [2, 3], 4: [], 5: []];
-    let map = [1: [], 2: [3, 4], 5: []];
-    let map = [1: [], 2: [], 3: [4, 5]];
-    let map: [int: [int]] = [1: [], 2: [], 3: []];
-
-    let map: [int: [int]] = [1: [2, 3]];
-    let map: [int: [int: int]] = [1: [2: 3]];
-
-    let map = [:];
-    map = [0: 0];
-
-    let map = [:];
-    map = [0: 0];
-    map = [1: 1];
-
-    let map = [:];
-    map = [:];
-    map = [0: 0];
-
-    let a = [:];
-    call(a);
-
-    let a = [0: [:]];
-    call2(a);
-
-    let a = [:];
-    let b = a;
-    b = [1: 1];
-    // type of "a" inferred from "b"
-    assert(#a == 0);
-
-    let a = [:];
-    let b = a;
-    b = [1: 1];
-    assert(#a == 0);
-    a = [2: 2];
-    assert(a[2] == 2);
-
-    let a = [0: [:]];
-    let b = a;
-    assert(#a == 1);
-    b = [1: [1: 1]];
-    assert(#a == 1);
-    assert(#a[0] == 0);
-    a = [2: [2: 2]];
-    assert(a[2][2] == 2);
-
-    let a = [:];
-    let b = a;
-    let c = b;
-    let d = c;
-    d = [1: 1];
+pub fn insert_and_get() {
+    let map = HashMap::new();
+    map.insert(1, 11).unwrap().unwrap_none();
+    map.insert(2, 22).unwrap().unwrap_none();
+    map.insert(3, 33).unwrap().unwrap_none();
+    assert(*map.get(&1).unwrap() == 11);
+    assert(*map.get(&2).unwrap() == 22);
+    assert(*map.get(&3).unwrap() == 33);
+    assert(map.len() == 3);
 }
 
 #[test]
-pub fn test_negative_zero() {
-    let m = [:];
-    m[0.0] = "zero";
-    assert(m[-0.0] == "zero");
+pub fn index_operator() {
+    let map = HashMap::new();
+    map.insert(100, 111).unwrap().unwrap_none();
+    assert(map[&100] == 111);
+}
+
+#[test]
+pub fn handles_duplicate_keys() {
+    let map = HashMap::new();
+    map.insert(1, 10).unwrap().unwrap_none();
+    assert(map.insert(1, 100).unwrap().unwrap() == 10);
+    assert(map.len() == 1);
+
+    assert(map.remove(&1).unwrap() == 100);
+    map.remove(&1).unwrap_none();
+    assert(map.len() == 0);
+}
+
+#[test]
+pub fn stress_test() {
+    let map = HashMap::new();
+    let N = 10_000;
+
+    for i in 0..N {
+        map.insert(i, i + 1).unwrap().unwrap_none();
+    }
+    for i in N/2..N {
+        assert(map.remove(&i).unwrap() == i + 1);
+    }
+    for i in -N/2..0 {
+        map.insert(i, i - 100).unwrap().unwrap_none();
+    }
+    for i in 0..N/2 {
+        assert(map.insert(i, i).unwrap().unwrap() == i + 1);
+    }
+    for i in N/2..N {
+        map.insert(i, i + 100).unwrap().unwrap_none();
+    }
+    assert(map.len() == N + N / 2);
+
+    for i in -N/2..0 {
+        assert(map.remove(&i).unwrap() == i - 100);
+    }
+    for i in 0..N/2 {
+        assert(map.remove(&i).unwrap() == i);
+    }
+    for i in N/2..N {
+        assert(map.remove(&i).unwrap() == i + 100);
+    }
+    assert(map.len() == 0);
 }
 
 struct BadKey {
@@ -99,11 +80,11 @@ struct BadKey {
 
 impl Hash for BadKey {
     // cause a collision on each insertion
-    fn hash(self) -> int { 0 }
+    fn hash(*self) -> int { 0 }
 }
 
-impl Equals for BadKey {
-    fn eq(self, rhs: Self) -> bool {
+impl Equals<Self> for BadKey {
+    fn eq(*self, rhs: *Self) -> bool {
         self.value == rhs.value
     }
 }
@@ -113,135 +94,86 @@ pub fn bk(value: int) -> BadKey {
 }
 
 #[test]
-pub fn test_addressing_stress() {
-    let m = [:];
-    m[bk(-1)] = -1;
-    m[bk(-2)] = -2;
-    m[bk(-3)] = -3;
+pub fn handles_lots_of_collisions() {
+    let m = HashMap::new();
+    let N = 500;
 
-    let i = 0;
-    while i < 500 {
-        m[bk(i)] = i;
-        i = i + 1;
+    m.insert(bk(-1), -1).unwrap().unwrap_none();
+    m.insert(bk(-2), -2).unwrap().unwrap_none();
+    m.insert(bk(-3), -3).unwrap().unwrap_none();
+
+    for i in 0..N {
+        m.insert(bk(i), i).unwrap().unwrap_none();
     }
 
-    i = 0;
-    while i < 500 {
-        assert(m[bk(i)] == i);
-        i = i + 1;
+    for i in 0..N {
+        assert(m[&bk(i)] == i);
     }
 
-    i = 0;
-    while i < 500 {
-        m.remove(bk(i));
-        i = i + 1;
+    for i in 0..N {
+        assert(m.remove(&bk(i)).unwrap() == i);
     }
 
-    assert(m[bk(-1)] == -1);
-    assert(m[bk(-2)] == -2);
-    assert(m[bk(-3)] == -3);
+    assert(*m.get(&bk(-1)).unwrap() == -1);
+    assert(*m.get(&bk(-2)).unwrap() == -2);
+    assert(*m.get(&bk(-3)).unwrap() == -3);
 }
 
-inline struct Int2 {
-    pub x: int,
-    pub y: int,
-}
-
-impl Int2 {
-    pub fn new(x: int, y: int) -> Self {
-        Self{x, y}
-    }
-}
-
-impl Hash for Int2 {
-    fn hash(self) -> int {
-        self.x.hash() ^ self.y.hash()
-    }
-}
-    
-impl Equals for Int2 {
-    fn eq(self, rhs: Self) -> bool {
-        self.x == rhs.x && self.y == rhs.y
-    }
-}
-
-#[test]
-pub fn test_wide_key() {
-    let map = [
-        Int2::new(-1, -2): -3,
-    ];
-
-    map[Int2::new(1, 2)] = 12;
-    map[Int2::new(3, 4)] = 34;
-    map[Int2::new(5, 6)] = 56;
-
-    assert(map[Int2::new(1, 2)] == 12);
-    assert(map[Int2::new(3, 4)] == 34);
-    assert(map[Int2::new(5, 6)] == 56);
-
-    map[Int2::new(1, 2)] = 21;
-    map[Int2::new(3, 3)] = 33;
-
-    assert(map[Int2::new(1, 2)] == 21);
-    assert(map[Int2::new(3, 3)] == 33);
-    assert(map[Int2::new(3, 4)] == 34);
-    assert(map[Int2::new(5, 6)] == 56);
-
-    assert(map[Int2::new(-1, -2)] == -3);
-}
-
-#[test]
-pub fn test_infer_key() {
-    let map = [:];
-
-    let iter = map.iterator();
-    match iter.next() {
-        Some(k) => {
-            assert(k == "string key");
-            assert(map[k] == "string value");
-        },
-        None => (),
-    }
-}
-
-#[test]
-pub fn test_traverse_map_with_unknown_key() {
-    let map = [:];
-
-    for key in map {
-        // never runs, but key and value types should be inferred as "str"
-        assert(key == "string key");
-        assert(map[key] == "string value");
-    }
-}
-
-#[test]
-pub fn test_wide_key_value() {
-    let map = [
-        Int2::new(-1, -2): Int2::new(-3, -4),
-    ];
-
-    map[Int2::new(1, 2)] = Int2::new(10, 20);
-    map[Int2::new(3, 4)] = Int2::new(30, 40);
-    map[Int2::new(5, 6)] = Int2::new(50, 60);
-
-    assert(map[Int2::new(1, 2)].eq(Int2::new(10, 20)));
-    assert(map[Int2::new(3, 4)].eq(Int2::new(30, 40)));
-    assert(map[Int2::new(5, 6)].eq(Int2::new(50, 60)));
-
-    map[Int2::new(1, 2)] = Int2::new(20, 10);
-    map[Int2::new(3, 3)] = Int2::new(30, 30);
-
-    assert(map[Int2::new(1, 2)].eq(Int2::new(20, 10)));
-    assert(map[Int2::new(3, 3)].eq(Int2::new(30, 30)));
-    assert(map[Int2::new(3, 4)].eq(Int2::new(30, 40)));
-    assert(map[Int2::new(5, 6)].eq(Int2::new(50, 60)));
-
-    assert(map[Int2::new(-1, -2)].eq(Int2::new(-3, -4)));
-}
-
-#[test]
-pub fn test_index_literal() {
-    let m = [0: 0, 1: 1, 2: 2][1];
-    assert(m == 1);
-}
+//struct Int2 {
+//    pub x: int,
+//    pub y: int,
+//}
+//
+//impl Int2 {
+//    pub fn new(x: int, y: int) -> Self {
+//        Self{x, y}
+//    }
+//}
+//
+//impl Hash for Int2 {
+//    fn hash(*self) -> int {
+//        self.x.hash() ^ self.y.hash()
+//    }
+//}
+//    
+//impl Equals<Self> for Int2 {
+//    fn eq(*self, rhs: *Self) -> bool {
+//        self.x == rhs.x && self.y == rhs.y
+//    }
+//}
+//
+//#[test]
+//pub fn handles_large_items() {
+//    let map = HashMap::new();
+//
+//    map.insert(Int2::new(-1, -2), -3).unwrap().unwrap_none();
+//
+//    map.insert(Int2::new(1, 2), 12).unwrap();
+//    map.insert(Int2::new(3, 4), 34).unwrap();
+//    map.insert(Int2::new(5, 6), 56).unwrap();
+//
+//    assert(map[&Int2::new(1, 2)] == 12);
+//    assert(map[&Int2::new(3, 4)] == 34);
+//    assert(map[&Int2::new(5, 6)] == 56);
+//
+//    map.insert(Int2::new(1, 2), 21).unwrap().unwrap();
+//    map.insert(Int2::new(3, 3), 33).unwrap().unwrap_none();
+//
+//    assert(map[&Int2::new(1, 2)] == 21);
+//    assert(map[&Int2::new(3, 3)] == 33);
+//    assert(map[&Int2::new(3, 4)] == 34);
+//    assert(map[&Int2::new(5, 6)] == 56);
+//
+//    assert(map[&Int2::new(-1, -2)] == -3);
+//}
+//
+//#[test]
+//pub fn strings_can_be_hashmap_keys() {
+//    let map = HashMap::<str, str>::new();
+//    map.insert("a", "A").unwrap().unwrap_none();
+//    map.insert("b", "B").unwrap().unwrap_none();
+//    map.insert("c", "C").unwrap().unwrap_none();
+//    assert(map[&"a"] == "A");
+//    assert(map[&"b"] == "B");
+//    assert(map[&"c"] == "C");
+//}

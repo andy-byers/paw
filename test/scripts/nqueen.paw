@@ -1,12 +1,15 @@
 // Translated from https://github.com/attractivechaos/plb2/blob/master/src/lua/nqueen.lua
+
+use list::List;
+
 fn nq_solve(n: int) -> int {
 	let m = 0;
-    let a = [];
-    let l = [];
-    let c = [];
-    let r = [];
+    let a = List::new();
+    let l = List::new();
+    let c = List::new();
+    let r = List::new();
 	let y0 = (1 << n) - 1;
-	while #a < n {
+	while a.len() < n {
         a.push(-1);
         l.push(0);
         c.push(0);
@@ -48,11 +51,15 @@ pub fn test() {
 }
 
 
-pub fn main(args: [str]) {
-    let n = if #args > 1 {
-        args[1].parse_int().unwrap()
-    } else {
-        5
-    };
-    print("\{nq_solve(n)}\n");
+use io;
+
+pub fn main() {
+//    let n = if args.len() > 1 {
+//        args[1].parse_int().unwrap()
+//    } else {
+//        5
+//    };
+    let n = 5;
+    nq_solve(n);
+//    io::print("\{nq_solve(n)}\n");
 }

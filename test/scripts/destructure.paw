@@ -40,26 +40,26 @@ pub fn test_struct() {
     assert(x == 42);
 }
 
-#[test]
-pub fn test_for_loop_tuple() {
-    let data = [(123, 456)];
-
-    for (x, y) in data {
-        assert(x == 123);
-        assert(y == 456);
-    } 
-}
-
-#[test]
-pub fn test_for_loop_struct() {
-    let data = [Fields{first: 123, second: "abc", third: (456, Unit)}];
-
-    for Fields{first, second, third} in data {
-        assert(first == 123);
-        assert(second == "abc");
-        assert(third.0 == 456);
-    }
-}
+//#[test]
+//pub fn test_for_loop_tuple() {
+//    let data = [(123, 456)];
+//
+//    for (x, y) in data {
+//        assert(x == 123);
+//        assert(y == 456);
+//    } 
+//}
+//
+//#[test]
+//pub fn test_for_loop_struct() {
+//    let data = [Fields{first: 123, second: "abc", third: (456, Unit)}];
+//
+//    for Fields{first, second, third} in data {
+//        assert(first == 123);
+//        assert(second == "abc");
+//        assert(third.0 == 456);
+//    }
+//}
 
 // only the first arm of the OR pattern is reachable
 #[test]

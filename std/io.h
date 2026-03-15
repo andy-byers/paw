@@ -8,7 +8,9 @@
 #include "paw.h"
 
 // struct File {...}
-typedef struct paw_io_File *paw_io_File;
+typedef struct paw_io_File {
+    void *inner;
+} paw_io_File;
 
 // inline enum Error {...}
 typedef struct {
@@ -40,21 +42,22 @@ typedef enum {
 PAW_DEFINE_RESULT(io_File, io_Error)
 PAW_DEFINE_RESULT(Unit, io_Error)
 PAW_DEFINE_RESULT(Int, io_Error)
-PAW_DEFINE_RESULT(Str, io_Error)
 
 // pub type Result<T> = result::Result<T, Error>;
 #define PAW_IO_RESULT(T) paw_Result_##T##_io_Error
 
-PAW_IO_RESULT(io_File) paw_io_File_open(void *, paw_Str, paw_Str);
-PAW_IO_RESULT(Unit) paw_io_File_seek(void *, paw_io_File, paw_Int, paw_io_Seek);
-PAW_IO_RESULT(Int) paw_io_File_tell(void *, paw_io_File);
-PAW_IO_RESULT(Int) paw_io_File_read(void *, paw_io_File *, paw_Slice_Char);
-PAW_IO_RESULT(Int) paw_io_File_write(void *, paw_io_File *, paw_Slice_Char);
-PAW_IO_RESULT(Unit) paw_io_File_flush(void *, paw_io_File);
+PAW_IO_RESULT(io_File) paw_io_File_open(void *, paw_Slice, paw_Slice);
+PAW_IO_RESULT(Unit) paw_io_File_seek(void *, paw_io_File *, paw_Int, paw_io_Seek);
+PAW_IO_RESULT(Int) paw_io_File_tell(void *, paw_io_File *);
+PAW_IO_RESULT(Unit) paw_io_File_flush(void *, paw_io_File *);
 
-paw_io_File paw_io_stdin(void *);
-paw_io_File paw_io_stdout(void *);
-paw_io_File paw_io_stderr(void *);
+PAW_IO_RESULT(Int) paw_io_File_read(void *, paw_io_File *, paw_Slice);
+PAW_IO_RESULT(Int) paw_io_File_write(void *, paw_io_File *, paw_Slice);
+void paw_io_File_drop(void *, paw_io_File *);
+
+paw_io_File *paw_io_stdin(void *);
+paw_io_File *paw_io_stdout(void *);
+paw_io_File *paw_io_stderr(void *);
 
 #endif // PAW_STD_IO_H
 

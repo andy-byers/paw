@@ -41,9 +41,9 @@ public:
         INT32,
         FLOAT,
         STR,
+        SLICE,
+        ARRAY,
         OBJECT,
-        LIST,
-        MAP,
         FN,
         PTR,
     };
@@ -68,12 +68,10 @@ public:
     bool is_float_type() const { return kind_ == Kind::FLOAT; }
     bool is_str_type() const { return kind_ == Kind::STR; }
     bool is_object_type() const { return kind_ == Kind::OBJECT; }
-    bool is_list_type() const { return kind_ == Kind::LIST; }
-    bool is_map_type() const { return kind_ == Kind::MAP; }
+    bool is_slice_type() const { return kind_ == Kind::SLICE; }
+    bool is_array_type() const { return kind_ == Kind::ARRAY; }
     bool is_fn_type() const { return kind_ == Kind::FN; }
     bool is_ptr_type() const { return kind_ == Kind::PTR; }
-    bool is_value_type() const { return !is_boxed_type(); }
-    bool is_boxed_type() const;
 
     bool is_abi_struct_type() const
     {
@@ -234,19 +232,31 @@ public:
 };
 
 
-class StrType: public PrimitiveType {
+
+class ArrayType: public Type {
 public:
-    friend class Str;
+    friend class Array;
 
-    explicit StrType(Context &X);
-    ~StrType() override = default;
+    explicit ArrayType(Context &X, Type *element_type, uint64_t length);
+    ~ArrayType() override = default;
+    llvm::Type *get_abi_ty() const override;
 
-    llvm::StructType *get_struct_ty() const;
-
-    std::string to_string() const override
+    llvm::ArrayType *get_array_ty() const
     {
-        return "str";
+        return llvm::cast<llvm::ArrayType>(get_ty());
     }
+
+    unsigned long hash() const override;
+    bool equals(Type const *rhs) const override;
+
+    uint64_t get_length() const { return length_; }
+    Type *get_element_type() const { return element_type_; }
+
+    std::string to_string() const override;
+
+private:
+    Type *element_type_;
+    uint64_t length_;
 };
 
 
@@ -260,23 +270,16 @@ class ObjectType: public Type {
 public:
     friend class Object;
 
-    // Describes where an object of this type is allocated
-    enum class Location {
-        STACK,
-        HEAP,
-    };
-
     enum class Kind {
         STRUCT,
         ENUM,
     };
 
     using FieldTypes = std::vector<Type *>;
-    explicit ObjectType(Context &X, llvm::ArrayRef<FieldTypes> variant_types, Location location = Location::HEAP);
-    explicit ObjectType(Context &X, std::string name, Location location = Location::HEAP);
+    explicit ObjectType(Context &X,
+            llvm::ArrayRef<FieldTypes> variant_types,
+            std::string name = "");
     ~ObjectType() override = default;
-
-    void set_variants(llvm::ArrayRef<FieldTypes> variant_types);
 
     llvm::Type *get_ty() const override;
     llvm::Type *get_abi_ty() const override;
@@ -285,8 +288,6 @@ public:
         return llvm::cast<llvm::StructType>(ty_);
     }
 
-    bool is_opaque() const;
-    bool is_inline() const { return is_inline_; }
     std::string const &get_name() const { return name_; }
     unsigned get_num_variants() const { return variants_.size(); }
 
@@ -311,7 +312,7 @@ public:
     std::string to_string() const override;
 
 private:
-    llvm::Type *create_inner_type(llvm::ArrayRef<ObjectType::FieldTypes> variant_types);
+    void set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants);
 
     struct Variant {
         std::vector<Type *> field_types;
@@ -320,50 +321,55 @@ private:
 
     std::vector<Variant> variants_;
     std::string name_;
-    bool is_inline_ : 1;
 };
 
-
-class ListType: public Type {
+class SliceType: public Type {
 public:
-    friend class List;
-    paw_Int static constexpr MIN_CAPACITY = 2;
+    friend class Slice;
 
-    explicit ListType(Context &X, Type *element_type);
-    ~ListType() override = default;
+    explicit SliceType(Context &X, Type *element_type);
+    ~SliceType() override = default;
 
     llvm::StructType *get_struct_ty() const;
+    llvm::Type *get_abi_ty() const override;
 
-    Type *get_element_type() { return element_type_; }
+    Type *get_element_type() const
+    {
+        return element_type_;
+    }
+
+    std::string to_string() const override
+    {
+        return "*[" + element_type_->to_string() + "]";
+    }
 
     unsigned long hash() const override;
     bool equals(Type const *rhs) const override;
-    std::string to_string() const override;
 
 private:
     Type *element_type_;
 };
 
-class MapType: public Type {
-public:
-    friend class Map;
 
-    explicit MapType(Context &X, Type *key_type, Type *value_type);
-    ~MapType() override = default;
+class StrType: public Type {
+public:
+    friend class Str;
+
+    explicit StrType(Context &X);
+    ~StrType() override = default;
 
     llvm::StructType *get_struct_ty() const;
+    llvm::Type *get_abi_ty() const override;
 
-    Type *get_key_type() const { return key_type_; }
-    Type *get_value_type() const { return value_type_; }
+    std::string to_string() const override
+    {
+        return "*str";
+    }
 
     unsigned long hash() const override;
     bool equals(Type const *rhs) const override;
-    std::string to_string() const override;
-
-private:
-    Type *key_type_;
-    Type *value_type_;
 };
+
 
 class FnType: public Type {
 public:

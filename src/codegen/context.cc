@@ -8,18 +8,20 @@
 namespace paw::cg {
 
 static constexpr char const *BUILTIN_NAMES[(size_t)BuiltinFn::NUM_BUILTINS] = {
-    "GC_init",
-    "GC_malloc",
-    "GC_free",
-    "paw_builtin_ckd_imul",
-    "paw_builtin_ckd_iadd",
-    "paw_builtin_bkpt",
-    "paw_builtin_hash_bytes",
-    "paw_builtin_abs_index",
-    "paw_builtin_rawcmp",
-    "paw_prelude_panic",
-    "paw_prelude_print",
-    "paw_prelude_println",
+    [(unsigned)BuiltinFn::PAW_ALLOC] = "paw_mem_alloc",
+    [(unsigned)BuiltinFn::PAW_REALLOC] = "paw_mem_realloc",
+    [(unsigned)BuiltinFn::PAW_DEALLOC] = "paw_mem_dealloc",
+    [(unsigned)BuiltinFn::PAW_ALIGNED_ALLOC] = "paw_aligned_alloc",
+    [(unsigned)BuiltinFn::CKD_IMUL] = "paw_builtin_ckd_imul",
+    [(unsigned)BuiltinFn::CKD_IADD] = "paw_builtin_ckd_iadd",
+    [(unsigned)BuiltinFn::PAW_BKPT] = "paw_builtin_bkpt",
+    [(unsigned)BuiltinFn::HASH_BYTES] = "paw_builtin_hash_bytes",
+    [(unsigned)BuiltinFn::CHECK_BOUNDS] = "paw_builtin_check_bounds",
+    [(unsigned)BuiltinFn::ABS_INDEX] = "paw_builtin_abs_index",
+    [(unsigned)BuiltinFn::RAWCMP] = "paw_builtin_rawcmp",
+    [(unsigned)BuiltinFn::PANIC] = "paw_panic_handler",
+    [(unsigned)BuiltinFn::PRINT] = "_PN7prelude5printIScE",
+    [(unsigned)BuiltinFn::PRINTLN] = "_PN7prelude7printlnIScE",
 };
 
 char const *get_builtin_name(BuiltinFn kind)
@@ -100,28 +102,21 @@ std::unique_ptr<Context> Context::clone() const
     return std::unique_ptr<Context>(new Context(*this, llvm::CloneModule(**M)));
 }
 
-ListType *Context::get_list_type(Type *element_type)
+SliceType *Context::get_slice_type(Type *element_type)
 {
-    ListType list_type(*this, element_type);
-    return (ListType *)intern_type(&list_type);
+    SliceType slice_type(*this, element_type);
+    return (SliceType *)intern_type(&slice_type);
 }
 
-MapType *Context::get_map_type(Type *key_type, Type *value_type)
+ArrayType *Context::get_array_type(Type *element_type, uint64_t length)
 {
-    MapType map_type(*this, key_type, value_type);
-    return (MapType *)intern_type(&map_type);
+    ArrayType array_type(*this, element_type, length);
+    return (ArrayType *)intern_type(&array_type);
 }
 
-ObjectType *Context::get_object_type(llvm::ArrayRef<ObjectType::FieldTypes> field_types,
-        ObjectType::Location location)
+ObjectType *Context::get_object_type(llvm::ArrayRef<ObjectType::FieldTypes> field_types)
 {
-    ObjectType object_type(*this, field_types, location);
-    return (ObjectType *)intern_type(&object_type);
-}
-
-ObjectType *Context::get_named_type(std::string name, ObjectType::Location location)
-{
-    ObjectType object_type(*this, std::move(name), location);
+    ObjectType object_type(*this, field_types);
     return (ObjectType *)intern_type(&object_type);
 }
 

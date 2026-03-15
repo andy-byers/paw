@@ -11,6 +11,8 @@ struct MatchVar {
     struct SourceSpan span;
     struct IrType *type;
     int id;
+
+    paw_Bool deref : 1;
 };
 
 struct Binding {
@@ -49,6 +51,10 @@ struct Constructor {
         struct {
             struct IrType *type;
         } struct_;
+
+        struct {
+            struct IrType *type;
+        } pointer;
     };
 };
 

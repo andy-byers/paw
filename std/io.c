@@ -12,10 +12,6 @@
 #define IO_RESULT_OK(T_, Value_) paw_Result_##T_##_io_Error_ok(Value_)
 #define IO_RESULT_ERR(T_, Error_) paw_Result_##T_##_io_Error_err(IO_ERROR(Error_))
 
-struct paw_io_File {
-    FILE *file;
-};
-
 
 //
 // OS interface
@@ -24,11 +20,11 @@ struct paw_io_File {
 #define INTR_TIMEOUT 100
 
 #define DEFINE_STREAM_GETTER(Stream_) \
-    paw_io_File paw_io_##Stream_(void *env) \
+    paw_io_File *paw_io_##Stream_(void *env) \
     { \
         PAW_UNUSED(env); \
         static struct paw_io_File s_file; \
-        s_file.file = Stream_; \
+        s_file.inner = Stream_; \
         return &s_file; \
     }
 DEFINE_STREAM_GETTER(stdin)
@@ -36,17 +32,17 @@ DEFINE_STREAM_GETTER(stdout)
 DEFINE_STREAM_GETTER(stderr)
 #undef DEFINE_STREAM_GETTER
 
-paw_Bool file_is_open(paw_io_File file)
+paw_Bool file_is_open(paw_io_File *file)
 {
-    return file->file != NULL;
+    return file->inner != NULL;
 }
 
-static int os_open(paw_Char const *pathname, paw_Char const *mode, FILE **file_ptr)
+static int os_open(paw_Char const *pathname, paw_Char const *mode, paw_io_File *file_out)
 {
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
         FILE *file = fopen(pathname, mode);
         if (file != NULL) {
-            *file_ptr = file;
+            file_out->inner = file;
             return 0;
         } else if (errno != EINTR) {
             break;
@@ -55,41 +51,41 @@ static int os_open(paw_Char const *pathname, paw_Char const *mode, FILE **file_p
     return -1;
 }
 
-static void os_close(paw_io_File file)
+static void os_close(paw_io_File *file)
 {
-    if (file->file == NULL)
+    if (file->inner == NULL)
         return;
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
-        int const rc = fclose(file->file);
+        int const rc = fclose(file->inner);
         if (rc == 0 || errno != EINTR) {
-            file->file = NULL;
+            file->inner = NULL;
             break;
         }
     }
 }
 
-int os_seek(paw_io_File file, paw_Int offset, int whence)
+int os_seek(paw_io_File const *file, paw_Int offset, int whence)
 {
-    return fseek(file->file, (long)offset, whence);
+    return fseek(file->inner, (long)offset, whence);
 }
 
-static paw_Int os_tell(paw_io_File file)
+static paw_Int os_tell(paw_io_File const *file)
 {
-    return ftell(file->file);
+    return ftell(file->inner);
 }
 
-static int os_flush(paw_io_File file)
+static int os_flush(paw_io_File const *file)
 {
-    return fflush(file->file);
+    return fflush(file->inner);
 }
 
-#define IO_FERROR(File_) (ferror((File_)->file) && errno != EINTR)
+#define IO_FERROR(File_) (ferror((File_)->inner) && errno != EINTR)
 
-static paw_Int os_read(paw_io_File file, void *data, paw_Int size)
+static paw_Int os_read(paw_io_File const *file, void *data, paw_Int size)
 {
     size_t remaining = (size_t)size;
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
-        size_t const n = fread(data, 1, remaining, file->file);
+        size_t const n = fread(data, 1, remaining, file->inner);
         if (n == 0) break;
 
         data = (paw_Char *)data + n;
@@ -97,20 +93,20 @@ static paw_Int os_read(paw_io_File file, void *data, paw_Int size)
 
         if (remaining == 0) {
             break;
-        } else if (feof(file->file)) {
+        } else if (feof(file->inner)) {
             break;
-        } else if (ferror(file->file) && errno != EINTR) {
+        } else if (ferror(file->inner) && errno != EINTR) {
             return -1;
         }
     }
     return size - (paw_Int)remaining;
 }
 
-static paw_Int os_write(paw_io_File file, void const *data, paw_Int size)
+static paw_Int os_write(paw_io_File const *file, void const *data, paw_Int size)
 {
     size_t remaining = (size_t)size;
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
-        size_t const n = fwrite(data, 1, remaining, file->file);
+        size_t const n = fwrite(data, 1, remaining, file->inner);
         if (n == 0) break;
 
         data = (paw_Char const *)data + n;
@@ -118,9 +114,9 @@ static paw_Int os_write(paw_io_File file, void const *data, paw_Int size)
 
         if (remaining == 0) {
             break;
-        } else if (feof(file->file)) {
+        } else if (feof(file->inner)) {
             break;
-        } else if (ferror(file->file) && errno != EINTR) {
+        } else if (ferror(file->inner) && errno != EINTR) {
             return -1;
         }
     }
@@ -152,18 +148,6 @@ static paw_io_ErrorKind check_errno(void)
     }
 }
 
-static paw_io_File malloc_file(void)
-{
-    paw_io_File file = PAW_MALLOC(sizeof *file);
-    file->file = NULL;
-    return file;
-}
-
-static void free_file(paw_io_File file)
-{
-    PAW_FREE(file);
-}
-
 static int seek_kind(paw_Int kind)
 {
     switch ((paw_io_SeekKind)kind) {
@@ -177,21 +161,27 @@ static int seek_kind(paw_Int kind)
 }
 
 
-// pub fn open(pathname: str, mode: str) -> Result<Self>
-PAW_IO_RESULT(io_File) paw_io_File_open(void *env, paw_Str pathname, paw_Str mode)
+// pub fn drop(&self)
+void paw_io_File_drop(void *env, paw_io_File *self)
 {
     PAW_UNUSED(env);
-    paw_io_File file = malloc_file();
-    if (os_open(pathname->text, mode->text, &file->file) == 0) {
+    os_close(self);
+}
+
+// pub fn open(pathname: str, mode: str) -> Result<Self>
+PAW_IO_RESULT(io_File) paw_io_File_open(void *env, paw_Slice pathname, paw_Slice mode)
+{
+    PAW_UNUSED(env);
+    paw_io_File file = {0};
+    if (os_open(pathname.start, mode.start, &file) == 0) {
         return IO_RESULT_OK(io_File, file);
     } else {
-        free_file(file); // free before collection
         return IO_RESULT_ERR(io_File, check_errno());
     }
 }
 
 // pub fn seek(self, offset: int, whence: Seek) -> Result<()>
-PAW_IO_RESULT(Unit) paw_io_File_seek(void *env, paw_io_File self, paw_Int offset, paw_io_Seek whence)
+PAW_IO_RESULT(Unit) paw_io_File_seek(void *env, paw_io_File *self, paw_Int offset, paw_io_Seek whence)
 {
     PAW_UNUSED(env);
     if (os_seek(self, offset, seek_kind(whence.discr)) == 0) {
@@ -202,7 +192,7 @@ PAW_IO_RESULT(Unit) paw_io_File_seek(void *env, paw_io_File self, paw_Int offset
 }
 
 // pub fn tell(self) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_tell(void *env, paw_io_File self)
+PAW_IO_RESULT(Int) paw_io_File_tell(void *env, paw_io_File *self)
 {
     PAW_UNUSED(env);
     paw_Int const offset = os_tell(self);
@@ -214,27 +204,27 @@ PAW_IO_RESULT(Int) paw_io_File_tell(void *env, paw_io_File self)
 }
 
 // pub fn read(self, data: SliceMut<char>) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_read(void *env, paw_io_File *self, paw_Slice_Char data)
+PAW_IO_RESULT(Int) paw_io_File_read(void *env, paw_io_File *self, paw_Slice data)
 {
     PAW_UNUSED(env);
-    paw_Int const length = os_read(*self, data.start, data.length);
+    paw_Int const length = os_read(self, data.start, data.length);
     return length >= 0
         ? IO_RESULT_OK(Int, length)
         : IO_RESULT_ERR(Int, check_errno());
 }
 
 // pub fn write(self, data: Slice<char>) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File *self, paw_Slice_Char data)
+PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File *self, paw_Slice data)
 {
     PAW_UNUSED(env);
-    paw_Int const length = os_write(*self, data.start, data.length);
+    paw_Int const length = os_write(self, data.start, data.length);
     return length >= 0
         ? IO_RESULT_OK(Int, length)
         : IO_RESULT_ERR(Int, check_errno());
 }
 
 // pub fn flush(self) -> Result<()>
-PAW_IO_RESULT(Unit) paw_io_File_flush(void *env, paw_io_File self)
+PAW_IO_RESULT(Unit) paw_io_File_flush(void *env, paw_io_File *self)
 {
     PAW_UNUSED(env);
     if (os_flush(self) == 0) {

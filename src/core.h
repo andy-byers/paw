@@ -17,6 +17,7 @@
 
 typedef int paw_Type;
 typedef char paw_Char;
+typedef unsigned char paw_Uint8;
 typedef long long paw_Int;
 typedef unsigned long long paw_Uint;
 typedef double paw_Float;
@@ -52,6 +53,7 @@ struct paw_Options {
     paw_Bool enable_asan : 1;
     paw_Bool verify_ir : 1;
     paw_Bool dump_ir : 1;
+    paw_Bool no_std : 1;
 };
 paw_Env *paw_open(struct paw_Options const *o);
 void paw_close(paw_Env *P);

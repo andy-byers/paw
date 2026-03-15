@@ -61,18 +61,43 @@ static char const *lib_getenv(paw_Env *P)
     return getenv(PAW_PATH_VAR);
 }
 
-paw_Bool pawL_is_std_name(char const *name)
+static char const *STD_NAMES[PAWL_NUM_STD_MODULES] = {
+    [PAWL_STD_PRELUDE] = "prelude",
+    [PAWL_STD_OPS] = "ops",
+    [PAWL_STD_PTR] = "ptr",
+    [PAWL_STD_MEM] = "mem",
+    [PAWL_STD_SLICE] = "slice",
+    [PAWL_STD_OPTION] = "option",
+    [PAWL_STD_RESULT] = "result",
+    [PAWL_STD_STRING] = "string",
+    [PAWL_STD_LIST] = "list",
+    [PAWL_STD_HASHMAP] = "hashmap",
+    [PAWL_STD_IO] = "io",
+    [PAWL_STD_MATH] = "math",
+    [PAWL_STD_STRING_BUILDER] = "string_builder",
+};
+
+_Static_assert(PAWL_NUM_CORE_MODULES <= PAW_COUNTOF(STD_NAMES), "");
+_Static_assert(PAWL_NUM_STD_MODULES == PAW_COUNTOF(STD_NAMES), "");
+
+char const *pawL_std_module_name(enum pawL_StdModule m)
 {
-    for (int i = 0; i < PAWL_NUM_STD_MODULES; ++i) {
-        if (strcmp(name, pawL_StdNames[i]) == 0)
-            return PAW_TRUE;
-    }
-    return PAW_FALSE;
+    paw_assert(m < PAWL_NUM_STD_MODULES);
+    return STD_NAMES[m];
 }
 
 static paw_Bool matches_modname(Str const *lhs, char const *rhs)
 {
     return strncmp(rhs, lhs->text, lhs->length) == 0;
+}
+
+static Str const *add_module_ext(paw_Env *P, Str const *modname)
+{
+    Buffer b;
+    pawL_init_buffer(P, &b);
+    L_ADD_STRING(P, &b, modname);
+    L_ADD_LITERAL(P, &b, PAW_MODULE_EXT);
+    return pawL_buffer_finish(P, &b);
 }
 
 static int open_source_file(paw_Env *P, Str const *dirname, Str const *filename, struct FileReader *result)
@@ -105,47 +130,27 @@ static int open_source_file(paw_Env *P, Str const *dirname, Str const *filename,
 static int searcher_cwd(paw_Env *P, void *arg)
 {
     struct SearcherState *state = arg;
-
-    Buffer b;
-    pawL_init_buffer(P, &b);
-    L_ADD_STRING(P, &b, state->name);
-    L_ADD_LITERAL(P, &b, PAW_MODULE_EXT);
-    Str const *filename = pawL_buffer_finish(P, &b);
+    Str const *filename = add_module_ext(P, state->name);
     return open_source_file(P, P->C->dirname, filename, state->fr);
-}
-
-static struct FileReader new_file_reader(paw_Env *P, char const *dirname, char const *filename)
-{
-    struct FileReader fr;
-    Str const *dir = pawS_new_str(P, dirname);
-    Str const *file = pawS_new_str(P, filename);
-    int const found = open_source_file(P, dir, file, &fr);
-    paw_assert(found); PAW_UNUSED(found); // must exist
-    return fr;
 }
 
 static int searcher_Paw(paw_Env *P, void *arg)
 {
-#define CREATE_MATCHER(Name_) if (matches_modname(state->name, Name_)) { \
-        *state->fr = new_file_reader(P, PAW_STDLIB_PATH, Name_ PAW_MODULE_EXT); \
-        return 1; \
-    }
-
     struct SearcherState *state = arg;
-    CREATE_MATCHER(PAWL_PRELUDE_NAME)
-    CREATE_MATCHER(PAWL_OPS_NAME)
-    CREATE_MATCHER(PAWL_LIST_NAME)
-    CREATE_MATCHER(PAWL_MAP_NAME)
-    CREATE_MATCHER(PAWL_SLICE_NAME)
-    CREATE_MATCHER(PAWL_OPTION_NAME)
-    CREATE_MATCHER(PAWL_RESULT_NAME)
-    CREATE_MATCHER(PAWL_UNSAFE_NAME)
-    CREATE_MATCHER(PAWL_IO_NAME)
-    CREATE_MATCHER(PAWL_MATH_NAME)
-    CREATE_MATCHER(PAWL_STR_BUILDER_NAME)
+    unsigned const num_modules = P->options.no_std
+        ? PAWL_NUM_CORE_MODULES
+        : PAWL_NUM_STD_MODULES;
+    for (unsigned i = 0; i < num_modules; ++i) {
+        char const *modname = STD_NAMES[i];
+        if (matches_modname(state->name, modname)) {
+            Str const *dirname = pawS_new_str(P, PAW_STDLIB_PATH);
+            Str const *filename = add_module_ext(P, state->name);
+            int const found = open_source_file(P, dirname, filename, state->fr);
+            paw_assert(found); PAW_UNUSED(found); // must exist
+            return 1;
+        }
+    }
     return 0;
-
-#undef CREATE_MATCHER
 }
 
 static int search_pathlist(paw_Env *P, char const *p, struct SearcherState *state)
@@ -161,11 +166,7 @@ static int search_pathlist(paw_Env *P, char const *p, struct SearcherState *stat
             p = NULL;
         }
 
-        Buffer b;
-        pawL_init_buffer(P, &b);
-        L_ADD_STRING(P, &b, state->name);
-        L_ADD_LITERAL(P, &b, PAW_MODULE_EXT);
-        Str const *filename = pawL_buffer_finish(P, &b);
+        Str const *filename = add_module_ext(P, state->name);
         if (open_source_file(P, dirname, filename, state->fr))
             return 1;
     }

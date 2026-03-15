@@ -34,6 +34,7 @@ enum Status {
     OPT_STRS(L, path, 100, "add to linker search path") \
     OPT_STRS(l, spec, 100, "specify library to link") \
     OPT_OPT(h, "display this help message") \
+    OPT_OPT(n, "omit the standard library") \
     OPT_OPT(c, "compile the program only") \
     OPT_OPT(t, "build module tests") \
     OPT_OPT(V, "validate LLVM IR") \
@@ -438,6 +439,7 @@ int main(int argc, char const *argv[])
                 .output_dirname = output_dirname,
                 .include_paths = s_opt.I,
                 .compile_only = s_opt.c,
+                .no_std = s_opt.n,
                 .build_tests = s_opt.t,
                 .enable_asan = PAW_FALSE,
                 .verify_ir = s_opt.V,

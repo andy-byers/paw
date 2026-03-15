@@ -1,62 +1,64 @@
 // mono_impl.paw
 
-pub trait Repr {
-    fn repr(&self) -> str;
+pub trait Key {
+    fn key(*self) -> int;
 }
 
-impl Repr for int {
-    fn repr(&self) -> str {
-        self.to_str()
+impl Key for int {
+    fn key(*self) -> int {
+        *self
     }
 }
 
-impl Repr for str {
-    fn repr(&self) -> str {
-        "\"\{self}\""
+impl Key for str {
+    fn key(*self) -> int {
+        assert(self.len() > 0);
+        self[self.len() - 1] as int
     }
 }
 
-pub trait DebugSelf {
-    fn debug_self(&self);
+pub trait KeyForSelf {
+    fn key_for_self(*self) -> int;
 }
 
-pub trait DebugArg<R: Repr> {
-    fn debug_arg(&self, r: R);
+pub trait KeyForArg<R: Key> {
+    fn key_for_arg(*self, r: R) -> int;
 }
 
 struct Mono;
 
-impl DebugSelf for Mono {
-    fn debug_self(&self) {
-        println("debug_self(Mono)");
+impl Copy for Mono {}
+
+impl KeyForSelf for Mono {
+    fn key_for_self(*self) -> int {
+        42
     }
 }
 
-impl<T: Repr> DebugArg<T> for Mono {
-    fn debug_arg(&self, value: T) {
-        println("debug_arg(Mono, \{value.repr()})");
+impl<T: Key> KeyForArg<T> for Mono {
+    fn key_for_arg(*self, value: T) -> int {
+        value.key()
     }
 }
 
-pub fn debug_self(m: Mono) {
-    m.debug_self();
+pub fn key_for_self(m: Mono) -> int {
+    m.key_for_self()
 }
 
-pub fn debug_arg<R: Repr>(m: Mono, r: R) {
-    m.debug_arg(r);
+pub fn key_for_arg<R: Key>(m: Mono, r: R) -> int {
+    m.key_for_arg(r)
 }
 
 #[test]
 pub fn test() {
     let m = Mono;
 
-    m.debug_self();
-    debug_self(m);
+    assert(m.key_for_self() == 42);
+    assert(key_for_self(m) == 42);
 
-    m.debug_arg(123);
-    debug_arg(m, 456);
+    assert(m.key_for_arg(123) == 123);
+    assert(key_for_arg(m, 456) == 456);
 
-    m.debug_arg("abc");
-    debug_arg(m, "def");
+    assert(m.key_for_arg("abc") == 'c' as int);
+    assert(key_for_arg(m, "def") == 'f' as int);
 }
-

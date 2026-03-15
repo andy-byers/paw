@@ -1,38 +1,64 @@
 // modification_sequence.paw
 
 #[test]
-pub fn test_assignment() {
+pub fn tuple_constructor() {
     let v = 1;
     let t = (v, v = 2, v);
     assert(t.0 == 1);
     assert(t.2 == 2);
 }
-    
-#[test]
-pub fn test_call() {
-    let v = 1;
-    let g = || v = 2;
-    let t = (v, g(), v);
-    assert(t.0 == 1);
-    assert(t.2 == 2);
-}
-
-struct Box<T> {
-    pub value: T,
-}
 
 #[test]
-pub fn test_boxed_type() {
-    let v = Box{value: 1};
-    let t = (v, v.value = 2, v);
-    assert(t.0.value == 2);
-    assert(t.2.value == 2);
-}
-
-#[test]
-pub fn test_value_type() {
+pub fn nested_tuple_constructor() {
     let v = (0, 1);
     let t = (v, v.1 = 2, v);
     assert(t.0.1 == 1);
     assert(t.2.1 == 2);
 }
+
+struct Struct<X, Y, Z> {
+    pub x: X,
+    pub y: Y,
+    pub z: Z,
+}
+
+#[test]
+pub fn struct_constructor() {
+    let v = 1;
+    // Note that the fields of a struct literal are evaluated in the
+    // order of the fields in the struct definition ("x", "y", then
+    // "z" here).
+    let t = Struct{
+        z: v, 
+        x: v, 
+        y: v = 2,
+    };
+    assert(t.x == 1);
+    assert(t.z == 2);
+}
+
+enum Enum<X, Y, Z> {
+    Variant(X, Y, Z)
+}
+
+#[test]
+pub fn variant_constructor() {
+    let v = 1;
+    match Enum::Variant(v, v = 2, v) {
+        Enum::Variant(x, _, z) => {
+            assert(x == 1);
+            assert(z == 2);
+        }
+    }
+}
+
+
+#[test]
+pub fn array_constructor() {
+    let v = 1;
+    let t = [(v, ()), (12, v = 2), (v, ())];
+    assert(t[0].0 == 1);
+    assert(t[1].0 == 12);
+    assert(t[2].0 == 2);
+}
+

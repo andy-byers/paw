@@ -9,12 +9,12 @@ impl Struct {
         Self{value}
     }
 
-    pub fn get(self) -> int {
+    pub fn get(*self) -> int {
         self.value
     }
 
-    pub fn assign(&self, rhs: Self) {
-        self = rhs;
+    pub fn assign(*self, rhs: Self) {
+        *self = rhs;
     }
 }
 
@@ -35,7 +35,7 @@ impl<Ty> PolyStruct<Ty> {
         Self{value}
     }
 
-    pub fn get(self) -> Ty {
+    pub fn get(*self) -> Ty {
         self.value
     }
 }
@@ -69,10 +69,10 @@ impl Enum {
         Self::B(value)
     }
 
-    pub fn debug(self) -> str {
+    pub fn debug(*self) -> str {
         match self {
-            Self::A(a) => "A(" ++ a.to_str() ++ ")",
-            Self::B(b) => "B(" ++ b ++ ")",
+            *Self::A(a) => "(int)",
+            *Self::B(b) => b,
         }
     }
 }
@@ -80,10 +80,10 @@ impl Enum {
 #[test]
 pub fn test_enum_methods() {
     let x = Enum::new_a(123);
-    assert(x.debug() == "A(123)");
+    assert(x.debug() == "(int)");
 
     let x = Enum::new_b("abc");
-    assert(x.debug() == "B(abc)");
+    assert(x.debug() == "abc");
 }
 
 enum PolyEnum<A, B> {
@@ -100,17 +100,17 @@ impl<A, B> PolyEnum<A, B> {
         Self::B(value)
     }
 
-    pub fn get_a(self, b: B) -> Result<A, B> {
+    pub fn get_a(*self, b: B) -> Result<A, B> {
         match self {
-            Self::A(a) => Result::Ok(a),
-            Self::B(_) => Result::Err(b),
+            *Self::A(a) => Result::Ok(a),
+            *Self::B(_) => Result::Err(b),
         }
     }
 
-    pub fn get_b(self, a: A) -> Result<B, A> {
+    pub fn get_b(*self, a: A) -> Result<B, A> {
         match self {
-            Self::A(_) => Result::Err(a),
-            Self::B(b) => Result::Ok(b),
+            *Self::A(_) => Result::Err(a),
+            *Self::B(b) => Result::Ok(b),
         }
     }
 }
@@ -138,119 +138,85 @@ pub fn test_poly_enum_methods_indirect() {
     assert(call_poly_enum_methods(123, "abc") == 123);
 }
 
-struct TestA<T, T2>;
-
-impl<T, T2> TestA<T, T2> {
-    pub fn f() -> int { 1 }
-}
-
-struct TestB<T, T2>;
-
-impl<T, T2> TestB<T, T2>{
-    pub fn f() -> int { 2 }
-}
-
-#[test]
-pub fn test_ab() {
-    let a = TestA::<int, float>::f();
-    let b = TestB::<float, int>::f();
-    let c = TestA::<int, int>::f();
-    let d = TestB::<float, float>::f();
-    assert(a == b - 1);
-    assert(c == d - 1);
-}
-
-#[test]
-pub fn test_primitive_methods() {
-    assert(false.to_str() == "false");
-    assert(true.to_str() == "true");
-    assert(1.to_str() == "1");
-    assert(0b10.to_str() == "2");
-    assert(0o10.to_str() == "8");
-    assert(0x10.to_str() == "16");
-    assert(1.0.to_str() != "");
-    assert(1.0e+1.to_str() != "");
-    assert(1e-1.to_str() != "");
-    assert(",".join(["a", "b"]) == "a,b");
-}
-
-#[test]
-pub fn test_scalar_methods() {
-    let c = 'a';
-    let c2 = 'x';
-    c.increment();
-    assert(c == 'b');
-    assert(c2 == 'x');
-}
-
-struct Ref {
-    pub value: int,
-}
-
-impl Ref {
-    pub fn get_val(self) -> Self { self }
-    pub fn get_ref(&self) -> Self { self }
-    pub fn inc_val(self) -> Self { let copy = self; self.value += 1; copy }
-    pub fn inc_ref(&self) -> Self { let copy = self; self.value += 1; copy }
-    pub fn set_val(self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
-    pub fn set_ref(&self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
-}
-
-#[test]
-pub fn test_ref_type() {
-    let r = Ref{value: 1};
-    assert(r.get_val().value == 1);
-    assert(r.set_val(Ref{value: 2}).value == 1);
-    assert(r.inc_val().value == 2);
-    assert(r.get_val().value == 2);
-
-    let r = Ref{value: 10};
-    assert(r.get_ref().value == 10);
-    assert(r.set_ref(Ref{value: 11}).value == 10);
-    assert(r.inc_ref().value == 12);
-    assert(r.get_ref().value == 12);
-
-    assert(Ref{value: 100}.get_val().value == 100);
-    assert(Ref{value: 100}.set_val(Ref{value: 101}).value == 100);
-    assert(Ref{value: 100}.inc_val().value == 101);
-
-    assert(Ref{value: 1000}.get_ref().value == 1000);
-    assert(Ref{value: 1000}.set_ref(Ref{value: 1001}).value == 1000);
-    assert(Ref{value: 1000}.inc_ref().value == 1001);
-}
-
-inline struct Val {
-    pub value: int,
-}
-
-impl Val {
-    pub fn get_val(self) -> Self { self }
-    pub fn get_ref(&self) -> Self { self }
-    pub fn inc_val(self) -> Self { let copy = self; self.value += 1; copy }
-    pub fn inc_ref(&self) -> Self { let copy = self; self.value += 1; copy }
-    pub fn set_val(self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
-    pub fn set_ref(&self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
-}
-
-#[test]
-pub fn test_val_type() {
-    let v = Val{value: 1};
-    assert(v.get_val().value == 1);
-    assert(v.set_val(Val{value: 2}).value == 1);
-    assert(v.inc_val().value == 1);
-    assert(v.get_val().value == 1);
-
-    let v = Val{value: 10};
-    assert(v.get_ref().value == 10);
-    assert(v.set_ref(Val{value: 11}).value == 10);
-    assert(v.inc_ref().value == 11);
-    assert(v.get_ref().value == 12);
-
-    assert(Val{value: 100}.get_val().value == 100);
-    assert(Val{value: 100}.set_val(Val{value: 101}).value == 100);
-    assert(Val{value: 100}.inc_val().value == 100);
-
-    assert(Val{value: 1000}.get_ref().value == 1000);
-    assert(Val{value: 1000}.set_ref(Val{value: 1001}).value == 1000);
-    assert(Val{value: 1000}.inc_ref().value == 1000);
-}
+//struct TestA<T, T2>;
+//
+//impl<T, T2> TestA<T, T2> {
+//    pub fn f() -> int { 1 }
+//}
+//
+//struct TestB<T, T2>;
+//
+//impl<T, T2> TestB<T, T2>{
+//    pub fn f() -> int { 2 }
+//}
+//
+//#[test]
+//pub fn test_ab() {
+//    let a = TestA::<int, float>::f();
+//    let b = TestB::<float, int>::f();
+//    let c = TestA::<int, int>::f();
+//    let d = TestB::<float, float>::f();
+//    assert(a == b - 1);
+//    assert(c == d - 1);
+//}
+//
+////#[test]
+////pub fn test_primitive_methods() {
+////    assert(false.to_str() == "false");
+////    assert(true.to_str() == "true");
+////    assert(1.to_str() == "1");
+////    assert(0b10.to_str() == "2");
+////    assert(0o10.to_str() == "8");
+////    assert(0x10.to_str() == "16");
+////    assert(1.0.to_str() != "");
+////    assert(1.0e+1.to_str() != "");
+////    assert(1e-1.to_str() != "");
+////    assert(",".join(["a", "b"]) == "a,b");
+////}
+//
+////#[test]
+////pub fn test_scalar_methods() {
+////    let c = 'a';
+////    let c2 = 'x';
+////    c.increment();
+////    assert(c == 'b');
+////    assert(c2 == 'x');
+////}
+////
+////struct Val {
+////    pub value: int,
+////}
+////
+////impl Copy for Val {}
+////
+////impl Val {
+////    pub fn get_val(self) -> Self { self }
+////    pub fn get_ref(*self) -> Self { *self }
+////    pub fn inc_val(self) -> Self { let copy = self; self.value += 1; copy }
+////    pub fn inc_ref(*self) -> Self { let copy = *self; self.value += 1; copy }
+////    pub fn set_val(self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
+////    pub fn set_ref(*self, rhs: Self) -> Self { let copy = *self; *self = rhs; copy }
+////}
+////
+////#[test]
+////pub fn test_val_type() {
+////    let v = Val{value: 1};
+////    assert(v.get_val().value == 1);
+////    assert(v.set_val(Val{value: 2}).value == 1);
+////    assert(v.inc_val().value == 1);
+////    assert(v.get_val().value == 1);
+////
+////    let v = Val{value: 10};
+////    assert(v.get_ref().value == 10);
+////    assert(v.set_ref(Val{value: 11}).value == 10);
+////    assert(v.inc_ref().value == 11);
+////    assert(v.get_ref().value == 12);
+////
+////    assert(Val{value: 100}.get_val().value == 100);
+////    assert(Val{value: 100}.set_val(Val{value: 101}).value == 100);
+////    assert(Val{value: 100}.inc_val().value == 100);
+////
+////    assert(Val{value: 1000}.get_ref().value == 1000);
+////    assert(Val{value: 1000}.set_ref(Val{value: 1001}).value == 1000);
+////    assert(Val{value: 1000}.inc_ref().value == 1000);
+////}

@@ -13,6 +13,7 @@ struct IrTrait;
 
 int pawIr_unify_traits(struct Compiler *C, struct IrTrait *a, struct IrTrait *b);
 struct IrTrait *pawIr_normalize_trait(struct Compiler *C, struct IrTrait *trait);
+struct IrTrait *pawIr_normalize_trait_projections(struct Compiler *C, struct IrTrait *trait);
 
 static void pawIr_unify_traits_unchecked(struct Compiler *C, struct IrTrait *a, struct IrTrait *b)
 {

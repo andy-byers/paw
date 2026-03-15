@@ -3,15 +3,13 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 use result;
-use slice::Slice;
-use slice::SliceMut;
 
 pub trait Read {
-    fn read(&self, data: SliceMut<char>) -> Result<int>;
+    fn read(*self, data: []char) -> Result<int>;
 }
 
 pub trait Write {
-    fn write(&self, data: Slice<char>) -> Result<int>;
+    fn write(*self, data: []char) -> Result<int>;
 }
 
 
@@ -19,33 +17,47 @@ pub type Result<T> = result::Result<T, Error>;
 
 
 pub struct File {
-    inner: (),
+    inner: *(),
 }
 
 impl File {
-    #[extern_std] pub fn open(pathname: str, mode: str) -> Result<Self>;
-    #[extern_std] pub fn seek(self, offset: int, whence: Seek) -> Result<()>;
-    #[extern_std] pub fn tell(self) -> Result<int>;
-    #[extern_std] pub fn flush(self) -> Result<()>;
+    #[extern = "paw_io_File_open"] 
+    pub fn open(pathname: []char, mode: []char) -> Result<Self>;
+
+    #[extern = "paw_io_File_seek"] 
+    pub fn seek(*self, offset: int, whence: Seek) -> Result<()>;
+
+    #[extern = "paw_io_File_tell"] 
+    pub fn tell(*self) -> Result<int>;
+
+    #[extern = "paw_io_File_flush"] 
+    pub fn flush(*self) -> Result<()>;
 }
 
 impl Read for File {
-    #[extern_std] fn read(&self, data: SliceMut<char>) -> Result<int>;
+    #[extern = "paw_io_File_read"] 
+    fn read(*self, data: []char) -> Result<int>;
 }
 
 impl Write for File {
-    #[extern_std] fn write(&self, data: Slice<char>) -> Result<int>;
+    #[extern = "paw_io_File_write"] 
+    fn write(*self, data: []char) -> Result<int>;
+}
+
+impl Drop for File {
+    #[extern = "paw_io_File_drop"]
+    fn drop(*self);
 }
 
 
-pub inline enum Seek {
+pub enum Seek {
     Begin,
     Current,
     End,
 }
 
 
-pub inline enum Error {
+pub enum Error {
     NotFound,
     TooLarge,
     PermissionDenied,
@@ -56,22 +68,43 @@ pub inline enum Error {
     Other,
 }
 
-impl Error {
-    pub fn to_str(self) -> str {
-        match self {
-            Error::NotFound => "not found",
-            Error::TooLarge => "too large",
-            Error::PermissionDenied => "permission denied",
-            Error::AlreadyExists => "already exists",
-            Error::NotOpened => "not opened",
-            Error::NotSupported => "not supported",
-            Error::InvalidArgument => "invalid argument",
-            Error::Other => "other error",
-        }
-    }
+//TODO impl ToString for Error {
+//TODO     fn to_string(*self) -> mem::Result<String> {
+//TODO         match self {
+//TODO             Error::NotFound => s"not found",
+//TODO             Error::TooLarge => s"too large",
+//TODO             Error::PermissionDenied => s"permission denied",
+//TODO             Error::AlreadyExists => s"already exists",
+//TODO             Error::NotOpened => s"not opened",
+//TODO             Error::NotSupported => s"not supported",
+//TODO             Error::InvalidArgument => s"invalid argument",
+//TODO             Error::Other => s"other error",
+//TODO         }
+//TODO     }
+//TODO }
+
+impl Copy for Error {}
+
+
+#[extern = "paw_io_stdin"] 
+pub fn stdin() -> *File;
+
+#[extern = "paw_io_stdout"] 
+pub fn stdout() -> *File;
+
+#[extern = "paw_io_stderr"] 
+pub fn stderr() -> *File;
+
+
+pub fn print<T: ToSlice<char>>(message: T) {
+    stdout().write(message.to_slice()).unwrap();
 }
 
+use string_builder;
 
-#[extern_std] pub fn stdin() -> File;
-#[extern_std] pub fn stdout() -> File;
-#[extern_std] pub fn stderr() -> File;
+pub fn println<T: ToSlice<char>>(message: T) {
+    let b = string_builder::Builder::new();
+    b.append(message).unwrap();
+    b.append_char('\n').unwrap();
+    print(b.string());
+}

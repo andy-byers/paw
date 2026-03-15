@@ -23,6 +23,7 @@ typedef struct Buffer {
 #define L_IS_BOXED(buf) ((buf)->data != (buf)->stack)
 
 void pawL_init_buffer(paw_Env *P, Buffer *buf);
+void pawL_buffer_discard(paw_Env *P, Buffer *buf);
 Str *pawL_buffer_finish(paw_Env *P, Buffer *buf);
 void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n);
 

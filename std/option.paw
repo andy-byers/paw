@@ -2,36 +2,53 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-pub inline enum Option<T> {
+pub enum Option<T> {
     Some(T),
     None,
 }
 
 impl<T> Option<T> {
-    pub fn is_some(self) -> bool {
+    pub fn is_some(*self) -> bool {
         !self.is_none()
     }
 
-    pub fn is_none(self) -> bool {
+    pub fn is_none(*self) -> bool {
         match self {
-            None => true,
-            Some(_) => false,
+            *None => true,
+            *Some(_) => false,
         }
     }
 
-    pub fn unwrap_or(self, value: T) -> T {
+    pub fn unwrap_or(self, default: T) -> T {
         match self {
-            Some(t) => t,
-            None => value,
+            Some(value) => value,
+            None => default,
         }
     }
 
     pub fn unwrap(self) -> T {
+        self.expect("failed to unwrap")
+    }
+
+    pub fn unwrap_none(self) -> () {
+        self.expect_none("failed to unwrap none")
+    }
+
+    pub fn expect(self, message: str) -> T {
         match self {
-            Some(t) => t,
-            None => panic("failed to unwrap"),
+            Some(value) => value,
+            None => panic(message),
+        }
+    }
+
+    pub fn expect_none(self, message: str) -> () {
+        match self {
+            Some(_) => panic(message),
+            None => (),
         }
     }
 }
 
 pub use Option::*;
+
+impl<T: Copy> Copy for Option<T> {}

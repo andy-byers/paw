@@ -1,0 +1,205 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+#include "mangle.h"
+#include "auxlib.h"
+#include "ir_type.h"
+#include "mir.h"
+
+
+static void add_rle_string(struct Compiler *C, Buffer *b, Str const *s)
+{
+    pawL_add_int(ENV(C), b, (paw_Int)s->length);
+    pawL_add_nstring(ENV(C), b, s->text, s->length);
+}
+
+static void start_generic_args(struct Compiler *C, Buffer *buf)
+{
+    pawL_add_char(ENV(C), buf, 'I');
+}
+
+static void finish_generic_args(struct Compiler *C, Buffer *buf)
+{
+    pawL_add_char(ENV(C), buf, 'E');
+}
+
+static void add_module_name(struct Compiler *C, Buffer *b, int modno)
+{
+    struct Module const info = ModuleInfo_get(C->modinfo, modno);
+    add_rle_string(C, b, info.name);
+}
+
+static void add_type(struct Compiler *C, Buffer *b, IrType *type);
+
+static void add_const(struct Compiler *C, Buffer *b, IrConst *konst)
+{
+    paw_Env *P = ENV(C);
+    paw_assert(konst->kind == IR_CONST_VALUE);
+
+    pawL_add_char(P, b, 'K');
+
+    // TODO: Figure out an encoding for the constant value
+    switch (IR_KINDOF(konst->value.type)) {
+        case kIrBool:
+            pawL_add_char(P, b, 'b');
+            break;
+        case kIrChar:
+            pawL_add_char(P, b, 'c');
+            break;
+        case kIrInt:
+            pawL_add_char(P, b, 'i');
+            break;
+        default:
+            paw_assert(IrIsFloat(konst->value.type));
+            pawL_add_char(P, b, 'f');
+    }
+}
+
+static void add_generic_arg(struct Compiler *C, Buffer *b, IrGenericArg arg)
+{
+    if (IrGenericArg_is_type(arg)) {
+        IrType *t = IrGenericArg_get_type(arg);
+        add_type(C, b, t);
+    } else {
+        IrConst *k = IrGenericArg_get_const(arg);
+        add_const(C, b, k);
+    }
+}
+
+static void add_type(struct Compiler *C, Buffer *b, IrType *type)
+{
+    paw_Env *P = ENV(C);
+    switch (IR_KINDOF(type)) {
+        case kIrUnit:
+            // mangle like empty tuple
+            L_ADD_LITERAL(P, b, "TE");
+            break;
+        case kIrBool:
+            pawL_add_char(P, b, 'b');
+            break;
+        case kIrChar:
+            pawL_add_char(P, b, 'c');
+            break;
+        case kIrInt:
+            pawL_add_char(P, b, 'i');
+            break;
+        case kIrFloat:
+            pawL_add_char(P, b, 'f');
+            break;
+        case kIrString:
+            pawL_add_char(P, b, 's');
+            break;
+        case kIrPtr:
+            pawL_add_char(P, b, 'p');
+            add_type(C, b, ir_deref(type));
+            break;
+        case kIrAdt: {
+            struct IrAdt const *t = IrGetAdt(type);
+            struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
+            add_module_name(C, b, (int)def->did.modno);
+            add_rle_string(C, b, def->name);
+            if (t->args != NULL && t->args->count > 0) {
+                start_generic_args(C, b);
+                K_LIST_XFOREACH (t->args, IrGenericArg const, p)
+                    add_generic_arg(C, b, *p);
+                finish_generic_args(C, b);
+            }
+            break;
+        }
+        case kIrSignature:
+            type = IR_SIGNATURE_FN(C, type);
+            // (fallthrough)
+        case kIrFnPtr: {
+            struct IrFnPtr const *fn = IrGetFnPtr(type);
+            pawL_add_char(P, b, 'F');
+            add_type(C, b, fn->result);
+            K_LIST_XFOREACH (fn->params, IrType *const, p)
+                add_type(C, b, *p);
+            pawL_add_char(P, b, 'E');
+            break;
+        }
+        case kIrTuple: {
+            struct IrTuple const *t = IrGetTuple(type);
+            pawL_add_char(P, b, 'T');
+            K_LIST_XFOREACH (t->elems, IrType *const, p)
+                add_type(C, b, *p);
+            pawL_add_char(P, b, 'E');
+            break;
+        }
+        case kIrSlice: {
+            struct IrSlice const *t = IrGetSlice(type);
+            pawL_add_char(P, b, 'S');
+            add_type(C, b, t->type);
+            break;
+        }
+        default:
+            paw_assert(IrIsNever(type));
+            pawL_add_char(P, b, 'x');
+            break;
+    }
+}
+
+static void add_trait(struct Compiler *C, Buffer *b, IrTrait *trait)
+{
+    struct IrTraitDef const *def = pawIr_get_trait_def(C, trait->did);
+    add_rle_string(C, b, def->name);
+
+    start_generic_args(C, b);
+    for (int i = 1; i < trait->args->count; ++i) {
+        IrGenericArg const p = IrGenericArgs_get(trait->args, i);
+        add_generic_arg(C, b, p);
+    }
+    finish_generic_args(C, b);
+}
+
+static void add_fn_part(struct Compiler *C, Buffer *b, IrType *type)
+{
+    struct IrFnDef const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(type));
+    add_module_name(C, b, (int)fn_def->did.modno);
+    add_rle_string(C, b, fn_def->name);
+    if (fn_def->generics->count > 0) {
+        start_generic_args(C, b);
+        IrGenericArgs *args = IR_GENERIC_ARGS(type);
+        K_LIST_XFOREACH (args, IrGenericArg const, p)
+            add_generic_arg(C, b, *p);
+        finish_generic_args(C, b);
+    }
+}
+
+Str *mangle_type(struct Compiler *C, IrType *type)
+{
+    Buffer b;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &b);
+
+    L_ADD_LITERAL(P, &b, "_P");
+
+    if (IrIsSignature(type)) {
+        IrType *self = pawIr_get_context(C, type);
+        if (self == NULL) {
+            // mangling a free function
+            pawL_add_char(P, &b, 'N');
+            add_fn_part(C, &b, type);
+        } else {
+            // mangling a method (trait or inherent impl)
+            struct IrFnDef const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(type));
+            struct IrImpl const *impl_def = pawIr_get_impl_def(C, fn_def->parent);
+            if (impl_def->trait == NULL) {
+                pawL_add_char(P, &b, 'M');
+                add_type(C, &b, self);
+            } else {
+                IrTrait *trait = pawIr_get_trait_context(C, type);
+                pawL_add_char(P, &b, 'X');
+                add_type(C, &b, self);
+                add_trait(C, &b, trait);
+            }
+            add_fn_part(C, &b, type);
+        }
+    } else {
+        add_type(C, &b, type);
+    }
+
+    return pawL_buffer_finish(P, &b);
+}
+

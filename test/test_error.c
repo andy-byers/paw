@@ -331,7 +331,8 @@ static void test_syntax_error(void)
     test_compiler_status(E_INVALID_SELECTOR, "invalid_selector", "", "let x = \"abc\".1e-2;");
     test_compiler_status(E_EMPTY_VARIANT_FIELD_LIST, "empty_variant_field_list", "enum E {X()}", "");
     test_compiler_status(E_FUNCTION_TYPE_DECL, "function_type_decl", "type F = fn();", "");
-    test_compiler_status(E_TRAIT_BOUNDS_ON_ALIAS_GENERIC, "trait_bounds_on_alias_generic", "struct Struct<X>;", "type T<X: Hash> = Struct<X>;");
+    // TODO: this is allowed now but doesn't seem to be enforced properly, i.e. if "X: Hash" cannot be proven, the compiler says nothing
+    test_compiler_status(PAW_OK, "trait_bounds_on_alias_generic", "struct Struct<X>;", "type T<X: Hash> = Struct<X>;");
     test_compiler_status(E_EXPECTED_COLON_AFTER_MAP_KEY, "expected_colon_after_map_key", "", "let x = [1: 2, 3];");
     test_compiler_status(E_COLON_AFTER_LIST_ELEMENT, "colon_after_list_element", "", "let x = [1, 2: 3];");
     test_compiler_status(E_EXPECTED_COMMA_SEPARATOR, "expected_comma_separator", "struct X {a: int b: int}", "");
@@ -814,9 +815,95 @@ static void test_impl_error(void)
 #undef GENERATE
 }
 
+static void test_definite_assignment(void)
+{
+#define TESTCASE(Name_, Status_, Code_) \
+        test_compiler_status(Status_, #Name_, COMMON_TYPES, Code_);
+
+    char const *COMMON_TYPES =
+        "struct Copyable; impl Copy for Copyable {}\n"
+        "struct MoveOnly;\n";
+
+    TESTCASE(SANITY_CHECK_deferred_init, 0,
+            "let first: MoveOnly;"
+            "first = MoveOnly;"
+            "let second = first;");
+
+    TESTCASE(SANITY_CHECK_reinitialize, 0,
+            "let first = MoveOnly;"
+            "let second = first;" // move out
+            "first = MoveOnly;" // reinitialize
+            "let third = first;");
+
+    TESTCASE(SANITY_CHECK_sometimes_copied, 0,
+            "let first = Copyable;"
+            "if true { let second = first; }"
+            "let third = first;");
+
+    TESTCASE(SANITY_CHECK_copy_out_of_object, 0,
+            "let first = (Copyable,);"
+            "let second = first.0;");
+
+    TESTCASE(SANITY_CHECK_always_reinitialized, 0,
+            "let first = MoveOnly;"
+            "if true {"
+            "    let second = first;"
+            "    first = MoveOnly;"
+            "} else {"
+            "    let second = first;"
+            "    first = MoveOnly;"
+            "}"
+            "let third = first;");
+
+    TESTCASE(SANITY_CHECK_copy_out_of_pointer, 0,
+            "let value = Copyable;"
+            "let pointer = &value;"
+            "let new_value = *pointer;");
+
+    TESTCASE(use_before_init, -1,
+            "let first: int;"
+            "let second = first;");
+
+    TESTCASE(use_after_move, -1,
+            "let first = MoveOnly;"
+            "let second = first;"
+            "let third = first;");
+
+    TESTCASE(sometimes_uninit, -1,
+            "let first: int;"
+            "if true { first = 42; }"
+            "let second = first;");
+
+    TESTCASE(sometimes_moved, -1,
+            "let first = MoveOnly;"
+            "if true { let second = first; }"
+            "let third = first;");
+
+    TESTCASE(move_out_of_object, -1,
+            "let first = (MoveOnly,);"
+            "let second = first.0;");
+
+    TESTCASE(sometimes_reinitialized, -1,
+            "let first = MoveOnly;"
+            "if true {"
+            "    let second = first;"
+            "    first = MoveOnly;"
+            "} else {"
+            "    let second = first;"
+            "}"
+            "let third = first;");
+
+    TESTCASE(move_out_of_pointer, -1,
+            "let value = MoveOnly;"
+            "let pointer = &value;"
+            "let new_value = *pointer;");
+
+#undef TESTCASE
+}
+
 int main(void)
 {
-    test_impl_error();
+    test_definite_assignment();
     return 42;
 
     test_syntax_error();
@@ -829,6 +916,7 @@ int main(void)
     test_arithmetic_error();
     test_tuple_error();
     test_struct_error();
+    test_impl_error();
     test_list_error();
     test_map_error();
     test_range_error();

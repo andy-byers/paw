@@ -1,0 +1,36 @@
+// dispatch_based_on_pointerness.paw 
+
+pub trait Trait<X> {
+    fn method(*self) -> X;
+}
+
+pub struct Struct<X> {
+    pub x: X,
+    pub y: X,
+}
+
+impl<Y> Trait<Y> for Struct<Y> {
+    fn method(*self) -> Y {
+        self.x
+    }
+}
+
+impl<Z> Trait<Z> for *Struct<Z> {
+    fn method(*self) -> Z {
+        self.y
+    }
+}
+
+fn function<T: Trait<X>, X>(t: T) -> X {
+    t.method()
+}
+
+#[test]
+pub fn test() {
+    let x = 123;
+    let y = 456;
+    let s = Struct{x, y};
+    let p = &s;
+    assert(function(s) == x);
+    assert(function(p) == y);
+}

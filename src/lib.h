@@ -13,49 +13,39 @@
 
 #include "core.h"
 
-// TODO: use the enum and list of names instead
-#define PAWL_PRELUDE_NAME "prelude"
-#define PAWL_OPS_NAME "ops"
-#define PAWL_LIST_NAME "list"
-#define PAWL_MAP_NAME "map"
-#define PAWL_SLICE_NAME "slice"
-#define PAWL_OPTION_NAME "option"
-#define PAWL_RESULT_NAME "result"
-#define PAWL_UNSAFE_NAME "unsafe"
-#define PAWL_MATH_NAME "math"
-#define PAWL_IO_NAME "io"
-#define PAWL_STR_BUILDER_NAME "str_builder"
-
 struct Str;
 
-enum pawL_StdModules {
+#define PAWL_STD_MODULES(X) \
+
+enum pawL_StdModule {
+    // Core modules:
     PAWL_STD_PRELUDE,
     PAWL_STD_OPS,
-    PAWL_STD_LIST,
-    PAWL_STD_MAP,
+    PAWL_STD_PTR,
+    PAWL_STD_MEM,
     PAWL_STD_SLICE,
     PAWL_STD_OPTION,
     PAWL_STD_RESULT,
+
+    // Standard library modules:
+    PAWL_STD_STRING,
+    PAWL_STD_LIST,
+    PAWL_STD_HASHMAP,
     PAWL_STD_IO,
     PAWL_STD_MATH,
-    PAWL_STD_STR_BUILDER,
+    PAWL_STD_STRING_BUILDER,
 
     PAWL_NUM_STD_MODULES
 };
 
-static char const *pawL_StdNames[PAWL_NUM_STD_MODULES] = {
-    [PAWL_STD_PRELUDE] = "prelude",
-    [PAWL_STD_OPS] = "ops",
-    [PAWL_STD_LIST] = "list",
-    [PAWL_STD_MAP] = "map",
-    [PAWL_STD_OPTION] = "option",
-    [PAWL_STD_RESULT] = "result",
-    [PAWL_STD_IO] = "io",
-    [PAWL_STD_MATH] = "math",
-    [PAWL_STD_STR_BUILDER] = "str_builder",
-};
+#define PAWL_NUM_CORE_MODULES (PAWL_STD_RESULT + 1)
 
-paw_Bool pawL_is_std_name(char const *name);
+char const *pawL_std_module_name(enum pawL_StdModule m);
+
+static paw_Bool pawL_is_core_module(enum pawL_StdModule m)
+{
+    return m <= PAWL_STD_RESULT;
+}
 
 struct FileReader {
     char data[512];

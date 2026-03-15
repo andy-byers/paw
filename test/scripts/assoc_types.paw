@@ -1,0 +1,68 @@
+// assoc_types.paw
+
+pub trait TestAdd<Rhs> {
+    type Output;
+    fn add(self, rhs: Rhs) -> Self::Output;
+}
+
+struct Integer {
+    pub v: int,
+}
+
+impl Copy for Integer {}
+
+impl TestAdd<Integer> for Integer {
+    type Output = int;
+    fn add(self, rhs: Integer) -> Self::Output {
+        self.v + rhs.v
+    }
+}
+
+struct Float {
+    pub v: float,
+}
+
+impl Copy for Float {}
+
+impl TestAdd<Float> for Float {
+    type Output = float;
+    fn add(self, rhs: Float) -> Self::Output {
+        self.v + rhs.v
+    }
+}
+
+struct Opaque<T> {
+    pub v: T,
+}
+
+impl<T: Copy> Copy for Opaque<T> {}
+
+impl<T> TestAdd<Opaque<T>> for Opaque<T> {
+    type Output = (T, T);
+    fn add(self, rhs: Opaque<T>) -> Self::Output {
+        (self.v, rhs.v)
+    }
+}
+
+pub fn add<T: TestAdd<T>>(lhs: T, rhs: T) -> T::Output {
+    lhs.add(rhs)
+}
+
+#[test]
+pub fn test() {
+    let i = Integer{v: 1};
+    let v = add(i, Integer{v: 2});
+    assert(v == 3);
+
+    let f = Float{v: 1.0};
+    let v = add(f, Float{v: 2.0});
+    assert(v == 3.0);
+
+    let o = Opaque{v: 1};
+    let v = add(o, Opaque{v: 2});
+    let v = add(Opaque{v}, Opaque{v: (3, 4)});
+    assert(v.0.0 == 1);
+    assert(v.0.1 == 2);
+    assert(v.1.0 == 3);
+    assert(v.1.1 == 4);
+}

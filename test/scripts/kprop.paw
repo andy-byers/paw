@@ -47,7 +47,6 @@ pub fn test_unary_op() {
     assert(!true == false);
     assert(~0 == -1);
     assert(~100 == -101);
-    assert(#"abc" == 3);
 }
 
 #[test]
@@ -128,24 +127,6 @@ pub fn test_nested_branch() {
         -1
     };
     assert(x == 3);
-}
-
-// Makes sure constant/copy propagation doesn"t affect captured variables
-// Such variables might be changed inside the capturing closure, so it would
-// be incorrect to consider them constant.
-#[test]
-pub fn test_captured_reg() {
-    let up = 0;
-    let increment = || {
-        up = up + 1;
-        up
-    };
-    assert(up == 0);
-    let copy = up;
-
-    increment();
-    assert(copy == 0);
-    assert(up == 1);
 }
 
 #[test]

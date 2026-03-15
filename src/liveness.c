@@ -18,19 +18,19 @@ static paw_Bool block_set_contains(struct MirBlockList *set, MirBlock b)
     return PAW_FALSE;
 }
 
-inline static int find_local(struct MirPlacePtrList const *places, MirLocal L)
+inline static int find_local(struct MirPlacePtrList const *places, MirRegister r)
 {
     int index;
     struct MirPlace *const *ppp;
     K_LIST_ENUMERATE (places, index, ppp) {
-        if ((*ppp)->kind == MIR_PLACE_LOCAL
-                && MIR_ID_EQUALS(L, (*ppp)->L))
+        if ((*ppp)->kind == MIR_PLACE_REGISTER
+                && MIR_ID_EQUALS(r, (*ppp)->r))
             return index;
     }
     return -1;
 }
 
-MirBlockList *pawMir_compute_live_in(struct Mir *mir, MirBlockList *uses, MirBlockList *defs, MirLocal L)
+MirBlockList *pawMir_compute_live_in(struct Mir *mir, MirBlockList *uses, MirBlockList *defs, MirRegister r)
 {
     // algorithm is from LLVM "mem2reg" pass
     MirBlock const *pb;
@@ -56,10 +56,10 @@ MirBlockList *pawMir_compute_live_in(struct Mir *mir, MirBlockList *uses, MirBlo
             // output, so loads must be checked before stores. e.g. "x = x + 1"
             // loads "x" before writing to it.
             MirPlacePtrList const *loads = pawMir_get_loads(mir, *pinstr);
-            if (find_local(loads, L) >= 0) break;
+            if (find_local(loads, r) >= 0) break;
 
             MirPlacePtrList const *stores = pawMir_get_stores(mir, *pinstr);
-            if (find_local(stores, L) >= 0) {
+            if (find_local(stores, r) >= 0) {
                 MirBlockList_swap_remove(W, index);
                 break;
             }

@@ -25,9 +25,9 @@ pub fn recursive(n: int) -> int {
     return 0;
 }
 
-pub fn poly_recursive<T>(n: int, t: T, list: [T]) {
+pub fn poly_recursive<T: mod_a::GetValue>(n: int, t: T, value: int) -> int {
     if n > 0 {
-        list.push(t);
-        mod_a::poly_recursive(n - 1, t, list);
+        return mod_a::poly_recursive(n - 1, t, value + t.get_value());
     }
+    value
 }

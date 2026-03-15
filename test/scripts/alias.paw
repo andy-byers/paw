@@ -255,3 +255,9 @@ pub fn test_types_are_hoisted() {
     };
 }
 
+#[test]
+pub fn test_array_alias() {
+    type A<T> = [T; 3];
+    let a: A<_> = [1, 2, 3];
+    assert(a[2] == 3);
+}

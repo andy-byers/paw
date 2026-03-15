@@ -23,7 +23,7 @@ enum Data {
     Y(int),
 }
 
-fn copy_data_enum(e: Data) -> Data {
+fn move_data_enum(e: Data) -> Data {
     let e2 = e;
     return e2;
 }
@@ -33,7 +33,7 @@ pub fn test_data_enum() {
     let e = Data::X;
     e = Data::Y(42);
 
-    let e = copy_data_enum(Data::X);
-    let e = copy_data_enum(Data::Y(42));
+    let e = move_data_enum(Data::X);
+    let e = move_data_enum(Data::Y(42));
 }
 

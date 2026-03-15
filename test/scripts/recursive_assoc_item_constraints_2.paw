@@ -1,0 +1,10 @@
+// recursive_assoc_item_constraints_2.paw
+
+pub trait A { type T: B; }
+pub trait B { type T: A; }
+
+struct S1;
+struct S2;
+
+impl A for S1 { type T = S2; }
+impl B for S2 { type T = S1; }

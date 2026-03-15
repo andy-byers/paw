@@ -49,9 +49,8 @@ pub fn test_parse_valid() {
     check_parse("+1", Some(1));
     check_parse("+10", Some(10));
 
-    let i = 1234567890;
-    check_parse("\{i}", Some(i));
-    check_parse("\{-i}", Some(-i));
+    check_parse("1234567890", Some(1234567890));
+    check_parse("-1234567890", Some(-1234567890));
 }
 
 #[test]
@@ -80,28 +79,28 @@ pub fn test_parse_radix_invalid() {
     check_parse_radix("EFG", None, 16); // digit out of range for base
 }
 
-fn apply<T>(f: fn(T), target: [T]) {
-    let i = 0;
-    while i < #target {
-        f(target[i]);
-        i = i + 1;
-    }
-}
-
-fn combine<T>(lhs: [T], rhs: [T]) -> [(T, T)] {
-    let out = [];
-    let i = 0;
-    while i < #lhs {
-        let j = 0;
-        while j < #rhs {
-            out.push((lhs[i], rhs[j]));
-            j = j + 1;
-        }
-        i = i + 1;
-    }
-    return out;
-}
-
+//fn apply<T>(f: fn(T), target: [T]) {
+//    let i = 0;
+//    while i < #target {
+//        f(target[i]);
+//        i = i + 1;
+//    }
+//}
+//
+//fn combine<T>(lhs: [T], rhs: [T]) -> [(T, T)] {
+//    let out = [];
+//    let i = 0;
+//    while i < #lhs {
+//        let j = 0;
+//        while j < #rhs {
+//            out.push((lhs[i], rhs[j]));
+//            j = j + 1;
+//        }
+//        i = i + 1;
+//    }
+//    return out;
+//}
+//
 //#[test]
 //pub fn test_boundary_values() {
 //    let imax = 0x7FFFFFFFFFFFFFFF;

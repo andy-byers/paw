@@ -10,28 +10,38 @@
 
 typedef struct IrType IrType;
 typedef struct IrTrait IrTrait;
+typedef struct IrConst IrConst;
+typedef struct IrGenericArg IrGenericArg;
+
+// NOTE: kIrGeneric must be the last type due to "IR_NUM_TYPE_KINDS"
+//   macro below.
 
 #define IR_TYPE_LIST(X) \
-    X(Unit)             \
-    X(Bool)             \
-    X(Char)             \
-    X(Int)              \
-    X(Float)            \
-    X(Str)              \
-    X(Ptr)              \
-    X(Adt)              \
-    X(FnPtr)            \
-    X(Signature)        \
-    X(Tuple)            \
-    X(Never)            \
-    X(Infer)            \
-    X(Generic)
+    X(Unit) \
+    X(Bool) \
+    X(Char) \
+    X(Int) \
+    X(Float) \
+    X(String) \
+    X(Ptr) \
+    X(Adt) \
+    X(FnPtr) \
+    X(Signature) \
+    X(Array) \
+    X(Slice) \
+    X(Tuple) \
+    X(Never) \
+    X(Infer) \
+    X(Generic) \
+    X(Projection)
 
 enum IrTypeKind {
 #define DEFINE_ENUM(X) kIr##X,
     IR_TYPE_LIST(DEFINE_ENUM)
 #undef DEFINE_ENUM
 };
+
+#define IR_NUM_TYPE_KINDS (kIrGeneric + 1)
 
 #define IR_TYPE_HEADER enum IrTypeKind kind : 8
 struct IrTypeHeader {
@@ -58,7 +68,7 @@ struct IrFloat {
     IR_TYPE_HEADER;
 };
 
-struct IrStr {
+struct IrString {
     IR_TYPE_HEADER;
 };
 
@@ -70,7 +80,7 @@ struct IrPtr {
 struct IrAdt {
     IR_TYPE_HEADER;
     DeclId did;
-    struct IrTypeList *types;
+    struct IrGenericArgs *args;
 };
 
 struct IrFnPtr {
@@ -82,7 +92,18 @@ struct IrFnPtr {
 struct IrSignature {
     IR_TYPE_HEADER;
     DeclId did;
-    struct IrTypeList *types;
+    struct IrGenericArgs *args;
+};
+
+struct IrArray {
+    IR_TYPE_HEADER;
+    IrConst *length;
+    IrType *type;
+};
+
+struct IrSlice {
+    IR_TYPE_HEADER;
+    IrType *type;
 };
 
 struct IrTuple {
@@ -100,16 +121,18 @@ struct IrInfer {
     int index;
 };
 
+// TODO: use this to represent only type schemes, i.e. the T in fn f<T>(). create a new type to represent instantiated generics, i.e. the T in "f::<T>()"
 struct IrGeneric {
     IR_TYPE_HEADER;
     DeclId did;
 };
 
+// Represents the type of "<Type as Trait>::Assoc::<Args..>"
 struct IrProjection {
     IR_TYPE_HEADER;
-    DeclId did;
+    DeclId assoc;
     IrType *type;
-    IrType *assoc;
+    IrTrait *trait;
 };
 
 static char const *kIrTypeNames[] = {
@@ -127,20 +150,20 @@ struct IrType {
     };
 };
 
-#define DEFINE_ACCESS(X)                                              \
-    static inline paw_Bool IrIs##X(const IrType *node)                \
-    {                                                                 \
-        return node->hdr.kind == kIr##X;                              \
-    }                                                                 \
-    static inline struct Ir##X *IrGet##X(IrType *node)                \
-    {                                                                 \
-        paw_assert(IrIs##X(node));                                    \
-        return &node->X##_;                                           \
-    }                                                                 \
-    static inline struct Ir##X const *IrGet##X##K(IrType const *node) \
-    {                                                                 \
-        paw_assert(IrIs##X(node));                                    \
-        return &node->X##_;                                           \
+#define DEFINE_ACCESS(X) \
+    static paw_Bool IrIs##X(const IrType *node) \
+    { \
+        return node->hdr.kind == kIr##X; \
+    } \
+    static struct Ir##X *IrGet##X(IrType *node) \
+    { \
+        paw_assert(IrIs##X(node)); \
+        return &node->X##_; \
+    } \
+    static struct Ir##X const *IrGet##X##K(IrType const *node) \
+    { \
+        paw_assert(IrIs##X(node)); \
+        return &node->X##_; \
     }
 IR_TYPE_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
@@ -150,23 +173,101 @@ IrType *pawIr_new_bool(struct Compiler *C);
 IrType *pawIr_new_char(struct Compiler *C);
 IrType *pawIr_new_int(struct Compiler *C);
 IrType *pawIr_new_float(struct Compiler *C);
-IrType *pawIr_new_str(struct Compiler *C);
+IrType *pawIr_new_string(struct Compiler *C);
 IrType *pawIr_new_ptr(struct Compiler *C, IrType *pointee);
-IrType *pawIr_new_adt(struct Compiler *C, DeclId did, struct IrTypeList *types);
+IrType *pawIr_new_adt(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
 IrType *pawIr_new_fn_ptr(struct Compiler *C, struct IrTypeList *params, IrType *result);
-IrType *pawIr_new_signature(struct Compiler *C, DeclId did, struct IrTypeList *types);
+IrType *pawIr_new_signature(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
+IrType *pawIr_new_slice(struct Compiler *C, IrType *type);
 IrType *pawIr_new_tuple(struct Compiler *C, struct IrTypeList *elems);
+IrType *pawIr_new_array(struct Compiler *C, IrType *type, IrConst *length);
 IrType *pawIr_new_never(struct Compiler *C);
 IrType *pawIr_new_infer(struct Compiler *C, int depth, int index);
 IrType *pawIr_new_generic(struct Compiler *C, DeclId did);
+IrType *pawIr_new_projection(struct Compiler *C, IrType *type, IrTrait *trait, DeclId assoc);
 
 
 struct IrTrait {
     DeclId did;
-    struct IrTypeList *types;
+    struct IrGenericArgs *args;
 };
 
-IrTrait *pawIr_new_trait(struct Compiler *C, DeclId did, struct IrTypeList *types);
+IrTrait *pawIr_new_trait(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
+
+
+union IrValue {
+    paw_Bool b;
+    paw_Char c;
+    paw_Int i;
+    paw_Float f;
+};
+
+enum IrConstKind {
+    IR_CONST_VALUE,
+    IR_CONST_PENDING,
+    IR_CONST_DECL,
+    IR_CONST_INFER,
+};
+
+struct IrConstValue {
+    union IrValue value;
+    IrType *type;
+};
+
+struct IrConstPending {
+    DeclId did;
+};
+
+struct IrConstParam {
+    DeclId did;
+};
+
+struct IrConstDecl {
+    DeclId did;
+};
+
+struct IrConstInfer {
+    int unimplemented; // TODO: make some identifier that allows us to reference a special inference variable
+};
+
+struct IrConst {
+    enum IrConstKind kind;
+    union {
+        struct IrConstValue value;
+        struct IrConstPending pending;
+        struct IrConstParam param;
+        struct IrConstDecl decl;
+        struct IrConstInfer infer;
+    };
+};
+
+IrConst *pawIr_new_const_value(struct Compiler *C, union IrValue value, IrType *type);
+IrConst *pawIr_new_const_pending(struct Compiler *C, DeclId did);
+IrConst *pawIr_new_const_decl(struct Compiler *C, DeclId did);
+IrConst *pawIr_new_const_infer(struct Compiler *C);
+
+
+enum IrGenericArgKind {
+    IR_GENERIC_ARG_TYPE,
+    IR_GENERIC_ARG_CONST,
+};
+
+struct IrGenericArg {
+    void *inner;
+};
+
+EXTERN_C IrGenericArg IrGenericArg_from_type(IrType *t);
+EXTERN_C IrGenericArg IrGenericArg_from_const(IrConst *k);
+
+EXTERN_C paw_Bool IrGenericArg_is_type(IrGenericArg ga);
+
+static paw_Bool IrGenericArg_is_const(IrGenericArg ga)
+{
+    return !IrGenericArg_is_type(ga);
+}
+
+EXTERN_C IrType *IrGenericArg_get_type(IrGenericArg ga);
+EXTERN_C IrConst *IrGenericArg_get_const(IrGenericArg ga);
 
 
 enum IrDefKind {
@@ -175,6 +276,7 @@ enum IrDefKind {
     IR_VARIANT_DEF,
     IR_IMPL_DEF,
     IR_TRAIT_DEF,
+    IR_ALIAS_DEF,
     IR_GENERIC_DEF,
     IR_FIELD_DEF,
 };
@@ -187,6 +289,27 @@ struct IrParam {
     IrType *type;
 };
 
+enum IrConstraintKind {
+    IR_CONSTRAINT_TYPE_EQUALS,
+    IR_CONSTRAINT_IMPL_TRAIT,
+};
+
+struct IrConstraint {
+    enum IrConstraintKind kind;
+    DeclId parent;
+    union {
+        struct {
+            IrType *type;
+            IrTrait *trait;
+        } impl;
+
+        struct {
+            IrType *lhs;
+            IrType *rhs;
+        } eq;
+    };
+};
+
 struct IrFieldDef {
     Str *name;
     DeclId did;
@@ -194,9 +317,19 @@ struct IrFieldDef {
 };
 
 struct IrGenericDef {
-    struct IrTraitList *bounds;
-    Str *name;
     DeclId did;
+    paw_Bool is_type : 1;
+    union {
+        struct {
+            struct IrTraitList *bounds;
+            Str *name;
+        } type;
+
+        struct {
+            Str *name;
+            IrType *type;
+        } konst;
+    };
 };
 
 struct IrVariantDef {
@@ -226,8 +359,14 @@ struct IrAdtDef {
     struct IrGenericDefs *generics;
     struct IrVariantDefs *variants;
     DeclId did;
-    paw_Bool is_inline : 1;
     paw_Bool is_struct : 1;
+    paw_Bool is_pub : 1;
+};
+
+struct IrAssocItem {
+    Str const *name;
+    DeclId did;
+    DeclId parent;
     paw_Bool is_pub : 1;
 };
 
@@ -235,6 +374,7 @@ struct IrTraitDef {
     Str *name;
     struct IrGenericDefs *generics;
     struct IrTypeList *methods;
+    struct IrAssocItems *items;
     DeclId did;
     paw_Bool is_pub : 1;
 };
@@ -244,33 +384,46 @@ struct IrImpl {
     IrType *type;
     struct IrGenericDefs *generics;
     struct IrTypeList *methods;
+    struct IrAssocItems *items;
     DeclId did;
 };
 
-struct IrGenericDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, Str *name, struct IrTraitList *bounds);
+struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str *name, struct IrTraitList *bounds);
+struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str *name);
 struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str *name, paw_Bool is_pub);
 struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str *name, struct IrFieldDefs *fields);
 struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub);
-struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline);
-struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrTypeList *methods, paw_Bool is_pub);
-struct IrImpl *pawIr_new_impl(struct Compiler *C, DeclId did, IrType *type, IrTrait *trait, struct IrGenericDefs *generics, struct IrTypeList *methods);
+struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct);
+struct IrAssocItem *pawIr_new_assoc_item(struct Compiler *C, DeclId did, Str const *name, DeclId parent, paw_Bool is_pub);
+struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrTypeList *methods, struct IrAssocItems *items, paw_Bool is_pub);
+struct IrImpl *pawIr_new_impl(struct Compiler *C, DeclId did, IrType *type, IrTrait *trait, struct IrGenericDefs *generics, struct IrTypeList *methods, struct IrAssocItems *items);
+
+struct IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did);
+struct IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did);
 
 
 #define IR_KINDOF(node) ((node)->hdr.kind)
 #define IR_CAST_TYPE(p) CAST(IrType *, p)
 #define IR_TYPE_DID(type) (IrIsAdt(type) ? IrGetAdt(type)->did : \
         IrIsSignature(type) ? IrGetSignature(type)->did : \
+        IrIsProjection(type) ? IrGetProjection(type)->assoc : \
         IrGetGeneric(type)->did)
-#define IR_TYPE_SUBTYPES(type) (IrIsAdt(type) ? IrGetAdt(type)->types : IrIsSignature(type) ? IrGetSignature(type)->types : NULL)
-#define IR_TYPE_SUBTYPES_(type) (IrIsAdt(type) ? IrGetAdt(type)->types : IrIsSignature(type) ? IrGetSignature(type)->types : NULL)
+#define IR_TYPE_IS_POLYMORPHIC(Type_) ((IrIsAdt(Type_) || IrIsSignature(Type_)) \
+        && IR_GENERIC_ARGS(Type_)->count > 0)
+#define IR_FIRST_GENERIC_ARG(Type_) IrGenericArgs_first(IR_GENERIC_ARGS(Type_))
+#define IR_GENERIC_ARGS(Type_) (IrIsAdt(Type_) ? IrGetAdt(Type_)->args : \
+        IrIsSignature(Type_) ? IrGetSignature(Type_)->args : NULL)
 #define IR_IS_FUNC_TYPE(p) (IrIsFnPtr(p) || IrIsSignature(p))
 #define IR_FPTR(p) CHECK_EXP(IR_IS_FUNC_TYPE(p), &(p)->FnPtr_)
 
 DEFINE_LIST(struct Compiler, IrTypeList, IrType *)
 DEFINE_LIST(struct Compiler, IrTraitList, IrTrait *)
+DEFINE_LIST(struct Compiler, IrGenericArgs, IrGenericArg)
 DEFINE_LIST(struct Compiler, IrDefs, DeclId)
+DEFINE_LIST(struct Compiler, IrAssocItems, struct IrAssocItem *)
 DEFINE_LIST(struct Compiler, IrVariantDefs, struct IrVariantDef *)
 DEFINE_LIST(struct Compiler, IrGenericDefs, struct IrGenericDef *)
+DEFINE_LIST(struct Compiler, IrConstraints, struct IrConstraint)
 DEFINE_LIST(struct Compiler, IrFieldDefs, struct IrFieldDef *)
 DEFINE_LIST(struct Compiler, IrParams, struct IrParam)
 
@@ -283,23 +436,34 @@ EXTERN_C struct IrGenericDef *pawIr_get_generic_def(struct Compiler *C, DeclId d
 EXTERN_C struct IrTraitDef *pawIr_get_trait_def(struct Compiler *C, DeclId did);
 EXTERN_C struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did);
 EXTERN_C struct IrFnDef *pawIr_get_fn_def(struct Compiler *C, DeclId did);
+EXTERN_C struct IrAssocItem *pawIr_get_assoc_item(struct Compiler *C, DeclId did);
 EXTERN_C struct IrImpl *pawIr_get_impl_def(struct Compiler *C, DeclId did);
 EXTERN_C IrType *pawIr_get_def_type(struct Compiler *C, DeclId did);
+EXTERN_C IrGenericArg pawIr_get_def_arg(struct Compiler *C, DeclId did);
 EXTERN_C IrTrait *pawIr_get_trait(struct Compiler *C, DeclId did);
+EXTERN_C IrGenericArg *pawIr_get_generic_arg(struct Compiler *C, DeclId did);
 
 EXTERN_C enum IrDefKind pawIr_get_kind(struct Compiler *C, DeclId did);
 EXTERN_C IrType *pawIr_get_context(struct Compiler *C, IrType *fn);
-IrTrait *pawIr_get_trait_context(struct Compiler *C, IrType *fn);
-IrTypeList *pawIr_get_generic_types(struct Compiler *C, DeclId did);
-IrTraitList *pawIr_get_trait_bounds(struct Compiler *C, DeclId did);
+EXTERN_C IrTrait *pawIr_get_trait_context(struct Compiler *C, IrType *fn);
+EXTERN_C IrGenericArgs *pawIr_get_generic_args(struct Compiler *C, DeclId did);
+EXTERN_C IrConstraints *pawIr_get_constraints(struct Compiler *C, DeclId did);
+EXTERN_C IrTraitList *pawIr_get_trait_bounds(struct Compiler *C, DeclId did);
+EXTERN_C paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type);
 
-void pawIr_set_generic_types(struct Compiler *C, DeclId did, IrTypeList *types);
+EXTERN_C paw_Bool pawIr_needs_drop(struct Compiler *C, IrType *type);
+EXTERN_C IrType *pawIr_get_custom_drop_type(struct Compiler *C, IrType *type);
+EXTERN_C IrType *pawIr_materialize_drop_type(struct Compiler *C, IrType *type);
+EXTERN_C IrType *pawIr_get_drop_type(struct Compiler *C, IrType *type);
+
+
+void pawIr_set_generic_args(struct Compiler *C, DeclId did, IrGenericArgs *args);
 void pawIr_set_trait_bounds(struct Compiler *C, DeclId did, IrTraitList *traits);
 
-EXTERN_C IrType *pawIr_materialize_fn(struct Compiler *C, DeclId did, IrTypeList *type_args);
-#define IR_SIGNATURE_FN(C_, Type_) pawIr_materialize_fn(C_, IR_TYPE_DID(Type_), IR_TYPE_SUBTYPES(Type_))
+EXTERN_C IrType *pawIr_materialize_fn(struct Compiler *C, DeclId did, IrGenericArgs *type_args);
+#define IR_SIGNATURE_FN(C_, Type_) pawIr_materialize_fn(C_, IR_TYPE_DID(Type_), IR_GENERIC_ARGS(Type_))
 #define IR_GET_FN(C_, Type_) (IrIsFnPtr(Type_) ? (Type_) : \
-        pawIr_materialize_fn(C_, IR_TYPE_DID(Type_), IR_TYPE_SUBTYPES(Type_)))
+        pawIr_materialize_fn(C_, IR_TYPE_DID(Type_), IR_GENERIC_ARGS(Type_)))
 
 EXTERN_C paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t);
 EXTERN_C paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b);
@@ -311,13 +475,67 @@ EXTERN_C paw_Bool pawIr_trait_equals(struct Compiler *C, IrTrait *a, IrTrait *b)
 #define IR_TRAIT_HASH(Ctx_, Trait_) pawIr_trait_hash((Ctx_)->C, Trait_)
 #define IR_TRAIT_EQUALS(Ctx_, A_, B_) pawIr_trait_equals((Ctx_)->C, A_, B_)
 
+EXTERN_C paw_Uint pawIr_const_hash(struct Compiler *C, IrConst *k);
+EXTERN_C paw_Bool pawIr_const_equals(struct Compiler *C, IrConst *a, IrConst *b);
+#define IR_CONST_HASH(Ctx_, Const_) pawIr_const_hash((Ctx_)->C, Const_)
+#define IR_CONST_EQUALS(Ctx_, A_, B_) pawIr_const_equals((Ctx_)->C, A_, B_)
 
-DEFINE_MAP(struct Compiler, IrGenericTypes, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrTypeList *)
+EXTERN_C paw_Uint pawIr_arg_hash(struct Compiler *C, IrGenericArg g);
+EXTERN_C paw_Bool pawIr_arg_equals(struct Compiler *C, IrGenericArg a, IrGenericArg b);
+#define IR_ARG_HASH(Ctx_, Arg_) pawIr_trait_hash((Ctx_)->C, Arg_)
+#define IR_ARG_EQUALS(Ctx_, A_, B_) pawIr_trait_equals((Ctx_)->C, A_, B_)
+
+
+struct IrType2 {
+    IrType *first;
+    IrType *second;
+};
+
+EXTERN_C paw_Uint pawIr_type2_hash(struct Compiler *C, struct IrType2 t);
+EXTERN_C paw_Bool pawIr_type2_equals(struct Compiler *C, struct IrType2 a, struct IrType2 b);
+#define IR_TYPE2_HASH(Ctx_, Type_) pawIr_type2_hash((Ctx_)->C, Type_)
+#define IR_TYPE2_EQUALS(Ctx_, A_, B_) pawIr_type2_equals((Ctx_)->C, A_, B_)
+
+int pawIr_unify(struct Compiler *C, IrGenericArg a, IrGenericArg b);
+IrGenericArg pawIr_normalize(struct Compiler *C, IrGenericArg g);
+IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g);
+
+struct IrPendingConstant {
+    IrConst *konst;
+    void *payload;
+};
+
+DEFINE_MAP(struct Compiler, IrConstraintsMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrConstraints *)
+DEFINE_MAP(struct Compiler, IrGenericTypes, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrGenericArgs *)
+DEFINE_MAP(struct Compiler, IrAssocItemMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAssocItem *)
+DEFINE_MAP(struct Compiler, IrDeclArgs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrGenericArg)
 DEFINE_MAP(struct Compiler, IrTraitBounds, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrTraitList *)
 DEFINE_MAP(struct Compiler, IrDefKinds, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, enum IrDefKind)
+DEFINE_MAP(struct Compiler, IrType2Map, pawP_alloc, pawIr_type2_hash, pawIr_type2_equals, struct IrType2, void *)
+DEFINE_MAP(struct Compiler, IrPendingConstants, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrPendingConstant)
+DEFINE_MAP_ITERATOR(IrPendingConstants, DeclId, struct IrPendingConstant)
 
 DEFINE_MAP(struct Compiler, TypeCollection, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *)
 DEFINE_MAP_ITERATOR(TypeCollection, IrType *, void *)
+DEFINE_LIST(struct Compiler, IrType2List, struct IrType2)
+
+struct IrConstObligation {
+    IrConst *lhs;
+    IrConst *rhs;
+};
+
+DEFINE_LIST(struct Compiler, IrConstObligations, struct IrConstObligation)
+
+void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs);
+int pawIr_solve_const_obligations(struct Compiler *C);
+
+paw_Bool pawIr_type_contains_inference_var(struct Compiler *C, IrType *type);
+paw_Bool pawIr_trait_contains_inference_var(struct Compiler *C, IrTrait *trait);
+
+
+EXTERN_C paw_Bool pawIr_is_unsized_type(struct Compiler *C, IrType *type);
+EXTERN_C IrType *pawIr_remove_indirection(struct Compiler *C, IrType *type);
+EXTERN_C IrTypeList *pawIr_autoptr_chain(struct Compiler *C, IrType *type);
 
 
 static IrType *ir_fn_result(struct Compiler *C, IrType *type)
@@ -330,90 +548,40 @@ static IrTypeList *ir_fn_params(struct Compiler *C, IrType *type)
     return IrGetFnPtr(IR_GET_FN(C, type))->params;
 }
 
-static IrTypeList *ir_signature_types_(IrType *type)
+static IrGenericArgs *ir_signature_args(IrType *type)
 {
-    return IrGetSignature(type)->types;
+    return IrGetSignature(type)->args;
 }
 
-static IrTypeList *ir_adt_types(IrType *type)
+static IrGenericArgs *ir_adt_args(IrType *type)
 {
-    return IrGetAdt(type)->types;
+    return IrGetAdt(type)->args;
 }
 
-static IrType *ir_adt_subtype(IrType *adt, int index)
+static IrGenericArg ir_adt_arg(IrType *adt, int index)
 {
-    return IrTypeList_get(IrGetAdt(adt)->types, index);
+    return IrGenericArgs_get(IrGetAdt(adt)->args, index);
 }
 
-static IrType *ir_list_elem(IrType *type)
+static IrType *ir_deref(IrType *type)
 {
-    return IrTypeList_get(IrGetAdt(type)->types, 0);
+    return IrGetPtr(type)->pointee;
 }
 
-static IrType *ir_map_key(IrType *type)
+static IrType *ir_auto_deref(IrType *type)
 {
-    return IrTypeList_get(IrGetAdt(type)->types, 0);
+    return IrIsPtr(type) ? ir_deref(type) : type;
 }
 
-static IrType *ir_map_value(IrType *type)
-{
-    return IrTypeList_get(IrGetAdt(type)->types, 1);
-}
-
-static paw_Bool ir_is_boxed(struct Compiler *C, IrType *type)
-{
-    if (!IrIsAdt(type)) return PAW_FALSE;
-    struct IrAdtDef *def = pawIr_get_adt_def(C, IR_TYPE_DID(type));
-    return !def->is_inline;
-}
-
-static inline IrType *ir_auto_deref(IrType *type)
-{
-    if (IrIsPtr(type))
-        type = IrGetPtr(type)->pointee;
-    // only 1 level of indirection allowed
-    paw_assert(!IrIsPtr(type));
-    return type;
-}
-
-static inline IrType *ir_remove_indirection(IrType *type)
-{
-    while (IrIsPtr(type))
-        type = IrGetPtr(type)->pointee;
-    return type;
-}
-
-static inline paw_Bool ir_is_reference_type(struct Compiler *C, IrType *type)
-{
-    enum BuiltinKind const kind = pawP_type2code(C, type);
-    switch (kind) {
-        case BUILTIN_UNIT:
-        case BUILTIN_BOOL:
-        case BUILTIN_CHAR:
-        case BUILTIN_INT:
-        case BUILTIN_FLOAT:
-            return PAW_FALSE;
-        case BUILTIN_STR:
-        case BUILTIN_LIST:
-        case BUILTIN_MAP:
-            return PAW_TRUE;
-        default:
-            break;
-    }
-    if (IrIsAdt(type)) {
-        struct IrAdtDef const *def = pawIr_get_adt_def(C, IR_TYPE_DID(type));
-        return !def->is_inline;
-    }
-    return PAW_FALSE;
-}
-
-static inline paw_Bool ir_is_value_type(struct Compiler *C, IrType *type)
-{
-    return !IrIsPtr(type) && !ir_is_reference_type(C, type);
-}
 
 EXTERN_C char const *pawIr_print_type(struct Compiler *C, IrType *type);
 EXTERN_C char const *pawIr_print_trait(struct Compiler *C, IrTrait *trait);
+EXTERN_C char const *pawIr_print_impl_trait_obligation(struct Compiler *C, IrType *type, IrTrait *trait);
+
+// TODO: use these and get rid of the old ones
+EXTERN_C Str const *pawIr_print_type_v2(struct Compiler *C, IrType *type);
+EXTERN_C Str const *pawIr_print_trait_v2(struct Compiler *C, IrTrait *trait);
+EXTERN_C Str const *pawIr_print_impl_trait_obligation_v2(struct Compiler *C, IrType *type, IrTrait *trait);
 
 DEFINE_LIST(struct Compiler, TraitOwnerList, struct IrTypeList *)
 DEFINE_MAP(struct Compiler, TraitOwners, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, TraitOwnerList *)

@@ -32,7 +32,7 @@ struct OrState {
 };
 
 struct BoundName {
-    struct SourceLoc loc;
+    struct SourceSpan span;
     NodeId id;
     int count;
 };
@@ -122,7 +122,7 @@ static paw_Bool pc_is_valid(struct PathCursor pc)
 static paw_Bool pc_is_last(struct PathCursor pc)
 {
     paw_assert(pc_is_valid(pc));
-    return pc.index + 1 == pc.path.segments->count;
+    return pc.index == pc.path.segments->count - 1;
 }
 
 static void pc_next(struct PathCursor *pc)

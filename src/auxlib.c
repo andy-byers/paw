@@ -9,6 +9,7 @@
 #include "util.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 static void grow_buffer(paw_Env *P, Buffer *buf)
 {
@@ -40,6 +41,12 @@ void pawL_init_buffer(paw_Env *P, Buffer *buf)
 Str *pawL_buffer_finish(paw_Env *P, Buffer *buf)
 {
     return pawP_scan_nstr(P->C, buf->data, buf->size);
+}
+
+void pawL_buffer_discard(paw_Env *P, Buffer *buf)
+{
+    if (L_IS_BOXED(buf))
+        pawP_alloc(P->pool, buf->data, buf->size, 0);
 }
 
 void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n)
@@ -134,11 +141,9 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, char const *fmt, va_list arg)
         ++fmt; // skip '%'
 
         switch (*fmt) {
-            case 's': {
-                char const *s = va_arg(arg, char *);
-                pawL_add_nstring(P, buf, s, strlen(s));
+            case 's':
+                pawL_add_string(P, buf, va_arg(arg, char *));
                 break;
-            }
             case '%':
                 pawL_add_char(P, buf, '%');
                 break;
@@ -151,6 +156,12 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, char const *fmt, va_list arg)
             case 'I':
                 pawL_add_int(P, buf, va_arg(arg, int64_t));
                 break;
+            case 'U': {
+                char temp[64];
+                int const n = snprintf(temp, sizeof(temp), "%" PRIu64, va_arg(arg, uint64_t));
+                pawL_add_nstring(P, buf, temp, CAST_SIZE(n));
+                break;
+            }
             case 'x':
             case 'X':
                 add_hex(P, buf, va_arg(arg, unsigned), *fmt == 'X');
