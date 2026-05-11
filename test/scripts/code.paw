@@ -1153,13 +1153,6 @@ struct S;
 
 impl A for S { type T = S; }
 
-
-#[test]
-pub fn test() {
-
-}
-
-
 // preconditions:
 //     <I as IntoIterator>::Item = *T
 //     I: IntoIterator

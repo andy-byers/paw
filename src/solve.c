@@ -12,7 +12,6 @@
 
 #define TODO ((struct SourceSpan){0})
 
-#define PAW_SOLVER_DEBUG
 #if defined(PAW_SOLVER_DEBUG)
 # define LOGLN(Fmt_, ...) fprintf(stderr, "(paw_solver) "Fmt_ "\n", __VA_ARGS__)
 #else
@@ -278,27 +277,6 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrIm
     return matches;
 }
 
-static paw_Bool trait_equals(IrSolver *S, IrType *x, IrType *y)
-{
-    if (IR_TYPE_DID(x).value != IR_TYPE_DID(y).value)
-        return PAW_FALSE;
-
-    IrGenericArgs *x_subtypes = IR_GENERIC_ARGS(x);
-    IrGenericArgs *y_subtypes = IR_GENERIC_ARGS(y);
-    if (x_subtypes != NULL) {
-        paw_assert(y_subtypes != NULL);
-        IrGenericArg const *px;
-        IrGenericArg const *py;
-        K_LIST_ZIP(x_subtypes, px, y_subtypes, py) {
-            if (!pawIr_arg_equals(S->C, *px, *py)) {
-                return PAW_FALSE;
-            }
-        }
-    }
-
-    return PAW_TRUE;
-}
-
 static paw_Bool matches_impl_precondition(IrSolver *S, IrType *type, IrTrait *trait)
 {
     K_LIST_XFOREACH (S->preconditions, struct IrObligation const, p) {
@@ -394,15 +372,7 @@ static int type_implements_trait(IrSolver *S, IrType *self, IrTrait *impl_trait,
         }
     }
 
-    if (candidates->count > 1) {
-        *traits_for_error = IrDefs_new(C);
-        IrDefs_reserve(C, *traits_for_error, candidates->count);
-        K_LIST_XFOREACH (candidates, struct Candidate const, p)
-            IrDefs_push(C, *traits_for_error, p->trait_did);
-        return IMPL_ERROR;
-    }
-
-    if (candidates->count == 0)
+    if (candidates->count != 1)
         return IMPL_NOT_FOUND;
 
     struct Candidate const c = Candidates_first(candidates);

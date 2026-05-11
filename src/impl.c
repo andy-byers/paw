@@ -96,6 +96,15 @@ static void add_context_preconditions(struct Compiler *C, IrSolver *S, IrType *s
     }
 }
 
+static paw_Bool types_are_compatible(struct Compiler *C, IrType *self, IrType *context)
+{
+    return pawU_unify(C->U, self, context) == 0
+        // only exclude an impl block from search if there is a trait obligation that
+        // is known to be unsatisfiable (pending obligations might be solved later,
+        // once more types have been inferred)
+        && pawIr_solver_solve(C->S).status == IR_SOLVER_OK;
+}
+
 static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrImpl const *impl)
 {
     // save the current position in the unification table
@@ -120,10 +129,11 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrIm
 
 struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str *name)
 {
-#define ADD_APPLICABLE_METHODS(Methods_) do { \
+#define ADD_APPLICABLE_METHODS(ImplDid_) do { \
             struct Candidate c_; \
-            if (find_method_in_list(C, Methods_, name, &c_)) { \
-                c_.impl = impl; \
+            struct IrImpl const *impl_def = pawIr_get_impl_def(C, ImplDid_); \
+            if (find_method_in_list(C, impl_def->methods, name, &c_)) { \
+                c_.impl = impl_def; \
                 Candidates_push(C, candidates, c_); \
             } \
         } while (0)
@@ -151,22 +161,25 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str *na
 
         // search inherent implementations
         K_LIST_XFOREACH (C->impls.inherent, DeclId const, p) {
-            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            if (impl_is_compatible(C, self, impl))
-                ADD_APPLICABLE_METHODS(impl->methods);
+            struct QueryState const q = start_query(C);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            if (types_are_compatible(C, self, inst.type))
+                ADD_APPLICABLE_METHODS(*p);
+            finish_query(C, q);
         }
 
         // search trait implementations
         K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
-            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            if (impl_is_compatible(C, self, impl))
-                ADD_APPLICABLE_METHODS(impl->methods);
+            struct QueryState const q = start_query(C);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            if (types_are_compatible(C, self, inst.type))
+                ADD_APPLICABLE_METHODS(*p);
+            finish_query(C, q);
         }
 
         // search blanket implementations
         K_LIST_XFOREACH (C->impls.blanket, DeclId const, p) {
-            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            ADD_APPLICABLE_METHODS(impl->methods);
+            ADD_APPLICABLE_METHODS(*p);
         }
     }
 
@@ -250,26 +263,25 @@ struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, I
 
         // search trait implementations
         K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
-            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            if (impl_is_compatible(C, self, impl)) {
-                struct QueryState const q = start_query(C);
-                struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, impl->did);
-                if (traits_are_compatible(C, q.S, trait, inst.trait))
-                    ADD_APPLICABLE_METHODS(impl->methods);
-                finish_query(C, q);
+            struct QueryState const q = start_query(C);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            if (types_are_compatible(C, self, inst.type)
+                    && traits_are_compatible(C, q.S, trait, inst.trait)) {
+                struct IrImpl const *def = pawIr_get_impl_def(C, *p);
+                ADD_APPLICABLE_METHODS(def->methods);
             }
+            finish_query(C, q);
         }
 
         // search blanket implementations
         K_LIST_XFOREACH (C->impls.blanket, DeclId const, p) {
-            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            if (impl->trait != NULL) {
-                struct QueryState const q = start_query(C);
-                struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, impl->did);
-                if (traits_are_compatible(C, q.S, trait, inst.trait))
-                    ADD_APPLICABLE_METHODS(impl->methods);
-                finish_query(C, q);
+            struct QueryState const q = start_query(C);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            if (inst.trait != NULL && traits_are_compatible(C, q.S, trait, inst.trait)) {
+                struct IrImpl const *def = pawIr_get_impl_def(C, *p);
+                ADD_APPLICABLE_METHODS(def->methods);
             }
+            finish_query(C, q);
         }
     }
 
@@ -392,21 +404,29 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
     struct IrImpl const *target_impl;
     Candidates *candidates = Candidates_new(C);
     {
-        struct IrProjection const *P = IrGetProjection(projection);
+        IrType *type = IrGetProjection(projection)->type;
+        IrTrait *trait = IrGetProjection(projection)->trait;
 
         // search trait implementations
         K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
+            struct QueryState const q = start_query(C);
             struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            if (P_ID_EQUALS(C, impl->trait->did, P->trait->did)
-                    && impl_is_compatible(C, P->type, impl))
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            if (traits_are_compatible(C, C->S, trait, inst.trait)
+                    && types_are_compatible(C, type, inst.type))
                 ADD_APPLICABLE_TYPES(impl, impl->items);
+            finish_query(C, q);
         }
 
         // search blanket implementations
         K_LIST_XFOREACH (C->impls.blanket, DeclId const, p) {
+            struct QueryState const q = start_query(C);
             struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            if (impl->trait != NULL && P_ID_EQUALS(C, impl->trait->did, P->trait->did))
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            if (impl->trait != NULL
+                    && traits_are_compatible(C, C->S, trait, inst.trait))
                 ADD_APPLICABLE_TYPES(impl, impl->items);
+            finish_query(C, q);
         }
     }
 

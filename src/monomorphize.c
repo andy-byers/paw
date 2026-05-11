@@ -389,6 +389,13 @@ static IrType *instantiate_method(struct Compiler *C, IrType *method, IrType *se
     return pawIr_fold_type(&F, method);
 }
 
+static IrType *get_assoc_fn(struct MonoCollector *M, IrType *self, IrTrait *trait, Str *name)
+{
+    if (trait == NULL)
+        return pawP_find_method(M->C, self, name)->inst;
+    return pawP_find_trait_method(M->C, self, trait, name)->inst;
+}
+
 static IrType *copy_type(struct MonoCollector *M, IrType *type)
 {
     type = finalize_type(M, type);
@@ -398,17 +405,12 @@ static IrType *copy_type(struct MonoCollector *M, IrType *type)
         if (trait != NULL)
             trait = finalize_trait(M, trait);
         if (self != NULL) {
-            // fold "Self" type and look up concrete method
             struct IrFnDef *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
-            IrTypeList *chain = pawIr_autoptr_chain(M->C, self);
-            K_LIST_XFOREACH (chain, IrType *const, p) {
-                struct Instantiation const *method = pawP_find_method(M->C, *p, def->name);
-                if (method != NULL) {
-                    pawU_unify_unchecked(M->C->U, method->inst, type);
-                    return pawU_normalize_projections(M->C->U, method->inst);
-                }
+            IrType *method = get_assoc_fn(M, self, trait, def->name);
+            if (method != NULL) {
+                pawU_unify_unchecked(M->C->U, method, type);
+                return pawU_normalize_projections(M->C->U, method);
             }
-            PAW_UNREACHABLE();
         }
     }
     return type;
