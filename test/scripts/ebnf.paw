@@ -10,6 +10,8 @@
 //
 
 use io;
+use hashmap::HashMap;
+use list::List;
 use str_builder;
 
 const CHUNK_SIZE: int = 1 << 12;
@@ -430,11 +432,11 @@ impl ParseErrorKind {
 }
 
 struct Grammer {
-    pub productions: [Production],
+    pub productions: List<Production>,
 }
 
 impl Grammer {
-    pub fn new(productions: [Production]) -> Self {
+    pub fn new(productions: List<Production>) -> Self {
         Self{productions}
     }
 
@@ -459,7 +461,7 @@ impl Production {
 }
 
 inline struct Expression {
-    pub alts: [Alternative],
+    pub alts: List<Alternative>,
 }
 
 impl Expression {
@@ -474,7 +476,7 @@ impl Expression {
 }
 
 inline struct Alternative {
-    pub terms: [Term],
+    pub terms: List<Term>,
 }
 
 impl Alternative {
@@ -520,7 +522,7 @@ impl Parser {
     }
 
     pub fn parse(self, s: Scanner) -> ParseResult<Grammer> {
-        let result = [];
+        let result = List::new();
         while !self.is_finished(s) {
             result.push(self.production(s)?);
         }
@@ -598,8 +600,8 @@ impl Parser {
         Ok(Expression{alts})
     }
 
-    fn alternatives(self, s: Scanner) -> ParseResult<[Alternative]> {
-        let result = [];
+    fn alternatives(self, s: Scanner) -> ParseResult<List<Alternative>> {
+        let result = List::new();
         loop {
             result.push(self.alternative(s)?);
             if self.check(s, TokenKind::Pipe) {
@@ -615,8 +617,8 @@ impl Parser {
         Ok(Alternative{terms})
     }
 
-    fn terms(self, s: Scanner) -> ParseResult<[Term]> {
-        let result = [];
+    fn terms(self, s: Scanner) -> ParseResult<List<Term>> {
+        let result = List::new();
         loop {
             let term = self.term(s)?;
             result.push(term);
@@ -722,8 +724,8 @@ enum Analysis {
 }
 
 fn analyze_definitions(g: Grammer, reserved: [str: ()]) -> Analysis {
-    let idents = [:];
-    let result = [:];
+    let idents = HashMap::new();
+    let result = HashMap::new();
 
     for Production{ident, expr} in g.productions {
         if result.contains(ident) {
@@ -785,7 +787,7 @@ impl App {
 
     pub fn info(self, msg: str) {
         if self.verbosity.should_print_info() {
-            println("\{msg}");
+            io::println(msg);
         }
     }
 
@@ -807,7 +809,7 @@ const TEST_PARSE_ERROR: int = -1;
 const TEST_ANALYSIS_ERROR: int = -2;
 
 fn test_check(source: str) -> int {
-    let builtins = [:];
+    let builtins = HashMap::new();
     let scanner = Scanner::new(source);
     let parser = Parser::new();
     match parser.parse(scanner) {
@@ -870,9 +872,9 @@ const SUCCESS: int = 0;
 const FAILURE: int = 1;
 
 
-pub fn main(args: [str]) -> int {
+pub fn main(args: List<str>) -> int {
     let app = App::new(args.get_or(0, "ebnf"));
-    let builtins: [str: ()] = [:];
+    let builtins = HashMap::new();
 
     let path = if #args < 2 {
         app.error("missing PATH argument");

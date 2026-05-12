@@ -6,7 +6,12 @@ const PADDING_VALUE: int = 0;
 const OFF: int = 0;
 const ON: int = 1;
 
-pub fn eca(num: int, rows: int, cols: int) {
+use io;
+use list::List;
+use string::String;
+use string_builder;
+
+pub fn eca(num: int, rows: int, cols: int) -> mem::Result<String> {
     //
     //  4 | 8
     // ---+---
@@ -19,22 +24,20 @@ pub fn eca(num: int, rows: int, cols: int) {
         "▀", "▛", "▜", "█",
     ];    
 
-    let rule = [];
+    let rule = List::new();
     for i in 0..8 {
         rule.push((num >> i) & 1);
     }
 
-    let grid = [];
-    while #grid < cols {
-        grid.push(OFF);
+    let grid = List::new();
+    while grid.len() < cols {
+        grid.push(OFF)?;
     }
     grid[cols / 2] = ON;
 
-    let coord = |r, c| r*cols + c;
-
     for r in 0..rows-1 {
         for c in 0..cols {
-            let i = coord(r, c);
+            let i = r * cols + c;
 
             let middle = grid[i];
             let high = if c > 0 { grid[i - 1] } else { PADDING_VALUE };
@@ -44,11 +47,12 @@ pub fn eca(num: int, rows: int, cols: int) {
         }
     }
 
+    let b = string_builder::Builder::new();
     for i in 0..rows/2 {
         for j in 0..cols/2 {
             let (r, c) = (i * 2, j * 2);
-            let upper = coord(r, c);
-            let lower = coord(r + 1, c);
+            let upper = r * cols + c;
+            let lower = (r + 1) * cols + c;
 
             let LL = grid[lower];
             let Lr = grid[lower + 1] << 1;
@@ -57,38 +61,45 @@ pub fn eca(num: int, rows: int, cols: int) {
 
             let index = LL + Lr + uL + ur;
             if INVERT_COLORS { index = -index - 1; }
-            print(charset[index]);
+            b.append(charset[index])?;
         }
-        print("\n");
+        b.append_char('\n')?;
     }
+    Ok(b.string())
 }
 
 
 #[test]
 pub fn test() {
-    eca(110, 96, 160);
+    let result = eca(110, 96, 160).unwrap();
 }
 
 
-pub fn main(args: [str]) {
-    let num = if #args >= 2 {
-        args[1].parse_int().unwrap()
-    } else {
-        110
-    };
+pub fn main() {
+//    let num = if #args >= 2 {
+//        args[1].parse_int().unwrap()
+//    } else {
+//        110
+//    };
+//
+//    let (rows, cols) = if #args >= 3 {
+//        let parts = args[2].split(",");
+//        let m = parts[0].parse_int().unwrap();
+//        let n = if #parts == 2 { 
+//            parts[1].parse_int().unwrap() 
+//        } else { 
+//            m 
+//        };
+//        (m * 2, n * 2)
+//    } else {
+//        (96, 160)
+//    };
+    let num = 110;
+    let rows = 96;
+    let cols = 160; 
 
-    let (rows, cols) = if #args >= 3 {
-        let parts = args[2].split(",");
-        let m = parts[0].parse_int().unwrap();
-        let n = if #parts == 2 { 
-            parts[1].parse_int().unwrap() 
-        } else { 
-            m 
-        };
-        (m * 2, n * 2)
-    } else {
-        (96, 160)
-    };
-
-    eca(num, rows, cols);
+    match eca(num, rows, cols) {
+        Ok(result) => io::print(result),
+        Err(error) => io::println("not enough memory"),
+    }
 }

@@ -159,7 +159,7 @@ static void solve_all_obligations(struct ItemCollector *X)
         case IR_SOLVER_MULTIPLE_APPLICABLE_TRAITS: {
             struct IrTraitDef const *first = pawIr_get_trait_def(X->C, IrDefs_get(result.mat.traits, 0));
             struct IrTraitDef const *second = pawIr_get_trait_def(X->C, IrDefs_get(result.mat.traits, 1));
-            COLLECTOR_ERROR(X, MultipleAppllicableTraits);
+            COLLECTOR_ERROR(X, MultipleApplicableTraits, .span = {0});
         }
     }
 }

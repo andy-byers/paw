@@ -602,9 +602,24 @@
         Str const *modname; \
         struct SourceSpan span; \
     ) \
-    X(MultipleAppllicableTraits, ERR_CATEGORY_TYPE, \
+    X(MultipleApplicableTraits, ERR_CATEGORY_TYPE, \
         Str const *modname; \
         struct SourceSpan span; \
+    ) \
+    X(MoveOutOfPointer, ERR_CATEGORY_TYPE, \
+        Str const *modname; \
+        struct SourceSpan span; \
+        Str const *type; \
+    ) \
+    X(MoveOutOfElement, ERR_CATEGORY_TYPE, \
+        Str const *modname; \
+        struct SourceSpan span; \
+        Str const *type; \
+    ) \
+    X(MoveOutOfField, ERR_CATEGORY_TYPE, \
+        Str const *modname; \
+        struct SourceSpan span; \
+        Str const *type; \
     ) \
     X(MissingBindingInAlternative, ERR_CATEGORY_PATTERN, \
         Str const *modname; \

@@ -336,14 +336,17 @@ static void ensure_valid_rvalue(struct TypeChecker *T, struct HirExpr *expr)
     IrType *type = GET_TYPE(T, expr->hdr.id);
     if (!pawIr_is_copyable(T->C, type)) {
         if (HirIsIndex(expr)) {
-            pawErr_generic_error(ENV(T), T->pm->name, NODE_SPAN(expr),
-                    "cannot move out of sequence element");
+            TYPECK_ERROR(T, MoveOutOfElement,
+                    .type = pawIr_print_type_v2(T->C, type),
+                    .span = NODE_SPAN(expr));
         } else if (HirIsSelector(expr)) {
-            pawErr_generic_error(ENV(T), T->pm->name, NODE_SPAN(expr),
-                    "cannot move out of object field");
+            TYPECK_ERROR(T, MoveOutOfField,
+                    .type = pawIr_print_type_v2(T->C, type),
+                    .span = NODE_SPAN(expr));
         } else if (HIR_IS_UNOP(expr, UNARY_DEREF)) {
-            pawErr_generic_error(ENV(T), T->pm->name, NODE_SPAN(expr),
-                    "cannot move out of pointed-to object");
+            TYPECK_ERROR(T, MoveOutOfPointer,
+                    .type = pawIr_print_type_v2(T->C, type),
+                    .span = NODE_SPAN(expr));
         }
     }
 }
@@ -714,16 +717,20 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                     // path refers to a type constructor
                     assoc = pawP_instantiate_assoc(T->C, base, assoc).inst;
                     if (last.args != NULL)
-                        pawErr_generic_error(ENV(T), T->pm->name, last.span,
-                                "unexpected type arguments on type constructor \"%s\"", last.ident.name->text);
+                        TYPECK_ERROR(T, UnexpectedTypeArguments,
+                                .what = SCAN_STR(T->C, "type constructor"),
+                                .name = last.ident.name,
+                                .span = last.span);
                 }
             } else {
                 // The value must be an associated function called on an ADT. Such values
                 // cannot be found during name resolution (type information is required).
                 assoc = lookup_method(T->C, base, last.ident.name);
                 if (assoc == NULL)
-                    pawErr_generic_error(ENV(T), T->pm->name, last.span,
-                            "unknown associated function \"%s\"", last.ident.name->text);
+                    TYPECK_ERROR(T, UnknownAssociatedItem,
+                            .type = pawIr_print_type_v2(T->C, base),
+                            .item = last.ident.name,
+                            .span = last.span);
                 IrType *context = pawIr_get_context(T->C, assoc);
                 unify_types(T, last.span, context, base);
             }
@@ -943,11 +950,6 @@ static IrType *check_binop_expr(struct TypeChecker *T, struct HirBinOpExpr *e)
 
 static IrType *check_assign_expr(struct TypeChecker *T, struct HirAssignExpr *e)
 {
-    // analogous case for operator assignment prevented by "check_binary_op" (only
-    // operation allowed on a pointer is UNARY_DEREF)
-    if (HIR_IS_UNOP(e->lhs, UNARY_ADDROF))
-        pawErr_generic_error(ENV(T), T->pm->name, NODE_SPAN(e->lhs),
-                "cannot assign to address of object");
     IrType *lhs = check_lvalue(T, e->lhs);
     IrType *rhs = check_operand(T, e->rhs);
     unify_types(T, e->span, lhs, rhs);
@@ -1074,6 +1076,7 @@ static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name)
     return method->inst;
 }
 
+// TODO: what about arrays???
 // Make sure that the target type of the given implementation of the Copy trait
 // contains only copyable fields
 static void check_copy_trait_impl(struct TypeChecker *T, struct SourceSpan span, struct IrImpl const *def)

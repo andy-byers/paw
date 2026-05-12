@@ -1883,10 +1883,37 @@ static void FormatTypeContainsSelfError(paw_Env *P, struct TypeContainsSelfError
     pawL_add_fstring(P, buffer, "recursive type requires indirection");
 }
 
-static void FormatMultipleAppllicableTraitsError(paw_Env *P, struct MultipleAppllicableTraitsError const *error, Buffer *buffer)
+static void FormatMultipleApplicableTraitsError(paw_Env *P, struct MultipleApplicableTraitsError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
     pawL_add_fstring(P, buffer, "multiple applicable traits");
+}
+
+static void FormatMoveOutOfFieldError(paw_Env *P, struct MoveOutOfFieldError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer,
+            "field of type `%s` cannot be moved out of its containing "
+            "object (implement `Copy` for `%s` to copy the field)",
+            error->type->text, error->type->text);
+}
+
+static void FormatMoveOutOfElementError(paw_Env *P, struct MoveOutOfElementError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer,
+            "element of type `%s` cannot be moved out of its containing "
+            "sequence (implement `Copy` for `%s` to copy the element)",
+            error->type->text, error->type->text);
+}
+
+static void FormatMoveOutOfPointerError(paw_Env *P, struct MoveOutOfPointerError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer,
+            "value of type `%s` cannot be moved out from behind a "
+            "pointer (implement `Copy` for `%s` to copy the value)",
+            error->type->text, error->type->text);
 }
 
 static void FormatInvalidInclusiveRangeError(paw_Env *P, struct InvalidInclusiveRangeError const *error, Buffer *buffer)

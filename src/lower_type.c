@@ -11,6 +11,9 @@
 #include "solve.h"
 #include "unify.h"
 
+#define LOWERING_ERROR(X_, Kind_, ...) THROW_ERROR((X_)->C, \
+        Kind_, .modname = (X_)->m.name, __VA_ARGS__)
+
 struct LowerType {
     struct HirModule m;
     struct Compiler *C;
@@ -97,13 +100,12 @@ static IrGenericArgs *new_unknowns(struct Compiler *C, struct HirDeclList *param
     return unknowns;
 }
 
-IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct HirDecl *decl, IrGenericArgs *knowns)
+IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, struct HirDecl *decl, IrGenericArgs *knowns)
 {
+    struct Compiler *C = L->C;
     paw_assert(HirIsTypeDecl(decl));
     IrType *type = GET_NODE_TYPE(C, decl);
     struct HirTypeDecl *d = HirGetTypeDecl(decl);
-
-    // TODO: is this correct? prob. needs to be instantiated, "seg" likely not used later so it seems to work
     pawIr_set_type(C, segment.id, type);
 
     if (d->rhs == NULL) return type;
@@ -112,8 +114,7 @@ IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct H
     IrGenericArgs *types = IR_GENERIC_ARGS(rhs);
     if (IrIsArray(rhs) || IrIsSlice(rhs)) {
         // TODO: make this work. need more general version of IR_GENERIC_ARGS that generates generic args for an array or slice
-        pawErr_generic_error(ENV(C), ModuleInfo_get(C->modinfo, (int)decl->hdr.did.modno).name,
-                decl->hdr.span, "type aliases are not supported on arrays or slices");
+        LOWERING_ERROR(L, Unsupported, decl->hdr.span);
     }
 
     IrGenericArgs *generics = collect_generic_args(C, d->generics);
@@ -149,8 +150,9 @@ static IrType *instantiate_segment(struct LowerType *L, struct HirSegment segmen
         type = pawP_substitute(L->C, type, subst);
     } else if (!pawS_eq(segment.ident.name, SCAN_STR(L->C, "Self"))
             && IR_TYPE_IS_POLYMORPHIC(type)) {
-        pawErr_generic_error(ENV(L->C), L->m.name, segment.span,
-                "expected type arguments on polymorphic type");
+        LOWERING_ERROR(L, ExpectedTypeArguments,
+                .name = segment.ident.name,
+                .span = segment.span);
     }
     pawIr_set_type(L->C, segment.id, type);
     return type;
@@ -163,13 +165,12 @@ static IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
     if (HirIsTypeDecl(base_decl)) {
         IrGenericArgs *args = segment.args != NULL
             ? lower_generic_args(L, segment.args) : NULL;
-        return lower_type_alias(L->C, segment, base_decl, args);
+        return lower_type_alias(L, segment, base_decl, args);
     }
     IrType *type = pawIr_get_type(L->C, segment.target);
     if (type == NULL)
-        pawErr_generic_error(ENV(L->C), L->m.name, segment.span,
-                "trait \"%s\" cannot be used in place of a type",
-                segment.ident.name);
+        LOWERING_ERROR(L, UnexpectedTrait,
+                .span = segment.span);
     type = instantiate_segment(L, segment, type);
     for (int i = 1; i < t->path.segments->count; ++i) {
         struct HirSegment const segment = HirSegments_get(t->path.segments, i);
@@ -180,31 +181,13 @@ static IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
             struct Instantiation *assoc = pawIr_find_assoc_type_generic(L->C,
                     type, segment.ident.name);
             if (assoc == NULL)
-                pawErr_generic_error(ENV(L->C), L->m.name, segment.span,
-                        "associated type \"%s\" does not exist on \"%s\"",
-                        segment.ident.name, pawIr_print_type(L->C, type));
+                LOWERING_ERROR(L, UnknownAssociatedItem,
+                        .item = segment.ident.name,
+                        .span = segment.span);
             type = instantiate_segment(L, segment, assoc->inst);
         }
     }
     return type;
-
-//    struct HirSegment const segment = K_LIST_FIRST(t->path.segments);
-//    struct HirDecl *decl = pawHir_get_node(L->hir, segment.target);
-//    if (HirIsTypeDecl(decl)) {
-//        IrGenericArgs *args = segment.args != NULL ? lower_generic_args(L, segment.args) : NULL;
-//        return lower_type_alias(L->C, segment, decl, args);
-//    }
-//    IrType *type = pawIr_get_type(L->C, segment.target);
-//    if (segment.args != NULL) {
-//        IrGenericArgs *args = lower_generic_args(L, segment.args);
-//        type = pawIr_solver_instantiate_type_with(L->C->S, IR_TYPE_DID(type), args);
-//    } else if (!pawS_eq(segment.ident.name, SCAN_STR(L->C, "Self"))
-//            && IR_TYPE_IS_POLYMORPHIC(type)) {
-//        pawErr_generic_error(ENV(L->C), L->m.name, t->span,
-//                "expected type arguments on polymorphic type");
-//    }
-//    pawIr_set_type(L->C, segment.id, type);
-//    return type;
 }
 
 static IrType *lower_infer_type(struct LowerType *L, struct HirInferType *t)

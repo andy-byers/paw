@@ -1,0 +1,59 @@
+// assoc_type_in_bound.paw
+
+use ops::Add;
+
+struct First {pub value: int}
+struct Second {pub value: int}
+
+impl Add<int> for First {
+    type Output = int;
+    fn add(*self, rhs: *int) -> int {
+        self.value + *rhs
+    }
+}
+
+impl Add<Second> for First {
+    type Output = First;
+    fn add(*self, rhs: *Second) -> First {
+        First{value: self.value + rhs.value}
+    }
+}
+
+pub fn add<X: Add<Y, Output = Z>, Y, Z>(first: X, second: Y) -> Z {
+    first.add(&second)
+}
+
+pub fn add_2<X: Add<int, Output = Z>, Z>(first: X, second: int) -> Z {
+    first.add(&second)
+}
+
+pub trait AsType {
+    type Output;
+    fn as_type(*self) -> Self::Output;
+}
+
+impl AsType for Second {
+    type Output = int;
+    fn as_type(*self) -> Self::Output {
+        self.value
+    }
+}
+
+pub fn add_3<X: Add<Y::Output, Output = Z>, Y: AsType, Z>(first: X, second: Y) -> Z {
+    first.add(&second.as_type())
+}
+
+#[test]
+pub fn test() {
+    let left = First{value: 1};
+    let right = Second{value: 2};
+    add(left, right);
+
+    let left = First{value: 3};
+    let right = 4;
+    add_2(left, right);
+
+    let left = First{value: 5};
+    let right = 6;
+    add_2(left, right);
+}

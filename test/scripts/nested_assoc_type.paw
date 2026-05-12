@@ -1,0 +1,15 @@
+// nested_assoc_type.paw
+
+pub trait A {
+    type TA: B;
+}
+pub trait B {
+    type TB: C;
+}
+pub trait C {
+    type TC;
+}
+
+fn func<Ty: A>(t: Ty) -> Ty::TA::TB::TC {
+    panic("compile only");
+}
