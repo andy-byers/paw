@@ -471,26 +471,22 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     break;
                 }
                 case IR_OBLIGATION_TYPE_EQUALS: {
-                    IrType *lhs = pawU_normalize(S->U, o.eq.lhs);
-                    IrType *rhs = pawU_normalize(S->U, o.eq.rhs);
-                    if (!pawIr_type_contains_inference_var(S->C, lhs)
-                            && !pawIr_type_contains_inference_var(S->C, rhs)) {
-                        lhs = pawU_normalize_projections(S->U, lhs);
-                        rhs = pawU_normalize_projections(S->U, rhs);
-                        if (solve_type_equals_obligation(S, lhs, rhs) == 0) {
-                            LOGLN("SOLVER:%p: proved type equals obligation `%s := %s`",
-                                    (void *)S, pawIr_print_type(S->C, lhs),
-                                    pawIr_print_type(S->C, rhs));
+                    IrType *lhs = pawU_normalize_projections(S->U, o.eq.lhs);
+                    IrType *rhs = pawU_normalize_projections(S->U, o.eq.rhs);
+                    if (solve_type_equals_obligation(S, lhs, rhs) == 0) {
+                        LOGLN("SOLVER:%p: proved type equals obligation `%s := %s`",
+                                (void *)S, pawIr_print_type(S->C, lhs),
+                                pawIr_print_type(S->C, rhs));
 
-                            solved = PAW_TRUE;
-                        } else {
-                            LOGLN("SOLVER:%p: unable to solve type equals obligation `%s := %s`",
-                                    (void *)S, pawIr_print_type(S->C, lhs),
-                                    pawIr_print_type(S->C, rhs));
-                            result.status = IR_SOLVER_CANNOT_PROVE_OBLIGATION;
-                            result.cpo.obligation = o;
-                            return result;
-                        }
+                        solved = PAW_TRUE;
+                    } else if (!pawIr_type_contains_inference_var(S->C, lhs)
+                            && !pawIr_type_contains_inference_var(S->C, rhs)) {
+                        LOGLN("SOLVER:%p: unable to solve type equals obligation `%s := %s`",
+                                (void *)S, pawIr_print_type(S->C, lhs),
+                                pawIr_print_type(S->C, rhs));
+                        result.status = IR_SOLVER_CANNOT_PROVE_OBLIGATION;
+                        result.cpo.obligation = o;
+                        return result;
                     }
                     break;
                 }
@@ -553,7 +549,7 @@ IrType *pawIr_solver_instantiate_type_with(IrSolver *S, DeclId did, IrGenericArg
 {
     IrGenericArgs *params = pawIr_get_generic_args(S->C, did);
     struct Substitution const subst = {params, args};
-    pawIr_solver_add_preconditions_from(S, did, args);
+//    pawIr_solver_add_preconditions_from(S, did, args);
     IrType *base = pawIr_get_def_type(S->C, did);
     return pawP_substitute(S->C, base, subst);
 }
@@ -563,7 +559,7 @@ IrTrait *pawIr_solver_instantiate_trait(IrSolver *S, DeclId did)
     IrTrait *trait = pawIr_get_trait(S->C, did);
     IrGenericArgs *args = pawIr_instantiate_args(S->C, did);
     struct Substitution const subst = {trait->args, args};
-    pawIr_solver_add_preconditions_from(S, did, args);
+//    pawIr_solver_add_preconditions_from(S, did, args);
     return substitute_trait(S->C, trait, subst);
 }
 
@@ -571,7 +567,7 @@ IrTrait *pawIr_solver_instantiate_trait_with(IrSolver *S, DeclId did, IrGenericA
 {
     IrTrait *trait = pawIr_get_trait(S->C, did);
     struct Substitution const subst = {trait->args, args};
-    pawIr_solver_add_preconditions_from(S, did, args);
+//    pawIr_solver_add_preconditions_from(S, did, args);
     return substitute_trait(S->C, trait, subst);
 }
 
@@ -595,7 +591,7 @@ struct IrImplInstance pawIr_solver_instantiate_impl_with(IrSolver *S, DeclId did
     struct IrImpl const *impl = pawIr_get_impl_def(S->C, did);
     IrGenericArgs *params = pawIr_get_generic_args(S->C, did);
     struct Substitution const subst = {params, args};
-    pawIr_solver_add_preconditions_from(S, did, args);
+//    pawIr_solver_add_preconditions_from(S, did, args);
     return (struct IrImplInstance){
         .type = pawP_substitute(S->C, impl->type, subst),
         .trait = impl->trait == NULL ? NULL :

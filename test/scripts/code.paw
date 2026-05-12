@@ -1147,11 +1147,61 @@
 //
 //pub fn function<TFn: Trait<TFn2>, TFn2: A>(t: TFn) {}
 
-pub trait A { type T: A; }
+//pub trait A { type T: A; }
+//
+//struct S;
+//
+//impl A for S { type T = S; }
 
-struct S;
+struct First {pub value: int}
+struct Second {pub value: int}
 
-impl A for S { type T = S; }
+impl Shl<int> for First {
+    type Output = int;
+    fn shl(*self, rhs: *int) -> int {
+        self.value << *rhs
+    }
+}
+
+impl Shl<Second> for First {
+    type Output = First;
+    fn shl(*self, rhs: *Second) -> First {
+        First{value: self.value << rhs.value}
+    }
+}
+
+pub fn shl<X: Shl<Y, Output = Z>, Y, Z>(first: X, second: Y) -> Z {
+    first.shl(&second)
+}
+
+pub fn shl_2<X: Shl<int, Output = Z>, Z>(first: X, second: int) -> Z {
+    first.shl(&second)
+}
+
+#[test]
+pub fn test() {
+    let left = First{value: 1};
+    let right = Second{value: 2};
+    shl(left, right);
+
+    let left = First{value: 1};
+    let right = 3;
+    shl_2(left, right);
+}
+
+#[test]
+pub fn test2() {
+    let left = First{value: 1};
+    let right = Second{value: 2};
+    let x: First = shl(left, right);
+    assert(x.value == 4);
+
+    let left = First{value: 1};
+    let right = 3;
+    let x: int = shl_2(left, right);
+    assert(x == 8);
+}
+
 
 // preconditions:
 //     <I as IntoIterator>::Item = *T
