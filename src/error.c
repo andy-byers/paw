@@ -981,6 +981,8 @@ _Noreturn void pawErr_exceeded_limit(paw_Env *P, Str const *modname, struct Sour
 static char const *ref_kind_name(enum SpanRefKind kind)
 {
     switch (kind) {
+        case SPAN_REF_TRAIT_SELF:
+            return "trait self type";
         case SPAN_REF_FOR_LOOP:
             return "for loop";
         case SPAN_REF_QUESTION_MARK:

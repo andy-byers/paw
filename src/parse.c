@@ -2217,11 +2217,12 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
     struct SourceLoc const start = TOKEN_START(lex->t);
     skip(lex); // "trait" token
     struct AstIdent const ident = parse_ident(lex);
-    struct AstDeclList *generics = type_param(lex);
+    AstDeclList *generics = type_param(lex);
+    AstBoundList *supertraits = parse_generic_bounds(lex);
 
     check_next(lex, '{');
-    struct AstDeclList *types = AstDeclList_new(lex->ast);
-    struct AstDeclList *methods = AstDeclList_new(lex->ast);
+    AstDeclList *types = AstDeclList_new(lex->ast);
+    AstDeclList *methods = AstDeclList_new(lex->ast);
     while (!end_of_block(lex)) {
         if (types->count == INT_MAX
                 || methods->count == INT_MAX)
@@ -2252,7 +2253,7 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
 
     struct SourceLoc const end = delim_next(lex, '}', '{', start);
     return NEW_NODE(lex, trait_decl, RANGE(start, end), next_id(lex),
-            ident, generics, types, methods, is_pub);
+            ident, generics, supertraits, types, methods, is_pub);
 }
 
 static struct AstExpr *expression(struct Lex *lex, unsigned prec)

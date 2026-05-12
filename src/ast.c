@@ -309,6 +309,10 @@ static void AcceptAdtDecl(struct AstVisitor *V, struct AstAdtDecl *d)
 static void AcceptTraitDecl(struct AstVisitor *V, struct AstTraitDecl *d)
 {
     accept_decl_list(V, d->generics);
+    if (d->supertraits != NULL) {
+        K_LIST_XFOREACH (d->supertraits, struct AstGenericBound, p)
+            AcceptPath(V, &p->path);
+    }
     accept_decl_list(V, d->types);
     accept_decl_list(V, d->methods);
 }

@@ -1,0 +1,11 @@
+// supertraits.paw
+
+pub trait A: B + C {}
+pub trait B: C {}
+pub trait C {}
+
+struct S;
+
+impl A for S {}
+impl B for S {}
+impl C for S {}

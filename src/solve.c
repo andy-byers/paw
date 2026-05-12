@@ -120,7 +120,7 @@ IrType *pawIr_solver_get_norm_target(IrSolver *S, IrType *type)
 
 DEFINE_MAP(struct Compiler, PreconditionCache, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, void *)
 
-static void add_precondition(IrSolver*S, IrType *type, IrTrait *trait, struct IrObligationCause cause, PreconditionCache *cache)
+static void add_precondition(IrSolver *S, IrType *type, IrTrait *trait, struct IrObligationCause cause, PreconditionCache *cache)
 {
     if (PreconditionCache_insert(S->C, cache, trait->did, NULL))
         return;
@@ -132,10 +132,19 @@ static void add_precondition(IrSolver*S, IrType *type, IrTrait *trait, struct Ir
                 .impl.trait = trait,
             });
 
-    // If `type: trait` is true, then we also know any facts declared on associated
-    // types in the definition of `trait`.
     IrGenericArgs *params = pawIr_get_generic_args(S->C, trait->did);
     struct Substitution const subst = {params, trait->args};
+    IrType *self = IrGenericArg_get_type(IrGenericArgs_first(params));
+    IrTraitList *supertraits = pawIr_get_trait_bounds(S->C, IR_TYPE_DID(self));
+    if (supertraits != NULL) {
+        K_LIST_XFOREACH (supertraits, IrTrait *const, p) {
+            IrTrait *trait = pawP_substitute_trait(S->C, *p, subst);
+            add_precondition(S, type, trait, cause, cache);
+        }
+    }
+
+    // If `type: trait` is true, then we also know any facts declared on associated
+    // types in the definition of `trait`.
     IrConstraints const *constraints = pawIr_get_constraints(S->C, trait->did);
     K_LIST_XFOREACH (constraints, struct IrConstraint const, p) {
         switch (p->kind) {

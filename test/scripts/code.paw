@@ -652,22 +652,32 @@
 //    assert(t.second() == 123);
 //}
 
-pub trait A {
-    type TA: B;
-}
-pub trait B {
-    type TB: C;
-}
-pub trait C {
-    type TC;
+pub trait A: B + C {fn a(*self) -> int;}
+pub trait B: C {fn b(*self) -> int;}
+pub trait C {fn c(*self) -> int;}
+
+struct S;
+
+impl A for S {fn a(*self) -> int {3}}
+impl B for S {fn b(*self) -> int {2}}
+impl C for S {fn c(*self) -> int {1}}
+
+fn fa<T: A>(t: T) -> int {
+    t.a() + t.b() + t.c()
 }
 
-fn func<Ty: A>(t: Ty) -> Ty::TA::TB::TC {
-    panic("compile only");
+fn fb<T: B>(t: T) -> int {
+    t.b() + t.c()
+}
+
+fn fc<T: C>(t: T) -> int {
+    t.c()
 }
 
 #[test]
 pub fn test() {
-
+    assert(fa(S) == 6);
+    assert(fb(S) == 3);
+    assert(fc(S) == 1);
 }
 

@@ -1,0 +1,20 @@
+// supertrait_assoc_type_bound.paw
+
+pub trait Trait: Supertrait<Type = Self::Type> {
+    type Type;
+}
+
+pub trait Supertrait {
+    type Type;
+}
+
+struct Struct;
+
+impl Trait for Struct {
+    type Type = Self;
+}
+
+impl Supertrait for Struct {
+    type Type = Self;
+}
+

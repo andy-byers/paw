@@ -912,20 +912,28 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
     enter_scope(R, d->id, SCOPE_TRAIT);
     d->did = next_did(R);
 
+    declare_generics(R, d->generics);
+
     // declare type parameter named "Self"
     {
         NodeId const self_id = next_id(R);
         NodeMap_insert(R->C, R->C->self_types, d->id, self_id);
+        struct SourceSpan const span = SourceSpan_from_ref(
+                pawSrc_create_ref(R->C, d->span),
+                SPAN_REF_TRAIT_SELF);
         struct AstIdent const ident = {
             .name = SCAN_STR(R->C, "Self"),
-            .span = d->span,
+            .span = span,
         };
-        struct AstDecl *self = pawAst_new_generic_type_decl(R->ast, (struct SourceSpan){0}, self_id, ident, NULL);
-        add_local(R, enclosing_scope(R), ident, self_id, NAMESPACE_TYPE, SYMBOL_DECL);
+        struct AstDecl *self = pawAst_new_generic_type_decl(
+                R->ast, span, self_id, ident, d->supertraits);
+        add_local(R, enclosing_scope(R), ident, self_id,
+                NAMESPACE_TYPE, SYMBOL_DECL);
         self->hdr.did = next_did(R);
+
+        pawAst_visit_decl(V, self);
     }
 
-    declare_generics(R, d->generics);
     declare_generics(R, d->types);
 
     maybe_store_core_trait(R, R->current->id, d->ident.name, d->did, d->id);

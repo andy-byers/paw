@@ -242,6 +242,7 @@ struct AstTraitDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     struct AstIdent ident;
+    struct AstBoundList *supertraits;
     struct AstDeclList *generics;
     struct AstDeclList *types;
     struct AstDeclList *methods;
@@ -444,7 +445,7 @@ inline static struct AstDecl *pawAst_new_const_decl(struct Ast *ast, struct Sour
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstDeclList *types, struct AstDeclList *methods, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstBoundList *supertraits, struct AstDeclList *types, struct AstDeclList *methods, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->TraitDecl_ = (struct AstTraitDecl){
@@ -454,6 +455,7 @@ inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct Sour
         .kind = kAstTraitDecl,
         .ident = ident,
         .generics = generics,
+        .supertraits = supertraits,
         .types = types,
         .methods = methods,
         .is_pub = is_pub,

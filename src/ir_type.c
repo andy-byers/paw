@@ -623,21 +623,55 @@ IrTrait *pawIr_get_trait(struct Compiler *C, DeclId did)
     return pawIr_new_trait(C, did, pawIr_get_generic_args(C, did));
 }
 
-// TODO: use pawP_find_method instead of calling this function, which doesn't handle "multiple applicable methods"
+DEFINE_MAP(struct Compiler, TraitCache, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, void *)
+
+static IrGenericArgs *replace_self_in_trait_args(struct Compiler *C, IrGenericArgs *args, struct IrGeneric *target)
+{
+    IrGenericArgs *result = IrGenericArgs_new(C);
+    IrGenericArgs_reserve(C, result, args->count);
+    K_LIST_XFOREACH (args, IrGenericArg const, arg)
+        IrGenericArgs_push(C, result, *arg);
+
+    IrGenericArgs_set(result, 0, IrGenericArg_from_type((IrType *)target));
+    return result;
+}
+
+// TODO: handle ambiguous method calls (there are multiple trait bounds on a single generic that declare a method with the same name)
 IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name)
 {
     IrTraitList *bounds = pawIr_get_trait_bounds(C, target->did);
 
     if (bounds != NULL) {
+        IrTraitList *worklist = IrTraitList_new(C);
+        IrTraitList_reserve(C, worklist, bounds->count);
+        TraitCache *cache = TraitCache_new(C);
         K_LIST_XFOREACH (bounds, IrTrait *const, b) {
-            struct IrTraitDef const *bound = pawIr_get_trait_def(C, (*b)->did);
-            K_LIST_XFOREACH (bound->methods, IrType *const, m) {
+            TraitCache_insert_unique(C, cache, (*b)->did, NULL);
+            IrTraitList_push(C, worklist, *b);
+        }
+
+        while (worklist->count > 0) {
+            IrTrait *b = IrTraitList_last(worklist);
+            IrTraitList_pop(worklist);
+            struct IrTraitDef const *def = pawIr_get_trait_def(C, b->did);
+            IrTraitList *supertraits = pawIr_get_trait_bounds(C,
+                    IrGenericDefs_first(def->generics)->did);
+            if (supertraits != NULL) {
+                K_LIST_XFOREACH (supertraits, IrTrait *const, psupertrait) {
+                    IrTrait *supertrait = *psupertrait;
+                    if (!TraitCache_insert(C, cache, supertrait->did, NULL)) {
+                        IrGenericArgs *args = replace_self_in_trait_args(C, supertrait->args, target);
+                        IrTraitList_push(C, worklist, pawIr_new_trait(C, supertrait->did, args));
+                    }
+                }
+            }
+            K_LIST_XFOREACH (def->methods, IrType *const, m) {
                 struct IrFnDef const *fn = pawIr_get_fn_def(C, IR_TYPE_DID(*m));
                 if (pawS_eq(fn->name, name)) {
                     IrType *type = pawIr_solver_instantiate_type(C->S, fn->did);
                     IrType *type_ctx = pawIr_get_context(C, type);
                     IrTrait *trait_ctx = pawIr_get_trait_context(C, type);
-                    pawIr_unify_traits_unchecked(C, trait_ctx, *b);
+                    pawIr_unify_traits_unchecked(C, trait_ctx, b);
                     pawU_unify_unchecked(C->U, type_ctx, (IrType *)target);
                     return type;
                 }

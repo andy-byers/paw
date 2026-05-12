@@ -1,0 +1,11 @@
+// poly_supertraits.paw
+
+pub trait A<TA>: B<TA> + C<TA> {}
+pub trait B<TB>: C<TB> {}
+pub trait C<TC> {}
+
+struct S<T>;
+
+impl<T> A<T> for S<T> {}
+impl<T> B<T> for S<T> {}
+impl<T> C<T> for S<T> {}
