@@ -1178,6 +1178,22 @@ pub fn shl_2<X: Shl<int, Output = Z>, Z>(first: X, second: int) -> Z {
     first.shl(&second)
 }
 
+pub trait AsType {
+    type Output;
+    fn as_type(*self) -> Self::Output;
+}
+
+impl AsType for Second {
+    type Output = int;
+    fn as_type(*self) -> Self::Output {
+        self.value
+    }
+}
+
+pub fn shl_3<X: Shl<Y::Output, Output = Z>, Y: AsType, Z>(first: X, second: Y) -> Z {
+    first.shl(&second.as_type())
+}
+
 #[test]
 pub fn test() {
     let left = First{value: 1};

@@ -92,51 +92,49 @@ static void add_preconditions_from(struct ItemCollector *X, DeclId did)
     pawIr_solver_add_preconditions_from(X->C->S, did, params);
 }
 
+static DeclId resolve_trait_segment(struct ItemCollector *X, struct HirSegment s)
+{
+    NodeId const id = SegmentTable_get(X->C, X->C->segtab, s.id)->id;
+    struct HirDecl const *decl = pawHir_get_node(X->hir, id);
+    return decl->hdr.did;
+}
+
+static void collect_trait_args(struct ItemCollector *X, HirGenericArgs *args, IrGenericArgs *result)
+{
+    K_LIST_XFOREACH (args, struct HirGenericArg const, p) {
+        if (p->item == NULL) {
+            IrGenericArg const arg = pawP_lower_generic_arg(X->C, *X->pm, *p);
+            IrGenericArgs_push(X->C, result, arg);
+        }
+    }
+}
+
 static IrTrait *collect_trait_path(struct ItemCollector *X, struct HirPath path, IrType *self)
 {
-    paw_assert(path.kind == HIR_PATH_ITEM);
-    paw_assert(path.segments->count == 1);
-    struct HirSegment const last = K_LIST_LAST(path.segments);
-    NodeId const id = SegmentTable_get(X->C, X->C->segtab, last.id)->id;
-    struct HirDecl const *decl = pawHir_get_node(X->hir, id);
+    struct HirSegment const last = HirSegments_last(path.segments);
+    DeclId const did = resolve_trait_segment(X, last);
 
     IrGenericArgs *args = IrGenericArgs_new(X->C);
     IrGenericArgs_push(X->C, args, IrGenericArg_from_type(self));
-    if (last.args != NULL) {
-        K_LIST_XFOREACH (last.args, struct HirGenericArg const, p) {
-            if (p->item != NULL) {
-                paw_assert(p->is_type);
-                collect_type(X, p->t);
-            } else {
-                IrGenericArg const arg = pawP_lower_generic_arg(X->C, *X->pm, *p);
-                IrGenericArgs_push(X->C, args, arg);
-            }
-        }
-    }
-    return pawIr_new_trait(X->C, decl->hdr.did, args);
+    if (last.args != NULL) collect_trait_args(X, last.args, args);
+    return pawIr_new_trait(X->C, did, args);
 }
 
 // Collect the type equality constraints from obligations of form "T: Trait<Type = T2>"
-static void collect_equals_constraints(struct ItemCollector *X, struct HirPath path, IrType *self, IrTrait *trait, IrConstraints *result)
+static void collect_equals_constraints(struct ItemCollector *X, struct HirGenericArgs *args, IrType *self, IrTrait *trait, IrConstraints *result)
 {
-    paw_assert(path.kind == HIR_PATH_ITEM);
-    paw_assert(path.segments->count == 1);
-    struct HirSegment const last = K_LIST_LAST(path.segments);
-
-    if (last.args != NULL) {
-        K_LIST_XFOREACH (last.args, struct HirGenericArg const, p) {
-            if (p->item != NULL) {
-                paw_assert(p->is_type);
-                IrType *rhs = collect_type(X, p->t);
-                struct HirGenericDecl const *d = pawHir_get_node(X->hir, p->target);
-                IrType *lhs = pawIr_new_projection(X->C, self, trait, d->did);
-                IrConstraints_push(X->C, result, (struct IrConstraint){
-                            .kind = IR_CONSTRAINT_TYPE_EQUALS,
-                            .parent = d->did,
-                            .eq.lhs = lhs,
-                            .eq.rhs = rhs,
-                        });
-            }
+    K_LIST_XFOREACH (args, struct HirGenericArg const, p) {
+        if (p->item != NULL) {
+            paw_assert(p->is_type);
+            IrType *rhs = collect_type(X, p->t);
+            struct HirGenericDecl const *d = pawHir_get_node(X->hir, p->target);
+            IrType *lhs = pawIr_new_projection(X->C, self, trait, d->did);
+            IrConstraints_push(X->C, result, (struct IrConstraint){
+                        .kind = IR_CONSTRAINT_TYPE_EQUALS,
+                        .parent = d->did,
+                        .eq.lhs = lhs,
+                        .eq.rhs = rhs,
+                    });
         }
     }
 }
@@ -381,14 +379,18 @@ static IrGenericArgs *collect_generic_args(struct ItemCollector *X, DeclId paren
     return types;
 }
 
-static void collect_bounds_from(struct ItemCollector *X, struct HirGenericDecl const *d, IrConstraints *result)
+static void collect_bound_traits(struct ItemCollector *X, struct HirGenericDecl const *d, IrConstraints *result)
 {
     IrType *generic = pawIr_get_def_type(X->C, d->did);
     if (d->t.bounds != NULL) {
         IrTraitList *bounds = IrTraitList_new(X->C);
         K_LIST_XFOREACH (d->t.bounds, struct HirGenericBound const, pbound) {
-            IrTrait *trait = collect_trait_path(X, pbound->path, generic);
-            collect_equals_constraints(X, pbound->path, generic, trait, result);
+            struct HirSegment const last = HirSegments_last(pbound->path.segments);
+            DeclId const did = resolve_trait_segment(X, last);
+
+            IrGenericArgs *args = IrGenericArgs_new(X->C);
+            IrGenericArgs_push(X->C, args, IrGenericArg_from_type(generic));
+            IrTrait *trait = pawIr_new_trait(X->C, did, args);
             IrTraitList_push(X->C, bounds, trait);
             IrConstraints_push(X->C, result, (struct IrConstraint){
                         .kind = IR_CONSTRAINT_IMPL_TRAIT,
@@ -401,12 +403,41 @@ static void collect_bounds_from(struct ItemCollector *X, struct HirGenericDecl c
     }
 }
 
+static void collect_bound_args(struct ItemCollector *X, struct HirGenericDecl const *d, IrConstraints *result)
+{
+    IrType *generic = pawIr_get_def_type(X->C, d->did);
+    if (d->t.bounds != NULL) {
+        IrTraitList *bounds = pawIr_get_trait_bounds(X->C, d->did);
+
+        IrTrait *const *ptrait;
+        struct HirGenericBound const *pbound;
+        K_LIST_ZIP (d->t.bounds, pbound, bounds, ptrait) {
+            IrTrait *trait = *ptrait;
+            struct HirSegment const last = HirSegments_last(pbound->path.segments);
+            if (last.args != NULL) {
+                collect_equals_constraints(X, last.args, generic, trait, result);
+                collect_trait_args(X, last.args, trait->args);
+            }
+        }
+    }
+}
+
 static void collect_generic_bounds(struct ItemCollector *X, struct HirDeclList *generics, IrConstraints *result)
 {
     if (generics != NULL) {
+        // Collection of generic bounds must be performed in 2 passes since traits may have as
+        // their generic arguments associated types from other generics, i.e. `T: Trait<T2::Type>`.
+        // The first pass creates an `IrTrait` object for each generic type, with `Self` bound to
+        // the type of the generic, allowing the second pass to look up trait bounds on other
+        // generic arguments in order to to resolve the identity of the associated type.
+
         K_LIST_XFOREACH (generics, struct HirDecl *const, pdecl) {
             struct HirGenericDecl const *d = HirGetGenericDecl(*pdecl);
-            if (d->is_type) collect_bounds_from(X, d, result);
+            if (d->is_type) collect_bound_traits(X, d, result);
+        }
+        K_LIST_XFOREACH (generics, struct HirDecl *const, pdecl) {
+            struct HirGenericDecl const *d = HirGetGenericDecl(*pdecl);
+            if (d->is_type) collect_bound_args(X, d, result);
         }
     }
 }
