@@ -53,15 +53,15 @@ void pawIr_solver_add_type_equals_obligation(IrSolver *S, struct IrType *lhs, st
 struct IrType *pawIr_solver_get_norm_target(IrSolver *S, struct IrType *type);
 void pawIr_solver_add_norm_target(IrSolver *S, struct IrType *type, struct IrType *target, struct IrObligationCause cause);
 
-void pawIr_solver_add_precondition(IrSolver *S, struct IrType *type, struct IrTrait *trait, struct IrObligationCause cause);
+void pawIr_solver_add_predicate(IrSolver *S, struct IrType *type, struct IrTrait *trait, struct IrObligationCause cause);
 
 void pawIr_solver_add_obligations_from(IrSolver *S, DeclId parent_did, struct IrGenericArgs *args);
 void pawIr_solver_add_obligations_from_type(IrSolver *S, struct IrType *type);
 void pawIr_solver_add_obligations_from_trait(IrSolver *S, struct IrTrait *trait);
 
-void pawIr_solver_add_preconditions_from(IrSolver *S, DeclId did, struct IrGenericArgs *args);
-void pawIr_solver_add_preconditions_from_type(IrSolver *S, struct IrType *type);
-void pawIr_solver_add_preconditions_from_trait(IrSolver *S, struct IrTrait *trait);
+void pawIr_solver_add_predicates_from(IrSolver *S, DeclId did, struct IrGenericArgs *args);
+void pawIr_solver_add_predicates_from_type(IrSolver *S, struct IrType *type);
+void pawIr_solver_add_predicates_from_trait(IrSolver *S, struct IrTrait *trait);
 
 
 struct IrType *pawIr_solver_instantiate_type(IrSolver *S, DeclId did);

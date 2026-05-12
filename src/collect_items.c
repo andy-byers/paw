@@ -86,10 +86,10 @@ static Str const *print_trait(struct ItemCollector *X, IrTrait *trait)
     return pawIr_print_trait_v2(X->C, trait);
 }
 
-static void add_preconditions_from(struct ItemCollector *X, DeclId did)
+static void add_predicates_from(struct ItemCollector *X, DeclId did)
 {
     IrGenericArgs *params = pawIr_get_generic_args(X->C, did);
-    pawIr_solver_add_preconditions_from(X->C->S, did, params);
+    pawIr_solver_add_predicates_from(X->C->S, did, params);
 }
 
 static DeclId resolve_trait_segment(struct ItemCollector *X, struct HirSegment s)
@@ -714,7 +714,7 @@ static void add_predicates_and_obligations(struct ItemCollector *X, DeclId did) 
                         pawHir_get_decl(X->hir, c->parent));
                 ensure_type_is_well_formed(X, d->span, c->impl.type);
                 ensure_trait_is_well_formed(X, d->span, c->impl.trait);
-                pawIr_solver_add_precondition(X->C->S, c->impl.type, c->impl.trait,
+                pawIr_solver_add_predicate(X->C->S, c->impl.type, c->impl.trait,
                         (struct IrObligationCause){
                             .span = d->span,
                         });
@@ -856,7 +856,7 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
 
         // instantiate the trait method with "Self" equal to the "Self" type
         // of the impl_def block
-        add_preconditions_from(X, info->did);
+        add_predicates_from(X, info->did);
         IrType *method = pawIr_new_signature(X->C, info->did, args);
         pawIr_solver_add_obligations_from(X->C->S, info->did, args);
         method = pawU_normalize_projections(X->C->U, method);

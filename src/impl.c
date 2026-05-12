@@ -71,7 +71,7 @@ static IrType *instantiate_impl(IrSolver *S, struct IrImpl const *impl)
 }
 
 // Learn about predicates from the ADT definition
-static void add_context_preconditions(struct Compiler *C, IrSolver *S, IrType *self)
+static void add_context_predicates(struct Compiler *C, IrSolver *S, IrType *self)
 {
     IrGenericArgs *args = IR_GENERIC_ARGS(self);
     if (args != NULL) { // TODO: should be non-NULL
@@ -88,7 +88,7 @@ static void add_context_preconditions(struct Compiler *C, IrSolver *S, IrType *s
                 if (bounds != NULL) {
                     K_LIST_XFOREACH (bounds, IrTrait *const, b) {
                         IrTrait *t = pawP_substitute_trait(C, *b, subst);
-                        pawIr_solver_add_precondition(S, at, t, (struct IrObligationCause){0});
+                        pawIr_solver_add_predicate(S, at, t, (struct IrObligationCause){0});
                     }
                 }
             }
@@ -110,7 +110,7 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrIm
     // save the current position in the unification table
     int const save = pawU_current_position(C->U);
     IrSolver *S = pawIr_push_solver(C);
-    add_context_preconditions(C, S, self);
+    add_context_predicates(C, S, self);
 
     IrType *context = instantiate_impl(S, impl);
     paw_Bool const matches =

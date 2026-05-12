@@ -494,7 +494,7 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     enter_block(T, &bs, d->span, BLOCK_NORMAL);
 
     IrGenericArgs *params = pawIr_get_generic_args(T->C, d->did);
-    pawIr_solver_add_preconditions_from(T->C->S, d->did, params);
+    pawIr_solver_add_predicates_from(T->C->S, d->did, params);
     IrType *ret = normalize_type(T,
             GET_NODE_TYPE(T->C, d->result));
 
@@ -1115,7 +1115,7 @@ static void check_impl_item(struct TypeChecker *T, struct HirImplDecl *d)
 {
     T->self = GET_TYPE(T, d->id);
     IrGenericArgs *params = pawIr_get_generic_args(T->C, d->did);
-    pawIr_solver_add_preconditions_from(T->C->S, d->did, params);
+    pawIr_solver_add_predicates_from(T->C->S, d->did, params);
 
     struct IrImpl const *def = pawIr_get_impl_def(T->C, d->did);
     if (def->trait != NULL && equals_core_trait(T, def->trait, CORE_TRAIT_COPY))
@@ -2178,7 +2178,7 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
 
 static void check_item(struct TypeChecker *T, struct HirDecl *item)
 {
-    // create a new solver to hold the item's preconditions
+    // create a new solver to hold the item's predicates
     pawIr_push_solver(T->C);
 
     if (HirIsFnDecl(item)) {
