@@ -7,11 +7,12 @@
 // HashMap layout:
 //
 // The data buffer backing a HashMap object is split into 2 sections: the
-// metadata region and the items region. Each regiion contains an entry
+// metadata region and the items region. Both regions contains an entry
 // for each available slot in the hash map, i.e. each section has a length
 // equal to the hash map capacity. A metadata entry consists of a flag
 // indicating if the entry is used as well as the highest 7 bits of the
-// key hash for that entry. 
+// key hash for that entry. Each item entry consists of an instance of 
+// the `Item<K, V>` structure.
 
 
 use ptr;
@@ -407,14 +408,6 @@ impl<K: Hash + Equals<K>, V> HashMap<K, V> {
         self.capacity = capacity;
         Ok(())
     }
-
-    pub fn __cursor_on_first_item(*self) -> Cursor<K, V> {
-        self.cursor(0)
-    }
-
-    pub fn __set_length_to_zero(*self) {
-        self.length = 0;
-    }
 }
 
 impl<K: Hash + Equals<K>, V> Index<*K> for HashMap<K, V> {
@@ -450,7 +443,7 @@ pub struct Iter<K: Hash + Equals<K>, V> {
 
 impl<K: Hash + Equals<K>, V> Iter<K, V> {
     pub fn new(inner: *HashMap<K, V>) -> Self {
-        Self{cursor: inner.__cursor_on_first_item()}
+        Self{cursor: inner.cursor(0)}
     }
 }
 
@@ -477,7 +470,7 @@ pub struct IntoIter<K: Hash + Equals<K>, V> {
 
 impl<K: Hash + Equals<K>, V> IntoIter<K, V> {
     pub fn new(inner: HashMap<K, V>) -> Self {
-        let cursor = inner.__cursor_on_first_item();
+        let cursor = inner.cursor(0);
         Self{inner, cursor}
     }
 }
@@ -485,7 +478,7 @@ impl<K: Hash + Equals<K>, V> IntoIter<K, V> {
 impl<K: Hash + Equals<K>, V> Drop for IntoIter<K, V> {
     fn drop(*self) {
         // prevent Drop from being called on elements
-        self.inner.__set_length_to_zero();
+        self.inner.length = 0;
     }
 }
 
