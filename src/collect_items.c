@@ -782,9 +782,8 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
     ensure_trait_is_well_formed(X, trait_path->span, trait);
 
     struct HirDecl *const *decl_ptr;
-    struct IrAssocItem *const *item_ptr;
-    struct IrTraitDef const *trait_def = pawIr_get_trait_def(X->C, trait->did);
-    K_LIST_ZIP (d->types, decl_ptr, trait_def->items, item_ptr) {
+    struct IrImpl const *impl_def = pawIr_get_impl_def(X->C, d->did);
+    K_LIST_XFOREACH (d->types, struct HirDecl *const, decl_ptr) {
         struct HirTypeDecl const *t = HirGetTypeDecl(*decl_ptr);
         IrType *lhs = pawIr_new_projection(X->C, self, trait, t->did);
         IrType *rhs = pawIr_get_def_type(X->C, t->did);
@@ -794,7 +793,6 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
                 });
     }
 
-    struct IrImpl const *impl_def = pawIr_get_impl_def(X->C, d->did);
     AssocItemInfoMap *assoc_types = collect_assoc_types_from_trait(X, impl_def->trait->did);
     K_LIST_XFOREACH (d->types, struct HirDecl *const, item_ptr) {
         struct HirTypeDecl const *item = HirGetTypeDecl(*item_ptr);
@@ -815,6 +813,7 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
         info->found = PAW_TRUE;
     }
 
+    struct IrTraitDef const *trait_def = pawIr_get_trait_def(X->C, trait->did);
     K_LIST_XFOREACH (trait_def->items, struct IrAssocItem *const, pitem) {
         struct IrAssocItem const *item = *pitem;
         struct AssocItemInfo const *info = AssocItemInfoMap_get(X, assoc_types, item->name);
@@ -833,7 +832,7 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
         struct IrFnDef const *fn_def = pawIr_get_fn_def(X->C, method_decl->did);
         struct AssocItemInfo *info = AssocItemInfoMap_get(X, assoc_fns, fn_def->name);
         if (info == NULL)
-            COLLECTOR_ERROR(X, TraitImplMissingAssocItem,
+            COLLECTOR_ERROR(X, TraitImplUnknownAssocItem,
                     .trait = print_trait(X, impl_def->trait),
                     .item = fn_def->name,
                     .span = method_decl->span);
@@ -868,15 +867,16 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
                     .span = method_decl->span);
     }
 
-    K_LIST_XFOREACH (d->methods, struct HirDecl *const, method_decl_ptr) {
-        struct HirFnDecl const *method_decl = HirGetFnDecl(*method_decl_ptr);
-        struct IrFnDef const *fn_def = pawIr_get_fn_def(X->C, method_decl->did);
+    K_LIST_XFOREACH (trait_def->methods, IrType *const, type_ptr) {
+        struct IrFnDef const *fn_def = pawIr_get_fn_def(X->C, IR_TYPE_DID(*type_ptr));
         struct AssocItemInfo const *info = AssocItemInfoMap_get(X, assoc_fns, fn_def->name);
-        if (!info->found)
+        if (!info->found) {
+            struct HirFnDecl const *fn_decl = HirGetFnDecl(pawHir_get_decl(X->hir, fn_def->did));
             COLLECTOR_ERROR(X, TraitImplMissingAssocItem,
                     .trait = print_trait(X, impl_def->trait),
                     .item = fn_def->name,
-                    .span = method_decl->span);
+                    .span = fn_decl->span);
+        }
     }
 }
 
