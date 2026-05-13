@@ -678,4 +678,8 @@
 
 #[test]
 pub fn test() {
+    assert(generic_call(Struct).get() == 123);
+    assert(generic_call2(Struct) == 123);
+    assert(concrete_call(Struct).get() == 123);
+    assert(concrete_call2(Struct) == 123);
 }

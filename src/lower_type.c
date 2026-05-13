@@ -132,23 +132,6 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
                 .item = t->name,
                 .span = t->span);
     return assoc;
-
-//    // TODO: pawIr_find_assoc_type_projection checks impls, but we need behavior more like the version that searches generic bounds
-//    if (IrIsGeneric(type)) {
-//        IrType *self = pawU_new_unknown(L->C->U, t->type->hdr.span);
-//        IrGenericArgs *args = IrGenericArgs_new(L->C);
-//        IrGenericArgs_push(L->C, args, IrGenericArg_from_type(self));
-//        struct Substitution const subst = {trait->args, args};
-//        trait = pawP_substitute_trait(L->C, trait, subst);
-//        struct Instantiation const *inst = pawIr_find_assoc_type_projection(
-//                L->C, self, trait, t->name);
-//        pawU_unify_unchecked(L->C->U, self, type);
-//        return pawU_normalize(L->C->U, inst->inst);
-//    } else {
-//        struct Instantiation const *inst = pawIr_find_assoc_type_projection(
-//                L->C, type, trait, t->name);
-//        return inst->inst;
-//    }
 }
 
 static IrType *lower_slice_type(struct LowerType *L, struct HirSliceType *t)
