@@ -17,10 +17,15 @@
 #include "mir.h"
 #include "unify.h"
 
+#define ANALYSIS_ERROR(V_, Kind_, ...) THROW_ERROR((V_)->C, Kind_, \
+        .modname = ModuleInfo_get((V_)->C->modinfo, (V_)->mir->modno).name, \
+        __VA_ARGS__)
+
 struct Variable {
     IrType *type;
     struct Variable *parent;
     struct VariableList *subvars;
+    Str const *name;
     int id;
 };
 
@@ -92,13 +97,14 @@ static IrTypeList *get_subtypes(struct Mir *mir, IrType *type)
     }
 }
 
-static struct Variable *new_variable(struct VariableAnalyzer *V, IrType *type, struct Variable *parent)
+static struct Variable *new_variable(struct VariableAnalyzer *V, Str const *name, IrType *type, struct Variable *parent)
 {
     struct Variable *var = pawP_alloc(V->mir->pool, NULL, 0, sizeof *var);
     *var = (struct Variable){
         .id = V->num_vars++,
         .parent = parent,
         .type = type,
+        .name = name,
     };
     return var;
 }
@@ -218,12 +224,16 @@ void visualize_blocks(struct VariableAnalyzer const *V)
 static void indicate_variable_use(struct VariableAnalyzer *V, struct Variable const *v)
 {
     if (states_get(V->current, v->id) != VAR_INIT) {
-        // TODO: better error message including name of local
-        struct Mir *mir = V->mir;
         enum VariableState const state = states_get(V->current, v->id);
-        Str const *modname = ModuleInfo_get(mir->C->modinfo, mir->modno).name;
-        pawErr_generic_error(ENV(V->mir), modname, (struct SourceSpan){0},
-                state == VAR_UNINIT ? "use before initialization" : "use after move");
+        if (state == VAR_UNINIT) {
+            ANALYSIS_ERROR(V, UseBeforeInitialization,
+                    .name = v->name,
+                    .span = {0});
+        } else {
+            ANALYSIS_ERROR(V, UseAfterMove,
+                    .name = v->name,
+                    .span = {0});
+        }
     }
 }
 
@@ -601,7 +611,7 @@ static void initialize_data_structures(struct VariableAnalyzer *V)
     int index;
     struct MirRegisterData const *pdata;
     K_LIST_ENUMERATE (V->mir->registers, index, pdata) {
-        struct Variable *local = new_variable(V, pdata->type, NULL);
+        struct Variable *local = new_variable(V, pdata->name, pdata->type, NULL);
         VariableList_push(V, V->locals, local);
     }
 

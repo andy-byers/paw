@@ -8,6 +8,9 @@
 #include "type_folder.h"
 #include "unify.h"
 
+#define LOOKUP_ERROR(C_, Kind_, ...) THROW_ERROR(C_, \
+        Kind_, __VA_ARGS__)
+
 #define TODO (struct SourceSpan){0}
 
 struct QueryState {
@@ -188,7 +191,9 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
 
     // TODO: return error indicator
     if (candidates->count > 1)
-        pawErr_generic_error(ENV(C), C->modname, TODO, "multiple applicable methods");
+        LOOKUP_ERROR(C, MultipleApplicableItems,
+                .modname = SCAN_STR(C, ""),
+                .span = TODO);
 
     // allocate return value
     struct Candidate const result = Candidates_first(candidates);
@@ -305,7 +310,9 @@ struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, I
 
     // TODO: return error indicator
     if (candidates->count > 1)
-        pawErr_generic_error(ENV(C), C->modname, TODO, "multiple applicable methods");
+        LOOKUP_ERROR(C, MultipleApplicableItems,
+                .modname = SCAN_STR(C, ""),
+                .span = TODO);
 
     // allocate return value
     struct Candidate const result = Candidates_first(candidates);
@@ -382,7 +389,9 @@ struct Instantiation *pawIr_find_assoc_type_generic(struct Compiler *C, IrType *
 
     // TODO: return error indicator
     if (candidates->count > 1)
-        pawErr_generic_error(ENV(C), C->modname, TODO, "multiple applicable associated types");
+        LOOKUP_ERROR(C, MultipleApplicableItems,
+                .modname = SCAN_STR(C, ""),
+                .span = TODO);
 
     struct Candidate const result = Candidates_first(candidates);
     IrType *assoc = pawIr_get_def_type(C, result.target);
@@ -447,7 +456,9 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
 
     // TODO: return error indicator
     if (candidates->count > 1)
-        pawErr_generic_error(ENV(C), C->modname, TODO, "multiple applicable associated types");
+        LOOKUP_ERROR(C, MultipleApplicableItems,
+                .modname = SCAN_STR(C, ""),
+                .span = TODO);
 
     // allocate return value
     struct Candidate const result = Candidates_first(candidates);

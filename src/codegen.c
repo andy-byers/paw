@@ -18,21 +18,13 @@
 #include "mem.h"
 #include "mir.h"
 #include "parse.h"
-#include "regstack.h"
 #include "ssa.h"
 #include "unify.h"
 
 #include "codegen/codegen.h"
 #include "glue.h"
 
-// TODO: need module name, this always reports main module, but error may be elsewhere
-#define CODEGEN_ERROR(G_, Kind_, ...) pawErr_##Kind_((G_)->C, (G_)->C->modname, __VA_ARGS__)
-
-#define IS_POINTER(G, r) REG_DATA(G, r).is_pointer
-#define REG_DATA(G, r) MirRegisterDataList_get((G)->fs->mir->registers, (r).value)
-#define TYPE_CODE(G, type) pawP_type2code((G)->C, type)
-#define REG(Place_) vm_register_for(fs, Place_)
-#define BASE_REG(Places_) REG(K_LIST_FIRST(Places_))
+#define CODEGEN_ERROR(G_, Kind_, ...) THROW_ERROR((G_)->C, Kind_, __VA_ARGS__)
 
 struct Generator {
     struct Compiler *C;
@@ -226,18 +218,10 @@ static void code_items(struct Generator *G)
     BodyList_delete(C, bodies);
 }
 
-static void compute_layout_for(struct Generator *G, IrType *type)
-{
-    struct IrLayout const layout = pawIr_compute_layout(G->C, type);
-    if (IR_TYPESIZE_GET_KIND(layout.size) == IR_TYPESIZE_UNSIZED)
-        pawErr_generic_error(ENV(G), SCAN_STR(G->C, ""), (struct SourceSpan){0},
-                "unsized type must be used behind pointer");
-}
-
 static void compute_mir_layout(struct Generator *G, struct Mir *mir)
 {
     K_LIST_XFOREACH (mir->registers, struct MirRegisterData const, p)
-        compute_layout_for(G, p->type);
+        pawIr_compute_layout(G->C, p->type);
 }
 
 static void register_items(struct Generator *G)
@@ -251,11 +235,13 @@ static void register_items(struct Generator *G)
 
     int const status = pawIr_solve_const_obligations(G->C);
     if (status == -1) {
-        pawErr_generic_error(ENV(G), SCAN_STR(G->C, "TODO"), (struct SourceSpan){0},
-                "invalid const obligation");
+        CODEGEN_ERROR(G, FalseConstObligation,
+                .modname = SCAN_STR(G->C, "TODO"),
+                .span = {0});
     } else if (status != 0) {
-        pawErr_generic_error(ENV(G), SCAN_STR(G->C, "TODO"), (struct SourceSpan){0},
-                "unable to prove const obligation");
+        CODEGEN_ERROR(G, UnsatisfiedConstObligation,
+                .modname = SCAN_STR(G->C, "TODO"),
+                .span = {0});
     }
 }
 

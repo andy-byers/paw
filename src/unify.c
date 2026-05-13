@@ -15,7 +15,8 @@
 
 #include <stdio.h>
 
-#define UNIFIER_ERROR(U_, Kind_, ...) pawErr_##Kind_((U_)->C, (U_)->modname, __VA_ARGS__)
+#define UNIFIER_ERROR(U_, Kind_, ...) THROW_ERROR((U_)->C, \
+        Kind_, .modname = (U_)->modname, __VA_ARGS__)
 
 #define UID(Type_) (IrGetInfer(Type_)->index)
 
@@ -189,7 +190,7 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, IrType *type)
 {
     if (ivar->type == type) {
         paw_assert(IrIsInfer(type));
-        UNIFIER_ERROR(U, cyclic_type, ivar->span);
+        UNIFIER_ERROR(U, CyclicType, ivar->span);
     }
     if (IrIsAdt(type)) {
         struct IrAdt *adt = IrGetAdt(type);
@@ -632,7 +633,7 @@ static void check_table(struct Unifier *U)
         InferenceVar const *var = get_ivar(U, i);
         IrType *type = pawU_normalize(U, var->type);
         if (IrIsInfer(type))
-            UNIFIER_ERROR(U, cannot_infer, var->span);
+            UNIFIER_ERROR(U, CannotInfer, var->span);
     }
 }
 

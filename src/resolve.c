@@ -386,8 +386,8 @@ static paw_Bool find_value_in_generic(struct Resolver *R, struct AstGenericDecl 
 {
     if (d->is_type) {
         if (d->t.bounds == NULL)
-            pawErr_generic_error(ENV(R), R->current->name,
-                    pc_segment(pc)->span, "expected bounds on generic");
+            RESOLVER_ERROR(R, MissingTraitBounds,
+                    .span = pc_segment(pc)->span);
 
         paw_Bool found = PAW_FALSE;
         struct AstGenericBound const *pbound;
@@ -395,8 +395,8 @@ static paw_Bool find_value_in_generic(struct Resolver *R, struct AstGenericDecl 
             struct ResolvedSegment res = get_path_result(R, pbound->path);
             if (find_value_in_scope(R, res.id, pc, out)) {
                 if (found) // more than 1 bound contains a method with the given name
-                    pawErr_generic_error(ENV(R), R->current->name,
-                            pc_segment(pc)->span, "multiple applicable methods");
+                    RESOLVER_ERROR(R, MultipleApplicableItems,
+                            .span = pc_segment(pc)->span);
                 found = PAW_TRUE;
             }
         }
@@ -596,8 +596,9 @@ static void resolve_trait_args(struct AstVisitor *V, NodeId trait_id, struct Ast
                     struct AstPath const path = {.span = segment->span, .segments = segments};
                     struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, pc_create(path), NAMESPACE_TYPE);
                     if (psymbol == NULL)
-                        pawErr_generic_error(ENV(R), R->current->name, segment->span,
-                                "unable to find associated type");
+                        RESOLVER_ERROR(R, UnknownPath,
+                                .path = pawAst_print_type_path(R->ast, path),
+                                .span = segment->span);
 
                     arg->target = psymbol->id;
                 }
@@ -1025,8 +1026,9 @@ static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
         struct AstPathType const *path = AstGetPathType(d->type);
         struct PathCursor pc = pc_create(path->path);
         if (!lookup_type(R, pc, &symbol))
-            pawErr_generic_error(ENV(R), R->current->name, d->span,
-                    "unable to find type of \"Self\"");
+            RESOLVER_ERROR(R, UnknownPath,
+                    .path = pawAst_print_type_path(R->ast, path->path),
+                    .span = d->span);
 
         struct AstDecl *self = pawAst_get_node(R->ast, symbol.id);
         if (AstIsAdtDecl(self)) {
@@ -1037,9 +1039,10 @@ static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
                 declare_self(R, d->span, v->hdr.id, NAMESPACE_VALUE);
             }
         }
-    } else if (AstIsFnType(d->type)) {
-        pawErr_generic_error(ENV(R), R->current->name, d->span,
-                "target of impl block cannot be a function type");
+    } else if (AstIsFnType(d->type)
+            || AstIsNeverType(d->type)) {
+        RESOLVER_ERROR(R, InvalidImplTarget,
+                .span = d->span);
     }
 
     return PAW_TRUE;

@@ -2276,12 +2276,6 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
             // propagate visibility qualifier from trait to methods
             struct AstDecl *method = parse_method(lex, NULL, is_pub);
             AstDeclList_push(lex->ast, methods, method);
-
-            // prevent default trait methods from being defined
-            struct AstFnDecl *fn_decl = AstGetFnDecl(method);
-            if (fn_decl->body != NULL)
-                PARSE_ERROR(lex, Unsupported,
-                        .span = fn_decl->body->hdr.span);
         }
     }
 

@@ -816,17 +816,23 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
     K_LIST_XFOREACH (trait_def->items, struct IrAssocItem *const, pitem) {
         struct IrAssocItem const *item = *pitem;
         struct AssocItemInfo const *info = AssocItemInfoMap_get(X, assoc_types, item->name);
-        if (!info->found)
+        if (!info->found) {
+            struct IrAssocItem const *item_def = pawIr_get_assoc_item(X->C, info->did);
+            struct HirTypeDecl const *missing_type = HirGetTypeDecl(pawHir_get_decl(X->hir, item_def->did));
+            struct Module const missing_mod = ModuleInfo_get(X->C->modinfo, (int)missing_type->did.modno);
             COLLECTOR_ERROR(X, TraitImplMissingAssocItem,
                     .trait = print_trait(X, impl_def->trait),
-                    .item = item->name,
-                    .span = {0});
+                    .item = item_def->name,
+                    .missing_modname = missing_mod.name,
+                    .missing_span = missing_type->span,
+                    .impl_span = d->span);
+        }
     }
 
     AssocItemInfoMap *assoc_fns = collect_assoc_fns_from_trait(X, impl_def->trait->did);
     K_LIST_XFOREACH (d->methods, struct HirDecl *const, method_decl_ptr) {
         struct HirFnDecl const *method_decl = HirGetFnDecl(*method_decl_ptr);
-        // ensure that each method defined in a trait impl_def block can be found
+        // ensure that each method defined in a trait impl block can be found
         // in the corresponding trait definition
         struct IrFnDef const *fn_def = pawIr_get_fn_def(X->C, method_decl->did);
         struct AssocItemInfo *info = AssocItemInfoMap_get(X, assoc_fns, fn_def->name);
@@ -847,13 +853,13 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
             K_LIST_XFOREACH (trait_args, IrGenericArg const, t)
                 IrGenericArgs_push(X->C, args, *t);
 
-            // add type parameters from impl_def block method
+            // add type parameters from impl block method
             K_LIST_XFOREACH (fn_def->generics, struct IrGenericDef *const, p)
                 IrGenericArgs_push(X->C, args, pawIr_get_def_arg(X->C, (*p)->did));
         }
 
         // instantiate the trait method with "Self" equal to the "Self" type
-        // of the impl_def block
+        // of the impl block
         add_predicates_from(X, info->did);
         IrType *method = pawIr_new_signature(X->C, info->did, args);
         pawIr_solver_add_obligations_from(X->C->S, info->did, args);
@@ -870,11 +876,14 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
         struct IrFnDef const *fn_def = pawIr_get_fn_def(X->C, IR_TYPE_DID(*type_ptr));
         struct AssocItemInfo const *info = AssocItemInfoMap_get(X, assoc_fns, fn_def->name);
         if (!info->found) {
-            struct HirFnDecl const *fn_decl = HirGetFnDecl(pawHir_get_decl(X->hir, fn_def->did));
+            struct HirFnDecl const *missing_fn = HirGetFnDecl(pawHir_get_decl(X->hir, fn_def->did));
+            struct Module const missing_mod = ModuleInfo_get(X->C->modinfo, (int)missing_fn->did.modno);
             COLLECTOR_ERROR(X, TraitImplMissingAssocItem,
                     .trait = print_trait(X, impl_def->trait),
                     .item = fn_def->name,
-                    .span = fn_decl->span);
+                    .missing_modname = missing_mod.name,
+                    .missing_span = missing_fn->span,
+                    .impl_span = d->span);
         }
     }
 }

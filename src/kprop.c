@@ -22,9 +22,9 @@
 #include <math.h>
 
 #define GET_MODNAME(Mir_) (ModuleInfo_get((Mir_)->C->modinfo, (Mir_)->modno).name)
-#define KPROP_ERROR(K_, Kind_, ...) pawErr_##Kind_((K_)->C, GET_MODNAME((K_)->mir), __VA_ARGS__)
-#define DIVIDE_BY_0(K, span) KPROP_ERROR(K, constant_divide_by_zero, span);
-#define SHIFT_BY_NEGATIVE(K, span) KPROP_ERROR(K, constant_negative_shift_count, span);
+#define KPROP_ERROR(K_, Kind_, ...) THROW_ERROR((K_)->C, Kind_, GET_MODNAME((K_)->mir), __VA_ARGS__)
+#define DIVIDE_BY_0(K, span) KPROP_ERROR(K, ConstantDivideByZero, span);
+#define SHIFT_BY_NEGATIVE(K, span) KPROP_ERROR(K, ConstantNegativeShiftCount, span);
 
 enum CellKind {
     CELL_TOP,

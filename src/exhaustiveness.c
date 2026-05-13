@@ -12,7 +12,8 @@
 #include "map.h"
 #include "match.h"
 
-#define USEFULNESS_ERROR(U_, Kind_, ...) pawErr_##Kind_((U_)->C, (U_)->modname, __VA_ARGS__)
+#define USEFULNESS_ERROR(U_, Kind_, ...) THROW_ERROR((U_)->C, \
+        Kind_, .modname = (U_)->modname, __VA_ARGS__)
 
 struct Usefulness {
     struct SourceSpan span;
@@ -675,7 +676,7 @@ static struct RawCase bool_case(struct Usefulness *U, struct SourceSpan span, pa
 static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
 {
     if (rows->count == 0)
-        USEFULNESS_ERROR(U, nonexhaustive_pattern_match, U->span);
+        USEFULNESS_ERROR(U, NonexhaustivePatternMatch, U->span);
 
     expand_or_patterns(U, rows);
     for (int i = 0; i < rows->count; ++i) {

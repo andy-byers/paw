@@ -203,12 +203,10 @@ static struct IrSolverResult solve_pending_obligations(struct TypeChecker *T)
             TYPECK_ERROR(T, FalseObligation,
                     .obligation = pawIr_print_obligation_(T->C, result.cpo.obligation));
         case IR_SOLVER_MULTIPLE_APPLICABLE_TRAITS:
-            // TODO: this cannot happen since having multiple applicable traits just means the obligation cannot yet be solved (status is OK but number of unsolved traits is > 0) need to distinguish from false obligation case
-            pawErr_generic_error(ENV(T->C), T->pm->name, (struct SourceSpan){0},
-                    "multiple applicable traits");
+            TYPECK_ERROR(T, MultipleApplicableTraits, .span = {0});
     }
     if (pawIr_solve_const_obligations(T->C) < 0)
-        pawErr_generic_error(ENV(T), T->pm->name, TODO, "unsatisfiable const obligation");
+        TYPECK_ERROR(T, FalseConstObligation, .span = {0});
     return result;
 }
 

@@ -9,7 +9,6 @@
 #include "map.h"
 #include "mir.h"
 
-#define SSA_ERROR(S_, Kind_, ...) pawErr_##Kind_((S_)->C, (S_)->mir->modname, __VA_ARGS__)
 #define REGISTER(Reg_, Type_) ((struct MirPlace){.r = Reg_, .kind = MIR_PLACE_REGISTER, .type = Type_})
 
 struct SsaConverter {

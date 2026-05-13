@@ -10,36 +10,25 @@
 #include "mir.h"
 #include <math.h>
 
-#define KFOLD_ERROR(C_, Kind_, Modname_, ...) pawErr_##Kind_(C_, Modname_, __VA_ARGS__)
-#define DIVIDE_BY_0(C_, Modname_, Loc_) KFOLD_ERROR(C_, constant_divide_by_zero, Modname_, Loc_);
-#define SHIFT_BY_NEGATIVE(C_, Modname_, Loc_) KFOLD_ERROR(C_, constant_negative_shift_count, Modname_, Loc_);
-#define XDIVMOD_OVERFLOWS(Left_, Right_) (V_CHAR(Left_) == PAW_CHAR_MIN && V_CHAR(Right_) == PAW_CHAR_C(-1))
+#define KFOLD_ERROR(C_, Kind_, Modname_, ...) THROW_ERROR(C_, Kind_, .modname = Modname_, __VA_ARGS__)
+#define DIVIDE_BY_0(C_, Modname_, Span_) KFOLD_ERROR(C_, ConstantDivideByZero, Modname_, Span_);
+#define SHIFT_BY_NEGATIVE(C_, Modname_, Span_) KFOLD_ERROR(C_, ConstantNegativeShiftCount, Modname_, Span_);
 #define IDIVMOD_OVERFLOWS(Left_, Right_) (V_INT(Left_) == PAW_INT_MIN && V_INT(Right_) == PAW_INT_C(-1))
 
-#define CHAR2U(X_) PAW_CAST_UCHAR(X_)
-#define U2CHAR(U_) PAW_CAST_CHAR(U_)
 #define INT2U(I_) PAW_CAST_UINT(I_)
 #define U2INT(U_) PAW_CAST_INT(U_)
 
 // Generate code for integer operators
 // Casts to unsigned to avoid UB (signed integer overflow). Requires
 // 2's complement integer representation to work properly.
-#define X_UNOP(X_, Op_) U2CHAR(Op_ CHAR2U(X_))
-#define X_BINOP(A_, B_, Op_) U2CHAR(CHAR2U(A_) Op_ CHAR2U(B_))
 #define I_UNOP(I_, Op_) U2INT(Op_ INT2U(I_))
 #define I_BINOP(A_, B_, Op_) U2INT(INT2U(A_) Op_ INT2U(B_))
-
-#define CHAR_UNARY_OP(Result_, Value_, Op_) \
-    V_SET_CHAR(Result_, X_UNOP(V_CHAR(Value_), Op_))
 
 #define INT_UNARY_OP(Result_, Value_, Op_) \
     V_SET_INT(Result_, I_UNOP(V_INT(Value_), Op_))
 
 #define FLOAT_UNARY_OP(Result_, Value_, Op_) \
     V_SET_FLOAT(Result_, Op_ V_FLOAT(Value_))
-
-#define CHAR_COMPARISON(Result_, X_, Y_, Op_) \
-    V_SET_BOOL(Result_, V_CHAR(X_) Op_ V_CHAR(Y_))
 
 #define CHAR_COMPARISON(Result_, X_, Y_, Op_) \
     V_SET_BOOL(Result_, V_CHAR(X_) Op_ V_CHAR(Y_))
@@ -53,42 +42,11 @@
 #define STR_COMPARISON(Result_, X_, Y_, Op_) \
     V_SET_BOOL(Result_, pawS_cmp(V_STR(X_), V_STR(Y_)) Op_ 0)
 
-#define CHAR_BINARY_OP(Result_, X_, Y_, Op_) \
-    V_SET_CHAR(Result_, X_BINOP(V_CHAR(X_), V_CHAR(Y_), Op_))
-
 #define INT_BINARY_OP(Result_, X_, Y_, Op_) \
     V_SET_INT(Result_, I_BINOP(V_INT(X_), V_INT(Y_), Op_))
 
 #define FLOAT_BINARY_OP(Result_, X_, Y_, Op_) \
     V_SET_FLOAT(Result_, V_FLOAT(X_) Op_ V_FLOAT(Y_))
-
-static void constant_div(struct Compiler *C, Str const *modname, struct SourceSpan span, Value *pr, Value x, Value y, enum BuiltinKind kind)
-{
-    if (kind == BUILTIN_FLOAT) {
-        if (V_FLOAT(y) == 0.0)
-            DIVIDE_BY_0(C, modname, span);
-        FLOAT_BINARY_OP(pr, x, y, /);
-    } else {
-        paw_assert(kind == BUILTIN_INT);
-        if (V_INT(y) == 0)
-            DIVIDE_BY_0(C, modname, span);
-        INT_BINARY_OP(pr, x, y, /);
-    }
-}
-
-static void constant_mod(struct Compiler *C, Str const *modname, struct SourceSpan span, Value *pr, Value x, Value y, enum BuiltinKind kind)
-{
-    if (kind == BUILTIN_FLOAT) {
-        if (V_FLOAT(y) == 0.0)
-            DIVIDE_BY_0(C, modname, span);
-        V_SET_FLOAT(pr, fmod(V_FLOAT(x), V_FLOAT(y)));
-    } else {
-        paw_assert(kind == BUILTIN_INT);
-        if (V_INT(y) == 0)
-            DIVIDE_BY_0(C, modname, span);
-        INT_BINARY_OP(pr, x, y, %);
-    }
-}
 
 paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v, Value *pr)
 {
@@ -245,3 +203,4 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
     }
     return PAW_TRUE;
 }
+

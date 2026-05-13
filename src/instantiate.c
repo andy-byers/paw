@@ -23,7 +23,9 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#define INSTANTIATION_ERROR(I_, Kind_, ...) pawErr_##Kind_((I_)->C, ModuleInfo_get((I_)->C->modinfo, (I_)->modno).name, __VA_ARGS__)
+#define INSTANTIATION_ERROR(I_, Kind_, ...) THROW_ERROR((I_)->C, \
+        Kind_, .modname = ModuleInfo_get((I_)->C->modinfo, (I_)->modno).name, \
+        __VA_ARGS__)
 
 #define TODO (struct SourceLoc){0}
 
@@ -61,7 +63,10 @@ static IrType *instantiate_fn_aux(struct InstanceState *I, struct IrSignature *b
 static void check_type_param(struct InstanceState *I, IrGenericArgs *params, IrGenericArgs *args)
 {
     if (params->count != args->count)
-        INSTANTIATION_ERROR(I, incorrect_type_arity, (struct SourceSpan){0}, params->count, args->count);
+        INSTANTIATION_ERROR(I, IncorrectTypeArity,
+                .want = params->count,
+                .have = args->count,
+                .span = {0});
 }
 
 static void normalize_type_list(struct InstanceState *I, IrGenericArgs *types)
@@ -76,8 +81,10 @@ static IrTrait *instantiate_trait(struct InstanceState *I, struct IrTrait *base,
     IrGenericArgs *generics = base->args;
     if (generics == NULL) {
         struct HirDecl *decl = pawHir_get_decl(I->C->hir, base->did);
-        INSTANTIATION_ERROR(I, unexpected_type_arguments, (struct SourceSpan){0},
-                "trait", HirGetTraitDecl(decl)->ident.name->text);
+        INSTANTIATION_ERROR(I, UnexpectedTypeArguments,
+                .what = SCAN_STR(I->C, "trait"),
+                .name = HirGetTraitDecl(decl)->ident.name,
+                .span = {0});
     }
     check_type_param(I, generics, types);
     normalize_type_list(I, types);

@@ -18,7 +18,8 @@
 #include "ssa.h"
 #include "unify.h"
 
-#define LOWERING_ERROR(L_, Kind_, ...) pawErr_##Kind_((L_)->C, (L_)->pm->name, __VA_ARGS__)
+#define LOWERING_ERROR(L_, Kind_, ...) THROW_ERROR((L_)->C, \
+        Kind_, .modname = (L_)->pm->name, __VA_ARGS__)
 #define NODE_SPAN(Node_) ((Node_)->hdr.span)
 
 #define TODO (struct SourceSpan){0}
@@ -159,7 +160,9 @@ static void enter_constant_ctx(struct LowerHir *L, struct ConstantContext *cctx,
     struct ConstantContext *cursor = L->cctx;
     while (cursor != NULL) {
         if (d->did.value == cursor->did.value)
-            LOWERING_ERROR(L, global_constant_cycle, d->span, d->ident.name->text);
+            LOWERING_ERROR(L, GlobalConstantCycle,
+                    .name = d->ident.name,
+                    .span = d->span);
         cursor = cursor->outer;
     }
     *cctx = (struct ConstantContext){
@@ -529,7 +532,9 @@ static void add_upvalue(struct FunctionState *fs, struct NonGlobal *info, paw_Bo
         }
     }
     if (fs->up->count > PAW_MAX_UPVALUES)
-        LOWERING_ERROR(fs->L, too_many_upvalues, fs->mir->span, PAW_MAX_UPVALUES);
+        LOWERING_ERROR(fs->L, TooManyUpvalues,
+                .limit = PAW_MAX_UPVALUES,
+                .span = fs->mir->span);
 
     MirUpvalueList_push(fs->mir, fs->up, (struct MirUpvalueInfo){
         .is_local = is_local,
@@ -2165,7 +2170,9 @@ static void validate_fn_annotations(struct LowerHir *L, struct Mir const *mir)
     struct Annotation a;
     if (pawP_check_extern(L->C, mir->annotations, &a)) {
         if (a.has_value && a.kind != BUILTIN_STR)
-            LOWERING_ERROR(L, invalid_annotation_type, a.span, a.name->text);
+            LOWERING_ERROR(L, InvalidAnnotationType,
+                    .name = a.name,
+                    .span = a.span);
     }
 }
 
@@ -2288,7 +2295,9 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
 
     // TODO: handle extern constants
     if (d->init == NULL)
-        LOWERING_ERROR(L, uninitialized_constant, d->span, d->ident.name->text);
+        LOWERING_ERROR(L, UninitializedConstant,
+                .name = d->ident.name,
+                .span = d->span);
 
     // prevent cycles between global constants
     struct ConstantContext cctx;

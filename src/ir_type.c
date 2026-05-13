@@ -10,7 +10,6 @@
 #include "unify.h"
 
 #define NEW_NODE(C, T) (T *)P_ALLOC(C, NULL, 0, sizeof(T))
-#define IR_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleInfo_get((C_)->modinfo, Modno_).name, __VA_ARGS__)
 
 #define TODO (struct SourceSpan){0}
 

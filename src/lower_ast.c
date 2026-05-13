@@ -26,7 +26,8 @@
 #include "str.h"
 #include "unify.h"
 
-#define LOWERING_ERROR(L_, Kind_, ...) pawErr_##Kind_((L_)->C, (L_)->m->name, __VA_ARGS__)
+#define LOWERING_ERROR(L_, Kind_, ...) THROW_ERROR((L_)->C, \
+        Kind_, .modname = (L_)->m->name, __VA_ARGS__)
 
 #define NEW_NODE(L_, Kind_, ...) \
     pawHir_new_##Kind_((L_)->hir, __VA_ARGS__)
@@ -309,7 +310,9 @@ static struct HirExpr *LowerUnOpExpr(struct LowerAst *L, struct AstUnOpExpr *e)
         if (lit->lit_kind == kAstBasicLit && lit->basic.code == BUILTIN_INT) {
             paw_Uint const u = V_UINT(lit->basic.value);
             if (u > (paw_Uint)PAW_INT_MAX + 1)
-                LOWERING_ERROR(L, integer_out_of_range, e->span, u);
+                LOWERING_ERROR(L, IntegerOutOfRange,
+                        .uint64 = u,
+                        .span = e->span);
 
             paw_Int const i = u < (paw_Uint)PAW_INT_MAX + 1 ? -(paw_Int)u : PAW_INT_MIN;
             return NEW_NODE(L, basic_lit, e->span, e->id, I2V(i), BUILTIN_INT);
@@ -375,7 +378,7 @@ static struct HirExpr *into_range(struct LowerAst *L, struct AstRangeExpr *e)
 static struct HirExpr *into_range_full(struct LowerAst *L, struct AstRangeExpr *e)
 {
     if (e->is_inclusive)
-        LOWERING_ERROR(L, invalid_inclusive_range, e->span);
+        LOWERING_ERROR(L, InvalidInclusiveRange, e->span);
 
     struct HirPath const path = NEW_BUILTIN_PATH(L, e->span, RANGE_FULL);
     return NEW_NODE(L, path_expr, e->span, e->id, path);
@@ -395,7 +398,7 @@ static struct HirExpr *into_range_to(struct LowerAst *L, struct AstRangeExpr *e)
 static struct HirExpr *into_range_from(struct LowerAst *L, struct AstRangeExpr *e)
 {
     if (e->is_inclusive)
-        LOWERING_ERROR(L, invalid_inclusive_range, e->span);
+        LOWERING_ERROR(L, InvalidInclusiveRange, e->span);
 
     struct HirPath const path = NEW_BUILTIN_PATH(L, e->span, RANGE_FROM);
     struct HirExpr *lhs = lower_expr(L, e->lhs);
@@ -557,7 +560,9 @@ static struct HirExpr *lower_basic_lit(struct LowerAst *L, struct AstBasicLit *e
     //       have the same Value representation as paw_Int and no conversion is necessary. Negative
     //       integer literals are handled in "LowerUnOpExpr".
     if (e->code == BUILTIN_INT && V_UINT(e->value) > (paw_Uint)PAW_INT_MAX)
-        LOWERING_ERROR(L, integer_out_of_range, span, e->value.u);
+        LOWERING_ERROR(L, IntegerOutOfRange,
+                .uint64 = e->value.u,
+                .span = span);
 
     return NEW_NODE(L, basic_lit, span, id, e->value, e->code);
 }
@@ -806,7 +811,7 @@ static struct HirStmt *LowerLetStmt(struct LowerAst *L, struct AstLetStmt *s)
     } else if (s->init != NULL) {
         return unpack_bindings(L, pat, init, tag, s->id);
     } else {
-        LOWERING_ERROR(L, uninitialized_destructuring, s->span);
+        LOWERING_ERROR(L, UninitializedDestructuring, s->span);
     }
 }
 
