@@ -1534,6 +1534,17 @@ static struct MirPlace lower_call_expr(struct HirVisitor *V, struct HirCallExpr 
     return result;
 }
 
+static struct MirPlace lower_projection_expr(struct HirVisitor *V, struct HirProjectionExpr *e)
+{
+    struct LowerHir *L = V->ud;
+    struct FunctionState *fs = L->fs;
+
+    IrType *fn_type = get_type(L, e->id);
+    struct MirPlace const target = new_register(fs, fn_type);
+    NEW_INSTR(fs, global, e->span, target);
+    return target;
+}
+
 static struct MirPlace lower_field_expr(struct HirVisitor *V, struct HirFieldExpr *e)
 {
     if (e->fid < 0) lower_rvalue(V, e->key);
@@ -2039,6 +2050,8 @@ static struct MirPlace lower_match_expr(struct HirVisitor *V, struct HirMatchExp
             return lower_conversion_expr(V_, HirGetConversionExpr(Expr_)); \
         case kHirCallExpr: \
             return lower_call_expr(V_, HirGetCallExpr(Expr_)); \
+        case kHirProjectionExpr: \
+            return lower_projection_expr(V_, HirGetProjectionExpr(Expr_)); \
         case kHirFieldExpr: \
             return lower_field_expr(V_, HirGetFieldExpr(Expr_)); \
         case kHirAssignExpr: \

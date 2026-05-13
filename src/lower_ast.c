@@ -216,26 +216,6 @@ static struct HirDecl *LowerVariantDecl(struct LowerAst *L, struct AstVariantDec
     return NEW_NODE(L, variant_decl, d->span, d->id, d->did, ident, fields, d->index, L->adt_did);
 }
 
-static struct HirExpr *LowerReturnExpr(struct LowerAst *L, struct AstReturnExpr *e)
-{
-    struct HirExpr *expr = e->expr != NULL ? lower_expr(L, e->expr) : NULL;
-    return NEW_NODE(L, return_expr, e->span, e->id, expr);
-}
-
-static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d);
-
-static struct HirDeclList *lower_methods(struct LowerAst *L, struct AstDeclList *src)
-{
-    struct HirDeclList *dst = HirDeclList_new(L->hir);
-    for (int i = 0; i < src->count; ++i) {
-        struct AstDecl *decl = AstDeclList_get(src, i);
-        struct AstFnDecl *d = AstGetFnDecl(decl);
-        struct HirDecl *result = LowerFnDecl(L, d);
-        HirDeclList_push(L->hir, dst, result);
-    }
-    return dst;
-}
-
 static struct HirPath lower_path(struct LowerAst *L, struct AstPath path)
 {
     struct HirSegments *segments = HirSegments_new(L->hir);
@@ -270,6 +250,32 @@ static struct HirPath lower_path(struct LowerAst *L, struct AstPath path)
     }
 
     return pawHir_path_create(path.span, segments, kind);
+}
+
+static struct HirExpr *LowerProjectionExpr(struct LowerAst *L, struct AstProjectionExpr *e)
+{
+    return NEW_NODE(L, projection_expr, e->span, e->id, lower_type(L, e->type),
+            lower_path(L, e->trait), e->name);
+}
+
+static struct HirExpr *LowerReturnExpr(struct LowerAst *L, struct AstReturnExpr *e)
+{
+    struct HirExpr *expr = e->expr != NULL ? lower_expr(L, e->expr) : NULL;
+    return NEW_NODE(L, return_expr, e->span, e->id, expr);
+}
+
+static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d);
+
+static struct HirDeclList *lower_methods(struct LowerAst *L, struct AstDeclList *src)
+{
+    struct HirDeclList *dst = HirDeclList_new(L->hir);
+    for (int i = 0; i < src->count; ++i) {
+        struct AstDecl *decl = AstDeclList_get(src, i);
+        struct AstFnDecl *d = AstGetFnDecl(decl);
+        struct HirDecl *result = LowerFnDecl(L, d);
+        HirDeclList_push(L->hir, dst, result);
+    }
+    return dst;
 }
 
 static paw_Bool is_enum_decl(struct HirDecl *decl)
@@ -1032,6 +1038,12 @@ static struct HirType *LowerArrayType(struct LowerAst *L, struct AstArrayType *t
     struct HirExpr *length = lower_expr(L, t->length);
     struct HirType *type = lower_type(L, t->type);
     return NEW_NODE(L, array_type, t->span, t->id, type, length);
+}
+
+static struct HirType *LowerProjectionType(struct LowerAst *L, struct AstProjectionType *t)
+{
+    return NEW_NODE(L, projection_type, t->span, t->id, lower_type(L, t->type),
+            lower_path(L, t->trait), t->name);
 }
 
 static struct HirType *LowerTupleType(struct LowerAst *L, struct AstTupleType *t)

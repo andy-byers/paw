@@ -1069,6 +1069,27 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
     return pawIr_new_fn_ptr(T->C, params, ret);
 }
 
+static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjectionExpr *e)
+{
+    IrType *type = check_type(T, e->type, NODE_SPAN(e->type));
+
+    struct HirSegment const segment = HirSegments_last(e->trait.segments);
+    struct HirDecl *trait_decl = pawHir_get_node(T->hir, segment.target);
+    if (!HirIsTraitDecl(trait_decl)) {
+        TYPECK_ERROR(T, ExpectedTrait,
+                .path = segment.ident.name,
+                .span = segment.span);
+    }
+
+    IrGenericArgs *args = lower_generic_args(T, segment.args);
+    IrGenericArgs_insert(T->C, args, 0, IrGenericArg_from_type(type));
+    IrTrait *trait = pawIr_new_trait(T->C, trait_decl->hdr.did, args);
+
+    struct Instantiation const *inst = pawP_find_trait_method(
+            T->C, type, trait, e->name);
+    return inst->inst;
+}
+
 static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name)
 {
     struct Instantiation *method = pawP_find_method(C, self, name);
@@ -2126,7 +2147,7 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
             type = check_closure_expr(T, HirGetClosureExpr(expr));
             break;
         case kHirProjectionExpr:
-            PAW_UNREACHABLE(); // TODO: implement this
+            type = check_projection_expr(T, HirGetProjectionExpr(expr));
             break;
         case kHirConversionExpr:
             type = check_conversion_expr(T, HirGetConversionExpr(expr));

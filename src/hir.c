@@ -331,7 +331,6 @@ static void AcceptProjectionExpr(struct HirVisitor *V, struct HirProjectionExpr 
 {
     AcceptType(V, e->type);
     AcceptPath(V, &e->trait);
-    accept_expr_list(V, e->args);
 }
 
 static void AcceptAscriptionExpr(struct HirVisitor *V, struct HirAscriptionExpr *e)
@@ -975,8 +974,7 @@ static struct HirExpr *FoldProjectionExpr(struct HirFolder *F, struct HirProject
 {
     struct HirType *type = F->FoldType(F, e->type);
     struct HirPath const trait = F->FoldPath(F, e->trait);
-    HirExprList *args = pawHir_fold_expr_list(F, e->args);
-    return pawHir_new_projection_expr(F->hir, e->span, next_node_id(F), type, trait, e->ident, args);
+    return pawHir_new_projection_expr(F->hir, e->span, next_node_id(F), type, trait, e->name);
 }
 
 static struct HirExpr *FoldAscriptionExpr(struct HirFolder *F, struct HirAscriptionExpr *e)
@@ -1896,13 +1894,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
             dump_type(P, e->type);
             DUMP_CSTR(P, " as ");
             DUMP_CSTR(P, ">::");
-            DUMP_STR(P, e->ident.name);
-            DUMP_CHAR(P, '(');
-            for (int i = 0; i < e->args->count; ++i) {
-                if (i > 0) DUMP_CSTR(P, ", ");
-                dump_expr(P, HirExprList_get(e->args, i));
-            }
-            DUMP_CHAR(P, ')');
+            DUMP_STR(P, e->name);
             break;
         }
         case kHirFieldExpr: {

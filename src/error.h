@@ -329,6 +329,10 @@
         struct SourceSpan span; \
         Str const *path; \
     ) \
+    X(ExpectedTraitPath, ERR_CATEGORY_SYNTAX, \
+        Str const *modname; \
+        struct SourceSpan span; \
+    ) \
     X(ExtraSegment, ERR_CATEGORY_NAME, \
         Str const *modname; \
         struct SourceSpan span; \

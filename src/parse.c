@@ -622,6 +622,23 @@ static struct AstPath parse_pathtype(struct Lex *lex, paw_Bool allow_item_constr
     };
 }
 
+static struct AstExpr *projection_expr(struct Lex *lex)
+{
+    struct SourceLoc const first = TOKEN_START(lex->t);
+    skip(lex); // skip '<' token
+
+    struct AstType *type = parse_type(lex);
+    check_next(lex, TK_AS);
+
+    struct AstPath const trait = parse_pathtype(lex, PAW_FALSE);
+    struct SourceLoc const last = delim_next(lex, '>', '<', first);
+    check_next(lex, TK_COLON2);
+
+    struct AstIdent const ident = parse_ident(lex);
+    return NEW_NODE(lex, projection_expr, RANGE(first, last),
+            next_id(lex), type, trait, ident.name);
+}
+
 static struct AstExpr *path_expr(struct Lex *lex)
 {
     struct AstPath const path = parse_pathexpr(lex);
@@ -895,6 +912,21 @@ static struct AstType *parse_paren_type(struct Lex *lex, struct SourceLoc lparen
     return type;
 }
 
+static struct AstType *parse_projection_type(struct Lex *lex, struct SourceLoc lcaret)
+{
+    skip(lex); // skip '<' token
+    struct AstType *type = parse_type(lex);
+    check_next(lex, TK_AS);
+
+    struct AstPath const trait = parse_pathtype(lex, PAW_FALSE);
+    struct SourceLoc const rcaret = delim_next(lex, '>', '<', lcaret);
+    check_next(lex, TK_COLON2);
+
+    struct AstIdent const ident = parse_ident(lex);
+    return NEW_NODE(lex, projection_type, RANGE(lcaret, rcaret),
+            next_id(lex), type, trait, ident.name);
+}
+
 static struct AstType *parse_pointer_type(struct Lex *lex, struct SourceLoc start)
 {
     paw_Bool const is_mut = test_next(lex, TK_MUT);
@@ -950,6 +982,12 @@ static struct AstType *parse_type(struct Lex *lex)
                     RANGE(start, rbracket),
                     next_id(lex), elem, length);
         }
+    } else if (test(lex, TK_LESS2)) {
+        lex->t.kind = '<';
+        lex->t2.kind = '<';
+        return parse_projection_type(lex, start);
+    } else if (test(lex, '<')) {
+        return parse_projection_type(lex, start);
     } else {
         struct AstPath path = parse_pathtype(lex, PAW_FALSE);
         return NEW_NODE(lex, path_type, path.span, next_id(lex), path);
@@ -1492,6 +1530,8 @@ static struct AstExpr *primary_expr(struct Lex *lex)
             return paren_expr(lex);
         case '[':
             return array_lit(lex);
+        case '<':
+            return projection_expr(lex);
         case TK_NAME:
             return path_expr(lex);
         case TK_TRUE:

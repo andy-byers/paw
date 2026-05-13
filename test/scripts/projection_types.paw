@@ -1,0 +1,57 @@
+// projection_types.paw
+
+struct Struct;
+struct Struct2;
+
+pub trait Outer {
+    type Type: Inner;
+    fn get(*self) -> Self::Type;
+}
+
+pub trait Inner {
+    type Type;
+    fn get(*self) -> Self::Type;
+}
+
+impl Outer for Struct {
+    type Type = Struct2;
+    fn get(*self) -> Self::Type {
+        Struct2
+    }
+}
+
+impl Inner for Struct2 {
+    type Type = int;
+    fn get(*self) -> Self::Type {
+        123
+    }
+}
+
+fn generic_call<T: Outer>(t: T) -> <T as Outer>::Type
+{
+    t.get()
+}
+
+fn generic_call2<T: Outer>(t: T) -> <<T as Outer>::Type as Inner>::Type
+{
+    generic_call(t).get()
+}
+
+fn concrete_call(s: Struct) -> <Struct as Outer>::Type
+{
+    s.get()
+}
+
+fn concrete_call2(s: Struct) -> <<Struct as Outer>::Type as Inner>::Type
+{
+    concrete_call(s).get()
+}
+
+#[test]
+pub fn test() {
+    assert(generic_call(Struct).get() == 123);
+    assert(generic_call2(Struct) == 123);
+    assert(concrete_call(Struct).get() == 123);
+    assert(concrete_call2(Struct) == 123);
+}
+

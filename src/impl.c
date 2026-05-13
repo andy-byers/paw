@@ -127,7 +127,7 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrIm
     return matches;
 }
 
-struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str *name)
+struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str const *name)
 {
 #define ADD_APPLICABLE_METHODS(ImplDid_) do { \
             struct Candidate c_; \
@@ -220,7 +220,7 @@ static paw_Bool traits_are_compatible(struct Compiler *C, IrSolver *S, IrTrait *
         && pawIr_solver_solve(S).status == IR_SOLVER_OK;
 }
 
-struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, IrTrait *trait, Str *name)
+struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, IrTrait *trait, Str const *name)
 {
 #define ADD_APPLICABLE_METHODS(Methods_) do { \
             struct Candidate c_; \
@@ -391,7 +391,7 @@ struct Instantiation *pawIr_find_assoc_type_generic(struct Compiler *C, IrType *
 #undef ADD_APPLICABLE_TYPES
 }
 
-struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrType *projection, Str const *name)
+struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrType *self, IrTrait *trait, Str const *name)
 {
 #define ADD_APPLICABLE_TYPES(Impl_, Methods_) do { \
             struct Candidate c_; \
@@ -404,16 +404,13 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
     struct IrImpl const *target_impl;
     Candidates *candidates = Candidates_new(C);
     {
-        IrType *type = IrGetProjection(projection)->type;
-        IrTrait *trait = IrGetProjection(projection)->trait;
-
         // search trait implementations
         K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
             if (traits_are_compatible(C, C->S, trait, inst.trait)
-                    && types_are_compatible(C, type, inst.type))
+                    && types_are_compatible(C, self, inst.type))
                 ADD_APPLICABLE_TYPES(impl, impl->items);
             finish_query(C, q);
         }
@@ -441,7 +438,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
     struct Candidate const result = Candidates_first(candidates);
     IrType *assoc = pawIr_get_def_type(C, result.target);
 
-    IrType *self = pawIr_remove_indirection(C, IrGetProjection(projection)->type);
+    self = pawIr_remove_indirection(C, self);
     IrType *impl_type = pawIr_remove_indirection(C, target_impl->type);
     if (IrIsGeneric(self)) {
         assoc = pawIr_solver_instantiate_type_with(C->S, IR_TYPE_DID(self), IR_GENERIC_ARGS(self));

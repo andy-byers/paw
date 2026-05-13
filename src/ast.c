@@ -342,6 +342,12 @@ static void AcceptConversionExpr(struct AstVisitor *V, struct AstConversionExpr 
     AcceptType(V, e->to);
 }
 
+static void AcceptProjectionExpr(struct AstVisitor *V, struct AstProjectionExpr *t)
+{
+    AcceptType(V, t->type);
+    AcceptPath(V, &t->trait);
+}
+
 static void AcceptPathExpr(struct AstVisitor *V, struct AstPathExpr *e)
 {
     AcceptPath(V, &e->path);
@@ -407,6 +413,12 @@ static void AcceptArrayType(struct AstVisitor *V, struct AstArrayType *t)
 static void AcceptTupleType(struct AstVisitor *V, struct AstTupleType *t)
 {
     accept_type_list(V, t->types);
+}
+
+static void AcceptProjectionType(struct AstVisitor *V, struct AstProjectionType *t)
+{
+    AcceptType(V, t->type);
+    AcceptPath(V, &t->trait);
 }
 
 static void AcceptNeverType(struct AstVisitor *V, struct AstNeverType *t)
@@ -1096,6 +1108,10 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
             struct AstClosureExpr *e = AstGetClosureExpr(expr);
             break;
         }
+        case kAstProjectionExpr: {
+            struct AstProjectionExpr *e = AstGetProjectionExpr(expr);
+            break;
+        }
         case kAstConversionExpr: {
             struct AstConversionExpr *e = AstGetConversionExpr(expr);
             break;
@@ -1412,6 +1428,16 @@ static void print_type(paw_Env *P, Buffer *buf, struct AstType *type)
                     pawL_add_char(P, buf, ',');
             }
             pawL_add_char(P, buf, ')');
+            break;
+        }
+        case kAstProjectionType: {
+            struct AstProjectionType const *t = AstGetProjectionType(type);
+            pawL_add_char(P, buf, '<');
+            print_type(P, buf, t->type);
+            L_ADD_LITERAL(P, buf, " as ");
+            print_path(P, buf, t->trait, PAW_TRUE);
+            L_ADD_LITERAL(P, buf, ">::");
+            L_ADD_STRING(P, buf, t->name);
             break;
         }
         case kAstNeverType:

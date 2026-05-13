@@ -1620,6 +1620,12 @@ static void FormatIncorrectItemClassError(paw_Env *P, struct IncorrectItemClassE
             error->want->text, error->have->text);
 }
 
+static void FormatExpectedTraitPathError(paw_Env *P, struct ExpectedTraitPathError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer, "expected trait path");
+}
+
 static void FormatExtraSegmentError(paw_Env *P, struct ExtraSegmentError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);

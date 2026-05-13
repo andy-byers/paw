@@ -34,6 +34,7 @@
     X(TupleType) \
     X(SliceType) \
     X(FnType) \
+    X(ProjectionType) \
     X(NeverType) \
     X(InferType)
 
@@ -49,6 +50,7 @@
     X(RangeExpr) \
     X(ClosureExpr) \
     X(ConversionExpr) \
+    X(ProjectionExpr) \
     X(CallExpr) \
     X(Index) \
     X(Selector) \
@@ -546,6 +548,13 @@ struct AstFnType {
     struct AstTypeList *params;
 };
 
+struct AstProjectionType {
+    AST_TYPE_HEADER;
+    struct AstType *type;
+    struct AstPath trait;
+    Str const *name;
+};
+
 struct AstNeverType {
     AST_TYPE_HEADER;
 };
@@ -654,6 +663,21 @@ inline static struct AstType *pawAst_new_fn_type(struct Ast *ast, struct SourceS
         .kind = kAstFnType,
         .params = params,
         .result = result,
+    };
+    pawAst_set_node(ast, id, t);
+    return t;
+}
+
+inline static struct AstType *pawAst_new_projection_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstPath trait, Str const *name)
+{
+    struct AstType *t = pawAst_new_type(ast);
+    t->ProjectionType_ = (struct AstProjectionType){
+        .id = id,
+        .span = span,
+        .kind = kAstProjectionType,
+        .type = type,
+        .trait = trait,
+        .name = name,
     };
     pawAst_set_node(ast, id, t);
     return t;
@@ -838,6 +862,13 @@ struct AstConversionExpr {
     AST_EXPR_HEADER;
     struct AstExpr *from;
     struct AstType *to;
+};
+
+struct AstProjectionExpr {
+    AST_EXPR_HEADER;
+    struct AstType *type;
+    struct AstPath trait;
+    Str const *name;
 };
 
 struct AstAssignExpr {
@@ -1110,6 +1141,21 @@ inline static struct AstExpr *pawAst_new_closure_expr(struct Ast *ast, struct So
         .params = params,
         .result = result,
         .expr = expr,
+    };
+    pawAst_set_node(ast, id, e);
+    return e;
+}
+
+inline static struct AstExpr *pawAst_new_projection_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstPath trait, Str const *name)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->ProjectionExpr_ = (struct AstProjectionExpr){
+        .id = id,
+        .span = span,
+        .kind = kAstProjectionExpr,
+        .type = type,
+        .trait = trait,
+        .name = name,
     };
     pawAst_set_node(ast, id, e);
     return e;

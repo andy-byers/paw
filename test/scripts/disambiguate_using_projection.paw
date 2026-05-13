@@ -1,0 +1,27 @@
+// disambiguate_using_projection.paw
+
+struct Struct;
+
+impl Equals<Struct> for Struct {
+    fn eq(*self, rhs: *Struct) -> bool {
+        true
+    }
+}
+
+impl Equals<int> for Struct {
+    fn eq(*self, rhs: *int) -> bool {
+        false
+    }
+}
+
+fn eq<T: Equals<int> + Equals<T>>(lhs: T, rhs: T) {
+    assert(<T as Equals<T>>::eq(&lhs, &rhs));
+    assert(!<T as Equals<int>>::eq(&lhs, &123));
+}
+
+#[test]
+pub fn test() {
+    eq(Struct, Struct);
+    assert(<Struct as Equals<Struct>>::eq(&Struct, &Struct));
+    assert(!<Struct as Equals<int>>::eq(&Struct, &123));
+}

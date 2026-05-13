@@ -402,7 +402,8 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
                 struct IrProjection const *t = IrGetProjection(type);
                 if (!IrIsInfer(t->type)) {
                     Str const *name = pawIr_get_assoc_item(U->C, t->assoc)->name;
-                    struct Instantiation *assoc = pawIr_find_assoc_type_projection(U->C, type, name);
+                    struct Instantiation *assoc = pawIr_find_assoc_type_projection(
+                            U->C, t->type, t->trait, name);
                     return assoc != NULL ? assoc->inst : type;
                 }
             }

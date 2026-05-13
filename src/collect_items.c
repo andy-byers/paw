@@ -781,7 +781,6 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
     IrTrait *trait = collect_trait_path(X, trait_path->path, self);
     ensure_trait_is_well_formed(X, trait_path->span, trait);
 
-    struct HirDecl *const *decl_ptr;
     struct IrImpl const *impl_def = pawIr_get_impl_def(X->C, d->did);
     K_LIST_XFOREACH (d->types, struct HirDecl *const, decl_ptr) {
         struct HirTypeDecl const *t = HirGetTypeDecl(*decl_ptr);
@@ -961,6 +960,7 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 {
     struct IrFnDef *fn_def = pawIr_get_fn_def(X->C, d->did);
     IrGenericArgs *generics = pawIr_get_generic_args(X->C, d->did);
+    add_predicates_from(X, d->did);
     if (d->body != NULL)
         collect_local_type_aliases(X, d->body);
     collect_param_types(X, d->params);

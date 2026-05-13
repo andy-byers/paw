@@ -17,6 +17,7 @@ TESTS=(
     "poly_supertraits"
     "supertrait_assoc_type_bound"
     "supertrait_methods"
+    "disambiguate_using_projection"
     "primitive"
     "operator"
     "op_assign"

@@ -54,9 +54,95 @@ static IrType *lower_array_type(struct LowerType *L, struct HirArrayType *t)
     return pawIr_new_array(L->C, type, length);
 }
 
+static DeclId const *locate_assoc_type(struct LowerType *L, IrTrait *trait, Str const *name)
+{
+    struct IrTraitDef const *def = pawIr_get_trait_def(L->C, trait->did);
+    K_LIST_XFOREACH (def->items, struct IrAssocItem *const, pitem) {
+        struct IrAssocItem const *item = *pitem;
+        if (pawS_eq(item->name, name))
+            return &item->did;
+    }
+    return NULL;
+}
+
 static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionType *t)
 {
-    PAW_UNUSED(L); PAW_UNUSED(t); PAW_UNREACHABLE(); // TODO: unimplemented
+    IrType *type = lower_type(L, t->type);
+
+    struct HirSegment const segment = HirSegments_last(t->trait.segments);
+    struct HirDecl *trait_decl = pawHir_get_node(L->hir, segment.target);
+    if (!HirIsTraitDecl(trait_decl)) {
+        LOWERING_ERROR(L, ExpectedTrait,
+                .path = segment.ident.name,
+                .span = segment.span);
+    }
+
+    IrGenericArgs *args = lower_generic_args(L, segment.args);
+    IrGenericArgs_push(L->C, args, IrGenericArg_from_type(type));
+    IrTrait *trait = pawIr_new_trait(L->C, trait_decl->hdr.did, args);
+
+    // prove that the trait is implemented by the type
+    IrSolver *child = pawIr_push_solver(L->C);
+    if (IrIsAdt(type))
+        pawIr_solver_add_well_formed_obligation(child, trait->did, args,
+                (struct IrObligationCause){.span = t->type->hdr.span});
+    pawIr_solver_add_well_formed_obligation(child, trait->did, args,
+            (struct IrObligationCause){.span = t->trait.span});
+    pawIr_solver_add_impl_trait_obligation(child, type, trait,
+            (struct IrObligationCause){.span = t->span});
+    struct IrSolverResult const result = pawIr_solver_solve(child);
+
+    switch (result.status) {
+        case IR_SOLVER_OK:
+            if (result.num_unsolved != 0) {
+                struct IrObligation const example = pawIr_solver_first_obligation(L->C->S);
+                LOWERING_ERROR(L, UnsatisfiedObligation,
+                        .example = pawIr_print_obligation_(L->C, example),
+                        .num_unsolved = result.num_unsolved,
+                        .span = example.cause.span);
+            }
+            break;
+        case IR_SOLVER_CANNOT_PROVE_OBLIGATION:
+            LOWERING_ERROR(L, FalseObligation,
+                    .obligation = pawIr_print_obligation_(L->C, result.cpo.obligation),
+                    .span = result.cpo.obligation.cause.span);
+        case IR_SOLVER_MULTIPLE_APPLICABLE_TRAITS: {
+            LOWERING_ERROR(L, MultipleApplicableTraits, .span = {0});
+        }
+    }
+
+    pawIr_pop_solver(L->C);
+
+    if (IrIsGeneric(type) || IrIsProjection(type)) {
+        DeclId const *passoc = locate_assoc_type(L, trait, t->name);
+        if (passoc == NULL)
+            LOWERING_ERROR(L, UnknownAssociatedItem,
+                    .item = t->name,
+                    .span = t->span);
+        return pawIr_new_projection(L->C, type, trait, *passoc);
+    } else {
+        // Search for the associated item on a trait impl.
+        struct Instantiation const *inst = pawIr_find_assoc_type_projection(
+                L->C, type, trait, t->name);
+        return inst->inst;
+    }
+
+//    // TODO: pawIr_find_assoc_type_projection checks impls, but we need behavior more like the version that searches generic bounds
+//    if (IrIsGeneric(type)) {
+//        IrType *self = pawU_new_unknown(L->C->U, t->type->hdr.span);
+//        IrGenericArgs *args = IrGenericArgs_new(L->C);
+//        IrGenericArgs_push(L->C, args, IrGenericArg_from_type(self));
+//        struct Substitution const subst = {trait->args, args};
+//        trait = pawP_substitute_trait(L->C, trait, subst);
+//        struct Instantiation const *inst = pawIr_find_assoc_type_projection(
+//                L->C, self, trait, t->name);
+//        pawU_unify_unchecked(L->C->U, self, type);
+//        return pawU_normalize(L->C->U, inst->inst);
+//    } else {
+//        struct Instantiation const *inst = pawIr_find_assoc_type_projection(
+//                L->C, type, trait, t->name);
+//        return inst->inst;
+//    }
 }
 
 static IrType *lower_slice_type(struct LowerType *L, struct HirSliceType *t)
@@ -276,12 +362,12 @@ IrGenericArg pawP_lower_generic_arg(struct Compiler *C, struct HirModule m, stru
 static IrGenericArgs *lower_generic_args(struct LowerType *L, struct HirGenericArgs *types)
 {
     IrGenericArgs *result = IrGenericArgs_new(L->C);
-    IrGenericArgs_reserve(L->C, result, types->count);
-
-    struct HirGenericArg const *p;
-    K_LIST_FOREACH (types, p) {
-        IrGenericArg const arg = lower_generic_arg(L, *p);
-        IrGenericArgs_push(L->C, result, arg);
+    if (types != NULL) {
+        IrGenericArgs_reserve(L->C, result, types->count);
+        K_LIST_XFOREACH (types, struct HirGenericArg const, p) {
+            IrGenericArg const arg = lower_generic_arg(L, *p);
+            IrGenericArgs_push(L->C, result, arg);
+        }
     }
     return result;
 }

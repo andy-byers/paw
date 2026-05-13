@@ -840,8 +840,7 @@ struct HirProjectionExpr {
     HIR_EXPR_HEADER;
     struct HirType *type;
     struct HirPath trait;
-    struct HirIdent ident;
-    struct HirExprList *args;
+    Str const *name;
 };
 
 struct HirOpAssignExpr {
@@ -1164,7 +1163,7 @@ static struct HirExpr *pawHir_new_conversion_expr(struct Hir *hir, struct Source
     return e;
 }
 
-static struct HirExpr *pawHir_new_projection_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirType *type, struct HirPath trait, struct HirIdent ident, struct HirExprList *args)
+static struct HirExpr *pawHir_new_projection_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirType *type, struct HirPath trait, Str const *name)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->ProjectionExpr_ = (struct HirProjectionExpr){
@@ -1173,8 +1172,7 @@ static struct HirExpr *pawHir_new_projection_expr(struct Hir *hir, struct Source
         .kind = kHirProjectionExpr,
         .type = type,
         .trait = trait,
-        .ident = ident,
-        .args = args,
+        .name = name,
     };
     pawHir_register_node(hir, id, e);
     return e;

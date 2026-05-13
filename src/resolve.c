@@ -627,6 +627,37 @@ static paw_Bool resolve_path_type(struct AstVisitor *V, struct AstPathType *t)
     return PAW_FALSE;
 }
 
+static paw_Bool resolve_projection_type(struct AstVisitor *V, struct AstProjectionType *t)
+{
+    struct Resolver *R = V->ud;
+
+    if (AstIsPathType(t->type)) {
+        struct Symbol symbol;
+        struct AstPathType const *path = AstGetPathType(t->type);
+        if (!lookup_type(R, pc_create(path->path), &symbol))
+            RESOLVER_ERROR(R, UnknownPath,
+                    .path = pawAst_print_type_path(R->ast, path->path),
+                    .span = t->span);
+
+        struct AstDecl *self = pawAst_get_node(R->ast, symbol.id);
+        if (AstIsTraitDecl(self))
+            RESOLVER_ERROR(R, UnexpectedTrait,
+                    .span = t->span);
+    } else {
+        pawAst_visit_type(V, t->type);
+    }
+
+    struct Symbol const trait_symbol = lookup_or_error(R, t->trait, NAMESPACE_TYPE);
+    struct AstDecl *trait = pawAst_get_node(R->ast, trait_symbol.id);
+    if (!AstIsTraitDecl(trait))
+        RESOLVER_ERROR(R, ExpectedTrait,
+                .path = pawAst_print_type_path(R->ast, t->trait),
+                .span = t->span);
+
+    resolve_type_args(V, t->trait);
+    return PAW_FALSE;
+}
+
 static paw_Bool in_first_alternative(struct OrState const *os)
 {
     while (os != NULL) {
@@ -848,6 +879,37 @@ static void leave_block_expr(struct AstVisitor *V, struct AstBlock *e)
     leave_scope(V->ud);
 }
 
+static paw_Bool resolve_projection_expr(struct AstVisitor *V, struct AstProjectionExpr *e)
+{
+    struct Resolver *R = V->ud;
+
+    if (AstIsPathType(e->type)) {
+        struct Symbol symbol;
+        struct AstPathType const *path = AstGetPathType(e->type);
+        if (!lookup_type(R, pc_create(path->path), &symbol))
+            RESOLVER_ERROR(R, UnknownPath,
+                    .path = pawAst_print_type_path(R->ast, path->path),
+                    .span = e->span);
+
+        struct AstDecl *self = pawAst_get_node(R->ast, symbol.id);
+        if (AstIsTraitDecl(self))
+            RESOLVER_ERROR(R, UnexpectedTrait,
+                    .span = e->span);
+    } else {
+        pawAst_visit_type(V, e->type);
+    }
+
+    struct Symbol const trait_symbol = lookup_or_error(R, e->trait, NAMESPACE_TYPE);
+    struct AstDecl *trait = pawAst_get_node(R->ast, trait_symbol.id);
+    if (!AstIsTraitDecl(trait))
+        RESOLVER_ERROR(R, ExpectedTrait,
+                .path = pawAst_print_type_path(R->ast, e->trait),
+                .span = e->span);
+
+    resolve_type_args(V, e->trait);
+    return PAW_FALSE;
+}
+
 static paw_Bool enter_for_expr(struct AstVisitor *V, struct AstForExpr *e)
 {
     PAW_UNUSED(e);
@@ -1062,6 +1124,7 @@ void pawP_resolve_names(struct Compiler *C)
     pawAst_visitor_init(R.V, C->ast, &R);
     R.V->VisitPathExpr = resolve_path_expr;
     R.V->VisitPathType = resolve_path_type;
+    R.V->VisitProjectionType = resolve_projection_type;
     R.V->VisitIdentPat = resolve_ident_pat;
     R.V->VisitPathPat = resolve_path_pat;
     R.V->VisitOrPat = resolve_or_pat;
@@ -1070,6 +1133,7 @@ void pawP_resolve_names(struct Compiler *C)
     R.V->VisitLiteralExpr = resolve_literal_expr;
     R.V->VisitMatchArm = enter_match_arm;
     R.V->PostVisitMatchArm = leave_match_arm;
+    R.V->VisitProjectionExpr = resolve_projection_expr;
     R.V->VisitBlock = enter_block_expr;
     R.V->PostVisitBlock = leave_block_expr;
     R.V->VisitForExpr = enter_for_expr;
