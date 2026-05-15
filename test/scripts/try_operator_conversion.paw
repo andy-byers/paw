@@ -1,0 +1,20 @@
+// try_operator_conversion.paw
+
+struct Error {pub code: int}
+struct Error2 {pub code: int}
+
+impl From<Error> for Error2 {
+    fn from(e: Error) -> Self {
+        Error2{code: e.code}
+    }
+}
+
+pub fn check(code: int) -> Result<(), Error2> {
+    Err(Error{code})?
+}
+
+#[test]
+pub fn test() {
+    assert(check(123).unwrap_err().code == 123);
+}
+

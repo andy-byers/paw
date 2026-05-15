@@ -1125,6 +1125,14 @@ static void FormatMoveOutOfPointerError(paw_Env *P, struct MoveOutOfPointerError
             error->type->text, error->type->text);
 }
 
+static void FormatTraitNotImplementedError(paw_Env *P, struct TraitNotImplementedError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer,
+            "trait `%s` not implemented for type `%s`",
+            error->trait->text, error->type->text);
+}
+
 static void FormatInvalidInclusiveRangeError(paw_Env *P, struct InvalidInclusiveRangeError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);

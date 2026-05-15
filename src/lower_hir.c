@@ -1109,7 +1109,10 @@ static struct MirPlace result_chain_error(struct FunctionState *fs, struct Sourc
         struct Instantiation const *inst = pawP_find_trait_method(fs->C, from_error_type,
                 into_trait, SCAN_STR(fs->C, "into"));
         if (inst == NULL)
-            __builtin_trap();
+            LOWERING_ERROR(fs->L, TraitNotImplemented,
+                    .trait = pawIr_print_trait_v2(fs->C, into_trait),
+                    .type = pawIr_print_type_v2(fs->C, from_error_type),
+                    .span = span);
 
         into_fn = new_register(fs, inst->inst);
         NEW_INSTR(fs, global, span, into_fn);
@@ -1117,7 +1120,7 @@ static struct MirPlace result_chain_error(struct FunctionState *fs, struct Sourc
 
     // convert to the type of the error variant payload from the function return type
     MirPlaceList *into_args = MirPlaceList_new(fs->mir);
-    MirPlaceList_push(fs->mir, into_args, from_error);
+    MirPlaceList_push(fs->mir, into_args, load_from(fs, span, from_error));
     NEW_INSTR(fs, call, span, into_fn, into_args, into_error);
 
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
