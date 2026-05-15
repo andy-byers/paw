@@ -220,6 +220,22 @@ static paw_Bool traits_are_compatible(struct Compiler *C, IrSolver *S, IrTrait *
         && pawIr_solver_solve(S).status == IR_SOLVER_OK;
 }
 
+static paw_Bool impls_are_compatible(struct Compiler *C, IrType *self, IrTrait *trait, struct IrImpl const *impl)
+{
+    paw_Bool matches = PAW_FALSE;
+    struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, impl->did);
+    if (pawU_unify(C->U, inst.type, self) == 0
+            && pawIr_unify_traits(C, inst.trait, trait) == 0) {
+        pawIr_solver_add_obligations_from(C->S, impl->did, inst.args);
+        struct IrSolverResult const result = pawIr_solver_solve(C->S);
+        matches = result.status == IR_SOLVER_OK
+            && result.num_unsolved == 0;
+    }
+    pawIr_solver_rollback(C->S);
+
+    return matches;
+}
+
 struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, IrTrait *trait, Str const *name)
 {
 #define ADD_APPLICABLE_METHODS(Methods_) do { \
@@ -264,9 +280,8 @@ struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, I
         // search trait implementations
         K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
             struct QueryState const q = start_query(C);
-            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
-            if (types_are_compatible(C, self, inst.type)
-                    && traits_are_compatible(C, q.S, trait, inst.trait)) {
+            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
+            if (impls_are_compatible(C, self, trait, impl)) {
                 struct IrImpl const *def = pawIr_get_impl_def(C, *p);
                 ADD_APPLICABLE_METHODS(def->methods);
             }
@@ -276,8 +291,8 @@ struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, I
         // search blanket implementations
         K_LIST_XFOREACH (C->impls.blanket, DeclId const, p) {
             struct QueryState const q = start_query(C);
-            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
-            if (inst.trait != NULL && traits_are_compatible(C, q.S, trait, inst.trait)) {
+            struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
+            if (impl->trait != NULL && impls_are_compatible(C, self, trait, impl)) {
                 struct IrImpl const *def = pawIr_get_impl_def(C, *p);
                 ADD_APPLICABLE_METHODS(def->methods);
             }

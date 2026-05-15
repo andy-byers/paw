@@ -5,6 +5,8 @@
 pub use string::String;
 
 use mem;
+use ptr;
+use result;
 use string_builder;
 
 
@@ -13,12 +15,18 @@ pub trait Display {
 }
 
 
-pub struct Error {
+pub enum Error {
     OutOfMemory,
     InvalidBase,
 }
 
 use Error::*;
+
+impl Into<Error> for mem::OutOfMemory {
+    fn into(self) -> Error {
+        Error::OutOfMemory
+    }
+}
 
 
 pub type Result<T> = result::Result<T, Error>;
@@ -31,6 +39,13 @@ pub struct Formatter {
 impl Formatter {
     pub fn new() -> Self {
         Self{b: string_builder::Builder::new()}
+    }
+
+    pub fn append_<I: IntoIterator<Item = *char>>(*self, iter: I) -> Result<()> {
+        for p in iter {
+            self.append_char(*p)?;
+        }
+        Ok(())
     }
 
     pub fn append<T: ToSlice<char>>(*self, value: T) -> Result<()> {
@@ -48,15 +63,16 @@ impl Formatter {
         Ok(())
     }
 
-    pub fn append_int(*self, value: int) -> mem::Result<()> {
+    pub fn append_int(*self, value: int) -> Result<()> {
         self.append_int_radix(value, 10)
     }
 
-    pub fn append_float(*self, value: int) -> mem::Result<()> {
+    pub fn append_float(*self, value: int) -> Result<()> {
         Ok(())
     }
 
     pub fn string(self) -> String {
-        self.b.string()
+        let b = ptr::replace(&self.b, string_builder::Builder::new());
+        b.string()
     }
 }

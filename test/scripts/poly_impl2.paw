@@ -1,11 +1,11 @@
 // poly_impl2.paw
 
 pub trait TestFrom<T> {
-    fn from(value: T) -> Self;
+    fn test_from(value: T) -> Self;
 }
 
 pub trait TestInto<T> {
-    fn into(*self) -> T;
+    fn test_into(*self) -> T;
 }
 
 pub struct CustomType<T> {
@@ -13,20 +13,20 @@ pub struct CustomType<T> {
 }
 
 impl<T> TestFrom<T> for CustomType<T> {
-    fn from(value: T) -> Self {
+    fn test_from(value: T) -> Self {
         Self{value}
     }
 }
 
 impl<T> TestInto<T> for CustomType<T> {
-    fn into(*self) -> T {
+    fn test_into(*self) -> T {
         self.value
     }
 }
 
 fn roundtrip<T>(value: T) -> T {
-    let t = CustomType::from(value);
-    t.into()
+    let t = CustomType::test_from(value);
+    t.test_into()
 }
 
 #[test]

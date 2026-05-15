@@ -504,7 +504,7 @@ static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir
     return inst;
 }
 
-static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *base, struct IrSignature *sig, IrType *self)
+static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *base, struct IrSignature *sig, IrType *self, IrTrait *trait)
 {
     struct IrFnDef const *def = pawIr_get_fn_def(M->C, sig->did);
     struct IrImpl *const *impl_ptr = ImplMap_get(M->C, M->C->impl_defs, base->parent_id);
@@ -515,11 +515,10 @@ static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *
     // types they were instantiated with. Substitute the former for the latter
     // in the context of the function.
 
-    struct Instantiation const *inst = pawP_find_method(M->C, self, def->name);
+    IrType *fn = get_assoc_fn(M, self, trait, def->name);
+    sig->did = IR_TYPE_DID(fn);
 
-    sig->did = IR_TYPE_DID(inst->inst);
-
-    pawU_unify_unchecked(M->C->U, (IrType *)sig, inst->inst);
+    pawU_unify_unchecked(M->C->U, (IrType *)sig, fn);
     sig = (struct IrSignature *)pawU_normalize_projections(M->C->U, (IrType *)sig);
 
     return monomorphize_function_aux(M, base, sig, self);
@@ -633,9 +632,10 @@ static struct Mir *monomorphize(struct MonoCollector *M, IrType *type)
     if (!base->is_poly) return base;
 
     IrType *self = pawIr_get_context(M->C, type);
+    IrTrait *trait = pawIr_get_trait_context(M->C, type);
     return self == NULL
                ? monomorphize_function_aux(M, base, t, NULL)
-               : monomorphize_method_aux(M, base, t, self);
+               : monomorphize_method_aux(M, base, t, self, trait);
 }
 
 static IrType *collect_other(struct MonoCollector *M, IrType *type)

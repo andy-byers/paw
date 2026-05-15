@@ -93,6 +93,7 @@ enum CoreTrait {
     CORE_TRAIT_COMPARE,
     CORE_TRAIT_INDEX,
     CORE_TRAIT_FROM,
+    CORE_TRAIT_INTO,
     NUM_CORE_TRAITS
 };
 

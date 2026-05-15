@@ -1319,7 +1319,7 @@ static void FormatExpectedTypeAnnotationError(paw_Env *P, struct ExpectedTypeAnn
 {
     add_error_header(P, error->modname, error->span, buffer);
     pawL_add_fstring(P, buffer,
-            "expected type annotationon on %s \"%s\"",
+            "expected type annotation on %s \"%s\"",
             error->what->text, error->name->text);
 }
 

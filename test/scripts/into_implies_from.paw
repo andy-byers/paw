@@ -1,0 +1,21 @@
+// into_implies_from.paw
+
+struct First;
+struct Second;
+
+impl From<First> for Second {
+    fn from(value: First) -> Self {
+        Second
+    }
+}
+
+fn convert<X: Into<Y>, Y>(x: X) -> Y {
+    x.into()
+}
+
+#[test]
+pub fn test() {
+    // NOTE: requires annotation (cannot infer return type here)
+    let _: Second = convert(First);
+}
+

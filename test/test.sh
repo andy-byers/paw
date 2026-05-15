@@ -13,6 +13,8 @@ TESTS=(
 #TODO    "nested_assoc_type"
     "recursive_assoc_item_constraints_2"
     "assoc_type_in_bound"
+    "into_implies_from"
+    "conversions_are_reflexive"
     "supertraits"
     "poly_supertraits"
     "supertrait_assoc_type_bound"

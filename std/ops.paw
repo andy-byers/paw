@@ -110,6 +110,11 @@ pub trait From<T> {
 }
 
 
+pub trait Into<T> {
+    fn into(self) -> T;
+}
+
+
 pub trait AsPtr<T> {
     fn as_ptr(*self) -> *T;
 }
@@ -755,7 +760,14 @@ pub fn builtin_rawcmp(
     rhs: *char, rhs_len: int) -> int;
 
 
+impl<T> From<T> for T {
+    fn from(value: T) -> Self {
+        value
+    }
+}
 
-
-
-
+impl<X, Y: From<X>> Into<Y> for X {
+    fn into(self) -> Y {
+        Y::from(self)
+    }
+}

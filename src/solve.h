@@ -72,7 +72,7 @@ struct IrTrait *pawIr_solver_instantiate_trait_with(IrSolver *S, DeclId did, str
 struct IrImplInstance {
     struct IrType *type;
     struct IrTrait *trait;
-    struct IrAssocItems *items;
+    struct IrGenericArgs *args;
 };
 
 struct IrImplInstance pawIr_solver_instantiate_impl(IrSolver *S, DeclId did);

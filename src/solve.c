@@ -270,12 +270,14 @@ void pawIr_solver_add_obligations_from_trait(IrSolver *S, IrTrait *trait)
     pawIr_solver_add_obligations_from(S, trait->did, trait->args);
 }
 
-static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrImpl const *impl)
+static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, IrTrait *trait, struct IrImpl const *impl)
 {
     paw_Bool matches = PAW_FALSE;
     WITH_SOLVER_CTX(C, child, {
         struct IrImplInstance const inst = pawIr_solver_instantiate_impl(child, impl->did);
-        if (pawU_unify(C->U, inst.type, self) == 0) {
+        if (pawU_unify(C->U, inst.type, self) == 0
+                && pawIr_unify_traits(C, inst.trait, trait) == 0) {
+            pawIr_solver_add_obligations_from(child, impl->did, inst.args);
             struct IrSolverResult const result = pawIr_solver_solve(child);
             matches = result.status == IR_SOLVER_OK
                 && result.num_unsolved == 0;
@@ -337,47 +339,31 @@ static int type_implements_trait(IrSolver *S, IrType *self, IrTrait *impl_trait,
     // compatible with "self"
     K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
         struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-        if (impl_is_compatible(C, self, impl)) {
-            IrSolver *child = pawIr_push_solver(C);
-            int const snapshot = pawU_current_position(C->U);
-            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(child, impl->did);
-            if (pawIr_unify_traits(C, inst.trait, impl_trait) == 0) {
-                Candidates_push(C, candidates, (struct Candidate){
-                            .trait_did = inst.trait->did,
-                            .impl_did = impl->did,
-                        });
-                LOGLN("SOLVER:%p: proved `%s: %s` using trait impl block DefId(%d)",
-                        (void *)S, pawIr_print_type(S->C, pawU_normalize_projections(S->U, inst.type)),
-                        pawIr_print_trait(S->C, pawIr_normalize_trait(S->C, inst.trait)),
-                        impl->did.value);
-            }
-            pawU_undo_unifications(C->U, snapshot);
-            pawIr_solver_rollback(child);
-            pawIr_pop_solver(C);
+        if (impl_is_compatible(C, self, impl_trait, impl)) {
+            Candidates_push(C, candidates, (struct Candidate){
+                        .trait_did = impl->trait->did,
+                        .impl_did = impl->did,
+                    });
+
+            LOGLN("SOLVER:%p: proved `%s: %s` using trait impl block DefId(%d)",
+                    (void *)S, pawIr_print_type(S->C, pawU_normalize_projections(S->U, inst.type)),
+                    pawIr_print_trait(S->C, pawIr_normalize_trait(S->C, inst.trait)),
+                    impl->did.value);
         }
     }
 
     // add instantiated trait types from blanket impl blocks
     K_LIST_XFOREACH (C->impls.blanket, DeclId const, p) {
         struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-        if (impl_is_compatible(C, self, impl)) {
-            IrSolver *child = pawIr_push_solver(C);
-            int const snapshot = pawU_current_position(C->U);
-            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(S, impl->did);
-            pawU_unify_unchecked(C->U, inst.type, self);
-            if (pawIr_unify_traits(C, inst.trait, impl_trait) == 0) {
-                Candidates_push(C, candidates, (struct Candidate){
-                            .trait_did = inst.trait->did,
-                            .impl_did = impl->did,
-                        });
-                LOGLN("SOLVER:%p: proved `%s: %s` using blanket impl block DefId(%d)",
-                        (void *)S, pawIr_print_type(S->C, impl->type),
-                        pawIr_print_trait(S->C, impl->trait),
-                        impl->did.value);
-            }
-            pawU_undo_unifications(C->U, snapshot);
-            pawIr_solver_rollback(child);
-            pawIr_pop_solver(C);
+        if (impl_is_compatible(C, self, impl_trait, impl)) {
+            Candidates_push(C, candidates, (struct Candidate){
+                        .trait_did = impl->trait->did,
+                        .impl_did = impl->did,
+                    });
+            LOGLN("SOLVER:%p: proved `%s: %s` using blanket impl block DefId(%d)",
+                    (void *)S, pawIr_print_type(S->C, impl->type),
+                    pawIr_print_trait(S->C, impl->trait),
+                    impl->did.value);
         }
     }
 
@@ -453,17 +439,19 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     IrTrait *trait = pawIr_normalize_trait_projections(S->C, o.impl.trait);
                     LOGLN("SOLVER:%p: encountered impl trait obligation `%s`",
                             (void *)S, pawIr_print_impl_trait_obligation(S->C, type, trait));
+
+                    if (pawIr_type_contains_inference_var(S->C, type)
+                            || pawIr_trait_contains_inference_var(S->C, trait))
+                        break; // not enough information
+
                     IrDefs *traits_for_error;
-                    int status = IMPL_NOT_FOUND;
-                    if (!IrIsInfer(type) && (status = type_implements_trait(
-                                    S, type, trait, &traits_for_error)) == IMPL_FOUND) {
+                    int status = type_implements_trait(S, type, trait, &traits_for_error);
+                    if (status == IMPL_FOUND) {
                         LOGLN("SOLVER:%p: proved impl trait obligation `%s`",
                                 (void *)S, pawIr_print_impl_trait_obligation(S->C, type, trait));
 
                         solved = PAW_TRUE;
-                    } else if (status == IMPL_NOT_FOUND
-                            && !pawIr_type_contains_inference_var(S->C, type)
-                            && !pawIr_trait_contains_inference_var(S->C, trait)) {
+                    } else if (status == IMPL_NOT_FOUND) {
                         // solver was not blocked by the unifier, indicating an
                         // unprovable obligation
                         struct IrSolverResult result;
@@ -483,14 +471,14 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     IrType *lhs = pawU_normalize_projections(S->U, o.eq.lhs);
                     IrType *rhs = pawU_normalize_projections(S->U, o.eq.rhs);
                     if (solve_type_equals_obligation(S, lhs, rhs) == 0) {
-                        LOGLN("SOLVER:%p: proved type equals obligation `%s := %s`",
+                        LOGLN("SOLVER:%p: proved type equals obligation `%s = %s`",
                                 (void *)S, pawIr_print_type(S->C, lhs),
                                 pawIr_print_type(S->C, rhs));
 
                         solved = PAW_TRUE;
                     } else if (!pawIr_type_contains_inference_var(S->C, lhs)
                             && !pawIr_type_contains_inference_var(S->C, rhs)) {
-                        LOGLN("SOLVER:%p: unable to solve type equals obligation `%s := %s`",
+                        LOGLN("SOLVER:%p: unable to solve type equals obligation `%s = %s`",
                                 (void *)S, pawIr_print_type(S->C, lhs),
                                 pawIr_print_type(S->C, rhs));
                         result.status = IR_SOLVER_CANNOT_PROVE_OBLIGATION;
@@ -558,7 +546,6 @@ IrType *pawIr_solver_instantiate_type_with(IrSolver *S, DeclId did, IrGenericArg
 {
     IrGenericArgs *params = pawIr_get_generic_args(S->C, did);
     struct Substitution const subst = {params, args};
-//    pawIr_solver_add_predicates_from(S, did, args);
     IrType *base = pawIr_get_def_type(S->C, did);
     return pawP_substitute(S->C, base, subst);
 }
@@ -568,7 +555,6 @@ IrTrait *pawIr_solver_instantiate_trait(IrSolver *S, DeclId did)
     IrTrait *trait = pawIr_get_trait(S->C, did);
     IrGenericArgs *args = pawIr_instantiate_args(S->C, did);
     struct Substitution const subst = {trait->args, args};
-//    pawIr_solver_add_predicates_from(S, did, args);
     return substitute_trait(S->C, trait, subst);
 }
 
@@ -576,7 +562,6 @@ IrTrait *pawIr_solver_instantiate_trait_with(IrSolver *S, DeclId did, IrGenericA
 {
     IrTrait *trait = pawIr_get_trait(S->C, did);
     struct Substitution const subst = {trait->args, args};
-//    pawIr_solver_add_predicates_from(S, did, args);
     return substitute_trait(S->C, trait, subst);
 }
 
@@ -588,7 +573,7 @@ struct IrImplInstance pawIr_solver_instantiate_impl(IrSolver *S, DeclId did)
         return (struct IrImplInstance){
                 .type = def->type,
                 .trait = def->trait,
-                .items = def->items,
+                .args = NULL,
             };
     }
     IrGenericArgs *args = pawIr_instantiate_args(S->C, did);
@@ -600,12 +585,11 @@ struct IrImplInstance pawIr_solver_instantiate_impl_with(IrSolver *S, DeclId did
     struct IrImpl const *impl = pawIr_get_impl_def(S->C, did);
     IrGenericArgs *params = pawIr_get_generic_args(S->C, did);
     struct Substitution const subst = {params, args};
-//    pawIr_solver_add_predicates_from(S, did, args);
     return (struct IrImplInstance){
         .type = pawP_substitute(S->C, impl->type, subst),
         .trait = impl->trait == NULL ? NULL :
             substitute_trait(S->C, impl->trait, subst),
-        .items = NULL, // TODO
+        .args = args,
     };
 }
 

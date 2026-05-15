@@ -1,0 +1,19 @@
+// conversions_are_reflexive.paw
+
+struct Struct;
+
+fn into_self<T: Into<T>>(value: T) -> T {
+    value.into()
+}
+
+fn from_self<T: From<T>>(value: T) -> T {
+    T::from(value)
+}
+
+#[test]
+pub fn test() {
+    // NOTE: requires annotation (cannot infer return type here)
+    let _: Struct = into_self(Struct);
+    let _: Struct = from_self(Struct);
+}
+

@@ -1081,13 +1081,44 @@ static struct MirPlace option_chain_error(struct FunctionState *fs, struct Sourc
 
 static struct MirPlace result_chain_error(struct FunctionState *fs, struct SourceSpan span, struct MirPlace object)
 {
-    MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const k = new_constant(fs, span, I2V(PAW_RESULT_ERR), BUILTIN_INT);
-    MirPlaceList_push(fs->mir, fields, k);
+    IrType *result_type = auto_deref_full(object.type);
+    IrType *from_error_type = IrGenericArg_get_type(IrGenericArgs_last(IrGetAdt(result_type)->args));
+    IrType *into_error_type = IrGenericArg_get_type(IrGenericArgs_last(IrGetAdt(fs->result)->args));
+    struct MirPlace const from_error = select_field(fs, object, 1, PAW_RESULT_ERR, from_error_type);
+    struct MirPlace const into_error = new_register(fs, into_error_type);
 
-    IrType *error_type = IrGenericArg_get_type(K_LIST_LAST(IrGetAdt(fs->result)->args));
-    struct MirPlace const e = select_field(fs, object, 1, PAW_RESULT_ERR, error_type);
-    MirPlaceList_push(fs->mir, fields, load_from(fs, e.span, e));
+    // Determine the type of method `<E as Into<E2>>::into`, where `Result<_, E>` is the type of
+    // the operand to `?` and `Result<_, E2>` is the return type of the enclosing function. Note
+    // that the blanket implementation (`impl<T> Into<T> for T`) is used if a more specific impl
+    // has not been provided.
+    struct MirPlace into_fn;
+    {
+        IrGenericArgs *args = IrGenericArgs_new(fs->C);
+        IrGenericArgs_push(fs->C, args, IrGenericArg_from_type(into_error_type));
+
+        DeclId const trait_did = fs->C->core_traits[CORE_TRAIT_INTO];
+        IrGenericArgs *trait_args = IrGenericArgs_new(fs->C);
+        IrGenericArgs_push(fs->C, trait_args, IrGenericArg_from_type(from_error_type));
+        IrGenericArgs_push(fs->C, trait_args, IrGenericArg_from_type(into_error_type));
+        IrTrait *into_trait = pawIr_new_trait(fs->C, trait_did, trait_args);
+        struct Instantiation const *inst = pawP_find_trait_method(fs->C, from_error_type,
+                into_trait, SCAN_STR(fs->C, "into"));
+        if (inst == NULL)
+            __builtin_trap();
+
+        into_fn = new_register(fs, inst->inst);
+        NEW_INSTR(fs, global, span, into_fn);
+    }
+
+    // convert to the type of the error variant payload from the function return type
+    MirPlaceList *into_args = MirPlaceList_new(fs->mir);
+    MirPlaceList_push(fs->mir, into_args, from_error);
+    NEW_INSTR(fs, call, span, into_fn, into_args, into_error);
+
+    MirPlaceList *fields = MirPlaceList_new(fs->mir);
+    struct MirPlace const error_discr = new_constant(fs, span, I2V(PAW_RESULT_ERR), BUILTIN_INT);
+    MirPlaceList_push(fs->mir, fields, error_discr);
+    MirPlaceList_push(fs->mir, fields, into_error);
 
     struct MirPlace const output = new_register(fs, fs->result);
     NEW_INSTR(fs, aggregate, span, fields, output, PAW_RESULT_ERR, PAW_FALSE);
@@ -1095,10 +1126,10 @@ static struct MirPlace result_chain_error(struct FunctionState *fs, struct Sourc
     return output;
 }
 
-// Transformation:
-//     opt?  =>  match opt {Some(x) => x, None => return None}
-//     opt?  =>  match opt {Ok(x) => x, Err(e) => return Err(e)}
-//
+// Given a try expression `x?`, this function performs the following
+// transformation (depending on the type of `x`):
+//   if (x: Option<T>)    => match x {Some(v) => v, None => return None}
+//   if (x: Result<T, E>) => match x {Ok(v) => v, Err(e) => return e.into()}
 static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
 {
     _Static_assert(PAW_OPTION_SOME == PAW_RESULT_OK && PAW_OPTION_NONE == PAW_RESULT_ERR,
@@ -1113,10 +1144,10 @@ static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExp
     enum BuiltinKind const kind = builtin_kind(L, target);
 
     struct SourceSpan const expr_span = SourceSpan_from_ref(
-            pawSrc_create_ref(L->C, e->span), SPAN_REF_FOR_LOOP);
+            pawSrc_create_ref(L->C, e->span), SPAN_REF_QUESTION_MARK);
 
     struct MirPlace const object = lower_rvalue(V, e->target);
-    struct MirPlace const discr = emit_get_field(fs, e->span,
+    struct MirPlace const discr = emit_get_field(fs, expr_span,
             object, 0, MISSING, get_builtin_type(L, BUILTIN_INT));
 
     MirBlock const input_bb = current_bb(fs);
@@ -1124,21 +1155,21 @@ static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExp
     MirBlock const after_bb = new_bb(fs);
 
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, input_bb, 1);
-    terminate_switch(fs, e->span, discr, arms, PAW_TRUE);
+    terminate_switch(fs, expr_span, discr, arms, PAW_TRUE);
     struct MirSwitchArm *arm = &K_LIST_FIRST(arms);
     arm->k = new_constant(fs, TODO, I2V(EXISTS), BUILTIN_INT).k;
 
     set_current_bb(fs, get_last_successor(fs));
-    struct MirPlace const value = emit_get_field(fs, e->span,
+    struct MirPlace const value = emit_get_field(fs, expr_span,
             object, 1, EXISTS, get_type(L, e->id));
-    set_goto_edge(fs, e->span, after_bb);
+    set_goto_edge(fs, expr_span, after_bb);
 
     set_current_bb(fs, none_bb);
     add_edge(fs, input_bb, none_bb);
     struct MirPlace const error = kind == BUILTIN_OPTION
-        ? option_chain_error(fs, e->span)
-        : result_chain_error(fs, e->span, object);
-    terminate_return(fs, e->span, error);
+        ? option_chain_error(fs, expr_span)
+        : result_chain_error(fs, expr_span, object);
+    terminate_return(fs, expr_span, error);
 
     set_current_bb(fs, after_bb);
     return value;

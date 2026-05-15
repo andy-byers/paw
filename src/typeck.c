@@ -203,6 +203,7 @@ static struct IrSolverResult solve_pending_obligations(struct TypeChecker *T)
             TYPECK_ERROR(T, FalseObligation,
                     .obligation = pawIr_print_obligation_(T->C, result.cpo.obligation));
         case IR_SOLVER_MULTIPLE_APPLICABLE_TRAITS:
+            // TODO: this cannot happen since having multiple applicable traits just means the obligation cannot yet be solved (status is OK but number of unsolved traits is > 0) need to distinguish from false obligation case
             pawErr_generic_error(ENV(T->C), T->pm->name, (struct SourceSpan){0},
                     "multiple applicable traits");
     }
@@ -807,10 +808,11 @@ static IrType *check_chain_expr(struct TypeChecker *T, struct HirChainExpr *e)
     } else if (is_result_t(T, type)) {
         IrType *result = instantiate(T, type, NULL);
         IrGenericArg const arg = IrGenericArg_from_type(result);
-        IrGenericArg const error = K_LIST_LAST(IR_GENERIC_ARGS(type));
-        IrGenericArg const infer = K_LIST_LAST(IR_GENERIC_ARGS(result));
-        unify_args(T, NODE_SPAN(e->target), error, infer);
-        unify_args(T, NODE_SPAN(e->target), arg, ret);
+//        IrGenericArg const error = K_LIST_LAST(IR_GENERIC_ARGS(type));
+//        IrGenericArg const infer = K_LIST_LAST(IR_GENERIC_ARGS(result));
+        unify_args(T, NODE_SPAN(e->target), ret, arg);
+//        unify_args(T, NODE_SPAN(e->target), error, infer);
+//        unify_args(T, NODE_SPAN(e->target), arg, ret);
     } else {
         TYPECK_ERROR(T, InvalidChainOperand,
                 .type = pawIr_print_type_v2(T->C, type),

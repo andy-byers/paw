@@ -130,6 +130,8 @@ static void maybe_store_core_trait(struct Resolver *R, NodeId module_id, Str con
             R->C->core_trait_index_id_hack = id;
         } else if (pawS_eq(name, SCAN_STR(R->C, "From"))) {
             R->C->core_traits[CORE_TRAIT_FROM] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Into"))) {
+            R->C->core_traits[CORE_TRAIT_INTO] = did;
         }
     }
 }
