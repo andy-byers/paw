@@ -792,25 +792,17 @@ static paw_Bool is_result_t(struct TypeChecker *T, IrType *type)
     return IrIsAdt(type) && IR_TYPE_DID(type).value == T->C->builtins[BUILTIN_RESULT].did.value;
 }
 
-static IrType *check_chain_expr(struct TypeChecker *T, struct HirChainExpr *e)
+static IrType *check_try_expr(struct TypeChecker *T, struct HirTryExpr *e)
 {
     IrType *type = check_operand(T, e->target);
 
     paw_assert(T->rs->prev != NULL);
     IrGenericArg const ret = IrGenericArg_from_type(T->rs->prev);
 
-    if (is_option_t(T, type)) {
-        IrType *option = instantiate(T, type, NULL);
-        IrGenericArg const arg = IrGenericArg_from_type(option);
+    if (is_option_t(T, type) || is_result_t(T, type)) {
+        IrGenericArg const arg = IrGenericArg_from_type(
+                instantiate(T, type, NULL));
         unify_args(T, NODE_SPAN(e->target), arg, ret);
-    } else if (is_result_t(T, type)) {
-        IrType *result = instantiate(T, type, NULL);
-        IrGenericArg const arg = IrGenericArg_from_type(result);
-//        IrGenericArg const error = K_LIST_LAST(IR_GENERIC_ARGS(type));
-//        IrGenericArg const infer = K_LIST_LAST(IR_GENERIC_ARGS(result));
-        unify_args(T, NODE_SPAN(e->target), ret, arg);
-//        unify_args(T, NODE_SPAN(e->target), error, infer);
-//        unify_args(T, NODE_SPAN(e->target), arg, ret);
     } else {
         TYPECK_ERROR(T, InvalidChainOperand,
                 .type = pawIr_print_type_v2(T->C, type),
@@ -2133,8 +2125,8 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
         case kHirPathExpr:
             type = check_path_expr(T, HirGetPathExpr(expr));
             break;
-        case kHirChainExpr:
-            type = check_chain_expr(T, HirGetChainExpr(expr));
+        case kHirTryExpr:
+            type = check_try_expr(T, HirGetTryExpr(expr));
             break;
         case kHirUnOpExpr: {
             type = check_unop_expr(T, HirGetUnOpExpr(expr));

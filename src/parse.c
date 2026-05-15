@@ -1275,7 +1275,7 @@ static struct AstExpr *call_expr(struct Lex *lex, struct AstExpr *target)
     return NEW_NODE(lex, call_expr, RANGE(start, end), next_id(lex), target, args);
 }
 
-static struct AstExpr *chain_expr(struct Lex *lex, struct AstExpr *target)
+static struct AstExpr *try_expr(struct Lex *lex, struct AstExpr *target)
 {
     struct SourceLoc const start = NODE_START(target);
     struct SourceLoc const end = TOKEN_START(lex->t);
@@ -1285,7 +1285,7 @@ static struct AstExpr *chain_expr(struct Lex *lex, struct AstExpr *target)
         PARSE_ERROR(lex, ChainOutsideFunction,
                 .span = RANGE(start, end));
 
-    return NEW_NODE(lex, chain_expr, RANGE(start, end), next_id(lex), target);
+    return NEW_NODE(lex, try_expr, RANGE(start, end), next_id(lex), target);
 }
 
 #define IS_SELF_TYPE(Lex_, Type_) (AstIsPathType(Type_) && AstGetPathType(Type_)->path.segments->count == 1 && \
@@ -1607,7 +1607,7 @@ static struct AstExpr *suffixed_expr(struct Lex *lex)
     for (;;) {
         switch (lex->t.kind) {
             case '?':
-                expr = chain_expr(lex, expr);
+                expr = try_expr(lex, expr);
                 break;
             case '(':
                 expr = call_expr(lex, expr);

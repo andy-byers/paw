@@ -204,7 +204,7 @@ static void AcceptLiteralExpr(struct HirVisitor *V, struct HirLiteralExpr *e)
     }
 }
 
-static void AcceptChainExpr(struct HirVisitor *V, struct HirChainExpr *e)
+static void AcceptTryExpr(struct HirVisitor *V, struct HirTryExpr *e)
 {
     AcceptExpr(V, e->target);
 }
@@ -832,10 +832,10 @@ static struct HirExpr *FoldLiteralExpr(struct HirFolder *F, struct HirLiteralExp
     }
 }
 
-static struct HirExpr *FoldChainExpr(struct HirFolder *F, struct HirChainExpr *e)
+static struct HirExpr *FoldTryExpr(struct HirFolder *F, struct HirTryExpr *e)
 {
     struct HirExpr *target = F->FoldExpr(F, e->target);
-    return pawHir_new_chain_expr(F->hir, e->span, next_node_id(F), target);
+    return pawHir_new_try_expr(F->hir, e->span, next_node_id(F), target);
 }
 
 static struct HirExpr *FoldUnOpExpr(struct HirFolder *F, struct HirUnOpExpr *e)
@@ -1844,8 +1844,8 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
             dump_path(P, &e->path, PAW_FALSE);
             break;
         }
-        case kHirChainExpr: {
-            struct HirChainExpr *e = HirGetChainExpr(expr);
+        case kHirTryExpr: {
+            struct HirTryExpr *e = HirGetTryExpr(expr);
             dump_expr(P, e->target);
             DUMP_CHAR(P, '?');
             break;

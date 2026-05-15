@@ -25,7 +25,7 @@
     X(LiteralExpr) \
     X(LogicalExpr) \
     X(PathExpr) \
-    X(ChainExpr) \
+    X(TryExpr) \
     X(UnOpExpr) \
     X(BinOpExpr) \
     X(ClosureExpr) \
@@ -803,7 +803,7 @@ struct HirLogicalExpr {
     struct HirExpr *rhs;
 };
 
-struct HirChainExpr {
+struct HirTryExpr {
     HIR_EXPR_HEADER;
     struct HirExpr *target;
 };
@@ -1092,14 +1092,14 @@ static struct HirExpr *pawHir_new_logical_expr(struct Hir *hir, struct SourceSpa
     return e;
 }
 
-static struct HirExpr *pawHir_new_chain_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target)
+static struct HirExpr *pawHir_new_try_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
-    e->ChainExpr_ = (struct HirChainExpr){
+    e->TryExpr_ = (struct HirTryExpr){
         .id = id,
         .span = span,
         .target = target,
-        .kind = kHirChainExpr,
+        .kind = kHirTryExpr,
     };
     pawHir_register_node(hir, id, e);
     return e;

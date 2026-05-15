@@ -1072,7 +1072,7 @@ static struct MirSwitchArmList *allocate_switch_arms(struct FunctionState *fs, M
     return arms;
 }
 
-static struct MirPlace option_chain_error(struct FunctionState *fs, struct SourceSpan span)
+static struct MirPlace option_try_error(struct FunctionState *fs, struct SourceSpan span)
 {
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
     struct MirPlace const discr = new_constant(fs, span, I2V(PAW_OPTION_NONE), BUILTIN_INT);
@@ -1084,7 +1084,7 @@ static struct MirPlace option_chain_error(struct FunctionState *fs, struct Sourc
     return output;
 }
 
-static struct MirPlace result_chain_error(struct FunctionState *fs, struct SourceSpan span, struct MirPlace object)
+static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceSpan span, struct MirPlace object)
 {
     IrType *result_type = auto_deref_full(object.type);
     IrType *from_error_type = IrGenericArg_get_type(IrGenericArgs_last(IrGetAdt(result_type)->args));
@@ -1138,7 +1138,7 @@ static struct MirPlace result_chain_error(struct FunctionState *fs, struct Sourc
 // transformation (depending on the type of `x`):
 //   if (x: Option<T>)    => match x {Some(v) => v, None => return None}
 //   if (x: Result<T, E>) => match x {Ok(v) => v, Err(e) => return e.into()}
-static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
+static struct MirPlace lower_try_expr(struct HirVisitor *V, struct HirTryExpr *e)
 {
     _Static_assert(PAW_OPTION_SOME == PAW_RESULT_OK && PAW_OPTION_NONE == PAW_RESULT_ERR,
             "Option and Result discriminants must have the same values for success and failure variants");
@@ -1175,8 +1175,8 @@ static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExp
     set_current_bb(fs, none_bb);
     add_edge(fs, input_bb, none_bb);
     struct MirPlace const error = kind == BUILTIN_OPTION
-        ? option_chain_error(fs, expr_span)
-        : result_chain_error(fs, expr_span, object);
+        ? option_try_error(fs, expr_span)
+        : result_try_error(fs, expr_span, object);
     terminate_return(fs, expr_span, error);
 
     set_current_bb(fs, after_bb);
@@ -2077,8 +2077,8 @@ static struct MirPlace lower_match_expr(struct HirVisitor *V, struct HirMatchExp
             return lower_literal_expr(V_, HirGetLiteralExpr(Expr_)); \
         case kHirLogicalExpr: \
             return lower_logical_expr(V_, HirGetLogicalExpr(Expr_)); \
-        case kHirChainExpr: \
-            return lower_chain_expr(V_, HirGetChainExpr(Expr_)); \
+        case kHirTryExpr: \
+            return lower_try_expr(V_, HirGetTryExpr(Expr_)); \
         case kHirUnOpExpr: \
             return lower_unop_expr(V_, HirGetUnOpExpr(Expr_)); \
         case kHirBinOpExpr: \

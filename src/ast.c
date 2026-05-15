@@ -209,7 +209,7 @@ static void AcceptLiteralExpr(struct AstVisitor *V, struct AstLiteralExpr *e)
     }
 }
 
-static void AcceptChainExpr(struct AstVisitor *V, struct AstChainExpr *e)
+static void AcceptTryExpr(struct AstVisitor *V, struct AstTryExpr *e)
 {
     AcceptExpr(V, e->target);
 }
@@ -1092,8 +1092,8 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
             struct AstPathExpr *e = AstGetPathExpr(expr);
             break;
         }
-        case kAstChainExpr: {
-            struct AstChainExpr *e = AstGetChainExpr(expr);
+        case kAstTryExpr: {
+            struct AstTryExpr *e = AstGetTryExpr(expr);
             break;
         }
         case kAstMatchExpr: {

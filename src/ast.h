@@ -44,7 +44,7 @@
     X(LogicalExpr) \
     X(StringExpr) \
     X(PathExpr) \
-    X(ChainExpr) \
+    X(TryExpr) \
     X(UnOpExpr) \
     X(BinOpExpr) \
     X(RangeExpr) \
@@ -831,7 +831,7 @@ struct AstSuffixedExpr {
     struct AstExpr *target;
 };
 
-struct AstChainExpr {
+struct AstTryExpr {
     AST_EXPR_HEADER;
     struct AstExpr *target;
 };
@@ -1061,13 +1061,13 @@ inline static struct AstExpr *pawAst_new_path_expr(struct Ast *ast, struct Sourc
     return e;
 }
 
-inline static struct AstExpr *pawAst_new_chain_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstExpr *target)
+inline static struct AstExpr *pawAst_new_try_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstExpr *target)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
-    e->ChainExpr_ = (struct AstChainExpr){
+    e->TryExpr_ = (struct AstTryExpr){
         .id = id,
         .span = span,
-        .kind = kAstChainExpr,
+        .kind = kAstTryExpr,
         .target = target,
     };
     pawAst_set_node(ast, id, e);

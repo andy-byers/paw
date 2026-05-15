@@ -297,10 +297,10 @@ static struct HirExpr *LowerLogicalExpr(struct LowerAst *L, struct AstLogicalExp
     return NEW_NODE(L, logical_expr, e->span, e->id, lhs, rhs, e->is_and);
 }
 
-static struct HirExpr *LowerChainExpr(struct LowerAst *L, struct AstChainExpr *e)
+static struct HirExpr *LowerTryExpr(struct LowerAst *L, struct AstTryExpr *e)
 {
     struct HirExpr *target = lower_expr(L, e->target);
-    return NEW_NODE(L, chain_expr, e->span, e->id, target);
+    return NEW_NODE(L, try_expr, e->span, e->id, target);
 }
 
 static struct HirExpr *LowerUnOpExpr(struct LowerAst *L, struct AstUnOpExpr *e)
