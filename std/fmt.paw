@@ -7,11 +7,11 @@ pub use string::String;
 use mem;
 use ptr;
 use result;
-use string_builder;
+use string_builder::Builder as StringBuilder;
 
 
 pub trait Display {
-    fn fmt(*self, f: *Formatter) -> mem::Result<()>;
+    fn fmt(*self, f: *Formatter) -> Result<()>;
 }
 
 
@@ -22,8 +22,8 @@ pub enum Error {
 
 use Error::*;
 
-impl Into<Error> for mem::OutOfMemory {
-    fn into(self) -> Error {
+impl From<mem::OutOfMemory> for Error {
+    fn from(value: mem::OutOfMemory) -> Self {
         Error::OutOfMemory
     }
 }
@@ -33,46 +33,31 @@ pub type Result<T> = result::Result<T, Error>;
 
 
 pub struct Formatter {
-    b: string_builder::Builder,
+    b: StringBuilder,
 }
 
 impl Formatter {
     pub fn new() -> Self {
-        Self{b: string_builder::Builder::new()}
+        Self{b: StringBuilder::new()}
     }
 
-    pub fn append_<I: IntoIterator<Item = *char>>(*self, iter: I) -> Result<()> {
-        for p in iter {
-            self.append_char(*p)?;
+    pub fn write<I: IntoIterator<Item = *char>>(*self, iter: I) -> Result<()> {
+        for p in iter { 
+            self.write_char(*p)?; 
         }
         Ok(())
     }
 
-    pub fn append<T: ToSlice<char>>(*self, value: T) -> Result<()> {
-        Ok(())
+    pub fn write_slice(*self, values: []char) -> Result<()> {
+        Ok(self.b.append_slice(values)?)
     }
 
-    pub fn append_char(*self, value: char) -> Result<()> {
-        // TODO: need error conversion
-//        self.b.append_char(value)?;
-        Ok(())
-    }
-
-    pub fn append_int_radix(*self, value: int, base: int) -> Result<()> {
-        if base < 1 || base > 36 { return Err(InvalidBase); }
-        Ok(())
-    }
-
-    pub fn append_int(*self, value: int) -> Result<()> {
-        self.append_int_radix(value, 10)
-    }
-
-    pub fn append_float(*self, value: int) -> Result<()> {
-        Ok(())
+    pub fn write_char(*self, value: char) -> Result<()> {
+        Ok(self.b.append_char(value)?)
     }
 
     pub fn string(self) -> String {
-        let b = ptr::replace(&self.b, string_builder::Builder::new());
+        let Self{b} = self;
         b.string()
     }
 }

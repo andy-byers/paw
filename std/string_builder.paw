@@ -15,8 +15,13 @@ impl Builder {
         Self{buffer: List::new()}
     }
 
-    pub fn append<T: ToSlice<char>>(*self, value: T) -> mem::Result<()> {
-        self.buffer.extend_from_slice(value.to_slice())?;
+    pub fn append<I: IntoIterator<Item = *char>>(*self, iter: I) -> mem::Result<()> {
+        self.buffer.extend(iter)?;
+        Ok(())
+    }
+
+    pub fn append_slice(*self, value: []char) -> mem::Result<()> {
+        self.buffer.extend_from_slice(value)?;
         Ok(())
     }
 

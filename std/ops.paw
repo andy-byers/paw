@@ -4,6 +4,9 @@
 
 pub use mem;
 
+use io;
+use ptr;
+use slice;
 
 pub trait Drop {
     fn drop(*self);
@@ -412,8 +415,6 @@ impl AsPtr<char> for str {
     fn as_ptr(*self) -> *char;
 }
 
-use slice;
-
 impl ToSlice<char> for str {
     fn to_slice(*self) -> []char {
         slice::from_raw_parts(self.as_ptr(), self.len())
@@ -456,6 +457,14 @@ impl Default for str {
     }
 }
 
+impl IntoIterator for str {
+    type Item = *char;
+    type IntoIter = slice::Iter<char>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.to_slice().into_iter()
+    }
+}
+
 
 impl<T> Copy for []T {}
 
@@ -463,8 +472,6 @@ impl<T> AsPtr<T> for []T {
     #[extern = "paw_ops_Slice_AsPtr_as_ptr"]
     fn as_ptr(*self) -> *T;
 }
-
-use ptr;
 
 impl<T> Index<int> for []T {
     type Output = T;
@@ -532,7 +539,6 @@ impl<T> ToSlice<T> for []T {
     }
 }
 
-use io;
 impl Hash for []char {
     fn hash(*self) -> int {
         builtin_hash_bytes(self.as_ptr(), self.len(), 0)
