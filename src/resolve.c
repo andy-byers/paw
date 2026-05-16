@@ -84,6 +84,9 @@ _Noreturn static void unknown_path(struct Resolver *R, struct AstPath path, enum
             .path = ns == NAMESPACE_TYPE
                 ? pawAst_print_type_path(R->ast, path)
                 : pawAst_print_value_path(R->ast, path),
+            .kind = ns == NAMESPACE_TYPE
+                ? SCAN_STR(R->C, "type")
+                : SCAN_STR(R->C, "value"),
             .span = path.span);
 }
 
@@ -596,9 +599,7 @@ static void resolve_trait_args(struct AstVisitor *V, NodeId trait_id, struct Ast
                     struct AstPath const path = {.span = segment->span, .segments = segments};
                     struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, pc_create(path), NAMESPACE_TYPE);
                     if (psymbol == NULL)
-                        RESOLVER_ERROR(R, UnknownPath,
-                                .path = pawAst_print_type_path(R->ast, path),
-                                .span = segment->span);
+                        unknown_path(R, path, NAMESPACE_TYPE);
 
                     arg->target = psymbol->id;
                 }
@@ -1026,9 +1027,7 @@ static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
         struct AstPathType const *path = AstGetPathType(d->type);
         struct PathCursor pc = pc_create(path->path);
         if (!lookup_type(R, pc, &symbol))
-            RESOLVER_ERROR(R, UnknownPath,
-                    .path = pawAst_print_type_path(R->ast, path->path),
-                    .span = d->span);
+            unknown_path(R, path->path, NAMESPACE_TYPE);
 
         struct AstDecl *self = pawAst_get_node(R->ast, symbol.id);
         if (AstIsAdtDecl(self)) {

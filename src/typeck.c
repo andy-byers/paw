@@ -557,6 +557,12 @@ static IrType *instantiate(struct TypeChecker *T, IrType *base, IrGenericArgs *a
     if (IR_GENERIC_ARGS(base) == NULL || (IrIsSignature(base) && IR_GENERIC_ARGS(base)->count == 0))
         return base;
 
+    if (args != NULL && IR_GENERIC_ARGS(base)->count != args->count)
+        TYPECK_ERROR(T, IncorrectTypeArity,
+                .want = IR_GENERIC_ARGS(base)->count,
+                .have = args->count,
+                .span = {0});
+
     DeclId const did = IR_TYPE_DID(base);
     if (args == NULL) args = pawIr_instantiate_args(T->C, did);
     pawIr_solver_add_obligations_from(T->C->S, did, args);

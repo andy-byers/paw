@@ -221,7 +221,7 @@ private:
             case kIrFloat:
                 return X->get_float_type();
             case kIrPtr:
-                return create_ptr_type(irtype);
+                return create_ptr_type();
             case kIrString:
                 return X->get_str_type();
             case kIrSlice:
@@ -260,10 +260,9 @@ private:
         return X->get_tuple_type(field_types);
     }
 
-    Type *create_ptr_type(IrType *irtype)
+    Type *create_ptr_type()
     {
-        auto const pointee_type = get_or_create_type(ir_deref(irtype));
-        return X->get_ptr_type(pointee_type);
+        return X->get_ptr_type();
     }
 
     Type *create_array_type(IrType *irtype)

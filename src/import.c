@@ -238,12 +238,12 @@ static paw_Bool add_symbol(struct Resolver *R, struct ImportScope *scope, struct
     if (kind == ISYMBOL_EXPLICIT && get_explicit_symbol(iname) != NULL) {
         while (scope->outer != NULL) scope = scope->outer;
         struct AstModuleDecl const *m = GET_NODE(R, scope->id);
-        IMPORTER_ERROR(R, DuplicateItem,
+        IMPORTER_ERROR(R, DuplicateName,
                 .modname = m->name,
                 .what = ns == NAMESPACE_TYPE
                     ? SCAN_STR(R->C, "type")
                     : SCAN_STR(R->C, "value"),
-                .item_name = ident.name,
+                .name = ident.name,
                 .span = ident.span);
     }
 
@@ -636,6 +636,7 @@ static void validate_bindings(struct Resolver *R, ImportBindings *bindings)
             struct AstModuleDecl const *m = GET_NODE(R, pb->source_id);
             IMPORTER_ERROR(R, UnknownPath,
                     .path = pawAst_print_type_path(R->ast, pb->path),
+                    .kind = SCAN_STR(R->C, "either (type or value)"),
                     .modname = m->name,
                     .span = ident.span);
         }

@@ -113,10 +113,28 @@ static IrTrait *collect_trait_path(struct ItemCollector *X, struct HirPath path,
 {
     struct HirSegment const last = HirSegments_last(path.segments);
     DeclId const did = resolve_trait_segment(X, last);
+    if (pawIr_get_kind(X->C, did) != IR_TRAIT_DEF)
+        COLLECTOR_ERROR(X, ExpectedTrait,
+                .path = last.ident.name,
+                .span = last.span);
 
     IrGenericArgs *args = IrGenericArgs_new(X->C);
     IrGenericArgs_push(X->C, args, IrGenericArg_from_type(self));
-    if (last.args != NULL) collect_trait_args(X, last.args, args);
+    if (last.args != NULL) {
+        struct IrTraitDef const *def = pawIr_get_trait_def(X->C, did);
+        collect_trait_args(X, last.args, args);
+        if (def->generics->count == 1)
+            COLLECTOR_ERROR(X, UnexpectedTypeArguments,
+                    .what = SCAN_STR(X->C, "trait"),
+                    .name = def->name,
+                    .span = last.span);
+        if (args->count != def->generics->count)
+            COLLECTOR_ERROR(X, IncorrectTypeArity,
+                    // `n - 1` to exclude implicit `Self`
+                    .want = def->generics->count - 1,
+                    .have = args->count - 1,
+                    .span = last.span);
+    }
     return pawIr_new_trait(X->C, did, args);
 }
 
@@ -918,9 +936,18 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
     }
 }
 
+// TODO: likely need multiple passes to resolve local type aliases that reference one another, needs tests...
 static void collect_local_type_decl(struct HirVisitor *V, struct HirTypeDecl *d)
 {
-    collect_type_decl(V->ud, d);
+    struct ItemCollector *X = V->ud;
+    IrConstraints *constraints = IrConstraints_new(X->C);
+
+    collect_generic_args(X, d->did, d->generics);
+    collect_generic_defs(X, d->generics);
+    collect_generic_bounds(X, d->generics, constraints);
+    collect_type_decl(X, d);
+
+    IrConstraintsMap_insert(X->C, X->C->ir_constraints, d->did, constraints);
 }
 
 static void collect_local_type_aliases(struct ItemCollector *X, struct HirExpr *block)
@@ -1006,10 +1033,10 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
         set_def_type(X, d->did, type);
     }
 
-    if (X->ctx != NULL) {
-        if (!X->in_trait_decl && d->body == NULL && !fn_def->is_extern)
-            COLLECTOR_ERROR(X, MissingFunctionBody, d->span);
+    if (!X->in_trait_decl && d->body == NULL && !fn_def->is_extern)
+        COLLECTOR_ERROR(X, MissingFunctionBody, d->span);
 
+    if (X->ctx != NULL) {
         if (d->params->count > 0) {
             struct HirDecl *first = K_LIST_FIRST(d->params);
             if (is_self_param(X, first)) { // make sure "self: Self" is true

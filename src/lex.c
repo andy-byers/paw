@@ -134,7 +134,7 @@ static void push_braces(struct Lex *X)
     IntStack_push(X, X->parens, 1);
 }
 
-static char peek_state(struct Lex *X)
+static enum StringState peek_state(struct Lex *X)
 {
     paw_assert(X->states->count > 0);
     return K_LIST_LAST(X->states);
@@ -246,9 +246,14 @@ static unsigned get_codepoint(struct Lex *X, struct SourceLoc slash)
     do {
         if (IS_LINE_END(X))
             // the whole literal must be unterminated so just return with
-            // an arbitrary codepoint and allow the caller to report an
+            // an arbitrary codepoint and let the caller to report the
             // error
             return 0;
+
+        if (*X->ptr == X->last_quote)
+            LEXER_ERROR(X, InvalidUnicodeEscape,
+                    .reason = SCAN_FMT(X, "missing end of codepoint payload '}'"),
+                    .span = RANGE(slash, X->loc));
 
         if (!ISHEX(*X->ptr))
             LEXER_ERROR(X, InvalidCharInUnicodeEscape,
@@ -279,12 +284,19 @@ static int get_hexcode(struct Lex *X)
             // see comment in get_codepoint()
             return 0;
 
+        if (*X->ptr == X->last_quote)
+            break;
+
         if (!ISHEX(*X->ptr))
             LEXER_ERROR(X, InvalidCharInHexEscape,
                     .span = RANGE1(X->loc));
 
         digits[n++] = next(X);
     } while (n < MAX_DIGITS);
+
+    if (n != MAX_DIGITS)
+        LEXER_ERROR(X, HexEscapeTooShort,
+                .span = RANGE1(X->loc));
 
     return (HEXVAL(digits[0]) << 4) | HEXVAL(digits[1]);
 }
@@ -373,6 +385,7 @@ static void escape_character(struct Lex *X, struct SourceLoc slash)
 
 static struct Token single_byte(struct Lex *X, struct SourceLoc quote)
 {
+    X->last_quote = '\'';
     for (;;) {
         struct SourceLoc const current = X->loc;
         if (IS_LINE_END(X)) {
@@ -414,6 +427,7 @@ static struct Token consume_byte(struct Lex *X, struct SourceLoc quote)
 static struct Token consume_string_part(struct Lex *X, struct SourceLoc start_loc)
 {
     paw_assert(peek_state(X) != STATE_NORMAL);
+    X->last_quote = '"';
 
     for (;;) {
     handle_ascii:
@@ -446,6 +460,7 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start_lo
 
 static struct Token consume_str(struct Lex *X, struct SourceLoc start_loc)
 {
+    X->last_quote = '"';
     for (;;) {
     handle_ascii:
         if (ISASCIIEND(*X->ptr))
@@ -624,7 +639,6 @@ static struct Token consume_number(struct Lex *X, struct SourceLoc start)
         test_next2(X, "+-");
         if (!ISDIGIT(*X->ptr))
             LEXER_ERROR(X, InvalidFloatLiteral,
-                    .reason = scan_str(X, "expected exponent part"),
                     .span = RANGE(start, X->loc));
     }
 

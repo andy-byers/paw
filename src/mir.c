@@ -817,7 +817,8 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
             ADD_OUTPUT(MirGetGlobal(instr)->output);
             break;
         case kMirAllocLocal:
-            ADD_OUTPUT(MirGetAllocLocal(instr)->output);
+            // TODO: this should not cause `output` to be defined since this hides use before init errors... in fact, there is not much need for AllocLocal anymore... (was used to allocate a heap slot for captured vars)
+//            ADD_OUTPUT(MirGetAllocLocal(instr)->output);
             break;
         case kMirAggregate:
             ADD_OUTPUT(MirGetAggregate(instr)->output);

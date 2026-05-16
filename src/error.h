@@ -15,6 +15,7 @@
 #include "str.h"
 
 #define ERR_ERROR_LIST(X) \
+    X(None, ERR_CATEGORY_NONE, ) \
     X(TooManyLines, ERR_CATEGORY_SYNTAX, \
         Str const *modname; \
         Str const *filename; \
@@ -72,6 +73,10 @@
         Str const *modname; \
         struct SourceSpan span; \
     ) \
+    X(HexEscapeTooShort, ERR_CATEGORY_SYNTAX, \
+        Str const *modname; \
+        struct SourceSpan span; \
+    ) \
     X(InvalidUnicodeEscape, ERR_CATEGORY_SYNTAX, \
         Str const *modname; \
         struct SourceSpan span; \
@@ -123,7 +128,6 @@
     X(InvalidFloatLiteral, ERR_CATEGORY_SYNTAX, \
         Str const *modname; \
         struct SourceSpan span; \
-        Str const *reason; \
     ) \
     X(ExpectedSymbol, ERR_CATEGORY_SYNTAX, \
         Str const *modname; \
@@ -299,12 +303,6 @@
         struct SourceSpan span; \
         Str const *path; \
     ) \
-    X(DuplicateItem, ERR_CATEGORY_SYNTAX, \
-        Str const *modname; \
-        struct SourceSpan span; \
-        Str const *item_name; \
-        Str const *what; \
-    ) \
     X(ExternFunctionBody, ERR_CATEGORY_SYNTAX, \
         Str const *modname; \
         struct SourceSpan span; \
@@ -381,6 +379,7 @@
     X(UnknownPath, ERR_CATEGORY_NAME, \
         Str const *modname; \
         struct SourceSpan span; \
+        Str const *kind; \
         Str const *path; \
     ) \
     X(UnknownField, ERR_CATEGORY_NAME, \
@@ -730,6 +729,7 @@
     )
 
 enum ErrorCategory {
+    ERR_CATEGORY_NONE,
     ERR_CATEGORY_SYNTAX, // Lexing and parsing
     ERR_CATEGORY_NAME, // Name resolution
     ERR_CATEGORY_TYPE, // Typesystem

@@ -248,6 +248,11 @@ static Str const *name_of_base(paw_Env *P, int base)
 
 
 
+static void FormatNoneError(paw_Env *P, struct NoneError *error, Buffer *buffer)
+{
+    PAW_UNREACHABLE();
+}
+
 static void FormatTooManyLinesError(paw_Env *P, struct TooManyLinesError *error, Buffer *buffer)
 {
     pawL_add_fstring(P, buffer,
@@ -332,6 +337,13 @@ static void FormatInvalidCharInHexEscapeError(paw_Env *P, struct InvalidCharInHe
     pawL_add_fstring(P, buffer, "invalid character found in hex escape");
 }
 
+static void FormatHexEscapeTooShortError(paw_Env *P, struct HexEscapeTooShortError *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer, "hex escape too short (must be 2 digits in length)");
+}
+
+
 static void FormatInvalidUnicodeEscapeError(paw_Env *P, struct InvalidUnicodeEscapeError *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
@@ -390,8 +402,7 @@ static void FormatInvalidCharInIntegerError(paw_Env *P, struct InvalidCharInInte
 static void FormatInvalidFloatLiteralError(paw_Env *P, struct InvalidFloatLiteralError *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
-    pawL_add_fstring(P, buffer, "invalid float literal (%s)",
-            error->reason->text);
+    pawL_add_fstring(P, buffer, "invalid float literal");
 }
 
 static void FormatExpectedSymbolError(paw_Env *P, struct ExpectedSymbolError *error, Buffer *buffer)
@@ -647,13 +658,6 @@ static void FormatAmbiguousPathError(paw_Env *P, struct AmbiguousPathError const
             error->path->text);
 }
 
-static void FormatDuplicateItemError(paw_Env *P, struct DuplicateItemError const *error, Buffer *buffer)
-{
-    add_error_header(P, error->modname, error->span, buffer);
-    pawL_add_fstring(P, buffer, "duplicate %s `%s`",
-            error->what->text, error->item_name->text);
-}
-
 static void FormatExternFunctionBodyError(paw_Env *P, struct ExternFunctionBodyError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
@@ -884,8 +888,8 @@ static void FormatUnexpectedTypeError(paw_Env *P, struct UnexpectedTypeError con
 static void FormatUnknownPathError(paw_Env *P, struct UnknownPathError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
-    pawL_add_fstring(P, buffer, "unknown path `%s`",
-            error->path->text);
+    pawL_add_fstring(P, buffer, "path `%s` cannot be found in %s namespace",
+            error->path->text, error->kind->text);
 }
 
 static void FormatMissingFieldsError(paw_Env *P, struct MissingFieldsError const *error, Buffer *buffer)

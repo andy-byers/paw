@@ -132,6 +132,10 @@ struct Lex {
     int nest_depth;
 
     paw_Bool in_impl;
+
+    // Last quote encountered at the beginning of a str or char literal,
+    // i.e. '\'' or '"'. Used for error reporting.
+    char last_quote;
 };
 
 enum StringState {
