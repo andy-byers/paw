@@ -578,6 +578,7 @@ static IrType *lower_adt_segment(struct TypeChecker *T, struct HirSegment segmen
 {
     struct HirDecl *decl = pawHir_get_node(T->hir, segment.target);
     if (HirIsTypeDecl(decl)) {
+        // TODO: prefix function name and declare in header, call unconditionally and handle count == 0 case same as ret == NULL case
         IrType *lower_type_alias(struct Compiler *, struct HirSegment, struct HirDecl *, IrGenericArgs *);
         IrGenericArgs *args = segment.args != NULL ? lower_generic_args(T, segment.args) : NULL;
         return lower_type_alias(T->C, segment, decl, args);
@@ -1080,11 +1081,17 @@ static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjection
     }
 
     IrGenericArgs *args = lower_generic_args(T, segment.args);
+    if (args == NULL) args = IrGenericArgs_new(T->C);
     IrGenericArgs_insert(T->C, args, 0, IrGenericArg_from_type(type));
     IrTrait *trait = pawIr_new_trait(T->C, trait_decl->hdr.did, args);
 
     struct Instantiation const *inst = pawP_find_trait_method(
             T->C, type, trait, e->name);
+    if (inst == NULL)
+        TYPECK_ERROR(T, UnknownMethod,
+                .type = pawIr_print_type_v2(T->C, type),
+                .method = e->name,
+                .span = e->span);
     return inst->inst;
 }
 

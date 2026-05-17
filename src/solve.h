@@ -112,5 +112,6 @@ paw_Bool pawIr_type_implements_trait(IrSolver *S, struct IrType *type, struct Ir
 EXTERN_C Str const *pawIr_print_obligation_(struct Compiler *C, struct IrObligation obligation);
 
 char const *debug_solver(IrSolver* S);
+void debug_impl(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
 
 #endif // PAW_SOLVE_H

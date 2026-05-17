@@ -652,7 +652,56 @@
 //    assert(t.second() == 123);
 //}
 
+
+
+
+
+
+
+//// TODO: causes stack overflow
+//pub trait Trait {
+//    type Type: Trait<Type = Self>;
+//}
+//
+//struct Struct;
+//
+//impl Trait for Struct {
+//    type Type = Struct;
+//}
+//
+//fn require<T: Trait<Type = Struct>>() {}
+//
+//#[test]
+//pub fn test() {
+//    require::<Struct>();
+//}
+
+
+
+
+
+pub trait Trait {
+    type Type: Trait<Type = Struct>;
+}
+
+struct Struct;
+
+impl Trait for Struct {
+    type Type = Struct;
+}
+
+fn require<T: Trait<Type = Struct>>() {}
+// Implements(T: Trait)
+// NormalizesTo(<T as Trait>::Type => Struct)
+//   Implements(T: Trait)
+//
+// need to prove WellFormed(Trait<Self = T>)
+// need to prove WellFormed(<T as Trait<Self = T>>::Type)
+//
+// need to prove NormalizesTo(<T as Trait>::Type => Struct)
+// -*- or -*-
+// need to prove NormalizesTo(<T as Trait>::Type => int)
+
 #[test]
 pub fn test() {
 }
-

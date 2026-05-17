@@ -21,6 +21,7 @@ fn fb<T: B>(t: T) -> int {
 fn fc<T: C>(t: T) -> int {
     t.c()
 }
+
 #[test]
 pub fn test() {
     assert(fa(S) == 6);

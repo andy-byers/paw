@@ -1,0 +1,18 @@
+// recursive_assoc_item_constraints_3.paw
+
+pub trait Trait {
+    type Type: Trait<Type = Self>;
+}
+
+struct Struct;
+
+impl Trait for Struct {
+    type Type = Struct;
+}
+
+fn require<T: Trait>() {}
+
+#[test]
+pub fn test() {
+    require::<Struct>();
+}

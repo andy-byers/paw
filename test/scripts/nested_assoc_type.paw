@@ -1,15 +1,9 @@
 // nested_assoc_type.paw
 
-pub trait A {
-    type TA: B;
-}
-pub trait B {
-    type TB: C;
-}
-pub trait C {
-    type TC;
+pub trait Trait {
+    type Type: Trait;
 }
 
-fn func<Ty: A>(t: Ty) -> Ty::TA::TB::TC {
-    panic("compile only");
+pub fn f<T: Trait>(_: <<<<<T as Trait>::Type as Trait>::Type as Trait>::Type as Trait>::Type as Trait>::Type) {
+
 }

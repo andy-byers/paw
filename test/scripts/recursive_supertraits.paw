@@ -1,0 +1,22 @@
+// recursive_supertraits.paw
+
+trait Trait: Id<Type = Self> {}
+
+trait Id {
+    type Type;
+}
+
+struct Struct;
+
+impl Id for Struct {
+    type Type = Struct;
+}
+
+impl Trait for Struct {}
+
+fn require<T: Trait>() {}
+
+#[test]
+pub fn test() {
+    require::<Struct>();
+}

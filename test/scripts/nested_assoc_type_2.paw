@@ -1,0 +1,23 @@
+// nested_assoc_type_2.paw
+
+pub trait A<T1, T2> {
+    type TA: B<T1, T2>;
+}
+
+pub trait B<T1, T2> {
+    type TB: A<T2, T1>;
+}
+
+pub fn f<T: A<X, Y>, X, Y>(_: <T as A<X, Y>>::TA) {
+
+}
+
+pub fn f2<T: A<X, Y>, X, Y>(_: <<T as A<X, Y>>::TA as B<X, Y>>::TB) {
+
+}
+
+// note `A<Y, X>` in projection below
+pub fn f3<T: A<X, Y>, X, Y>(_: <<<T as A<X, Y>>::TA as B<X, Y>>::TB as A<Y, X>>::TA) {
+
+}
+

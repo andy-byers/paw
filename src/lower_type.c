@@ -78,7 +78,7 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
     }
 
     IrGenericArgs *args = lower_generic_args(L, segment.args);
-    IrGenericArgs_push(L->C, args, IrGenericArg_from_type(type));
+    IrGenericArgs_insert(L->C, args, 0, IrGenericArg_from_type(type));
     IrTrait *trait = pawIr_new_trait(L->C, trait_decl->hdr.did, args);
 
     // prove that the trait is implemented by the type
@@ -113,19 +113,27 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
 
     pawIr_pop_solver(L->C);
 
+    // Search for the associated type. The type `type` is already known to implement
+    // the trait `trait`. The following lines just make sure an associated type named
+    // `t->name` is defined on the trait.
+    IrType *assoc = NULL;
     if (IrIsGeneric(type) || IrIsProjection(type)) {
-        DeclId const *passoc = locate_assoc_type(L, trait, t->name);
-        if (passoc == NULL)
-            LOWERING_ERROR(L, UnknownAssociatedItem,
-                    .item = t->name,
-                    .span = t->span);
-        return pawIr_new_projection(L->C, type, trait, *passoc);
+        DeclId const *pdid = locate_assoc_type(L, trait, t->name);
+        if (pdid != NULL)
+            assoc = pawIr_new_projection(L->C, type, trait, *pdid);
     } else {
-        // Search for the associated item on a trait impl.
         struct Instantiation const *inst = pawIr_find_assoc_type_projection(
                 L->C, type, trait, t->name);
-        return inst->inst;
+        if (inst != NULL)
+            assoc = inst->inst;
     }
+
+    if (assoc == NULL)
+        LOWERING_ERROR(L, UnknownAssociatedItem,
+                .type = pawIr_print_type_v2(L->C, type),
+                .item = t->name,
+                .span = t->span);
+    return assoc;
 
 //    // TODO: pawIr_find_assoc_type_projection checks impls, but we need behavior more like the version that searches generic bounds
 //    if (IrIsGeneric(type)) {
@@ -264,10 +272,15 @@ static IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
             paw_assert(segment.args == NULL);
             type = pawIr_get_type(L->C, segment.target);
         } else {
+            // Encountered a construct like `T::Type` where `T` is a generic type. There
+            // must exist a single trait bound on `T` that declares an associated type
+            // named `Type` (`T::Type` must be unambiguous, otherwise a projection type
+            // is required to disambiguate).
             struct Instantiation *assoc = pawIr_find_assoc_type_generic(L->C,
                     type, segment.ident.name);
             if (assoc == NULL)
                 LOWERING_ERROR(L, UnknownAssociatedItem,
+                        .type = pawIr_print_type_v2(L->C, type),
                         .item = segment.ident.name,
                         .span = segment.span);
             type = instantiate_segment(L, segment, assoc->inst);
@@ -320,6 +333,7 @@ static IrType *lower_type(struct LowerType *L, struct HirType *type)
             break;
     }
 
+    result = pawU_normalize_projections(L->C->U, result);
     pawIr_set_type(L->C, type->hdr.id, result);
     return result;
 }

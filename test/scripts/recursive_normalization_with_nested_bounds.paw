@@ -1,0 +1,13 @@
+// recursive_normalization_with_nested_bounds.paw
+
+trait Id {
+    type Type;
+}
+
+impl<T> Id for T {
+    type Type = T;
+}
+
+fn f<T: Id<Type = U>, U: Id<Type = int>>() {
+    let _: <<T as Id>::Type as Id>::Type = 123;
+}

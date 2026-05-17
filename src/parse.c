@@ -362,6 +362,21 @@ static void check_next(struct Lex *lex, TokenKind want)
     skip(lex);
 }
 
+static paw_Bool test_lcaret_next(struct Lex *lex)
+{
+    switch (lex->t.kind) {
+        case TK_LESS2:
+            lex->t.kind = '<';
+            lex->t2.kind = '<';
+            // (fallthrough)
+        case '<':
+            skip(lex);
+            return PAW_TRUE;
+        default:
+            return PAW_FALSE;
+    }
+}
+
 static void semicolon(struct Lex *lex, char const *where)
 {
     if (!test_next(lex, ';'))
@@ -562,7 +577,7 @@ static struct AstPath parse_pathexpr(struct Lex *lex)
         struct AstGenericArgs *args = NULL;
         // permit "::<types..>" between segments
         if (test_next(lex, TK_COLON2)) {
-            if (test_next(lex, '<')) {
+            if (test_lcaret_next(lex)) {
                 args = generic_args(lex, lex->loc);
             } else {
                 pawAst_add_segment(lex->ast, s, ident.span, next_id(lex), ident, NULL);
@@ -596,7 +611,7 @@ static struct AstPath parse_pathtype(struct Lex *lex, paw_Bool allow_item_constr
         struct AstIdent const ident = parse_ident(lex);
         struct SourceSpan span = ident.span;
         struct AstGenericArgs *args = NULL;
-        if (test_next(lex, '<')) {
+        if (test_lcaret_next(lex)) {
             // _<types..> is not allowed
             ensure_not_underscore(lex, ident);
             args = allow_item_constraints
@@ -914,7 +929,6 @@ static struct AstType *parse_paren_type(struct Lex *lex, struct SourceLoc lparen
 
 static struct AstType *parse_projection_type(struct Lex *lex, struct SourceLoc lcaret)
 {
-    skip(lex); // skip '<' token
     struct AstType *type = parse_type(lex);
     check_next(lex, TK_AS);
 
@@ -982,11 +996,7 @@ static struct AstType *parse_type(struct Lex *lex)
                     RANGE(start, rbracket),
                     next_id(lex), elem, length);
         }
-    } else if (test(lex, TK_LESS2)) {
-        lex->t.kind = '<';
-        lex->t2.kind = '<';
-        return parse_projection_type(lex, start);
-    } else if (test(lex, '<')) {
+    } else if (test_lcaret_next(lex)) {
         return parse_projection_type(lex, start);
     } else {
         struct AstPath path = parse_pathtype(lex, PAW_FALSE);
@@ -1809,7 +1819,7 @@ static struct AstDeclList *type_param(struct Lex *lex)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
     struct AstDeclList *list = NULL;
-    if (test_next(lex, '<')) {
+    if (test_lcaret_next(lex)) {
         ++lex->expr_depth;
         list = AstDeclList_new(lex->ast);
         parse_generic_list(lex, list, start);

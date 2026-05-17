@@ -641,6 +641,7 @@ IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target,
     IrTraitList *bounds = pawIr_get_trait_bounds(C, target->did);
 
     if (bounds != NULL) {
+        IrTypeList *candidates = IrTypeList_new(C);
         IrTraitList *worklist = IrTraitList_new(C);
         IrTraitList_reserve(C, worklist, bounds->count);
         TraitCache *cache = TraitCache_new(C);
@@ -672,10 +673,19 @@ IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target,
                     IrTrait *trait_ctx = pawIr_get_trait_context(C, type);
                     pawIr_unify_traits_unchecked(C, trait_ctx, b);
                     pawU_unify_unchecked(C->U, type_ctx, (IrType *)target);
-                    return type;
+                    IrTypeList_push(C, candidates, type);
                 }
             }
         }
+
+        if (candidates->count > 1)
+            THROW_ERROR(C, MultipleApplicableItems,
+                    .modname = SCAN_STR(C, ""),
+                    .name = name,
+                    .span = {0});
+
+        if (candidates->count == 1)
+            return IrTypeList_first(candidates);
     }
 
     return NULL;
@@ -1411,24 +1421,52 @@ static void print_trait_omitting_self(struct Printer *P, IrTrait *t)
     paw_assert(t->args->count > 0);
     struct IrTraitDef const *def = pawIr_get_trait_def(P->C, t->did);
     PRINT_STRING(P, def->name);
+
+    P->print_bounds = PAW_TRUE;
     if (t->args->count > 1) {
-        P->print_bounds = PAW_TRUE;
         PRINT_CHAR(P, '<');
         for (int i = 1; i < t->args->count; ++i) {
             if (i > 1) PRINT_LITERAL(P, ", ");
             print_generic_arg(P, IrGenericArgs_get(t->args, i));
         }
         PRINT_CHAR(P, '>');
-        P->print_bounds = PAW_FALSE;
     }
+    P->print_bounds = PAW_FALSE;
 }
 
 static void print_trait(struct Printer *P, IrTrait *t)
 {
+    paw_assert(t->args->count > 0);
     struct IrTraitDef const *def = pawIr_get_trait_def(P->C, t->did);
     PRINT_STRING(P, def->name);
-    print_binder(P, t->args);
+
+    P->print_bounds = PAW_TRUE;
+
+    paw_Bool printed_self = PAW_FALSE;
+    IrType *current = IrGenericArg_get_type(IrGenericArgs_first(t->args));
+    DeclId const base_did = IrGenericDefs_first(def->generics)->did;
+    if (!IrIsGeneric(current) || P_ID_EQUALS(NULL, IR_TYPE_DID(current), base_did)) {
+        PRINT_CHAR(P, '<');
+        PRINT_LITERAL(P, "Self = ");
+        print_type(P, current);
+        printed_self = PAW_TRUE;
+    }
+    if (t->args->count > 1) {
+        if (printed_self) {
+            PRINT_LITERAL(P, ", ");
+        } else {
+            PRINT_CHAR(P, '<');
+        }
+        for (int i = 1; i < t->args->count; ++i) {
+            if (i > 1) PRINT_LITERAL(P, ", ");
+            print_generic_arg(P, IrGenericArgs_get(t->args, i));
+        }
+    }
+    if (t->args->count > 1 || printed_self)
+        PRINT_CHAR(P, '>');
+    P->print_bounds = PAW_FALSE;
 }
+
 
 static void print_type(struct Printer *P, IrType *type)
 {
@@ -1536,7 +1574,7 @@ static void print_type(struct Printer *P, IrType *type)
             PRINT_CHAR(P, '<');
             print_type(P, t->type);
             PRINT_LITERAL(P, " as ");
-            print_trait_omitting_self(P, t->trait);
+            print_trait(P, t->trait);
             PRINT_FORMAT(P, ">::%s", item->name->text);
             break;
         }
@@ -1635,7 +1673,7 @@ char const *pawIr_print_impl_trait_obligation(struct Compiler *C, IrType *type, 
     };
     print_type(&p, type);
     PRINT_LITERAL(&p, ": ");
-    print_trait_omitting_self(&p, trait);
+    print_trait(&p, trait);
 
     Str const *s = pawL_buffer_finish(P, &buf);
     return s->text;
@@ -1663,7 +1701,7 @@ Str const *pawIr_print_trait_v2(struct Compiler *C, IrTrait *trait)
     paw_Env *P = ENV(C);
     pawL_init_buffer(P, &buf);
 
-    print_trait_omitting_self(&(struct Printer){
+    print_trait(&(struct Printer){
                    .P = ENV(C),
                    .buf = &buf,
                    .C = C,
@@ -1686,7 +1724,7 @@ Str const *pawIr_print_impl_trait_obligation_v2(struct Compiler *C, IrType *type
     };
     print_type(&p, type);
     PRINT_LITERAL(&p, ": ");
-    print_trait_omitting_self(&p, trait);
+    print_trait(&p, trait);
 
     return pawL_buffer_finish(P, &buf);
 }

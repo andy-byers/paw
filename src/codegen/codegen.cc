@@ -1244,8 +1244,20 @@ private:
         if (mir->self != nullptr)
             methods_[mir->self][to_string(mir->name)] = fn.get();
 
-        if (has_annotation(C, mir->annotations, "test"))
+        if (has_annotation(C, mir->annotations, "test")) {
+            struct IrFnPtr const *fn = IrGetFnPtr(IR_GET_FN(C, mir->type));
+            // TODO: perform this check much earlier? like in collect_items.c
+            if (fn->params->count > 0) {
+                IncorrectArityError const error = {
+                    .modname = SCAN_STR(C, modname_.c_str()),
+                    .have = fn->params->count,
+                    .want = 0,
+                    .span = mir->span,
+                };
+                pawErr_throw(C, kErrIncorrectArity, (void *)&error);
+            }
             test_names_.push_back(mangled_name);
+        }
 
         fns_.insert(mir->type, std::move(fn));
     }

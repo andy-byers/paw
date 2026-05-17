@@ -702,33 +702,35 @@ static void ensure_trait_is_well_formed(struct ItemCollector *X, struct SourceSp
 
 static void add_predicates_and_obligations(struct ItemCollector *X, DeclId did) // struct HirDeclList *generics)
 {
-    IrConstraints const *constraints = pawIr_get_constraints(X->C, did);
-    K_LIST_XFOREACH (constraints, struct IrConstraint const, c) {
-        switch (c->kind) {
-            case IR_CONSTRAINT_IMPL_TRAIT: {
-                struct HirGenericDecl const *d = HirGetGenericDecl(
-                        pawHir_get_decl(X->hir, c->parent));
-                ensure_type_is_well_formed(X, d->span, c->impl.type);
-                ensure_trait_is_well_formed(X, d->span, c->impl.trait);
-                pawIr_solver_add_predicate(X->C->S, c->impl.type, c->impl.trait,
-                        (struct IrObligationCause){
-                            .span = d->span,
-                        });
-                break;
-            }
-            case IR_CONSTRAINT_TYPE_EQUALS: {
-                struct HirGenericDecl const *d = HirGetGenericDecl(
-                        pawHir_get_decl(X->hir, c->parent));
-                ensure_type_is_well_formed(X, d->span, c->eq.lhs);
-                ensure_type_is_well_formed(X, d->span, c->eq.rhs);
-                pawIr_solver_add_norm_target(X->C->S, c->eq.lhs, c->eq.rhs,
-                        (struct IrObligationCause){
-                            .span = d->span,
-                        });
-                break;
-            }
-        }
-    }
+    IrGenericArgs *params = pawIr_get_generic_args(X->C, did);
+    pawIr_solver_add_predicates_from(X->C->S, did, params);
+//    IrConstraints const *constraints = pawIr_get_constraints(X->C, did);
+//    K_LIST_XFOREACH (constraints, struct IrConstraint const, c) {
+//        switch (c->kind) {
+//            case IR_CONSTRAINT_IMPL_TRAIT: {
+//                struct HirGenericDecl const *d = HirGetGenericDecl(
+//                        pawHir_get_decl(X->hir, c->parent));
+//                ensure_type_is_well_formed(X, d->span, c->impl.type);
+//                ensure_trait_is_well_formed(X, d->span, c->impl.trait);
+//                pawIr_solver_add_predicate(X->C->S, c->impl.type, c->impl.trait,
+//                        (struct IrObligationCause){
+//                            .span = d->span,
+//                        });
+//                break;
+//            }
+//            case IR_CONSTRAINT_TYPE_EQUALS: {
+//                struct HirGenericDecl const *d = HirGetGenericDecl(
+//                        pawHir_get_decl(X->hir, c->parent));
+//                ensure_type_is_well_formed(X, d->span, c->eq.lhs);
+//                ensure_type_is_well_formed(X, d->span, c->eq.rhs);
+//                pawIr_solver_add_norm_target(X->C->S, c->eq.lhs, c->eq.rhs,
+//                        (struct IrObligationCause){
+//                            .span = d->span,
+//                        });
+//                break;
+//            }
+//        }
+//    }
 }
 
 struct AssocItemInfo {
@@ -890,12 +892,14 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
         pawIr_push_solver(X->C);
 
         if (HirIsAdtDecl(*p)) {
-            struct HirAdtDecl const *d = HirGetAdtDecl(*p);
-            add_predicates_and_obligations(X, d->did);
-
-            X->cache = TypeCollection_new(X->C);
             IrType *type = GET_NODE_TYPE(X->C, *p);
-            ensure_not_recursive(X, type);
+            if (IrIsAdt(type)) { // skip builtin types
+                struct HirAdtDecl const *d = HirGetAdtDecl(*p);
+                add_predicates_and_obligations(X, d->did);
+
+                X->cache = TypeCollection_new(X->C);
+                ensure_not_recursive(X, type);
+            }
         } else if (HirIsTraitDecl(*p)) {
             struct HirTraitDecl const *d = HirGetTraitDecl(*p);
             add_predicates_and_obligations(X, d->did);
@@ -1047,7 +1051,7 @@ static void collect_method_decls(struct ItemCollector *X, DeclId parent_id, stru
 static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
 {
     IrType *type = pawIr_get_def_type(X->C, d->did);
-    // skip basic types, i.e. "int"
+    // skip basic types, e.g. `int`
     if (!IrIsAdt(type)) return;
 
     struct IrAdtDef *def = pawIr_get_adt_def(X->C, d->did);
@@ -1062,6 +1066,7 @@ static void collect_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
 {
     struct IrImpl *impl = pawIr_get_impl_def(X->C, d->did);
     IrGenericArgs *binder = pawIr_get_generic_args(X->C, d->did);
+    add_predicates_from(X, d->did);
 
     IrType *type = collect_type(X, d->type);
 
@@ -1093,6 +1098,7 @@ static void collect_trait_decl(struct ItemCollector *X, struct HirTraitDecl *d)
 {
     X->in_trait_decl = PAW_TRUE;
     struct IrTraitDef *trait_def = pawIr_get_trait_def(X->C, d->did);
+    add_predicates_from(X, d->did);
 
     IrGenericArgs *params = pawIr_get_generic_args(X->C, d->did);
     IrType *self = IrGenericArg_get_type(IrGenericArgs_first(params));

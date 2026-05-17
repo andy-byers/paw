@@ -755,7 +755,7 @@ enum ErrorKind {
 
 #define THROW_ERROR(C_, Kind_, ...) pawErr_throw(C_, \
         kErr##Kind_, &(struct Kind_##Error) {__VA_ARGS__})
-_Noreturn void pawErr_throw(struct Compiler *C, enum ErrorKind kind, void *payload);
+EXTERN_C _Noreturn void pawErr_throw(struct Compiler *C, enum ErrorKind kind, void *payload);
 
 enum ErrorCategory pawErr_error_category(enum ErrorKind kind);
 

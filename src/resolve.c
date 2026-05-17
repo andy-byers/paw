@@ -354,7 +354,10 @@ static paw_Bool lookup_type(struct Resolver *R, struct PathCursor pc, struct Sym
 
     if (!pc_is_last(pc)) {
         pc_next(&pc);
-        return find_associated_type(R, &pc, &symbol);
+        if (find_associated_type(R, &pc, &symbol)) {
+            *out = symbol;
+            return PAW_TRUE;
+        }
     }
 
     set_result(R, pc_segment(pc)->id, symbol.id, RESOLVED_DECL);
@@ -1000,7 +1003,11 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
         pawAst_visit_decl(V, self);
     }
 
-    declare_generics(R, d->types);
+    // TODO: allocate DeclIds during parsing and remove this, as well as other DeclId creation code in this file
+    K_LIST_XFOREACH (d->types, struct AstDecl *const, p)
+        (*p)->hdr.did = next_did(R);
+
+//    declare_generics(R, d->types);
 
     maybe_store_core_trait(R, R->current->id, d->ident.name, d->did, d->id);
     return PAW_TRUE;

@@ -730,6 +730,55 @@ static void test_deferred_init(void)
     test_compiler_status(kErrUseBeforeInitialization, "uninit_if_else", "", "let a; if true {a = 1;} else if true {return;} else {} let b = a;");
 }
 
+#define CODELINE(Line_) Line_ "\n"
+
+static void test_projections(void)
+{
+#define HEADER \
+    CODELINE("pub trait Trait {") \
+    CODELINE("  type Type;") \
+    CODELINE("  fn method(*self);") \
+    CODELINE("}") \
+    CODELINE("struct Struct;") \
+    CODELINE("impl Trait for Struct {") \
+    CODELINE("  type Type = int;") \
+    CODELINE("  fn method(*self) {}") \
+    CODELINE("}")
+
+    test_compiler_status(kErrUnknownAssociatedItem, "unknown_assoc_item_path",
+            HEADER "fn f<T: Trait>(t: T, item: T::Nonexistent) {}", "");
+    test_compiler_status(kErrMultipleApplicableItems, "ambiguous_assoc_item_path",
+            HEADER "pub trait Trait2 { type Type; }"
+            "fn f<T: Trait + Trait2>(t: T, item: T::Type) {}", "");
+
+    test_compiler_status(kErrUnknownAssociatedItem, "unknown_assoc_item_projection",
+            HEADER "fn f<T: Trait>(t: T, item: <T as Trait>::Nonexistent) {}", "");
+    test_compiler_status(kErrNone, "SANITY_CHECK_disambiguate_assoc_item_using_projection",
+            HEADER "pub trait Trait2 { type Type; }"
+            "fn f<T: Trait + Trait2>(t: T, item: <T as Trait>::Type) {}", "");
+
+    test_compiler_status(kErrUnknownMethod, "unknown_assoc_item_path_expr",
+            HEADER "fn f<T: Trait>(t: T) {t.nonexistent();}", "");
+    test_compiler_status(kErrMultipleApplicableItems, "ambiguous_assoc_item_path_expr",
+            HEADER "pub trait Trait2 { fn method(*self); }"
+            "fn f<T: Trait + Trait2>(t: T) {t.method();}", "");
+
+    test_compiler_status(kErrUnknownMethod, "unknown_assoc_item_projection_expr",
+            HEADER "fn f<T: Trait>(t: T) {<T as Trait>::nonexistent(&t);}", "");
+    test_compiler_status(kErrNone, "SANITY_CHECK_disambiguate_assoc_item_using_projection_expr",
+            HEADER
+            CODELINE("pub trait Trait2 {")
+            CODELINE("  type Type;")
+            CODELINE("  fn method(*self);")
+            CODELINE("}")
+            CODELINE("fn f<T: Trait + Trait2>(t: T) {")
+            CODELINE("  <T as Trait>::method(&t);")
+            CODELINE("  <T as Trait2>::method(&t);")
+            CODELINE("}"), "");
+
+#undef HEADER
+}
+
 static void test_interpolation(void)
 {
     test_compiler_status(kErrExpectedExpression, "extra_close_braces", "", "let s = \"\\{103 +} 20}\";");
@@ -918,6 +967,7 @@ int main(void)
     test_trait_error();
     test_destructuring();
     test_deferred_init();
+    test_projections();
 //    test_interpolation();
     test_panic();
     test_divergence();

@@ -1,0 +1,12 @@
+// projection_as_generic_arg.paw
+
+struct SomeContainer<T>;
+
+trait Container {
+    type Elem;
+}
+
+pub fn f<T: Container>() {
+    let _: SomeContainer<<T as Container>::Elem> = panic("");
+}
+
