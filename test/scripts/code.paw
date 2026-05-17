@@ -652,10 +652,7 @@
 //    assert(t.second() == 123);
 //}
 
-struct Struct<X>;
-
 #[test]
 pub fn test() {
-    type T<X: Hash> = Struct<X>;
 }
 

@@ -467,7 +467,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
     self = pawIr_remove_indirection(C, self);
     IrType *impl_type = pawIr_remove_indirection(C, target_impl->type);
     if (IrIsGeneric(self)) {
-        assoc = pawIr_solver_instantiate_type_with(C->S, IR_TYPE_DID(self), IR_GENERIC_ARGS(self));
+//        assoc = pawIr_solver_instantiate_type_with(C->S, IR_TYPE_DID(self), IR_GENERIC_ARGS(self));
     } else if (IrIsAdt(self)){
         struct Substitution const subst = {IR_GENERIC_ARGS(impl_type), IR_GENERIC_ARGS(self)};
         assoc = pawP_substitute(C, assoc, subst);

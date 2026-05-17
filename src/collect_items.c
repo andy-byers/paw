@@ -44,7 +44,6 @@ struct ItemCollector {
     struct HirModule const *pm;
     struct Compiler *C;
     struct Pool *pool;
-    struct IrTypeVisitor *V;
     TypeCollection *cache;
     IrGenericArgs *binder;
     IrType *ctx;
@@ -688,27 +687,6 @@ static void ensure_not_recursive(struct ItemCollector *X, IrType *type)
     TypeCollection_remove(X->C, X->cache, type);
 }
 
-static void add_obligations_from_trait(struct ItemCollector *X, IrTrait *trait)
-{
-    pawIr_visit_trait(X->V, trait);
-}
-
-static void add_obligations_from_type(struct ItemCollector *X, IrType *type)
-{
-    pawIr_visit_type(X->V, type);
-}
-
-static void add_obligations_from_args(struct ItemCollector *X, IrGenericArgs const *args)
-{
-    K_LIST_XFOREACH (args, struct IrGenericArg const, p) {
-        if (IrGenericArg_is_type(*p)) {
-            pawIr_visit_type(X->V, IrGenericArg_get_type(*p));
-        } else {
-//            pawIr_visit_const(X->V, IrGenericArg_get_const(*p));
-        }
-    }
-}
-
 static void ensure_type_is_well_formed(struct ItemCollector *X, struct SourceSpan span, IrType *type)
 {
     if (IrIsAdt(type))
@@ -945,9 +923,15 @@ static void collect_local_type_decl(struct HirVisitor *V, struct HirTypeDecl *d)
     collect_generic_args(X, d->did, d->generics);
     collect_generic_defs(X, d->generics);
     collect_generic_bounds(X, d->generics, constraints);
-    collect_type_decl(X, d);
+    IrType *rhs = collect_type_decl(X, d);
 
     IrConstraintsMap_insert(X->C, X->C->ir_constraints, d->did, constraints);
+
+    pawIr_push_solver(X->C);
+    add_predicates_and_obligations(X, d->did);
+    ensure_type_is_well_formed(X, d->rhs->hdr.span, rhs);
+    solve_all_obligations(X);
+    pawIr_pop_solver(X->C);
 }
 
 static void collect_local_type_aliases(struct ItemCollector *X, struct HirExpr *block)
@@ -1185,35 +1169,21 @@ static void run_collection_phases(struct ItemCollector *X, struct Hir *hir)
 #undef MAP_MODULES
 }
 
-static void visit_type(struct IrTypeVisitor *V, IrType *type)
-{
-    struct ItemCollector *X = V->ud;
-    pawIr_solver_add_obligations_from_type(X->C->S, type);
-}
-
-static void visit_trait(struct IrTypeVisitor *V, IrTrait *trait)
-{
-    struct ItemCollector *X = V->ud;
-    pawIr_solver_add_obligations_from_trait(X->C->S, trait);
-}
-
 // Entrypoint to item collection
 void pawP_collect_items(struct Compiler *C, struct Pool *pool)
 {
-    struct IrTypeVisitor V;
     struct ItemCollector X = {
         .hir = C->hir,
         .pool = pool,
         .P = ENV(C),
-        .V = &V,
         .C = C,
     };
 
     DLOG(&X, "collecting %d module(s)", C->modules->count);
 
-    pawIr_type_visitor_init(X.V, C, &X);
-    V.VisitTrait = visit_trait;
-    V.VisitType = visit_type;
+//    pawIr_type_visitor_init(X.V, C, &X);
+//    V.VisitTrait = visit_trait;
+//    V.VisitType = visit_type;
 
     pawU_enter_binder(C->U, SCAN_STR(C, "<module>"));
 

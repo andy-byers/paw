@@ -1,0 +1,5 @@
+// impl_special_case_2.paw
+
+trait Trait<T> {}
+
+impl<T, U: Trait<T>> Trait<U> for T {}

@@ -12,6 +12,8 @@ TESTS=(
 #TODO    "recursive_assoc_item_constraints"
 #TODO    "nested_assoc_type"
     "recursive_assoc_item_constraints_2"
+    "impl_special_case"
+    "impl_special_case_2"
     "assoc_type_in_bound"
     "into_implies_from"
     "conversions_are_reflexive"
