@@ -680,19 +680,19 @@
 
 
 
-//pub trait Trait {
-//    type Type: Trait<Type = Struct>;
-//}
+pub trait Trait {
+    type Type: Trait<Type = Struct>;
+}
 
 struct Struct;
 
-//impl Trait for Struct {
-//    type Type = Struct;
-//}
-//
-//fn require<T: Trait<Type = Struct>>() {}
+impl Trait for Struct {
+    type Type = int;
+}
+
+fn require<T: Trait<Type = Struct>>() {}
 
 #[test]
 pub fn test() {
-    let array: [3]() = [(), (), ()];
+//    require::<Struct>();
 }

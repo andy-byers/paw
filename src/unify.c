@@ -418,7 +418,7 @@ static int unify_lists(struct Unifier *U, IrTypeList *a, IrTypeList *b)
     if (a->count != b->count) return -1;
     IrType *const *pa, *const *pb;
     K_LIST_ZIP (a, pa, b, pb) {
-        if (U->action(U, *pa, *pb))
+        if (pawU_unify(U, *pa, *pb))
             return -1;
     }
     return 0;
@@ -443,14 +443,13 @@ static int unify(struct Unifier *U, IrType *a, IrType *b);
 static int unify_array(struct Unifier *U, struct IrArray *a, struct IrArray *b)
 {
     // TODO: need to undo const obligations, maybe store in IrSolver. the problem is they can be long-lived
-    if (U->action == unify)
-        pawIr_add_const_obligation(U->C, a->length, b->length);
-    return U->action(U, a->type, b->type);
+    pawIr_add_const_obligation(U->C, a->length, b->length);
+    return pawU_unify(U, a->type, b->type);
 }
 
 static int unify_slice(struct Unifier *U, struct IrSlice *a, struct IrSlice *b)
 {
-    return U->action(U, a->type, b->type);
+    return pawU_unify(U, a->type, b->type);
 }
 
 static int unify_tuple(struct Unifier *U, struct IrTuple *a, struct IrTuple *b)
@@ -462,7 +461,7 @@ static int unify_fptr(struct Unifier *U, struct IrFnPtr *a, struct IrFnPtr *b)
 {
     if (unify_lists(U, a->params, b->params))
         return -1;
-    return U->action(U, a->result, b->result);
+    return pawU_unify(U, a->result, b->result);
 }
 
 static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneric *b)
@@ -473,52 +472,54 @@ static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneri
 
 static int unify_projection(struct Unifier *U, struct IrProjection *a, struct IrProjection *b)
 {
-    if (U->action(U, a->type, b->type) != 0) return -1;
-    if (U->trait_action(U->C, a->trait, b->trait) != 0) return -1;
+    if (pawU_unify(U, a->type, b->type) != 0) return -1;
+    if (pawIr_unify_traits(U->C, a->trait, b->trait) != 0) return -1;
     return P_ID_EQUALS(U->C, a->assoc, b->assoc) ? 0 : -1;
 }
 
-static IrType *materialize_fn(struct Unifier *U, IrType *type)
+static IrType *materialize_fn(struct Unifier *U, struct IrSignature const *t)
 {
-    if (IrIsSignature(type)) {
-        struct IrSignature const *t = IrGetSignature(type);
-        return pawIr_materialize_fn(U->C, t->did, t->args);
-    }
-    return type;
+    return pawIr_materialize_fn(U->C, t->did, t->args);
 }
 
 static int unify_types(struct Unifier *U, IrType *a, IrType *b)
 {
     debug_log(U, "unify_types", a, b);
-    if (IrIsNever(a) || IrIsNever(b)) {
-        return 0;
-    } else if (IR_IS_FUNC_TYPE(a) && IR_IS_FUNC_TYPE(b)) {
-        // function pointer and definition types are compatible
-        IrType *x = materialize_fn(U, a);
-        IrType *y = materialize_fn(U, b);
-        return unify_fptr(U, IrGetFnPtr(x), IrGetFnPtr(y));
-    } else if (IR_KINDOF(a) != IR_KINDOF(b)) {
+
+    if (IrIsNever(a)) return 0;
+    if (IrIsNever(b)) return 0;
+
+    if (IrIsSignature(a))
+        a = materialize_fn(U, IrGetSignature(a));
+    if (IrIsSignature(b))
+        b = materialize_fn(U, IrGetSignature(b));
+
+    if (IR_KINDOF(a) != IR_KINDOF(b))
         return -1;
-    } else if (IrIsArray(a)) {
-        return unify_array(U, IrGetArray(a), IrGetArray(b));
-    } else if (IrIsSlice(a)) {
-        return unify_slice(U, IrGetSlice(a), IrGetSlice(b));
-    } else if (IrIsTuple(a)) {
-        return unify_tuple(U, IrGetTuple(a), IrGetTuple(b));
-    } else if (IrIsAdt(a)) {
-        return unify_adt(U, IrGetAdt(a), IrGetAdt(b));
-    } else if (IrIsGeneric(a)) {
-        return unify_generic(U, IrGetGeneric(a), IrGetGeneric(b));
-    } else if (IrIsProjection(a)) {
-        return unify_projection(U, IrGetProjection(a), IrGetProjection(b));
-    } else if (IrIsPtr(a)) {
-        return U->action(U, IrGetPtr(a)->pointee, IrGetPtr(b)->pointee);
-    } else {
-        return 0;
+
+    switch (IR_KINDOF(a)) {
+        case kIrFnPtr:
+            return unify_fptr(U, IrGetFnPtr(a), IrGetFnPtr(b));
+        case kIrArray:
+            return unify_array(U, IrGetArray(a), IrGetArray(b));
+        case kIrSlice:
+            return unify_slice(U, IrGetSlice(a), IrGetSlice(b));
+        case kIrTuple:
+            return unify_tuple(U, IrGetTuple(a), IrGetTuple(b));
+        case kIrAdt:
+            return unify_adt(U, IrGetAdt(a), IrGetAdt(b));
+        case kIrGeneric:
+            return unify_generic(U, IrGetGeneric(a), IrGetGeneric(b));
+        case kIrProjection:
+            return unify_projection(U, IrGetProjection(a), IrGetProjection(b));
+        case kIrPtr:
+            return pawU_unify(U, IrGetPtr(a)->pointee, IrGetPtr(b)->pointee);
+        default:
+            return 0;
     }
 }
 
-static int unify(struct Unifier *U, IrType *a, IrType *b)
+int pawU_unify(struct Unifier *U, IrType *a, IrType *b)
 {
     a = pawU_normalize(U, a);
     b = pawU_normalize(U, b);
@@ -541,21 +542,6 @@ static int unify(struct Unifier *U, IrType *a, IrType *b)
     return 0;
 }
 
-#define RUN_ACTION(U, a, b, f) ((U)->action = f)(U, a, b)
-
-int pawU_unify(struct Unifier *U, IrType *a, IrType *b)
-{
-    Unify const old_action = U->action;
-    UnifyTrait const old_trait_action = U->trait_action;
-
-    U->trait_action = pawIr_unify_traits;
-    int const result = RUN_ACTION(U, a, b, unify);
-
-    U->action = old_action;
-    U->trait_action = old_trait_action;
-    return result;
-}
-
 static int equate(struct Unifier *U, IrType *a, IrType *b)
 {
     a = pawU_normalize(U, a);
@@ -565,24 +551,6 @@ static int equate(struct Unifier *U, IrType *a, IrType *b)
     if (IrIsInfer(a) || IrIsInfer(b)) return 0;
 
     return unify_types(U, a, b);
-}
-
-static int equals_adaptor(struct Compiler *C, IrTrait *a, IrTrait *b)
-{
-    return pawIr_trait_equals(C, a, b) ? 0 : -1;
-}
-
-paw_Bool pawU_equals(struct Unifier *U, IrType *a, IrType *b)
-{
-    Unify const old_action = U->action;
-    UnifyTrait const old_trait_action = U->trait_action;
-
-    U->trait_action = equals_adaptor;
-    int const result = RUN_ACTION(U, a, b, equate) == 0;
-
-    U->action = old_action;
-    U->trait_action = old_trait_action;
-    return result;
 }
 
 int pawU_current_position(struct Unifier *U)

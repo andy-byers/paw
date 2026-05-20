@@ -79,22 +79,21 @@ struct IrImplInstance pawIr_solver_instantiate_impl(IrSolver *S, DeclId did);
 struct IrImplInstance pawIr_solver_instantiate_impl_with(IrSolver *S, DeclId did, struct IrGenericArgs *args);
 
 enum IrSolverStatus {
-    IR_SOLVER_OK,
-    IR_SOLVER_MULTIPLE_APPLICABLE_TRAITS,
-    IR_SOLVER_CANNOT_PROVE_OBLIGATION,
+    IR_SOLVER_SOLVED,
+    IR_SOLVER_AMBIGUOUS,
+    IR_SOLVER_ERROR,
 };
 
 struct IrSolverResult {
     enum IrSolverStatus status;
-    int num_unsolved;
     union {
         struct {
-            struct IrDefs *traits;
-        } mat;
+            int num_unsolved;
+        } ambiguous;
 
         struct {
             struct IrObligation obligation;
-        } cpo;
+        } error;
     };
 };
 

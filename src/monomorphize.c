@@ -642,7 +642,7 @@ static IrType *collect_other(struct MonoCollector *M, IrType *type)
 {
     IrType *const *ptarget;
     K_LIST_FOREACH (M->other, ptarget) {
-        if (pawU_equals(M->C->U, *ptarget, type))
+        if (pawU_unify(M->C->U, *ptarget, type) == 0)
             return *ptarget;
     }
     IrTypeList_push(M->C, M->other, type);

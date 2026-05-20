@@ -105,7 +105,7 @@ static paw_Bool types_are_compatible(struct Compiler *C, IrType *self, IrType *c
         // only exclude an impl block from search if there is a trait obligation that
         // is known to be unsatisfiable (pending obligations might be solved later,
         // once more types have been inferred)
-        && pawIr_solver_solve(C->S).status == IR_SOLVER_OK;
+        && pawIr_solver_solve(C->S).status != IR_SOLVER_ERROR;
 }
 
 static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrImpl const *impl)
@@ -121,7 +121,7 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrIm
         // only exclude an impl block from search if there is a trait obligation that
         // is known to be unsatisfiable (pending obligations might be solved later,
         // once more types have been inferred)
-        && pawIr_solver_solve(S).status == IR_SOLVER_OK;
+        && pawIr_solver_solve(S).status != IR_SOLVER_ERROR;
 
     // undo all changes to the environment made in this function
     pawU_undo_unifications(C->U, save);
@@ -222,7 +222,7 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
 static paw_Bool traits_are_compatible(struct Compiler *C, IrSolver *S, IrTrait *a, IrTrait *b)
 {
     return pawIr_unify_traits(C, a, b) == 0
-        && pawIr_solver_solve(S).status == IR_SOLVER_OK;
+        && pawIr_solver_solve(S).status != IR_SOLVER_ERROR;
 }
 
 static paw_Bool impls_are_compatible(struct Compiler *C, IrType *self, IrTrait *trait, struct IrImpl const *impl)
@@ -233,8 +233,7 @@ static paw_Bool impls_are_compatible(struct Compiler *C, IrType *self, IrTrait *
             && pawIr_unify_traits(C, inst.trait, trait) == 0) {
         pawIr_solver_add_obligations_from(C->S, impl->did, inst.args);
         struct IrSolverResult const result = pawIr_solver_solve(C->S);
-        matches = result.status == IR_SOLVER_OK
-            && result.num_unsolved == 0;
+        matches = result.status == IR_SOLVER_SOLVED;
     }
     pawIr_solver_rollback(C->S);
 

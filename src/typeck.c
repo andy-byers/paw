@@ -197,13 +197,12 @@ static struct IrSolverResult solve_pending_obligations(struct TypeChecker *T)
 {
     struct IrSolverResult const result = pawIr_solver_solve(T->C->S);
     switch (result.status) {
-        case IR_SOLVER_OK:
+        case IR_SOLVER_SOLVED:
+        case IR_SOLVER_AMBIGUOUS:
             break;
-        case IR_SOLVER_CANNOT_PROVE_OBLIGATION:
+        case IR_SOLVER_ERROR:
             TYPECK_ERROR(T, FalseObligation,
-                    .obligation = pawIr_print_obligation_(T->C, result.cpo.obligation));
-        case IR_SOLVER_MULTIPLE_APPLICABLE_TRAITS:
-            TYPECK_ERROR(T, MultipleApplicableTraits, .span = {0});
+                    .obligation = pawIr_print_obligation_(T->C, result.error.obligation));
     }
     if (pawIr_solve_const_obligations(T->C) < 0)
         TYPECK_ERROR(T, FalseConstObligation, .span = {0});
@@ -2216,11 +2215,11 @@ static void check_item(struct TypeChecker *T, struct HirDecl *item)
     }
 
     struct IrSolverResult const result = solve_pending_obligations(T);
-    if (result.num_unsolved != 0) {
+    if (result.status == IR_SOLVER_AMBIGUOUS) {
         struct IrObligation const example = pawIr_solver_first_obligation(T->C->S);
         TYPECK_ERROR(T, UnsatisfiedObligation,
                 .example = pawIr_print_obligation_(T->C, example),
-                .num_unsolved = result.num_unsolved);
+                .num_unsolved = result.ambiguous.num_unsolved);
     }
 
     pawIr_pop_solver(T->C);

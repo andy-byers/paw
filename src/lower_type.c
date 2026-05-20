@@ -93,22 +93,20 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
     struct IrSolverResult const result = pawIr_solver_solve(child);
 
     switch (result.status) {
-        case IR_SOLVER_OK:
-            if (result.num_unsolved != 0) {
+        case IR_SOLVER_SOLVED:
+            break;
+        case IR_SOLVER_AMBIGUOUS: {
                 struct IrObligation const example = pawIr_solver_first_obligation(L->C->S);
                 LOWERING_ERROR(L, UnsatisfiedObligation,
                         .example = pawIr_print_obligation_(L->C, example),
-                        .num_unsolved = result.num_unsolved,
+                        .num_unsolved = result.ambiguous.num_unsolved,
                         .span = example.cause.span);
+                break;
             }
-            break;
-        case IR_SOLVER_CANNOT_PROVE_OBLIGATION:
+        case IR_SOLVER_ERROR:
             LOWERING_ERROR(L, FalseObligation,
-                    .obligation = pawIr_print_obligation_(L->C, result.cpo.obligation),
-                    .span = result.cpo.obligation.cause.span);
-        case IR_SOLVER_MULTIPLE_APPLICABLE_TRAITS: {
-            LOWERING_ERROR(L, MultipleApplicableTraits, .span = {0});
-        }
+                    .obligation = pawIr_print_obligation_(L->C, result.error.obligation),
+                    .span = result.error.obligation.cause.span);
     }
 
     pawIr_pop_solver(L->C);

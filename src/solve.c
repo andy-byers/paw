@@ -241,8 +241,7 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, IrTrait *tr
                 && pawIr_unify_traits(C, inst.trait, trait) == 0) {
             pawIr_solver_add_obligations_from(child, impl->did, inst.args);
             struct IrSolverResult const result = pawIr_solver_solve(child);
-            matches = result.status == IR_SOLVER_OK
-                && result.num_unsolved == 0;
+            matches = result.status == IR_SOLVER_SOLVED;
         }
         pawIr_solver_rollback(child);
     });
@@ -255,8 +254,10 @@ static paw_Bool matches_impl_predicate(IrSolver *S, IrType *type, IrTrait *trait
     K_LIST_XFOREACH (S->predicates, struct IrObligation const, p) {
         switch (p->kind) {
             case IR_OBLIGATION_IMPL_TRAIT:
-                if (pawU_equals(S->U, type, p->impl.type)
-                        && pawIr_trait_equals(S->C, trait, p->impl.trait)) {
+                // there are no inference variables in `type` or `trait` so unifying is the
+                // same as equating
+                if (pawU_unify(S->U, type, p->impl.type) == 0
+                        && pawIr_unify_traits(S->C, trait, p->impl.trait) == 0) {
                     LOGLN("SOLVER:%p: proved `%s: %s` using predicate",
                             (void *)S, pawIr_print_type(S->C, type),
                             pawIr_print_trait(S->C, trait));
@@ -278,9 +279,6 @@ struct Candidate {
 
 DEFINE_LIST(struct Compiler, Candidates, struct Candidate)
 
-#define IMPL_FOUND 0
-#define IMPL_NOT_FOUND -1
-
 static void add_type_predicates(IrSolver *S, IrType *type, PredicateCache *cache, int depth);
 static void add_trait_predicates(IrSolver *S, IrTrait *trait, PredicateCache *cache, int depth);
 
@@ -296,13 +294,13 @@ static void add_nested_predicates(IrSolver *S, struct IrProjection const *p)
     struct IrSolverResult const r = pawIr_solver_solve(child);
     pawIr_pop_solver(S->C);
 
-    if (r.status == IR_SOLVER_OK && r.num_unsolved == 0) {
+    if (r.status == IR_SOLVER_SOLVED) {
         PredicateCache *cache = PredicateCache_new(S->C);
         add_trait_predicates(S, p->trait, cache, 0);
     }
 }
 
-static int type_implements_trait(IrSolver *S, IrType *self, IrTrait *impl_trait)
+static paw_Bool type_implements_trait(IrSolver *S, IrType *self, IrTrait *impl_trait)
 {
     if (IrIsProjection(self))
         add_nested_predicates(S, IrGetProjection(self));
@@ -310,7 +308,7 @@ static int type_implements_trait(IrSolver *S, IrType *self, IrTrait *impl_trait)
     IrSolver *cursor = S;
     while (cursor != NULL) {
         if (matches_impl_predicate(cursor, self, impl_trait))
-            return IMPL_FOUND;
+            return PAW_TRUE;
         cursor = cursor->outer;
     }
 
@@ -350,13 +348,13 @@ static int type_implements_trait(IrSolver *S, IrType *self, IrTrait *impl_trait)
     }
 
     if (candidates->count != 1)
-        return IMPL_NOT_FOUND;
+        return PAW_FALSE;
 
     struct Candidate const c = Candidates_first(candidates);
     struct IrImplInstance const inst = pawIr_solver_instantiate_impl(S, c.impl_did);
     pawU_unify_unchecked(C->U, inst.type, self);
     pawIr_unify_traits_unchecked(C, inst.trait, impl_trait);
-    return IMPL_FOUND;
+    return PAW_TRUE;
 }
 
 static IrTrait *adjust_trait(IrSolver *S, IrTrait *trait, IrType *self)
@@ -371,8 +369,7 @@ static IrTrait *adjust_trait(IrSolver *S, IrTrait *trait, IrType *self)
 paw_Bool pawIr_type_implements_trait(IrSolver *S, IrType *type, IrTrait *trait)
 {
     // search for evidence in the form of a compatible impl block
-    int const result = type_implements_trait(S, type, trait);
-    return result == IMPL_FOUND;
+    return type_implements_trait(S, type, trait);
 }
 
 static int solve_type_equals_obligation(IrSolver *S, IrType *lhs, IrType *rhs)
@@ -393,17 +390,25 @@ static int solve_type_equals_obligation(IrSolver *S, IrType *lhs, IrType *rhs)
     return 0;
 }
 
+#define RESULT_SOLVED() ((struct IrSolverResult){ \
+        .status = IR_SOLVER_SOLVED, \
+    })
+#define RESULT_AMBIGUOUS(NumUnsolved_) ((struct IrSolverResult){ \
+        .status = IR_SOLVER_AMBIGUOUS, \
+        .ambiguous.num_unsolved = NumUnsolved_, \
+    })
+#define RESULT_ERROR(Obligation_) ((struct IrSolverResult){ \
+        .status = IR_SOLVER_ERROR, \
+        .error.obligation = Obligation_, \
+    })
+
 struct IrSolverResult pawIr_solver_solve(IrSolver *S)
 {
     LOGLN("SOLVER:%p: starting solver invocation", (void *)S);
 
-    struct IrSolverResult result = {
-        .status = IR_SOLVER_OK,
-    };
     paw_Bool solved_any;
     do {
         solved_any = PAW_FALSE;
-        result.num_unsolved = S->obligations->count;
         for (int i = 0; i < S->obligations->count; ++i) {
             paw_Bool solved = PAW_FALSE;
             struct IrObligation const o = IrObligations_get(S->obligations, i);
@@ -418,8 +423,11 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     IrSolver *child = pawIr_push_solver(S->C);
                     pawIr_solver_add_obligations_from(child, o.wf.did, o.wf.args);
                     struct IrSolverResult const r = pawIr_solver_solve(child);
-                    solved = r.status == IR_SOLVER_OK && r.num_unsolved == 0;
                     pawIr_pop_solver(S->C);
+
+                    if (r.status == IR_SOLVER_ERROR)
+                        return RESULT_ERROR(r.error.obligation);
+                    solved = r.status == IR_SOLVER_SOLVED;
                     break;
                 }
                 case IR_OBLIGATION_IMPL_TRAIT: {
@@ -432,21 +440,17 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                             || pawIr_trait_contains_inference_var(S->C, trait))
                         break; // not enough information
 
-                    int status = type_implements_trait(S, type, trait);
-                    if (status == IMPL_FOUND) {
+                    if (type_implements_trait(S, type, trait)) {
                         LOGLN("SOLVER:%p: proved impl trait obligation `%s`",
                                 (void *)S, pawIr_print_impl_trait_obligation(S->C, type, trait));
 
                         solved = PAW_TRUE;
-                    } else if (status == IMPL_NOT_FOUND) {
+                    } else {
                         // solver was not blocked by the unifier, indicating an
                         // unprovable obligation
-                        struct IrSolverResult result;
                         LOGLN("SOLVER:%p: unprovable impl trait obligation \"%s\"",
                                 (void *)S, pawIr_print_impl_trait_obligation(S->C, type, trait));
-                        result.status = IR_SOLVER_CANNOT_PROVE_OBLIGATION;
-                        result.cpo.obligation = o;
-                        return result;
+                        return RESULT_ERROR(o);
                     }
                     break;
                 }
@@ -462,9 +466,7 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                         LOGLN("SOLVER:%p: unable to solve type equals obligation `%s = %s`",
                                 (void *)S, pawIr_print_type(S->C, lhs),
                                 pawIr_print_type(S->C, rhs));
-                        result.status = IR_SOLVER_CANNOT_PROVE_OBLIGATION;
-                        result.cpo.obligation = o;
-                        return result;
+                        return RESULT_ERROR(o);
                     }
                     break;
                 }
@@ -476,11 +478,14 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
         }
     } while (solved_any);
 
-    paw_assert(result.status == IR_SOLVER_OK);
-    paw_assert(result.num_unsolved == S->obligations->count);
-    LOGLN("SOLVER:%p: finishing solver invocation successfully (unsolved obligations = %d)",
-            (void *)S, result.num_unsolved);
-    return result;
+    if (S->obligations->count > 0) {
+        LOGLN("SOLVER:%p: finished with AMBIGUOUS status (%d unsolved obligations)",
+                (void *)S, S->obligations->count);
+        return RESULT_AMBIGUOUS(S->obligations->count);
+    }
+
+    LOGLN("SOLVER:%p: finished with SUCCESS status", (void *)S);
+    return RESULT_SOLVED();
 }
 
 int pawIr_solver_num_obligations(IrSolver const *S)
@@ -671,12 +676,12 @@ Str const *pawIr_print_obligation_(struct Compiler *C, struct IrObligation oblig
             enum IrDefKind const def_kind = pawIr_get_kind(C, obligation.wf.did);
             if (def_kind == IR_TRAIT_DEF) {
                 IrTrait *trait = pawIr_new_trait(C, obligation.wf.did, obligation.wf.args);
-                pawL_add_fstring(P, &buf, "  WellFormed(%s)\n",
+                pawL_add_fstring(P, &buf, "WellFormed(%s)",
                         pawIr_print_trait(C, trait));
             } else {
                 paw_assert(def_kind == IR_ADT_DEF);
                 IrType *type = pawIr_new_adt(C, obligation.wf.did, obligation.wf.args);
-                pawL_add_fstring(P, &buf, "  WellFormed(%s)\n",
+                pawL_add_fstring(P, &buf, "WellFormed(%s)",
                         pawIr_print_type(C, type));
             }
             break;

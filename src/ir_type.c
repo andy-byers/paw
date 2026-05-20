@@ -1098,6 +1098,7 @@ static paw_Bool type_equals(struct Compiler *C, IrType *lhs, IrType *rhs)
                 && P_ID_EQUALS(C, x->assoc, y->assoc);
         }
         default:
+            paw_assert(IR_KINDOF(lhs) == IR_KINDOF(rhs));
             return PAW_TRUE;
     }
 }

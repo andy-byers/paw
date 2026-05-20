@@ -160,24 +160,19 @@ static void solve_all_obligations(struct ItemCollector *X)
 {
     struct IrSolverResult const result = pawIr_solver_solve(X->C->S);
     switch (result.status) {
-        case IR_SOLVER_OK:
-            if (result.num_unsolved != 0) {
-                struct IrObligation const example = pawIr_solver_first_obligation(X->C->S);
-                COLLECTOR_ERROR(X, UnsatisfiedObligation,
-                        .example = pawIr_print_obligation_(X->C, example),
-                        .num_unsolved = result.num_unsolved,
-                        .span = example.cause.span);
-            }
+        case IR_SOLVER_SOLVED:
             break;
-        case IR_SOLVER_CANNOT_PROVE_OBLIGATION:
+        case IR_SOLVER_AMBIGUOUS: {
+            struct IrObligation const example = pawIr_solver_first_obligation(X->C->S);
+            COLLECTOR_ERROR(X, UnsatisfiedObligation,
+                    .example = pawIr_print_obligation_(X->C, example),
+                    .num_unsolved = result.ambiguous.num_unsolved,
+                    .span = example.cause.span);
+            }
+        case IR_SOLVER_ERROR:
             COLLECTOR_ERROR(X, FalseObligation,
-                    .obligation = pawIr_print_obligation_(X->C, result.cpo.obligation),
-                    .span = result.cpo.obligation.cause.span);
-        case IR_SOLVER_MULTIPLE_APPLICABLE_TRAITS: {
-            struct IrTraitDef const *first = pawIr_get_trait_def(X->C, IrDefs_get(result.mat.traits, 0));
-            struct IrTraitDef const *second = pawIr_get_trait_def(X->C, IrDefs_get(result.mat.traits, 1));
-            COLLECTOR_ERROR(X, MultipleApplicableTraits, .span = {0});
-        }
+                    .obligation = pawIr_print_obligation_(X->C, result.error.obligation),
+                    .span = result.error.obligation.cause.span);
     }
 }
 

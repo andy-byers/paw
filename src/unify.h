@@ -12,8 +12,6 @@ typedef int (*Unify)(struct Unifier *, struct IrType *, struct IrType *);
 typedef int (*UnifyTrait)(struct Compiler *, struct IrTrait *, struct IrTrait *);
 
 struct Unifier {
-    Unify action;
-    UnifyTrait trait_action;
     UnificationTable *table;
     Str const *modname;
     struct Compiler *C;
@@ -23,11 +21,6 @@ struct Unifier {
 struct IrType *pawU_normalize(struct Unifier *U, struct IrType *a);
 struct IrType *pawU_normalize_projections(struct Unifier *U, struct IrType *type);
 struct IrConst *pawU_normalize_const(struct Unifier *U, IrConst *k);
-
-struct IrObligations *pawU_steal_obligations(struct Unifier *U);
-
-// Check if 'a' and 'b' are equal without side effects (besides normalization)
-paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b);
 
 // Impose the constraint that types 'a' and 'b' are equal
 int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
