@@ -683,6 +683,9 @@
 pub trait Trait {
     type Type: Trait<Type = Struct>;
 }
+// predicates:
+// (1) <Self as Trait>::Type: Trait
+// (2) <<Self as Trait>::Type as Trait>::Type = Struct
 
 struct Struct;
 

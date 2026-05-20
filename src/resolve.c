@@ -573,7 +573,6 @@ static void declare_generics(struct Resolver *R, struct AstDeclList *generics)
             } else {
                 new_local_value(R, d->k.ident, d->id, SYMBOL_DECL);
             }
-            d->did = next_did(R);
         }
     }
 }
@@ -808,26 +807,22 @@ static paw_Bool resolve_variant_pat(struct AstVisitor *V, struct AstVariantPat *
 
 static paw_Bool resolve_variant_decl(struct AstVisitor *V, struct AstVariantDecl *d)
 {
-    d->did = next_did(V->ud);
     return PAW_TRUE;
 }
 
 static paw_Bool resolve_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
 {
-    d->did = next_did(V->ud);
     return PAW_TRUE;
 }
 
 static paw_Bool resolve_field_decl(struct AstVisitor *V, struct AstFieldDecl *d)
 {
-    d->did = next_did(V->ud);
     return PAW_TRUE;
 }
 
 static paw_Bool resolve_param_decl(struct AstVisitor *V, struct AstParamDecl *d)
 {
     struct Resolver *R = V->ud;
-    d->did = next_did(R);
 
     new_local_value(R, d->ident, d->id, SYMBOL_DECL);
     return PAW_TRUE;
@@ -934,7 +929,6 @@ static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 {
     struct Resolver *R = V->ud;
     enter_scope(R, d->id, SCOPE_FN);
-    d->did = next_did(R);
 
     declare_generics(R, d->generics);
     declare_type_aliases(R, d->id);
@@ -960,7 +954,6 @@ static paw_Bool enter_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
 {
     struct Resolver *R = V->ud;
     enter_scope(R, d->id, SCOPE_ADT);
-    d->did = next_did(R);
 
     declare_generics(R, d->generics);
     declare_self(R, d->span, d->id, NAMESPACE_TYPE);
@@ -979,7 +972,6 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
 {
     struct Resolver *R = V->ud;
     enter_scope(R, d->id, SCOPE_TRAIT);
-    d->did = next_did(R);
 
     declare_generics(R, d->generics);
 
@@ -995,19 +987,12 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
             .span = span,
         };
         struct AstDecl *self = pawAst_new_generic_type_decl(
-                R->ast, span, self_id, ident, d->supertraits);
+                R->ast, span, self_id, next_did(R), ident, d->supertraits);
         add_local(R, enclosing_scope(R), ident, self_id,
                 NAMESPACE_TYPE, SYMBOL_DECL);
-        self->hdr.did = next_did(R);
 
         pawAst_visit_decl(V, self);
     }
-
-    // TODO: allocate DeclIds during parsing and remove this, as well as other DeclId creation code in this file
-    K_LIST_XFOREACH (d->types, struct AstDecl *const, p)
-        (*p)->hdr.did = next_did(R);
-
-//    declare_generics(R, d->types);
 
     maybe_store_core_trait(R, R->current->id, d->ident.name, d->did, d->id);
     return PAW_TRUE;
@@ -1023,7 +1008,6 @@ static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
 {
     struct Resolver *R = V->ud;
     enter_scope(R, d->id, SCOPE_IMPL);
-    d->did = next_did(R);
 
     declare_generics(R, d->generics);
     declare_self(R, d->span, d->id, NAMESPACE_TYPE);
@@ -1064,7 +1048,6 @@ static paw_Bool enter_type_decl(struct AstVisitor *V, struct AstTypeDecl *d)
 {
     struct Resolver *R = V->ud;
     enter_scope(R, d->id, SCOPE_TYPE);
-    d->did = next_did(R);
 
     declare_generics(R, d->generics);
     return PAW_TRUE;
@@ -1080,7 +1063,6 @@ static paw_Bool enter_module_decl(struct AstVisitor *V, struct AstModuleDecl *d)
 {
     struct Resolver *R = V->ud;
     R->current = d;
-    d->did = next_did(R);
     return PAW_TRUE;
 }
 

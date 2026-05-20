@@ -274,12 +274,12 @@ AST_DECL_LIST(X)
 
 struct AstDecl *pawAst_new_decl(struct Ast *ast);
 
-static struct AstDecl *pawAst_new_module_decl(struct Ast *ast, struct SourceSpan span, NodeId id, Str *name, int modno, struct AstDeclList *items)
+static struct AstDecl *pawAst_new_module_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, Str *name, int modno, struct AstDeclList *items)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ModuleDecl_ = (struct AstModuleDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstModuleDecl,
         .items = items,
@@ -290,12 +290,12 @@ static struct AstDecl *pawAst_new_module_decl(struct Ast *ast, struct SourceSpan
     return d;
 }
 
-static struct AstDecl *pawAst_new_field_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstType *tag, paw_Bool is_pub)
+static struct AstDecl *pawAst_new_field_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstType *tag, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->FieldDecl_ = (struct AstFieldDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstFieldDecl,
         .is_pub = is_pub,
@@ -306,12 +306,12 @@ static struct AstDecl *pawAst_new_field_decl(struct Ast *ast, struct SourceSpan 
     return d;
 }
 
-static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstType *tag)
+static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstType *tag)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ParamDecl_ = (struct AstParamDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstParamDecl,
         .ident = ident,
@@ -321,12 +321,12 @@ static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan 
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_fn_decl(struct Ast *ast, struct SourceSpan span, NodeId id, enum FnKind fn_kind, struct AstIdent ident, struct Annotations *annos, struct AstDeclList *generics, struct AstDeclList *params, struct AstType *result, struct AstExpr *body, paw_Bool is_pub, paw_Bool is_method)
+inline static struct AstDecl *pawAst_new_fn_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, enum FnKind fn_kind, struct AstIdent ident, struct Annotations *annos, struct AstDeclList *generics, struct AstDeclList *params, struct AstType *result, struct AstExpr *body, paw_Bool is_pub, paw_Bool is_method)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->FnDecl_ = (struct AstFnDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstFnDecl,
         .fn_kind = fn_kind,
@@ -343,12 +343,12 @@ inline static struct AstDecl *pawAst_new_fn_decl(struct Ast *ast, struct SourceS
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_generic_type_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstBoundList *bounds)
+inline static struct AstDecl *pawAst_new_generic_type_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstBoundList *bounds)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->GenericDecl_ = (struct AstGenericDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstGenericDecl,
         .is_type = PAW_TRUE,
@@ -359,12 +359,12 @@ inline static struct AstDecl *pawAst_new_generic_type_decl(struct Ast *ast, stru
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_generic_const_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstIdent ident)
+inline static struct AstDecl *pawAst_new_generic_const_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstType *type, struct AstIdent ident)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->GenericDecl_ = (struct AstGenericDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstGenericDecl,
         .is_type = PAW_FALSE,
@@ -375,12 +375,12 @@ inline static struct AstDecl *pawAst_new_generic_const_decl(struct Ast *ast, str
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_impl_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstType *trait, struct AstDeclList *generics, struct AstDeclList *types, struct AstDeclList *constants, struct AstDeclList *methods)
+inline static struct AstDecl *pawAst_new_impl_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstType *type, struct AstType *trait, struct AstDeclList *generics, struct AstDeclList *types, struct AstDeclList *constants, struct AstDeclList *methods)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ImplDecl_ = (struct AstImplDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstImplDecl,
         .type = type,
@@ -394,12 +394,12 @@ inline static struct AstDecl *pawAst_new_impl_decl(struct Ast *ast, struct Sourc
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstDeclList *variants, paw_Bool is_pub, paw_Bool is_struct)
+inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstDeclList *generics, struct AstDeclList *variants, paw_Bool is_pub, paw_Bool is_struct)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->AdtDecl_ = (struct AstAdtDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstAdtDecl,
         .ident = ident,
@@ -412,12 +412,12 @@ inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct Source
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstType *rhs, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstDeclList *generics, struct AstType *rhs, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->TypeDecl_ = (struct AstTypeDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstTypeDecl,
         .ident = ident,
@@ -429,12 +429,12 @@ inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, struct Sourc
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_const_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct Annotations *annos, struct AstType *tag, struct AstExpr *init, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_const_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct Annotations *annos, struct AstType *tag, struct AstExpr *init, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ConstDecl_ = (struct AstConstDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstConstDecl,
         .annos = annos,
@@ -447,12 +447,12 @@ inline static struct AstDecl *pawAst_new_const_decl(struct Ast *ast, struct Sour
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstBoundList *supertraits, struct AstDeclList *types, struct AstDeclList *methods, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstDeclList *generics, struct AstBoundList *supertraits, struct AstDeclList *types, struct AstDeclList *methods, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->TraitDecl_ = (struct AstTraitDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstTraitDecl,
         .ident = ident,
@@ -467,12 +467,12 @@ inline static struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, struct Sour
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_use_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPath path, struct AstIdent as, enum AstUseKind kind, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_use_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstPath path, struct AstIdent as, enum AstUseKind kind, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->UseDecl_ = (struct AstUseDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstUseDecl,
         .use_kind = kind,
@@ -484,12 +484,12 @@ inline static struct AstDecl *pawAst_new_use_decl(struct Ast *ast, struct Source
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_variant_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *fields, int index)
+inline static struct AstDecl *pawAst_new_variant_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstDeclList *fields, int index)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->VariantDecl_ = (struct AstVariantDecl){
         .id = id,
-        .did = NO_DECL,
+        .did = did,
         .span = span,
         .kind = kAstVariantDecl,
         .ident = ident,

@@ -119,14 +119,6 @@ static NodeId next_node_id(struct LowerAst *L)
     return (NodeId){(unsigned)++L->hir->node_count};
 }
 
-static DeclId next_decl_id(struct LowerAst *L)
-{
-    return (DeclId){
-        .value = (unsigned)L->hir->decls->count + 1,
-        .modno = (unsigned)L->m->modno,
-    };
-}
-
 static struct HirIdent make_ident(Str *name, struct SourceSpan span)
 {
     return (struct HirIdent){

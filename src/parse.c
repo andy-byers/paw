@@ -58,6 +58,14 @@ static NodeId next_id(struct Lex *lex)
     return (NodeId){(unsigned)++lex->ast->node_count};
 }
 
+static DeclId next_did(struct Lex *lex)
+{
+    return (DeclId){
+        .value = (unsigned)++lex->C->decl_count,
+        .modno = (unsigned)lex->modno,
+    };
+}
+
 
 // recursive non-terminals
 static struct AstExpr *expression(struct Lex *, unsigned);
@@ -513,7 +521,8 @@ static struct AstDecl *variant_field_decl(struct Lex *lex)
 {
     struct AstIdent const empty = {0};
     struct AstType *tag = parse_type(lex);
-    return NEW_NODE(lex, field_decl, NODE_SPAN(tag), next_id(lex), empty, tag, PAW_FALSE);
+    return NEW_NODE(lex, field_decl, NODE_SPAN(tag), next_id(lex),
+            next_did(lex), empty, tag, PAW_FALSE);
 }
 
 #define DEFINE_LIST_PARSER(Name_, A_, B_, Limit_, What_, Fn_, List_)                                          \
@@ -1053,7 +1062,7 @@ static struct AstDecl *fn_param_decl(struct Lex *lex)
     struct AstIdent const ident = parse_ident_or_underscore(lex);
     struct AstType *tag = expect_type_annotation(lex, "parameter", ident);
     return NEW_NODE(lex, param_decl, merge_spans(ident.span, NODE_SPAN(tag)),
-            next_id(lex), ident, tag);
+            next_id(lex), next_did(lex), ident, tag);
 }
 
 static struct AstDecl *closure_param_decl(struct Lex *lex)
@@ -1062,7 +1071,7 @@ static struct AstDecl *closure_param_decl(struct Lex *lex)
     struct AstType *tag = type_annotation(lex);
     struct SourceLoc const end = tag != NULL ? NODE_END(tag) : RANGE_END(ident.span);
     return NEW_NODE(lex, param_decl, RANGE(RANGE_START(ident.span), end),
-            next_id(lex), ident, tag);
+            next_id(lex), next_did(lex), ident, tag);
 }
 
 static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
@@ -1086,7 +1095,7 @@ static struct AstDecl *generic_param(struct Lex *lex)
         ? RANGE_END(K_LIST_LAST(bounds).path.span)
         : RANGE_END(ident.span);
     return NEW_NODE(lex, generic_type_decl, RANGE(RANGE_START(ident.span), end),
-            next_id(lex), ident, bounds);
+            next_id(lex), next_did(lex), ident, bounds);
 }
 
 DEFINE_LIST_PARSER(sig_param, '(', ')', PAW_MAX_ARGUMENTS, "function parameters", parse_type, AstTypeList)
@@ -1344,11 +1353,11 @@ static struct AstDeclList *fn_parameters(struct Lex *lex, paw_Bool *is_method)
             tag = type_annotation(lex);
         }
         if (is_shorthand_ptr)
-            tag = NEW_NODE(lex, ref_type, RANGE(start, NODE_END(tag)), next_id(lex), tag, is_shorthand_mut);
+            tag = NEW_NODE(lex, ref_type, RANGE(start, NODE_END(tag)), next_id(lex),
+                    tag, is_shorthand_mut);
 
-        struct AstDecl *first = NEW_NODE(lex, param_decl,
-                RANGE(start, NODE_END(tag)), next_id(lex),
-                ident, tag);
+        struct AstDecl *first = NEW_NODE(lex, param_decl, RANGE(start, NODE_END(tag)),
+                next_id(lex), next_did(lex), ident, tag);
         AstDeclList_push(lex->ast, params, first);
         test_next(lex, ',');
     }
@@ -1859,8 +1868,8 @@ static struct AstDecl *function(struct Lex *lex, struct SourceLoc start, struct 
         end = NODE_END(body);
     }
 
-    return NEW_NODE(lex, fn_decl, RANGE(start, end), next_id(lex), kind, ident, annos,
-            generics, params, result, body, is_pub, is_method);
+    return NEW_NODE(lex, fn_decl, RANGE(start, end), next_id(lex), next_did(lex),
+            kind, ident, annos, generics, params, result, body, is_pub, is_method);
 }
 
 static struct AstDecl *use_decl(struct Lex *lex, paw_Bool is_pub)
@@ -1911,7 +1920,7 @@ static struct AstDecl *use_decl(struct Lex *lex, paw_Bool is_pub)
 
     struct SourceLoc const end = TOKEN_END(lex->t);
     semicolon(lex, "'use' declaration");
-    return NEW_NODE(lex, use_decl, RANGE(start, end), next_id(lex),
+    return NEW_NODE(lex, use_decl, RANGE(start, end), next_id(lex), next_did(lex),
             path, as, kind, is_pub);
 }
 
@@ -2013,7 +2022,7 @@ static struct AstDecl *variant_decl(struct Lex *lex, int index)
     }
 
     return NEW_NODE(lex, variant_decl, RANGE(RANGE_START(ident.span), end),
-            next_id(lex), ident, fields, index);
+            next_id(lex), next_did(lex), ident, fields, index);
 }
 
 static struct SourceLoc enum_body(struct Lex *lex, struct SourceLoc start, struct AstDeclList *variants)
@@ -2050,8 +2059,8 @@ static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
     struct AstDeclList *variants = AstDeclList_new(lex->ast);
     struct SourceLoc const end = enum_body(lex, RANGE_START(ident.span), variants);
 
-    return NEW_NODE(lex, adt_decl, RANGE(RANGE_START(ident.span), end), next_id(lex), ident,
-            generics, variants, is_pub, PAW_FALSE);
+    return NEW_NODE(lex, adt_decl, RANGE(RANGE_START(ident.span), end), next_id(lex),
+            next_did(lex), ident, generics, variants, is_pub, PAW_FALSE);
 }
 
 static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
@@ -2059,7 +2068,7 @@ static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
     struct AstIdent const ident = parse_ident(lex);
     struct AstType *tag = expect_type_annotation(lex, "field", ident);
     return NEW_NODE(lex, field_decl, RANGE(RANGE_START(ident.span), NODE_END(tag)),
-            next_id(lex), ident, tag, is_pub);
+            next_id(lex), next_did(lex), ident, tag, is_pub);
 }
 
 static struct SourceLoc struct_body(struct Lex *lex, struct AstDeclList *fields)
@@ -2109,10 +2118,10 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub)
 
     struct AstDeclList *variants = AstDeclList_new(lex->ast);
     struct AstDecl *v = NEW_NODE(lex, variant_decl, RANGE(start, end),
-            next_id(lex), ident, fields, 0);
+            next_id(lex), next_did(lex), ident, fields, 0);
     AstDeclList_push(lex->ast, variants, v);
 
-    return NEW_NODE(lex, adt_decl, RANGE(start, end), next_id(lex), ident,
+    return NEW_NODE(lex, adt_decl, RANGE(start, end), next_id(lex), next_did(lex), ident,
             generics, variants, is_pub, PAW_TRUE);
 }
 
@@ -2126,7 +2135,7 @@ static struct AstDecl *const_decl(struct Lex *lex, struct Annotations *annos, pa
     struct SourceLoc const end = TOKEN_START(lex->t);
     semicolon(lex, "constant declaration");
 
-    return NEW_NODE(lex, const_decl, RANGE(start, end), next_id(lex),
+    return NEW_NODE(lex, const_decl, RANGE(start, end), next_id(lex), next_did(lex),
             ident, annos, tag, init, is_pub);
 }
 
@@ -2183,7 +2192,7 @@ static struct AstDecl *type_decl(struct Lex *lex, paw_Bool is_pub)
 
     struct SourceLoc const end = TOKEN_END(lex->t);
     semicolon(lex, "type declaration");
-    return NEW_NODE(lex, type_decl, RANGE(start, end), next_id(lex),
+    return NEW_NODE(lex, type_decl, RANGE(start, end), next_id(lex), next_did(lex),
             ident, generics, rhs, is_pub);
 }
 
@@ -2258,7 +2267,7 @@ static struct AstDecl *impl_decl(struct Lex *lex)
         ? trait_impl_body(lex, types, constants, methods)
         : inherent_impl_body(lex, constants, methods);
 
-    return NEW_NODE(lex, impl_decl, RANGE(start, end), next_id(lex),
+    return NEW_NODE(lex, impl_decl, RANGE(start, end), next_id(lex), next_did(lex),
             type, trait, generics, types, constants, methods);
 }
 
@@ -2296,7 +2305,7 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
                 .limit = MAX_ASSOC_ITEMS);
 
     struct SourceLoc const end = delim_next(lex, '}', '{', start);
-    return NEW_NODE(lex, trait_decl, RANGE(start, end), next_id(lex),
+    return NEW_NODE(lex, trait_decl, RANGE(start, end), next_id(lex), next_did(lex),
             ident, generics, supertraits, types, methods, is_pub);
 }
 
@@ -2430,9 +2439,9 @@ static void import_prelude(struct Lex *lex, struct AstDeclList *items)
     struct SourceSpan span = {0};
     struct AstIdent const none = {0}; // no alias
     AstDeclList_push(lex->ast, items, NEW_NODE(lex, use_decl, span,
-                next_id(lex), path, none, AST_USE_NORMAL, PAW_FALSE));
+                next_id(lex), next_did(lex), path, none, AST_USE_NORMAL, PAW_FALSE));
     AstDeclList_push(lex->ast, items, NEW_NODE(lex, use_decl, span,
-                next_id(lex), path, none, AST_USE_GLOB, PAW_FALSE));
+                next_id(lex), next_did(lex), path, none, AST_USE_GLOB, PAW_FALSE));
 }
 
 static struct AstDecl *generate_builtin_decl(struct Lex *lex, char const *name)
@@ -2447,10 +2456,10 @@ static struct AstDecl *generate_builtin_decl(struct Lex *lex, char const *name)
     AstDeclList *fields = AstDeclList_new(lex->ast);
     AstDeclList *variants = AstDeclList_new(lex->ast);
     struct AstDecl *v = NEW_NODE(lex, variant_decl, span,
-            next_id(lex), ident, fields, 0);
+            next_id(lex), next_did(lex), ident, fields, 0);
     AstDeclList_push(lex->ast, variants, v);
 
-    return NEW_NODE(lex, adt_decl, span, next_id(lex), ident,
+    return NEW_NODE(lex, adt_decl, span, next_id(lex), next_did(lex), ident,
             generics, variants, PAW_TRUE, PAW_TRUE);
 }
 
@@ -2484,7 +2493,7 @@ static struct AstDecl *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 
     paw_assert(lex->ptr == lex->end);
     struct AstDecl *decl = NEW_NODE(lex, module_decl, span_from(lex, start),
-            next_id(lex), lex->modname, lex->modno, items);
+            next_id(lex), next_did(lex), lex->modname, lex->modno, items);
     AstDeclList_push(lex->ast, lex->ast->modules, decl);
     return decl;
 }
