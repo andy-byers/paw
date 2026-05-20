@@ -374,8 +374,6 @@ struct Instantiation *pawIr_find_assoc_type_generic(struct Compiler *C, IrType *
         // The receiver is a generic type. Search in traits specified by bounds on
         // the generic type parameter.
         IrTraitList *bounds = pawIr_get_trait_bounds(C, IR_TYPE_DID(self));
-        if (bounds == NULL) bounds = IrTraitList_new(C);
-//        if (trait != NULL) IrTraitList_push(C, bounds, trait);
         if (bounds != NULL) {
             K_LIST_XFOREACH (bounds, IrTrait *const, p) {
                 struct IrTraitDef const *def = pawIr_get_trait_def(C, (*p)->did);
@@ -466,9 +464,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
 
     self = pawIr_remove_indirection(C, self);
     IrType *impl_type = pawIr_remove_indirection(C, target_impl->type);
-    if (IrIsGeneric(self)) {
-//        assoc = pawIr_solver_instantiate_type_with(C->S, IR_TYPE_DID(self), IR_GENERIC_ARGS(self));
-    } else if (IrIsAdt(self)){
+    if (IrIsAdt(self)){
         struct Substitution const subst = {IR_GENERIC_ARGS(impl_type), IR_GENERIC_ARGS(self)};
         assoc = pawP_substitute(C, assoc, subst);
     }
