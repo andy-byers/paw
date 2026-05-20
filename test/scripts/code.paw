@@ -680,31 +680,19 @@
 
 
 
-pub trait Trait {
-    type Type: Trait<Type = Struct>;
-}
-// predicates:
-// (1) <Self as Trait>::Type: Trait
-// (2) <<Self as Trait>::Type as Trait>::Type = Struct
+//pub trait Trait {
+//    type Type: Trait<Type = Struct>;
+//}
 
 struct Struct;
 
-impl Trait for Struct {
-    type Type = Struct;
-}
-
-fn require<T: Trait<Type = Struct>>() {}
-// Implements(T: Trait)
-// NormalizesTo(<T as Trait>::Type => Struct)
-//   Implements(T: Trait)
+//impl Trait for Struct {
+//    type Type = Struct;
+//}
 //
-// need to prove WellFormed(Trait<Self = T>)
-// need to prove WellFormed(<T as Trait<Self = T>>::Type)
-//
-// need to prove NormalizesTo(<T as Trait>::Type => Struct)
-// -*- or -*-
-// need to prove NormalizesTo(<T as Trait>::Type => int)
+//fn require<T: Trait<Type = Struct>>() {}
 
 #[test]
 pub fn test() {
+    let array: [3]() = [(), (), ()];
 }

@@ -56,72 +56,55 @@ static struct IrLayout const SCALAR_LAYOUTS[] = {
     },
 };
 
-static struct IrLayout fatptr_layout(struct LayoutState *L)
-{
-    IrLayouts *fields = IrLayouts_new(L->C);
-    IrLayouts_push(L->C, fields, SCALAR_LAYOUTS[kIrPtr]);
-    IrLayouts_push(L->C, fields, SCALAR_LAYOUTS[kIrInt]);
-
-    unsigned size = 0;
-    K_LIST_XFOREACH (fields, struct IrLayout const, p)
-        size += IR_TYPESIZE_GET_VALUE(p->size);
-
-    return (struct IrLayout){
-        .alignment = SCALAR_LAYOUTS[kIrPtr].alignment,
-        .size = IR_TYPESIZE_FIXED(size),
-        .fields = fields,
-        .count = 1,
-    };
-}
 
 static struct IrLayout compute_field_layout(struct LayoutState *L, IrType *type);
 
-static struct IrLayout leaf_layout(struct LayoutState *L, unsigned size, unsigned alignment_exponent)
+static IrTypeSize align_up(IrTypeSize size, IrAlignment alignment)
 {
-    return (struct IrLayout){
-        .fields = IrLayouts_new(L->C),
-        .alignment = IR_ALIGNMENT_FROM_EXPONENT(alignment_exponent),
-        .size = IR_TYPESIZE_FIXED(size),
-    };
-}
-
-static unsigned bump_to_alignment(unsigned offset, IrAlignment alignment)
-{
+    unsigned const value = IR_TYPESIZE_GET_VALUE(size);
     unsigned const align = IR_ALIGNMENT_AS_INTEGER(alignment);
-    return (offset + (-offset & (align - 1)));
+    return IR_TYPESIZE_FIXED(value + (-value & (align - 1)));
 }
 
 static struct IrLayout compute_typelist_layout(struct LayoutState *L, IrTypeList const *types)
 {
-    IrLayouts *fields = IrLayouts_new(L->C);
-    unsigned max_align_exp = 0;
-    unsigned total_size = 0;
+    IrLayoutFields *fields = IrLayoutFields_new(L->C);
+    IrAlignment max_alignment = IR_ALIGNMENT_FROM_EXPONENT(0);
+    IrTypeSize total_size = IR_TYPESIZE_FIXED(0);
 
     K_LIST_XFOREACH (types, IrType *const, p) {
-        struct IrLayout const field = compute_field_layout(L, *p);
-        unsigned const field_offset = bump_to_alignment(total_size, field.alignment);
-        IrLayouts_push(L->C, fields, field);
+        struct IrLayout const lo = compute_field_layout(L, *p);
+        total_size = align_up(total_size, lo.alignment);
+        IrLayoutFields_push(L->C, fields, (struct IrLayoutField){
+                    .offset = IR_TYPESIZE_GET_VALUE(total_size),
+                    .layout = lo,
+                });
 
-        unsigned const field_size = IR_TYPESIZE_GET_VALUE(field.size);
-        max_align_exp = PAW_MAX(max_align_exp, field.alignment.exponent);
-        total_size = field_offset + field_size;
+        total_size = IrTypeSize_add_unchecked(total_size, lo.size);
+        max_alignment = IrAlignment_max(max_alignment, lo.alignment);
     }
 
     return (struct IrLayout){
-        .alignment = IR_ALIGNMENT_FROM_EXPONENT(max_align_exp),
-        .size = IR_TYPESIZE_FIXED(total_size),
+        .size = align_up(total_size, max_alignment),
+        .alignment = max_alignment,
         .fields = fields,
         .count = 1,
     };
 
+}
+
+static struct IrLayout fatptr_layout(struct LayoutState *L, IrType *pointee)
+{
+    IrTypeList *fields = IrTypeList_new(L->C);
+    IrTypeList_push(L->C, fields, pawIr_new_ptr(L->C, pointee));
+    IrTypeList_push(L->C, fields, pawIr_new_int(L->C));
+    return compute_typelist_layout(L, fields);
 }
 
 static struct IrLayout compute_struct_layout(struct LayoutState *L, struct IrAdt *t)
 {
     IrTypeList const *types = pawP_instantiate_struct_fields(L->C, t);
-    struct IrLayout layout = compute_typelist_layout(L, types);
-    layout.size.value = PAW_MAX(layout.size.value, 1); // TODO
-    return layout;
+    return compute_typelist_layout(L, types);
 }
 
 // Compute the memory layout of an enumeration
@@ -131,25 +114,27 @@ static struct IrLayout compute_enum_layout(struct LayoutState *L, struct IrAdt *
 {
     struct IrAdtDef const *def = pawIr_get_adt_def(L->C, t->did);
 
-    struct IrLayout layout = {
-        .fields = IrLayouts_new(L->C),
+    struct IrLayout enum_lo = {
+        .fields = IrLayoutFields_new(L->C),
     };
 
     int index;
     struct IrVariantDef *const *pvariant;
     K_LIST_ENUMERATE (def->variants, index, pvariant) {
-        IrTypeList const *fields = pawP_instantiate_variant_fields(L->C, t, index);
-        struct IrLayout lo = compute_typelist_layout(L, fields);
+        IrTypeList *fields = pawP_instantiate_variant_fields(L->C, t, index);
+        IrTypeList_insert(L->C, fields, 0, pawIr_new_int(L->C));
+        struct IrLayout const variant_lo = compute_typelist_layout(L, fields);
 
-        struct IrLayout const discr = SCALAR_LAYOUTS[kIrInt];
-        IrLayouts_insert(L->C, lo.fields, 0, discr);
-        lo.size.value += IR_TYPESIZE_GET_VALUE(discr.size);
-
-        IrLayouts_push(L->C, layout.fields, lo);
-        layout.size.value = PAW_MAX(layout.size.value, lo.size.value);
+        IrLayoutFields_push(L->C, enum_lo.fields,
+                (struct IrLayoutField){
+                    .layout = variant_lo,
+                    .offset = 0,
+                });
+        enum_lo.alignment = IrAlignment_max(enum_lo.alignment, variant_lo.alignment);
+        enum_lo.size = IrTypeSize_max(enum_lo.size, variant_lo.size);
     }
 
-    return layout;
+    return enum_lo;
 }
 
 static struct IrLayout compute_tuple_layout(struct LayoutState *L, struct IrTuple *t)
@@ -190,8 +175,9 @@ static struct IrLayout compute_field_layout(struct LayoutState *L, IrType *type)
         case kIrPtr:
             return SCALAR_LAYOUTS[kIrPtr];
         case kIrString:
+            return fatptr_layout(L, pawIr_new_char(L->C));
         case kIrSlice:
-            return fatptr_layout(L);
+            return fatptr_layout(L, IrGetSlice(type)->type);
         case kIrAdt:
             return compute_adt_layout(L, IrGetAdt(type));
         case kIrFnPtr:
