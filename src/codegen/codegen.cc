@@ -462,6 +462,12 @@ private:
     std::vector<Closure> closures_;
 };
 
+static void remove_global_if_exists(llvm::Module &M, std::string name)
+{
+    auto *gv = M.getNamedGlobal(name);
+    if (gv != nullptr) gv->eraseFromParent();
+}
+
 static void remove_function_if_exists(llvm::Module &M, std::string name)
 {
     auto *fn = M.getFunction(name);
@@ -592,6 +598,9 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
     remove_function_if_exists(*m, "paw_main");
     remove_function_if_exists(*m, "main");
 
+    auto *os_argc = m->getNamedGlobal("paw_argc");
+    auto *os_argv = m->getNamedGlobal("paw_argv");
+
     auto *main_fn = llvm::Function::Create(
             llvm::FunctionType::get(X->get_i32_ty(),
                 // int argc, char **argv
@@ -603,6 +612,9 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
 
         auto *block = llvm::BasicBlock::Create(*c, "entry", main_fn);
         B->SetInsertPoint(block);
+
+        auto *argc64 = B->CreateSExt(main_fn->getArg(0), X->get_int_ty());
+        B->CreateStore(argc64, os_argc); B->CreateStore(main_fn->getArg(1), os_argv);
 
         for (auto const &name: test_names) {
             auto *fn_ty = llvm::FunctionType::get(B->getInt32Ty(), B->getPtrTy(), true);
@@ -728,6 +740,13 @@ public:
         state.create_return();
     }
 
+    void generate_ptr_strlen(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *result = X.call_strlen(fn->get_arg(0));
+        state.create_return(result);
+    }
+
     // fn sizeof<T>() -> int
     void generate_sizeof_intrinsic(Mir const *mir, Fn *fn)
     {
@@ -748,6 +767,19 @@ public:
         State state(X, fn);
         auto *result = X.create_int(X.align_of(*type).value());
         state.create_return(result);
+    }
+
+    void generate_os_args(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+
+        auto *argc = B->CreateLoad(X.get_int_ty(), os_argc_);
+        auto *argv = B->CreateLoad(X.get_ptr_ty(), os_argv_);
+        llvm::Value *args = llvm::UndefValue::get(X.get_slice_ty());
+        args = B->CreateInsertValue(args, argv, 0);
+        args = B->CreateInsertValue(args, argc, 1);
+
+        state.create_return(args);
     }
 
     void define_fn(Mir const *mir)
@@ -779,6 +811,12 @@ public:
 
         if (is_core_op(mir, "ptr", "drop"))
             generate_ptr_drop(mir, fn);
+
+        if (is_core_op(mir, "ptr", "strlen"))
+            generate_ptr_strlen(mir, fn);
+
+        if (is_core_op(mir, "os", "args"))
+            generate_os_args(mir, fn);
 
         if (is_core_op(mir, "mem", "sizeof"))
             generate_sizeof_intrinsic(mir, fn);
@@ -839,6 +877,15 @@ public:
         // generated code
         generate_builtins();
 
+        os_argc_ = new llvm::GlobalVariable(
+                **M, X.get_int_ty(), false,
+                llvm::GlobalValue::InternalLinkage,
+                X.create_int(0), "paw_argc");
+        os_argv_ = new llvm::GlobalVariable(
+                **M, X.get_ptr_ty(), false,
+                llvm::GlobalValue::InternalLinkage,
+                X.create_null_ptr(), "paw_argv");
+
         FnType constructor_type(X, X.get_unit_type(), {}, FUNC_FUNCTION);
         auto constructor_fn = Fn(
                 X, "paw_constructor",
@@ -893,7 +940,9 @@ public:
 
     llvm::Value *create_cstr_to_str(llvm::Value *cstr)
     {
-        auto *len = B->CreateCall(X.get_strlen_callee(), {cstr});
+        llvm::Value *len = B->CreateCall(X.get_strlen_callee(), {cstr});
+        len = B->CreateSExt(len, X.get_int_ty());
+
         llvm::Value *str = llvm::UndefValue::get(X.get_str_ty());
         str = B->CreateInsertValue(str, cstr, 0);
         str = B->CreateInsertValue(str, len, 1);
@@ -911,6 +960,10 @@ public:
                 }, FUNC_FUNCTION, false);
         Fn main_fn(X, "main", llvm::Function::ExternalLinkage, &main_type);
         State state(X, &main_fn);
+
+        auto *argc64 = B->CreateSExt(main_fn.get_arg(0), X.get_int_ty());
+        B->CreateStore(argc64, os_argc_);
+        B->CreateStore(main_fn.get_arg(1), os_argv_);
 
         auto *ret = B->CreateCall(inner, {X.create_null_ptr(), X.create_null_ptr()});
         state.create_return(materialize_return ? X.create_i32(0)
@@ -1995,6 +2048,9 @@ private:
     llvm::TargetMachine *machine_;
     CodegenOptions options_;
     PawState *state_;
+
+    llvm::GlobalValue *os_argc_;
+    llvm::GlobalValue *os_argv_;
 
     // mapping from IR strings to runtime global variables
     struct StringDescriptor { llvm::Value *text; llvm::Value *length; };

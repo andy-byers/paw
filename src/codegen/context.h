@@ -302,8 +302,14 @@ public:
     llvm::FunctionCallee get_strlen_callee() const
     {
         return M->get_module()->getOrInsertFunction("strlen",
-            llvm::FunctionType::get(get_int_ty(),
+            llvm::FunctionType::get(get_i64_ty(),
                 {get_ptr_ty()}, false));
+    }
+
+    llvm::Value *call_strlen(llvm::Value *str) const
+    {
+        auto *len = B->CreateCall(get_strlen_callee(), {str});
+        return B->CreateSExt(len, get_int_ty());
     }
 
     llvm::FunctionCallee get_exit_callee() const

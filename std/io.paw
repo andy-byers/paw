@@ -104,7 +104,7 @@ use string_builder;
 
 pub fn println<T: ToSlice<char>>(message: T) {
     let b = string_builder::Builder::new();
-    b.append(message).unwrap();
+    b.append_slice(message.to_slice()).unwrap();
     b.append_char('\n').unwrap();
     print(b.string());
 }

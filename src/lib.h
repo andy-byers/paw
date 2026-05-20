@@ -33,6 +33,7 @@ enum pawL_StdModule {
     PAWL_STD_HASHMAP,
     PAWL_STD_FMT,
     PAWL_STD_IO,
+    PAWL_STD_OS,
     PAWL_STD_MATH,
     PAWL_STD_STRING_BUILDER,
 

@@ -678,21 +678,29 @@
 
 
 
+use os;
+use ptr;
+use slice;
+use io;
+use list;
 
-
-pub trait Trait {
-    type Type: Trait<Type = Struct>;
+pub fn print_commandline_args() {
+    for a in os::args() {
+        let arg = slice::from_raw_parts(*a, ptr::strlen(*a));
+        io::println(arg);
+    }
 }
 
-struct Struct;
-
-impl Trait for Struct {
-    type Type = int;
-}
-
-fn require<T: Trait<Type = Struct>>() {}
 
 #[test]
-pub fn test() {
-//    require::<Struct>();
+pub fn test1() {
+    print_commandline_args();
+}
+
+#[test]
+pub fn test2() {
+}
+
+pub fn main() {
+    print_commandline_args();
 }

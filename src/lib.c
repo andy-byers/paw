@@ -74,6 +74,7 @@ static char const *STD_NAMES[PAWL_NUM_STD_MODULES] = {
     [PAWL_STD_HASHMAP] = "hashmap",
     [PAWL_STD_FMT] = "fmt",
     [PAWL_STD_IO] = "io",
+    [PAWL_STD_OS] = "os",
     [PAWL_STD_MATH] = "math",
     [PAWL_STD_STRING_BUILDER] = "string_builder",
 };

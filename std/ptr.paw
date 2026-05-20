@@ -58,3 +58,5 @@ pub fn memset(ptr: *char, value: char, size: int) -> *char;
 #[extern = "paw_ptr_memcmp"] 
 pub fn memcmp(lhs: *char, rhs: *char, size: int) -> int;
 
+#[extern] 
+pub fn strlen(string: *char) -> int;
