@@ -35,24 +35,30 @@ static void add_type(struct Compiler *C, Buffer *b, IrType *type);
 static void add_const(struct Compiler *C, Buffer *b, IrConst *konst)
 {
     paw_Env *P = ENV(C);
-    paw_assert(konst->kind == IR_CONST_VALUE);
-
     pawL_add_char(P, b, 'K');
 
-    // TODO: Figure out an encoding for the constant value
-    switch (IR_KINDOF(konst->value.type)) {
-        case kIrBool:
-            pawL_add_char(P, b, 'b');
-            break;
-        case kIrChar:
-            pawL_add_char(P, b, 'c');
-            break;
-        case kIrInt:
-            pawL_add_char(P, b, 'i');
-            break;
-        default:
-            paw_assert(IrIsFloat(konst->value.type));
-            pawL_add_char(P, b, 'f');
+    if (konst->kind == IR_CONST_DECL) {
+        struct IrGenericDef const *def = pawIr_get_generic_def(C, konst->decl.did);
+        L_ADD_STRING(P, b, def->konst.name);
+    } else {
+        paw_assert(konst->kind == IR_CONST_VALUE);
+
+        // TODO: Figure out a better encoding for the constant value (currently just using type prefix + binary data)
+        switch (IR_KINDOF(konst->value.type)) {
+            case kIrBool:
+                pawL_add_char(P, b, 'b');
+                break;
+            case kIrChar:
+                pawL_add_char(P, b, 'c');
+                break;
+            case kIrInt:
+                pawL_add_char(P, b, 'i');
+                break;
+            default:
+                paw_assert(IrIsFloat(konst->value.type));
+                pawL_add_char(P, b, 'f');
+        }
+        pawL_add_hex(P, b, (paw_Uint)konst->value.value.i);
     }
 }
 

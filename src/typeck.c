@@ -766,11 +766,14 @@ static IrType *check_path_expr(struct TypeChecker *T, struct HirPathExpr *e)
         if (HirIsParamDecl(decl)) return type;
     }
 
-    // TODO: what about local type decls?
-    if (IrIsGeneric(type))
-        TYPECK_ERROR(T, ExpectedValue,
-                .type = pawIr_print_type_v2(T->C, type),
-                .span = e->span);
+    if (IrIsGeneric(type)) {
+        struct IrGenericDef const *def = pawIr_get_generic_def(T->C, IR_TYPE_DID(type));
+        if (def->is_type)
+            TYPECK_ERROR(T, ExpectedValue,
+                    .type = def->type.name,
+                    .span = e->span);
+        type = def->konst.type;
+    }
     return type;
 }
 

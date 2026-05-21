@@ -338,8 +338,24 @@ static IrType *lower_type(struct LowerType *L, struct HirType *type)
 
 static IrConst *lower_const(struct LowerType *L, struct HirExpr *expr)
 {
-    __builtin_trap();
-    return pawIr_new_const_pending(L->C, (DeclId){0}); // TODO
+    struct HirLiteralExpr const *t = HirGetLiteralExpr(expr);
+    union IrValue value;
+    switch (t->basic.code) {
+        case BUILTIN_BOOL:
+            value.b = V_TRUE(t->basic.value);
+            break;
+        case BUILTIN_CHAR:
+            value.c = V_CHAR(t->basic.value);
+            break;
+        case BUILTIN_INT:
+            value.i = V_INT(t->basic.value);
+            break;
+        default:
+            paw_assert(t->basic.code == BUILTIN_FLOAT);
+            value.f = V_FLOAT(t->basic.value);
+    }
+    return pawIr_new_const_value(L->C, value,
+            pawP_builtin_type(L->C, t->basic.code));
 }
 
 static IrGenericArg lower_generic_arg(struct LowerType *L, struct HirGenericArg arg)

@@ -37,5 +37,6 @@ void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int i);
 void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f);
 void pawL_add_vfstring(paw_Env *P, Buffer *buf, char const *fmt, va_list arg);
 void pawL_add_fstring(paw_Env *P, Buffer *buf, char const *fmt, ...);
+void pawL_add_hex(paw_Env *P, Buffer *buf, paw_Uint u);
 
 #endif // PAW_AUX_H

@@ -100,14 +100,14 @@ static void add_pointer(paw_Env *P, Buffer *buf, void *p)
     pawL_add_nstring(P, buf, temp, CAST_SIZE(n));
 }
 
-static void add_hex(paw_Env *P, Buffer *buf, unsigned u, paw_Bool capitalize)
+static void add_hex(paw_Env *P, Buffer *buf, paw_Uint u, paw_Bool capitalize)
 {
     char const *letters = capitalize
         ? "0123456789ABCDEF"
         : "0123456789abcdef";
     unsigned const BASE = 16;
 
-    char temp[32];
+    char temp[60];
     char *end = temp + BASE;
     char *ptr = end - 1;
 
@@ -117,6 +117,11 @@ static void add_hex(paw_Env *P, Buffer *buf, unsigned u, paw_Bool capitalize)
     } while (u > 0);
 
     pawL_add_nstring(P, buf, ptr + 1, CAST_SIZE(end - ptr - 1));
+}
+
+void pawL_add_hex(paw_Env *P, Buffer *buf, paw_Uint u)
+{
+    add_hex(P, buf, u, PAW_FALSE);
 }
 
 static char const *add_non_fmt(paw_Env *P, Buffer *buf, char const *ptr)

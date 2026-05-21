@@ -567,7 +567,7 @@ static void declare_generics(struct Resolver *R, struct AstDeclList *generics)
 {
     if (generics != NULL) {
         K_LIST_XFOREACH (generics, struct AstDecl *const, p) {
-            struct AstGenericDecl *d = AstGetGenericDecl(*p);
+            struct AstGenericDecl const *d = AstGetGenericDecl(*p);
             if (d->is_type) {
                 new_local_type(R, d->t.ident, d->id, SYMBOL_DECL);
             } else {
@@ -849,8 +849,7 @@ static paw_Bool resolve_generic_decl(struct AstVisitor *V, struct AstGenericDecl
             }
         }
     } else {
-        // TODO
-        PAW_UNREACHABLE();
+        pawAst_visit_type(V, d->k.type);
     }
     return PAW_FALSE;
 }

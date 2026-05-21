@@ -957,7 +957,7 @@ static struct AstType *parse_pointer_type(struct Lex *lex, struct SourceLoc star
     return NEW_NODE(lex, ref_type, RANGE(start, lex->loc), next_id(lex), pointee, is_mut);
 }
 
-static struct AstType *parse_signature(struct Lex *, struct SourceLoc);
+static struct AstExpr *block_expr(struct Lex *lex);
 
 static struct AstGenericArg generic_arg(struct Lex *lex)
 {
@@ -969,12 +969,40 @@ static struct AstGenericArg generic_arg(struct Lex *lex)
             .t = type,
         };
 
+    struct AstExpr *expr;
+    struct Token const t = lex->t;
+    switch (t.kind) {
+        case TK_TRUE:
+            expr = emit_bool(lex, t.span, PAW_TRUE);
+            break;
+        case TK_FALSE:
+            expr = emit_bool(lex, t.span, PAW_FALSE);
+            break;
+        case TK_CHAR:
+            expr = new_basic_lit(lex, t.span, t.value, BUILTIN_CHAR);
+            break;
+        case TK_INT:
+            expr = new_basic_lit(lex, t.span, t.value, BUILTIN_INT);
+            break;
+        case TK_FLOAT:
+            expr = new_basic_lit(lex, t.span, t.value, BUILTIN_FLOAT);
+            break;
+        case TK_STR:
+            expr = new_basic_lit(lex, t.span, t.value, BUILTIN_STR);
+            break;
+        default:
+            PARSE_ERROR(lex, Unsupported, t.span);
+    }
+
+    skip(lex);
     return (struct AstGenericArg){
         .id = next_id(lex),
         .is_type = PAW_FALSE,
-        .k = expect_expr0(lex),
+        .k = expr,
     };
 }
+
+static struct AstType *parse_signature(struct Lex *, struct SourceLoc);
 
 static struct AstType *parse_type(struct Lex *lex)
 {
@@ -1007,9 +1035,11 @@ static struct AstType *parse_type(struct Lex *lex)
         }
     } else if (test_lcaret_next(lex)) {
         return parse_projection_type(lex, start);
-    } else {
+    } else if (test(lex, TK_NAME)) {
         struct AstPath path = parse_pathtype(lex, PAW_FALSE);
         return NEW_NODE(lex, path_type, path.span, next_id(lex), path);
+    } else {
+        return NULL;
     }
 }
 
@@ -1088,14 +1118,23 @@ static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
 
 static struct AstDecl *generic_param(struct Lex *lex)
 {
-    // NAME [":" Trait {"+" Trait}]
-    struct AstIdent const ident = parse_ident(lex);
-    struct AstBoundList *bounds = parse_generic_bounds(lex);
-    struct SourceLoc const end = bounds != NULL
-        ? RANGE_END(K_LIST_LAST(bounds).path.span)
-        : RANGE_END(ident.span);
-    return NEW_NODE(lex, generic_type_decl, RANGE(RANGE_START(ident.span), end),
-            next_id(lex), next_did(lex), ident, bounds);
+    struct SourceLoc const start = TOKEN_START(lex->t);
+    if (test_next(lex, TK_CONST)) {
+        struct AstIdent const ident = parse_ident(lex);
+        check_next(lex, ':');
+        struct AstType *type = parse_type(lex);
+        return NEW_NODE(lex, generic_const_decl, RANGE(start, NODE_END(type)),
+                next_id(lex), next_did(lex), type, ident);
+    } else {
+        // NAME [":" Trait {"+" Trait}]
+        struct AstIdent const ident = parse_ident(lex);
+        struct AstBoundList *bounds = parse_generic_bounds(lex);
+        struct SourceLoc const end = bounds != NULL
+            ? RANGE_END(K_LIST_LAST(bounds).path.span)
+            : RANGE_END(ident.span);
+        return NEW_NODE(lex, generic_type_decl, RANGE(start, end),
+                next_id(lex), next_did(lex), ident, bounds);
+    }
 }
 
 DEFINE_LIST_PARSER(sig_param, '(', ')', PAW_MAX_ARGUMENTS, "function parameters", parse_type, AstTypeList)

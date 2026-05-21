@@ -1049,8 +1049,13 @@ static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr 
         return lookup_global_constant(L, HirGetConstDecl(decl));
     } else if (HirIsAdtDecl(decl)) {
         return lower_unit_struct(V, e);
+    } else if (HirIsGenericDecl(decl)) {
+        // TODO: materialize const generic value from typesystem
+        // NEW_INSTR(fs, loadk, e->span, decl->hdr.did, output);
+        LOWERING_ERROR(L, Unsupported, e->span);
+    } else {
+        NEW_INSTR(fs, global, e->span, output);
     }
-    NEW_INSTR(fs, global, e->span, output);
     return output;
 }
 
