@@ -51,6 +51,7 @@
 #include "mangle.h"
 #include "state.h"
 #include "type.h"
+#include "unify.h"
 
 
 namespace paw::cg {
@@ -232,6 +233,12 @@ private:
                 return create_array_type(irtype);
             case kIrAdt:
                 return create_adt(irtype);
+            case kIrProjection: {
+                // TODO: normalize away projections earlier, after monomorphization
+                irtype = pawU_normalize_projections(C->U, irtype);
+                paw_assert(!IrIsProjection(irtype));
+                return create_type(irtype);
+            }
             default:
                 paw_assert(IR_IS_FUNC_TYPE(irtype));
                 return create_fn_type(irtype);

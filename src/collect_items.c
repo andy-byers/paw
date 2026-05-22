@@ -592,6 +592,19 @@ static void collect_nominal_types(struct ItemCollector *X, struct HirModule m)
             collect_adt_def(X, HirGetAdtDecl(*p));
         } else if (HirIsTraitDecl(*p)) {
             collect_trait_def(X, HirGetTraitDecl(*p));
+        } else if (HirIsFnDecl(*p)) {
+            struct HirFnDecl const *d = HirGetFnDecl(*p);
+            collect_generic_defs(X, d->generics);
+        } else if (HirIsTypeDecl(*p)) {
+            struct HirTypeDecl const *d = HirGetTypeDecl(*p);
+            collect_generic_defs(X, d->generics);
+        } else if (HirIsImplDecl(*p)) {
+            struct HirImplDecl const *d = HirGetImplDecl(*p);
+            collect_generic_defs(X, d->generics);
+            K_LIST_XFOREACH (d->methods, struct HirDecl *const, pmethod) {
+                struct HirFnDecl const *method = HirGetFnDecl(*pmethod);
+                collect_generic_defs(X, method->generics);
+            }
         }
     }
 }
@@ -627,7 +640,7 @@ static void collect_constraints_from(struct ItemCollector *X, struct HirDecl *de
     } else if (HirIsTypeDecl(decl)) {
         struct HirTypeDecl const *d = HirGetTypeDecl(decl);
         collect_generic_args(X, d->did, d->generics);
-        collect_generic_defs(X, d->generics);
+//        collect_generic_defs(X, d->generics);
         collect_generic_bounds(X, d->generics, constraints);
     } else if (HirIsFnDecl(decl)) {
         struct HirFnDecl const *d = HirGetFnDecl(decl);
@@ -1159,8 +1172,8 @@ static void run_collection_phases(struct ItemCollector *X, struct Hir *hir)
         }
 
     MAP_MODULES(X, hir->modules, collect_nominal_types);
-    MAP_MODULES(X, hir->modules, collect_definitions);
     MAP_MODULES(X, hir->modules, collect_constraints);
+    MAP_MODULES(X, hir->modules, collect_definitions);
     MAP_MODULES(X, hir->modules, collect_type_aliases);
     MAP_MODULES(X, hir->modules, collect_item_defs);
     MAP_MODULES(X, hir->modules, solve_signatures);

@@ -154,9 +154,10 @@ static void VisitType(struct Compiler *C, IrType *type)
         case kIrNever:
             C->typesystem.primitives.never_t = type;
             break;
+        case kIrProjection:
+            break;
         case kIrInfer:
         case kIrGeneric:
-        case kIrProjection:
             PAW_UNREACHABLE();
     }
 }

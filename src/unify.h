@@ -19,7 +19,7 @@ struct Unifier {
 };
 
 struct IrType *pawU_normalize(struct Unifier *U, struct IrType *a);
-struct IrType *pawU_normalize_projections(struct Unifier *U, struct IrType *type);
+EXTERN_C struct IrType *pawU_normalize_projections(struct Unifier *U, struct IrType *type);
 struct IrConst *pawU_normalize_const(struct Unifier *U, IrConst *k);
 
 // Impose the constraint that types 'a' and 'b' are equal

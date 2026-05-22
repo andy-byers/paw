@@ -676,31 +676,6 @@
 //    require::<Struct>();
 //}
 
-
-
-use os;
-use ptr;
-use slice;
-use io;
-use list;
-
-pub fn print_commandline_args() {
-    for a in os::args() {
-        let arg = slice::from_raw_parts(*a, ptr::strlen(*a));
-        io::println(arg);
-    }
-}
-
-
 #[test]
-pub fn test1() {
-    print_commandline_args();
-}
-
-#[test]
-pub fn test2() {
-}
-
-pub fn main() {
-    print_commandline_args();
+pub fn test() {
 }
