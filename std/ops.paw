@@ -698,10 +698,25 @@ impl RangeFull {
 }
 
 
+// TODO: `done` should not be public
 pub struct RangeInclusive<T> {
     pub start: T,
     pub end: T,
     pub done: bool,
+}
+
+impl<T> RangeInclusive<T> {
+    pub fn new(start: T, end: T) -> Self {
+        Self{start, end, done: false}
+    }
+
+    pub fn start(*self) -> T {
+        self.start
+    }
+
+    pub fn end(*self) -> T {
+        self.end
+    }
 }
 
 impl<T: Compare<T>> RangeInclusive<T> {

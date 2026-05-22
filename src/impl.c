@@ -457,22 +457,23 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
                 .modname = SCAN_STR(C, ""),
                 .span = TODO);
 
-    // allocate return value
-    struct Candidate const result = Candidates_first(candidates);
-    IrType *assoc = pawIr_get_def_type(C, result.target);
+    struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, target_impl->did);
 
     self = pawIr_remove_indirection(C, self);
-    IrType *impl_type = pawIr_remove_indirection(C, target_impl->type);
-    if (IrIsAdt(self)){
-        struct Substitution const subst = {IR_GENERIC_ARGS(impl_type), IR_GENERIC_ARGS(self)};
-        assoc = pawP_substitute(C, assoc, subst);
-    }
+    IrType *impl_type = pawIr_remove_indirection(C, inst.type);
+    pawU_unify_unchecked(C->U, impl_type, self);
+
+    IrGenericArgs *params = pawIr_get_generic_args(C, target_impl->did);
+    struct Substitution const subst = {params, inst.args};
+    struct Candidate const result = Candidates_first(candidates);
+    IrType *assoc = pawIr_get_def_type(C, result.target);
+    assoc = pawP_substitute(C, assoc, subst);
 
     struct Instantiation *out = P_ALLOC(C, NULL, 0, sizeof(*out));
     *out = (struct Instantiation){
-        .subst.params = pawIr_get_generic_args(C, result.target),
-        .subst.args = IR_GENERIC_ARGS(assoc),
-        .inst = assoc,
+        .subst.params = params,
+        .subst.args = inst.args,
+        .inst = pawU_normalize(C->U, assoc),
     };
     return out;
 

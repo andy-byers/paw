@@ -192,7 +192,7 @@ static IrGenericArgs *new_unknowns(struct Compiler *C, struct HirDeclList *param
     return unknowns;
 }
 
-IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, struct HirDecl *decl, IrGenericArgs *knowns)
+static IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, struct HirDecl *decl, IrGenericArgs *knowns)
 {
     struct Compiler *C = L->C;
     paw_assert(HirIsTypeDecl(decl));
@@ -211,7 +211,7 @@ IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, struct 
 
     IrGenericArgs *generics = collect_generic_args(C, d->generics);
     IrGenericArgs *unknowns = new_unknowns(C, d->generics);
-    IrGenericArgs *args = pawP_instantiate_typelist(C, generics, unknowns, types);
+//    IrGenericArgs *args = pawP_instantiate_typelist(C, generics, unknowns, types);
     if (knowns != NULL) {
         IrGenericArg const *pu;
         IrGenericArg const *pk;
@@ -220,12 +220,13 @@ IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, struct 
             int const rc = pawIr_unify(C, *pu, *pk);
             paw_assert(rc == 0); PAW_UNUSED(rc);
         }
-        K_LIST_XFOREACH (args, IrGenericArg, p)
-            *p = pawIr_normalize(C, *p);
+ //       K_LIST_XFOREACH (args, IrGenericArg, p)
+ //           *p = pawIr_normalize(C, *p);
     }
 
-    struct Substitution const subst = {generics, args};
-    return pawP_substitute(C, rhs, subst);
+    struct Substitution const subst = {generics, unknowns};
+    rhs = pawP_substitute(C, rhs, subst);
+    return pawU_normalize(C->U, rhs);
 }
 
 static IrType *lower_ptr_type(struct LowerType *L, struct HirRefType *t)
@@ -385,6 +386,19 @@ IrGenericArg pawP_lower_generic_arg(struct Compiler *C, struct HirModule m, stru
         .m = m,
     };
     return lower_generic_arg(&L, arg);
+}
+
+IrType *pawP_lower_type_alias(struct Compiler *C, struct HirSegment segment, struct HirDecl *decl, IrGenericArgs *knowns)
+{
+    struct HirModule m = HirModuleList_get(C->hir->modules, (int)decl->hdr.did.modno);
+
+    struct LowerType L = {
+        .hir = C->hir,
+        .C = C,
+        .m = m,
+    };
+
+    return lower_type_alias(&L, segment, decl, knowns);
 }
 
 static IrGenericArgs *lower_generic_args(struct LowerType *L, struct HirGenericArgs *types)

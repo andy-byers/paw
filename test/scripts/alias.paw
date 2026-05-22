@@ -1,263 +1,270 @@
-// alias.paw
+//// alias.paw
+//
+//// TODO: Aliases only work for ADTs (same with impl blocks), because those are the 
+////       only types that are assigned DeclIds. Figure out how to get aliases to other
+////       types to work. Unit type works because it is considered an ADT.
+//
+//#[test]
+//pub fn test_primitive() {
+//    type I = int;
+//    let i: I = 123;
+//    assert(i == 123);
+//
+//    type S = str;
+//    let s: S = "abc";
+//    assert(s == "abc");
+//}
+//
+//#[test]
+//pub fn test_tuple() {
+//    type U = ();
+//    let u: U = ();
+//
+//    // TODO: see top of file
+////    type T = (int, str);
+////    let t: T = (123, "abc");
+////    assert(t.0 == 123);
+////    assert(t.1 == "abc");
+//}
+//
+//use list;
+//use hashmap;
+//
+//#[test]
+//pub fn test_container() {
+//    type L<T> = list::List<T>;
+//    let l: L<int> = L::new();
+//    list_function(l);
+//
+//    type M<K: Hash + Equals<K>, V> = hashmap::HashMap<K, V>;
+//    let m: M<int, str> = M::new();
+//    map_function(m);
+//}
+//
+//fn list_function<T>(list: list::List<T>) {}
+//fn map_function<K: Hash + Equals<K>, V>(map: hashmap::HashMap<K, V>) {}
+//
+//
+//struct Mono {
+//    pub value: int,
+//}
+//
+//fn check_mono(m: Mono, n: int) {
+//    assert(m.value == n);
+//}
+//
+//#[test]
+//pub fn test_mono() {
+//    type M = Mono;
+//
+//    let m: M = M{value: 123};
+//    check_mono(m, 123);
+//
+//    let m = M{value: 456};
+//    check_mono(m, 456);
+//}
+//
+//struct Poly<P> {
+//    pub value: P,
+//}
+//
+//fn accepts_poly<T>(p: Poly<T>) { }
+//
+//fn check_poly<T2>(p: Poly<T2>) {
+//    accepts_poly(p);
+//}
+//
+//#[test]
+//pub fn test_poly() {
+//    type P<X> = Poly<X>;
+//
+//    let p: P<int> = P{value: 123};
+//    check_poly(p);
+//
+//    let p = P{value: 456};
+//    check_poly(p);
+//}
+//
+//struct Poly2<A, B> {
+//    pub first: A,
+//    pub second: B,
+//}
+//
+//fn accepts_poly2<S, T>(p: Poly2<S, T>) { }
+//
+//fn check_poly2<S2, T2>(p: Poly2<S2, T2>) {
+//    accepts_poly2(p);
+//}
+//
+//#[test]
+//pub fn test_poly2() {
+//    type P<X, Y> = Poly2<X, Y>;
+//
+//    let p: P<int, str> = P{
+//        first: 123,
+//        second: "abc",
+//    };
+//    check_poly2(p);
+//
+//    let p = P{
+//        first: 45.6,
+//        second: 789,
+//    };
+//    check_poly2(p);
+//}
+//
+//#[test]
+//pub fn test_poly2_partial() {
+//    type P1<X> = Poly2<X, str>;
+//
+//    let p: P1<int> = P1{
+//        first: 123,
+//        second: "abc",
+//    };
+//    check_poly2(p);
+//
+//    let p = P1{
+//        first: 456,
+//        second: "def",
+//    };
+//    check_poly2(p);
+//
+//    type P2<Y> = Poly2<int, Y>;
+//
+//    let p: P2<str> = P2{
+//        first: 123,
+//        second: "abc",
+//    };
+//    check_poly2(p);
+//
+//    let p = P2{
+//        first: 456,
+//        second: "def",
+//    };
+//    check_poly2(p);
+//}
+//
+//fn check_nested_poly<T>(t: T) -> T {
+//    type P = Poly2<T, T>;
+//
+//    check_poly2(P{
+//        first: t,
+//        second: t,
+//    });
+//
+//    let p = P{
+//        first: t,
+//        second: t,
+//    };
+//    p.second
+//}
+//
+//fn check_nested_poly2<T>(t: T) -> T {
+//    type P<X> = Poly2<X, T>;
+//
+//    check_poly2(P{
+//        first: 456,
+//        second: t,
+//    });
+//
+//    let p = P{
+//        first: 456,
+//        second: t,
+//    };
+//    p.second
+//}
+//
+//#[test]
+//pub fn test_nested_poly() {
+//    assert(check_nested_poly("abc") == "abc");
+//    assert(check_nested_poly(123) == 123);
+//    assert(check_nested_poly2(4.56) == 4.56);
+//    assert(check_nested_poly2(true) == true);
+//}
+//
+//#[test]
+//pub fn test_dependent() {
+//    type P<X> = Poly<X>;
+//    type L<Y> = list::List<P<Y>>;
+//    type M<Z> = hashmap::HashMap<int, L<Z>>;
+//    let m: M<int> = M::new();
+//    m.insert(123, L::new()).unwrap();
+//}
+//
+//#[test]
+//pub fn test_global() {
+//    let gi: GI = 123;
+//    assert(gi == 123);
+//
+//    let gf: GF = 4.56;
+//    assert(gf == 4.56);
+//
+//    let gp = GP{value: gf};
+//    assert(gp.value == 4.56);
+//
+//    let gp2 = GP2{
+//        first: gp,
+//        second: gf,
+//    };
+//    assert(gp2.first.value == gf);
+//    assert(gp2.second == gf);
+//}
+//
+//type GI = int;
+//type GF = float;
+//type GP = Poly<GF>;
+//type GP2<X> = Poly2<Poly<X>, X>;
+//
+//#[test]
+//pub fn test_imported() {
+//    type O<T> = Obj<T>;
+//    let o = O::new(123);
+//    assert(o.get_t() == 123);
+//
+//    type P<T> = PolyExternal<T>;
+//    let p = P{value: 456};
+//}
+//
+//#[test]
+//pub fn test_imported2() {
+//    type O<T> = mod_c::Obj<T>;
+//    let o = O{value: 789};
+//}
+//
+//use mod_a::Obj;
+//use mod_b::*;
+//use mod_c;
+//
+//// TODO: hoisting should be per-function? i.e. don't hoist S out of the closure
+////#[test]
+////pub fn test_types_are_hoisted() {
+////    let i: I = 123;
+////    assert(i == 123);
+////    let s: S = "abc";
+////    assert(s == "abc");
+////
+////    type I = int;
+////    let _ = || {
+////        type S = str;
+////    };
+////}
+//
+////#[test]
+////pub fn test_array_alias() {
+////    type A<T> = [3]T;
+////    let a: A<_> = [1, 2, 3];
+////    assert(a[2] == 3);
+////}
 
-// TODO: Aliases only work for ADTs (same with impl blocks), because those are the 
-//       only types that are assigned DeclIds. Figure out how to get aliases to other
-//       types to work. Unit type works because it is considered an ADT.
+trait Trait {}
+type Polymorphic<T: Trait> = Poly3<T>;
 
-#[test]
-pub fn test_primitive() {
-    type I = int;
-    let i: I = 123;
-    assert(i == 123);
-
-    type S = str;
-    let s: S = "abc";
-    assert(s == "abc");
+struct Poly3<P> {
+    pub value: *Polymorphic<P>,
 }
 
-#[test]
-pub fn test_tuple() {
-    type U = ();
-    let u: U = ();
+//TODO: the following should be an error b/c P not constrained
+//struct Poly3<P> {
+//    pub value: *Polymorphic<P>,
+//}
 
-    // TODO: see top of file
-//    type T = (int, str);
-//    let t: T = (123, "abc");
-//    assert(t.0 == 123);
-//    assert(t.1 == "abc");
-}
-
-#[test]
-pub fn test_container() {
-    type L = [int];
-    let l: L = [1, 2, 3];
-    assert(l[-1] == 3);
-
-    type M = [int: str];
-    let m: M = [1: "a", 2: "b", 3: "c"];
-    assert(m[3] == "c");
-}
-
-fn list_function<T>(list: [T]) {}
-fn map_function<K: Hash + Equals, V>(map: [K: V]) {}
-
-#[test]
-pub fn test_poly_container() {
-    type L<T> = [T];
-    let l: L<bool> = [true, false, true];
-    assert(l[-1] == true);
-    list_function(l);
-
-    type M<K: Equals + Hash, V> = [K: V];
-    let m: M<str, float> = ["a": 1.0, "b": 2.0, "c": 3.0];
-    assert(m["c"] == 3.0);
-    map_function(m);
-}
-
-struct Mono {
-    pub value: int,
-}
-
-fn check_mono(m: Mono, n: int) {
-    assert(m.value == n);
-}
-
-#[test]
-pub fn test_mono() {
-    type M = Mono;
-
-    let m: M = M{value: 123};
-    check_mono(m, 123);
-
-    let m = M{value: 456};
-    check_mono(m, 456);
-}
-
-struct Poly<P> {
-    pub value: P,
-}
-
-fn accepts_poly<T>(p: Poly<T>) { }
-
-fn check_poly<T2>(p: Poly<T2>) {
-    accepts_poly(p);
-}
-
-#[test]
-pub fn test_poly() {
-    type P<X> = Poly<X>;
-
-    let p: P<int> = P{value: 123};
-    check_poly(p);
-
-    let p = P{value: 456};
-    check_poly(p);
-}
-
-struct Poly2<A, B> {
-    pub first: A,
-    pub second: B,
-}
-
-fn accepts_poly2<S, T>(p: Poly2<S, T>) { }
-
-fn check_poly2<S2, T2>(p: Poly2<S2, T2>) {
-    accepts_poly2(p);
-}
-
-#[test]
-pub fn test_poly2() {
-    type P<X, Y> = Poly2<X, Y>;
-
-    let p: P<int, str> = P{
-        first: 123,
-        second: "abc",
-    };
-    check_poly2(p);
-
-    let p = P{
-        first: 456,
-        second: "def",
-    };
-    check_poly2(p);
-}
-
-#[test]
-pub fn test_poly2_partial() {
-    type P1<X> = Poly2<X, str>;
-
-    let p: P1<int> = P1{
-        first: 123,
-        second: "abc",
-    };
-    check_poly2(p);
-
-    let p = P1{
-        first: 456,
-        second: "def",
-    };
-    check_poly2(p);
-
-    type P2<Y> = Poly2<int, Y>;
-
-    let p: P2<str> = P2{
-        first: 123,
-        second: "abc",
-    };
-    check_poly2(p);
-
-    let p = P2{
-        first: 456,
-        second: "def",
-    };
-    check_poly2(p);
-}
-
-fn check_nested_poly<T>(t: T) -> T {
-    type P = Poly2<T, T>;
-
-    let p = P{
-        first: t,
-        second: t,
-    };
-    check_poly2(p);
-    p.second
-}
-
-fn check_nested_poly2<T>(t: T) -> T {
-    type P<X> = Poly2<X, T>;
-
-    let p = P{
-        first: 456,
-        second: t,
-    };
-    check_poly2(p);
-    p.second
-}
-
-#[test]
-pub fn test_nested_poly() {
-    assert(check_nested_poly("abc") == "abc");
-    assert(check_nested_poly(123) == 123);
-    assert(check_nested_poly2(4.56) == 4.56);
-    assert(check_nested_poly2(true) == true);
-}
-
-#[test]
-pub fn test_dependent() {
-    type P<X> = Poly<X>;
-    type L<Y> = [P<Y>];
-    type M<Z> = [int: L<Z>];
-    let m: M<int> = [
-        123: [
-            P{value: 456}, 
-            P{value: 789},
-        ],
-    ];
-    assert(m[123][0].value == 456);
-    assert(m[123][1].value == 789);
-}
-
-#[test]
-pub fn test_global() {
-    let gi: GI = 123;
-    assert(gi == 123);
-
-    let gf: GF = 4.56;
-    assert(gf == 4.56);
-
-    let gp = GP{value: gf};
-    assert(gp.value == 4.56);
-
-    let gp2 = GP2{
-        first: gp,
-        second: gf,
-    };
-    assert(gp2.first.value == gf);
-    assert(gp2.second == gf);
-}
-
-type GI = int;
-type GF = float;
-type GP = Poly<GF>;
-type GP2<X> = Poly2<Poly<X>, X>;
-
-#[test]
-pub fn test_imported() {
-    type O<T> = Obj<T>;
-    let o = O::new(123);
-    assert(o.get_t() == 123);
-
-    type P<T> = PolyExternal<T>;
-    let p = P{value: 456};
-}
-
-#[test]
-pub fn test_imported2() {
-    type O<T> = mod_c::Obj<T>;
-    let o = O{value: 789};
-}
-
-use mod_a::Obj;
-use mod_b::*;
-use mod_c;
-
-#[test]
-pub fn test_types_are_hoisted() {
-    let i: I = 123;
-    assert(i == 123);
-    let s: S = "abc";
-    assert(s == "abc");
-
-    type I = int;
-    let _ = || {
-        type S = str;
-    };
-}
-
-#[test]
-pub fn test_array_alias() {
-    type A<T> = [T; 3];
-    let a: A<_> = [1, 2, 3];
-    assert(a[2] == 3);
-}

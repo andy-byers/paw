@@ -74,9 +74,11 @@ struct HirTypeList;
 struct HirSymtab;
 struct HirType;
 struct HirGenericArg;
+struct HirSegment;
 
 struct IrType;
 struct IrTypeList;
+struct IrGenericArgs;
 struct IrTypeFolder;
 struct IrSignature;
 struct IrAdt;
@@ -263,6 +265,7 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool);
 
 struct IrType *pawP_lower_type(struct Compiler *C, struct HirModule m, struct HirType *type);
 struct IrGenericArg pawP_lower_generic_arg(struct Compiler *C, struct HirModule m, struct HirGenericArg arg);
+struct IrType *pawP_lower_type_alias(struct Compiler *C, struct HirSegment segment, struct HirDecl *decl, struct IrGenericArgs *knowns);
 
 struct RegisterInfo {
     int value;

@@ -640,8 +640,9 @@ static void collect_constraints_from(struct ItemCollector *X, struct HirDecl *de
     } else if (HirIsTypeDecl(decl)) {
         struct HirTypeDecl const *d = HirGetTypeDecl(decl);
         collect_generic_args(X, d->did, d->generics);
-//        collect_generic_defs(X, d->generics);
         collect_generic_bounds(X, d->generics, constraints);
+        if (constraints->count > 0)
+            COLLECTOR_ERROR(X, Unsupported, d->span);
     } else if (HirIsFnDecl(decl)) {
         struct HirFnDecl const *d = HirGetFnDecl(decl);
         collect_generic_bounds(X, d->generics, constraints);
@@ -905,6 +906,13 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
                 struct HirAdtDecl const *d = HirGetAdtDecl(*p);
                 add_predicates_and_obligations(X, d->did);
 
+                for (int discr = 0; discr < d->variants->count; ++discr) {
+                    IrType *type = pawIr_get_def_type(X->C, d->did);
+                    IrTypeList *fields = pawP_instantiate_variant_fields(X->C, IrGetAdt(type), discr);
+                    K_LIST_XFOREACH (fields, IrType *const, pfield)
+                        pawIr_solver_add_obligations_from_type(X->C->S, *pfield);
+                }
+
                 X->cache = TypeCollection_new(X->C);
                 ensure_not_recursive(X, type);
             }
@@ -916,6 +924,9 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
         } else if (HirIsTypeDecl(*p)) {
             struct HirTypeDecl const *d = HirGetTypeDecl(*p);
             add_predicates_and_obligations(X, d->did);
+
+            IrType *rhs = GET_NODE_TYPE(X->C, d->rhs);
+            pawIr_solver_add_obligations_from_type(X->C->S, rhs);
         } else if (HirIsFnDecl(*p)) {
             struct HirFnDecl const *d = HirGetFnDecl(*p);
             add_predicates_and_obligations(X, d->did);
@@ -1172,9 +1183,9 @@ static void run_collection_phases(struct ItemCollector *X, struct Hir *hir)
         }
 
     MAP_MODULES(X, hir->modules, collect_nominal_types);
+    MAP_MODULES(X, hir->modules, collect_type_aliases);
     MAP_MODULES(X, hir->modules, collect_constraints);
     MAP_MODULES(X, hir->modules, collect_definitions);
-    MAP_MODULES(X, hir->modules, collect_type_aliases);
     MAP_MODULES(X, hir->modules, collect_item_defs);
     MAP_MODULES(X, hir->modules, solve_signatures);
 

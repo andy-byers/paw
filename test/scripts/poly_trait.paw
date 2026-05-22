@@ -156,7 +156,7 @@ impl<T> Iterable<T> {
 
 impl<T> CustomIterator<T> for Iterable<T> {
     fn next(self) -> Option<T> {
-        if self.iter < #self.list {
+        if self.iter < self.list.len() {
             let i = self.iter;
             self.iter = self.iter + 1;
             Option::Some(self.list[i])    

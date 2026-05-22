@@ -389,15 +389,15 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
             return pawIr_new_adt(U->C, t->did, args);
         }
         case kIrProjection: {
-            {
+            for (IrType *target; IrIsProjection(type); type = target) {
+                target = pawIr_solver_get_norm_target(U->C->S, type);
+                if (target == NULL) break;
+            }
+            if (IrIsProjection(type)) {
                 struct IrProjection const *t = IrGetProjection(type);
                 IrType *self = pawU_normalize_projections(U, t->type);
                 IrTrait *trait = pawIr_normalize_trait_projections(U->C, t->trait);
                 type = pawIr_new_projection(U->C, self, trait, t->assoc);
-            }
-            for (IrType *target; IrIsProjection(type); type = target) {
-                target = pawIr_solver_get_norm_target(U->C->S, type);
-                if (target == NULL) break;
             }
             if (IrIsProjection(type)) {
                 struct IrProjection const *t = IrGetProjection(type);

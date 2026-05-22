@@ -577,10 +577,9 @@ static IrType *lower_adt_segment(struct TypeChecker *T, struct HirSegment segmen
 {
     struct HirDecl *decl = pawHir_get_node(T->hir, segment.target);
     if (HirIsTypeDecl(decl)) {
-        // TODO: prefix function name and declare in header, call unconditionally and handle count == 0 case same as ret == NULL case
-        IrType *lower_type_alias(struct Compiler *, struct HirSegment, struct HirDecl *, IrGenericArgs *);
+        // TODO: handle count == 0 case same as ret == NULL case
         IrGenericArgs *args = segment.args != NULL ? lower_generic_args(T, segment.args) : NULL;
-        return lower_type_alias(T->C, segment, decl, args);
+        return pawP_lower_type_alias(T->C, segment, decl, args);
     }
 
     IrType *type = GET_TYPE(T, segment.target);
@@ -1600,7 +1599,7 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
                     .span = span);
 
         struct HirExpr *item = HirExprList_get(order, *pindex);
-        unify_types(T, field->span, *ptype, check_operand(T, item));
+        unify_types(T, item->hdr.span, *ptype, check_operand(T, item));
         HirExprList_set(items, index, item);
         FieldMap_remove(T, map, field->ident);
         HirGetFieldExpr(item)->fid = index++;

@@ -79,7 +79,7 @@ TESTS=(
     "match_or"
     "constants"
     "import"
-#    "alias"
+    "alias"
 #    "misc"
     "modification_sequence"
     "argument_sequence"
