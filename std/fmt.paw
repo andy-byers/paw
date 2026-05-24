@@ -4,9 +4,11 @@
 
 pub use string::String;
 
+use list;
 use mem;
 use ptr;
 use result;
+use slice;
 use string_builder::Builder as StringBuilder;
 
 
@@ -56,8 +58,72 @@ impl Formatter {
         Ok(self.b.append_char(value)?)
     }
 
+    pub fn write_int(*self, value: int) -> Result<()> {
+        // TODO: use an array
+        let temp = list::List::new();
+        for i in 0..32 { temp.push('\0').unwrap(); }
+        let negative = value < 0;
+        let end = temp.len();
+        let idx = end - 1;
+
+        if value == INT_MIN {
+            let int64_min = "-9223372036854775808";
+            return self.write_slice(int64_min.to_slice());
+        }
+        let u = value;
+        if negative { u = -u; }
+
+        let FIRST_DIGIT: int = '0' as int;
+        loop {
+            temp[idx] = (u % 10 + FIRST_DIGIT) as char;
+            idx -= 1;
+            u /= 10;
+            if u == 0 { 
+                break; 
+            }
+        }
+        if negative {
+            temp[idx] = '-';
+        } else {
+            idx += 1;
+        }
+
+        self.write_slice(slice::from_raw_parts(
+            &temp[idx], end - idx))
+    }
+
+    pub fn write_float(*self, value: float) -> Result<()> {
+        // TODO: use an array
+        let temp = String::new();
+        temp.extend("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0".to_slice()).unwrap();
+        let len = write_float_to(value, 17, &temp[0], temp.len());
+        self.write_slice(slice::from_raw_parts(&temp[0], len))
+    }
+
     pub fn string(self) -> String {
         let Self{b} = self;
         b.string()
     }
 }
+
+#[extern = "paw_fmt_write_float"]
+fn write_float_to(value: float, precision: int, output: *char, output_len: int) -> int;
+
+
+impl Display for int {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        f.write_int(*self)
+    }
+} 
+
+impl Display for float {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        f.write_float(*self)
+    }
+} 
+
+impl Display for str {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        f.write_slice(self.to_slice())
+    }
+} 

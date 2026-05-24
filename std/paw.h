@@ -176,4 +176,6 @@ void *paw_ptr_memmove(void *env, void *dest, void *src, paw_Int size);
 void *paw_ptr_memset(void *env, void *ptr, char value, paw_Int size);
 int paw_ptr_memcmp(void *env, void *lhs, void *rhs, paw_Int size);
 
+paw_Int paw_fmt_write_float(void *env, paw_Float value, paw_Int precision, char *output, paw_Int output_len);
+
 #endif // PAW_STD_PAW_H

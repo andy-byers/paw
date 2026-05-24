@@ -746,11 +746,11 @@ fn check_bounds(index: int, length: int, allow_end: bool) {
 
 
 #[extern = "paw_builtin_hash_bytes"]
-pub fn builtin_hash_bytes(bytes: *char, length: int, seed: int) -> int;
+fn builtin_hash_bytes(bytes: *char, length: int, seed: int) -> int;
 
 // Allows "*hs" to be equal to "0 as *char" if "*hs_len" is equal to 0.
 #[extern = "paw_builtin_rawcmp"]
-pub fn builtin_rawcmp(
+fn builtin_rawcmp(
     lhs: *char, lhs_len: int, 
     rhs: *char, rhs_len: int) -> int;
 

@@ -426,3 +426,9 @@ void paw_builtin_check_bounds(void *env, paw_Int index, paw_Int length)
     }
 }
 
+paw_Int paw_fmt_write_float(void *env, paw_Float value, paw_Int precision, char *output, paw_Int output_len)
+{
+    PAW_UNUSED(env);
+    return snprintf(output, output_len, "%.*g", (int)precision, value);
+}
+
