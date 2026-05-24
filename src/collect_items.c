@@ -999,6 +999,7 @@ static void validate_main_signature(struct ItemCollector *X, struct SourceSpan s
                 "return type of \"main\" must have type \"()\" or \"int\"");
 }
 
+#include"stdio.h"
 static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 {
     struct IrFnDef *fn_def = pawIr_get_fn_def(X->C, d->did);
@@ -1010,6 +1011,9 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 
     IrGenericArgs *args = IrGenericArgs_new(X->C);
     IrTypeList *params = pawHir_collect_decl_types(X->C, d->params);
+    if(d->did.value==184){
+    puts("hi");
+    }
     IrType *result = collect_type(X, d->result);
     IrType *type = pawIr_new_signature(X->C, d->did, args);
     SET_TYPE(X, d->id, type);

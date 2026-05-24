@@ -166,6 +166,7 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
         K_LIST_XFOREACH (C->impls.inherent, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            pawIr_solver_add_obligations_from(q.S, *p, inst.args);
             if (types_are_compatible(C, self, inst.type))
                 ADD_APPLICABLE_METHODS(*p);
             finish_query(C, q);
@@ -175,6 +176,7 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
         K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            pawIr_solver_add_obligations_from(q.S, *p, inst.args);
             if (types_are_compatible(C, self, inst.type))
                 ADD_APPLICABLE_METHODS(*p);
             finish_query(C, q);
@@ -182,7 +184,12 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
 
         // search blanket implementations
         K_LIST_XFOREACH (C->impls.blanket, DeclId const, p) {
-            ADD_APPLICABLE_METHODS(*p);
+            struct QueryState const q = start_query(C);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            pawIr_solver_add_obligations_from(q.S, *p, inst.args);
+            if (types_are_compatible(C, self, inst.type))
+                ADD_APPLICABLE_METHODS(*p);
+            finish_query(C, q);
         }
     }
 
@@ -257,6 +264,7 @@ struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, I
             K_LIST_XFOREACH (bounds, IrTrait *const, p) {
                 struct QueryState const q = start_query(C);
                 // TODO: replace generics w/ inference vars in p? e.g. in fn f<T: Trait<X>, X>(), Trait<X> => Trait<_>
+                pawIr_solver_add_obligations_from_trait(q.S, *p);
                 if (traits_are_compatible(C, q.S, trait, *p)) {
                     struct IrTraitDef const *def = pawIr_get_trait_def(C, (*p)->did);
                     ADD_APPLICABLE_METHODS(def->methods);
@@ -270,6 +278,7 @@ struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, I
             K_LIST_XFOREACH (bounds, IrTrait *const, p) {
                 struct QueryState const q = start_query(C);
                 // TODO: instantiate p? e.g. in fn f<T: Trait<X>, X>(), Trait<X> => Trait<_>
+                pawIr_solver_add_obligations_from_trait(q.S, *p);
                 if (traits_are_compatible(C, q.S, trait, *p)) {
                     struct IrTraitDef const *def = pawIr_get_trait_def(C, (*p)->did);
                     ADD_APPLICABLE_METHODS(def->methods);
@@ -430,6 +439,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
             struct QueryState const q = start_query(C);
             struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            pawIr_solver_add_obligations_from(q.S, impl->did, inst.args);
             if (traits_are_compatible(C, C->S, trait, inst.trait)
                     && types_are_compatible(C, self, inst.type))
                 ADD_APPLICABLE_TYPES(impl, impl->items);
@@ -441,6 +451,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
             struct QueryState const q = start_query(C);
             struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            pawIr_solver_add_obligations_from(q.S, impl->did, inst.args);
             if (impl->trait != NULL
                     && traits_are_compatible(C, C->S, trait, inst.trait))
                 ADD_APPLICABLE_TYPES(impl, impl->items);

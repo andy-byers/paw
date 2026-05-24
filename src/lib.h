@@ -26,6 +26,7 @@ enum pawL_StdModule {
     PAWL_STD_SLICE,
     PAWL_STD_OPTION,
     PAWL_STD_RESULT,
+    PAWL_STD_ITER,
 
     // Standard library modules:
     PAWL_STD_STRING,

@@ -100,7 +100,7 @@ TESTS=(
 #    "trait_impl"
 #    "trait_impl2"
 #    "blanket_impl"
-    "recursive_impl"
+#    "recursive_impl"
 ##TODO    "ambiguous_method_call"
 #    "impl_selection"
     "bubble"

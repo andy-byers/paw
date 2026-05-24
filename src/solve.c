@@ -31,7 +31,7 @@ struct IrSolver {
     IrSolver *outer;
     IrObligations *obligations;
     IrObligations *predicates;
-    IrType2List *norm_targets;
+    TypeCollection *norm_targets;
     struct Compiler *C;
     struct Unifier *U;
 };
@@ -74,7 +74,7 @@ IrSolver *pawIr_push_solver(struct Compiler *C)
     *S = (IrSolver){
         .obligations = IrObligations_new(C),
         .predicates = IrObligations_new(C),
-        .norm_targets = IrType2List_new(C),
+        .norm_targets = TypeCollection_new(C),
         .outer = C->S,
         .U = C->U,
         .C = C,
@@ -90,38 +90,55 @@ void pawIr_pop_solver(struct Compiler *C)
 
 void pawIr_solver_add_norm_target(IrSolver *S, IrType *type, IrType *target, struct IrObligationCause cause)
 {
-    IrType2List_push(S->C, S->norm_targets, (struct IrType2){type, target});
+    TypeCollection_insert(S->C, S->norm_targets, type, target);
 }
 
 IrType *pawIr_solver_get_norm_target(IrSolver *S, IrType *type)
 {
     paw_assert(IrIsProjection(type));
-    do {
-        K_LIST_XFOREACH (S->norm_targets, struct IrType2 const, p) {
-            struct IrProjection const *x = IrGetProjection(type);
-            struct IrProjection const *y = IrGetProjection(
-                    pawU_normalize(S->U, p->first));
-            struct IrAssocItem const *xitem = pawIr_get_assoc_item(S->C, x->assoc);
-            struct IrAssocItem const *yitem = pawIr_get_assoc_item(S->C, y->assoc);
-            if (pawS_eq(xitem->name, yitem->name)) {
-                int const position = pawU_current_position(S->U);
-                IrType *x_type = pawU_normalize(S->U, x->type);
-                IrType *y_type = pawU_normalize(S->U, y->type);
-                if (pawU_unify(S->U, x_type, y_type) == 0
-                        && pawIr_unify_traits(S->C, x->trait, y->trait) == 0)
-                    return pawU_normalize(S->U, p->second);
-                pawU_undo_unifications(S->U, position);
-            }
-        }
-        S = S->outer;
-    } while (S != NULL);
+    type = pawU_normalize(S->U, type);
+    if (!pawIr_type_contains_inference_var(S->C, type)) {
+        void **p = TypeCollection_get(S->C, S->norm_targets, type);
+        if (p != NULL) return *p;
+    }
     return NULL;
+
+//    do {
+//        K_LIST_XFOREACH (S->norm_targets, struct IrType2 const, p) {
+//            struct IrProjection const *x = IrGetProjection(type);
+//            struct IrProjection const *y = IrGetProjection(
+//                    pawU_normalize(S->U, p->first));
+//            struct IrAssocItem const *xitem = pawIr_get_assoc_item(S->C, x->assoc);
+//            struct IrAssocItem const *yitem = pawIr_get_assoc_item(S->C, y->assoc);
+//            if (pawS_eq(xitem->name, yitem->name)) {
+//                int const position = pawU_current_position(S->U);
+//                IrType *x_type = pawU_normalize(S->U, x->type);
+//                IrType *y_type = pawU_normalize(S->U, y->type);
+//                if (pawU_unify(S->U, x_type, y_type) == 0
+//                        && pawIr_unify_traits(S->C, x->trait, y->trait) == 0)
+//                    return pawU_normalize(S->U, p->second);
+//                pawU_undo_unifications(S->U, position);
+//            }
+//        }
+//        S = S->outer;
+//    } while (S != NULL);
+//    return NULL;
 }
 
 DEFINE_MAP(struct Compiler, PredicateCache, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, void *)
 
 void pawIr_solver_add_predicate(IrSolver *S, IrType *type, IrTrait *trait, struct IrObligationCause cause)
 {
+    paw_assert(!pawIr_type_contains_inference_var(S->C, type));
+    paw_assert(!pawIr_trait_contains_inference_var(S->C, trait));
+    K_LIST_XFOREACH (S->predicates, struct IrObligation const, p) {
+        int const position = pawU_current_position(S->U);
+        paw_Bool const matches = pawU_unify(S->U, type, p->impl.type) == 0
+                && pawIr_unify_traits(S->C, trait, p->impl.trait) == 0;
+        pawU_undo_unifications(S->U, position);
+        if (matches) return;
+    }
+
     IrObligations_push(S->C, S->predicates, (struct IrObligation){
                 .kind = IR_OBLIGATION_IMPL_TRAIT,
                 .cause = cause,
@@ -382,14 +399,6 @@ paw_Bool pawIr_type_implements_trait(IrSolver *S, IrType *type, IrTrait *trait)
 
 static int solve_type_equals_obligation(IrSolver *S, IrType *lhs, IrType *rhs)
 {
-    if (IrIsProjection(lhs))
-        add_nested_predicates(S, IrGetProjection(lhs));
-    if (IrIsProjection(rhs))
-        add_nested_predicates(S, IrGetProjection(rhs));
-
-    lhs = pawU_normalize_projections(S->U, lhs);
-    rhs = pawU_normalize_projections(S->U, rhs);
-
     int const position = pawU_current_position(S->U);
     if (pawU_unify(S->U, lhs, rhs) != 0) {
         pawU_undo_unifications(S->U, position);
@@ -463,14 +472,24 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     break;
                 }
                 case IR_OBLIGATION_TYPE_EQUALS: {
-                    if (solve_type_equals_obligation(S, o.eq.lhs, o.eq.rhs) == 0) {
+                    IrType *lhs = o.eq.lhs;
+                    IrType *rhs = o.eq.rhs;
+                    if (IrIsProjection(lhs))
+                        add_nested_predicates(S, IrGetProjection(lhs));
+                    if (IrIsProjection(rhs))
+                        add_nested_predicates(S, IrGetProjection(rhs));
+                    // TODO: yes, this actually needs to be called twice, at least to make a specific case work...
+                    lhs = pawU_normalize_projections(S->U, lhs);
+                    lhs = pawU_normalize_projections(S->U, lhs);
+                    rhs = pawU_normalize_projections(S->U, rhs);
+                    if (solve_type_equals_obligation(S, lhs, rhs) == 0) {
                         LOGLN("SOLVER:%p: proved type equals obligation `%s = %s`",
                                 (void *)S, pawIr_print_type(S->C, lhs),
                                 pawIr_print_type(S->C, rhs));
 
                         solved = PAW_TRUE;
-                    } else if (!pawIr_type_contains_inference_var(S->C, o.eq.lhs)
-                            && !pawIr_type_contains_inference_var(S->C, o.eq.rhs)) {
+                    } else if (!pawIr_type_contains_inference_var(S->C, lhs)
+                            && !pawIr_type_contains_inference_var(S->C, rhs)) {
                         LOGLN("SOLVER:%p: unable to solve type equals obligation `%s = %s`",
                                 (void *)S, pawIr_print_type(S->C, lhs),
                                 pawIr_print_type(S->C, rhs));
@@ -515,15 +534,15 @@ void pawIr_solver_rollback(IrSolver *S)
 
 void pawIr_solver_commit(IrSolver *S)
 {
-    if (S->outer != NULL) {
-        // TODO: likely going to end up with many duplicates. should probably do something about that as performance could get very bad
-        K_LIST_XFOREACH (S->obligations, struct IrObligation const, p)
-            IrObligations_push(S->C, S->outer->obligations, *p);
-        K_LIST_XFOREACH (S->predicates, struct IrObligation const, p)
-            IrObligations_push(S->C, S->outer->predicates, *p);
-        K_LIST_XFOREACH (S->norm_targets, struct IrType2 const, p)
-            pawIr_solver_add_norm_target(S->outer, p->first, p->second, (struct IrObligationCause){0});
-    }
+//    if (S->outer != NULL) {
+//        // TODO: likely going to end up with many duplicates. should probably do something about that as performance could get very bad
+//        K_LIST_XFOREACH (S->obligations, struct IrObligation const, p)
+//            IrObligations_push(S->C, S->outer->obligations, *p);
+//        K_LIST_XFOREACH (S->predicates, struct IrObligation const, p)
+//            IrObligations_push(S->C, S->outer->predicates, *p);
+//        K_LIST_XFOREACH (S->norm_targets, struct IrType2 const, p)
+//            pawIr_solver_add_norm_target(S->outer, p->first, p->second, (struct IrObligationCause){0});
+//    }
 
     S->obligations->count = 0;
 }
@@ -766,10 +785,15 @@ char const *debug_solver(IrSolver* S)
         print_obligation(S, &buf, *p);
     }
     L_ADD_LITERAL(P, &buf, "type eq predicates:\n");
-    K_LIST_XFOREACH (S->norm_targets, struct IrType2 const, p) {
+    TypeCollectionIterator iter;
+    TypeCollectionIterator_init(S->norm_targets, &iter);
+    while (TypeCollectionIterator_is_valid(&iter)) {
+        IrType *first = TypeCollectionIterator_key(&iter);
+        IrType *second = *TypeCollectionIterator_valuep(&iter);
         pawL_add_fstring(P, &buf, "  %s = %s\n",
-                pawIr_print_type_v2(S->C, p->first)->text,
-                pawIr_print_type_v2(S->C, p->second)->text);
+                pawIr_print_type_v2(S->C, first)->text,
+                pawIr_print_type_v2(S->C, second)->text);
+        TypeCollectionIterator_next(&iter);
     }
     return pawL_buffer_finish(P, &buf)->text;
 }

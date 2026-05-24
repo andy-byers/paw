@@ -262,6 +262,7 @@ A panic can also be caused by calling the `panic` builtin function.
 
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
++ Generic type parameters on type aliases can't be constrained with trait bounds
 + Edge cases exist related to impl blocks and traits
 + Need to keep track of source-to-source mappings that result from IR transformations (e.g. when ForExpr AST node is lowered into a Loop + Match)
 + Don't throw errors in 'lex.c'. Return a token of type `TK_ERROR` and let the parser handle it. Allows for more sensible error messages.

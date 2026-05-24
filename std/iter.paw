@@ -1,0 +1,26 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub struct Zip<X, Y> {
+    x: X,
+    y: Y,
+}
+
+impl<X, Y> Zip<X, Y> {
+    pub fn new(x: X, y: Y) -> Self {
+        Self{x, y}
+    }
+}
+
+impl<X: Iterator, Y: Iterator> Iterator for Zip<X, Y> {
+    type Item = (X::Item, Y::Item);
+
+    fn next(*self) -> Option<Self::Item> {
+        Some((self.x.next()?, self.y.next()?))
+    }
+}
+
+pub fn zip<X: IntoIterator, Y: IntoIterator>(x: X, y: Y) -> Zip<X::IntoIter, Y::IntoIter> {
+    Zip::new(x.into_iter(), y.into_iter())
+}

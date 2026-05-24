@@ -500,6 +500,12 @@ int pawIr_unify(struct Compiler *C, IrGenericArg a, IrGenericArg b);
 IrGenericArg pawIr_normalize(struct Compiler *C, IrGenericArg g);
 IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g);
 
+static void pawIr_unify_unchecked(struct Compiler *C, IrGenericArg a, IrGenericArg b)
+{
+    int const rc = pawIr_unify(C, a, b);
+    paw_assert(rc == 0); PAW_UNUSED(rc);
+}
+
 struct IrPendingConstant {
     IrConst *konst;
     void *payload;

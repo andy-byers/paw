@@ -624,15 +624,6 @@ impl<T: Compare<T>> Range<T> {
     }
 }
 
-impl<Idx: Clone + Compare<Idx> + Increment> IntoIterator for Range<Idx> {
-    type Item = Idx;
-    type IntoIter = Range<Idx>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self
-    }
-}
-
 impl<T: Clone + Compare<T> + Increment> Iterator for Range<T> {
     type Item = T;
 
@@ -655,15 +646,6 @@ pub struct RangeFrom<T> {
 impl<T: Compare<T>> RangeFrom<T> {
     pub fn contains(*self, value: *T) -> bool {
         self.start.le(value)
-    }
-}
-
-impl<T: Clone + Increment> IntoIterator for RangeFrom<T> {
-    type Item = T;
-    type IntoIter = RangeFrom<T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self
     }
 }
 
@@ -725,15 +707,6 @@ impl<T: Compare<T>> RangeInclusive<T> {
     }
 }
 
-impl<T: Clone + Compare<T> + Increment> IntoIterator for RangeInclusive<T> {
-    type Item = T;
-    type IntoIter = RangeInclusive<T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self
-    }
-}
-
 impl<T: Clone + Compare<T> + Increment> Iterator for RangeInclusive<T> {
     type Item = T;
 
@@ -771,6 +744,7 @@ fn check_bounds(index: int, length: int, allow_end: bool) {
     }
 }
 
+
 #[extern = "paw_builtin_hash_bytes"]
 pub fn builtin_hash_bytes(bytes: *char, length: int, seed: int) -> int;
 
@@ -792,3 +766,13 @@ impl<X, Y: From<X>> Into<Y> for X {
         Y::from(self)
     }
 }
+
+impl<I: Iterator> IntoIterator for I {
+    type Item = I::Item;
+    type IntoIter = I;
+
+    fn into_iter(self) -> I {
+        self
+    }
+}
+

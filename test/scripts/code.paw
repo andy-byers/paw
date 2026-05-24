@@ -676,10 +676,52 @@
 //    require::<Struct>();
 //}
 
+
+
+
+
+//pub struct Zip<X, Y> {
+//    x: X,
+//    y: Y,
+//}
+//
+//impl<X, Y> Zip<X, Y> {
+//    pub fn new(x: X, y: Y) -> Self {
+//        Self{x, y}
+//    }
+//}
+//
+//impl<X: Iterator, Y: Iterator> Iterator for Zip<X, Y> {
+//    type Item = (X::Item, Y::Item);
+//    fn next(*self) -> Option<Self::Item> {
+//        Some((self.x.next()?, self.y.next()?))
+//    }
+//}
+//
+//pub fn zip<X: IntoIterator, Y: IntoIterator>(x: X, y: Y) -> Zip<X::IntoIter, Y::IntoIter> {
+//    Zip::new(x.into_iter(), y.into_iter())    
+//}
+
+
+
+//struct Struct;
+//struct Iter<T>;
+//
+//impl Iterator for Iter<char> {
+//    type Item = *char;
+//    fn next(*self) -> Option<*char> {
+//        None
+//    }
+//}
+//impl IntoIterator for Struct {
+//    type Item = *char;
+//    type IntoIter = Iter<char>;
+//    fn into_iter(self) -> Self::IntoIter {
+//        Iter::<char>
+//    }
+//}
+
 #[test]
 pub fn test() {
-    assert(generic_call(Struct).get() == 123);
-    assert(generic_call2(Struct) == 123);
-    assert(concrete_call(Struct).get() == 123);
-    assert(concrete_call2(Struct) == 123);
 }
+

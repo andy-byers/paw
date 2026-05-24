@@ -222,7 +222,7 @@ static void test_type_error(void)
     test_compiler_status(kErrIncompatibleTypes, "missing_return_value", "fn f() -> int {}", "");
     test_compiler_status(kErrIncompatibleTypes, "non_unit_guard", "fn f(x: bool) {if x {123}}", "");
     test_compiler_status(kErrIncompatibleTypes, "nonscalar_cast", "", "let x = 123 as str;");
-    test_compiler_status(kErrFalseObligation, "invalid_map_key", "use hashmap::HashMap; struct S;", "let x = HashMap::<S, int>::new();");
+    test_compiler_status(kErrFalseObligation, "invalid_map_key", "use hashmap::HashMap; struct S;", "let x: HashMap<S, int> = HashMap::new();");
 }
 
 static void test_name_too_long(void)

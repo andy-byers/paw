@@ -85,7 +85,7 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
     IrSolver *child = pawIr_push_solver(L->C);
     if (IrIsAdt(type))
         pawIr_solver_add_well_formed_obligation(child, trait->did, args,
-                (struct IrObligationCause){.span = t->type->hdr.span});
+                (struct IrObligationCause){.span = t->trait.span});
     pawIr_solver_add_well_formed_obligation(child, trait->did, args,
             (struct IrObligationCause){.span = t->trait.span});
     pawIr_solver_add_impl_trait_obligation(child, type, trait,
@@ -96,13 +96,13 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
         case IR_SOLVER_SOLVED:
             break;
         case IR_SOLVER_AMBIGUOUS: {
-                struct IrObligation const example = pawIr_solver_first_obligation(L->C->S);
-                LOWERING_ERROR(L, UnsatisfiedObligation,
-                        .example = pawIr_print_obligation_(L->C, example),
-                        .num_unsolved = result.ambiguous.num_unsolved,
-                        .span = example.cause.span);
-                break;
-            }
+            struct IrObligation const example = pawIr_solver_first_obligation(L->C->S);
+            LOWERING_ERROR(L, UnsatisfiedObligation,
+                    .example = pawIr_print_obligation_(L->C, example),
+                    .num_unsolved = result.ambiguous.num_unsolved,
+                    .span = example.cause.span);
+            break;
+        }
         case IR_SOLVER_ERROR:
             LOWERING_ERROR(L, FalseObligation,
                     .obligation = pawIr_print_obligation_(L->C, result.error.obligation),
@@ -175,7 +175,7 @@ static IrGenericArgs *new_unknowns(struct Compiler *C, struct HirDeclList *param
     return unknowns;
 }
 
-static IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, struct HirDecl *decl, IrGenericArgs *knowns)
+static IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, struct HirDecl *decl, IrGenericArgs *args)
 {
     struct Compiler *C = L->C;
     paw_assert(HirIsTypeDecl(decl));
@@ -186,28 +186,11 @@ static IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, 
     if (d->rhs == NULL) return type;
     IrType *rhs = GET_NODE_TYPE(C, d->rhs);
     if (d->generics == NULL) return rhs;
-    IrGenericArgs *types = IR_GENERIC_ARGS(rhs);
-    if (IrIsArray(rhs) || IrIsSlice(rhs)) {
-        // TODO: make this work. need more general version of IR_GENERIC_ARGS that generates generic args for an array or slice
-        LOWERING_ERROR(L, Unsupported, decl->hdr.span);
-    }
 
-    IrGenericArgs *generics = collect_generic_args(C, d->generics);
-    IrGenericArgs *unknowns = new_unknowns(C, d->generics);
-//    IrGenericArgs *args = pawP_instantiate_typelist(C, generics, unknowns, types);
-    if (knowns != NULL) {
-        IrGenericArg const *pu;
-        IrGenericArg const *pk;
-        K_LIST_ZIP (unknowns, pu, knowns, pk) {
-            // unification with an IrInfer never fails due to incompatible types
-            int const rc = pawIr_unify(C, *pu, *pk);
-            paw_assert(rc == 0); PAW_UNUSED(rc);
-        }
- //       K_LIST_XFOREACH (args, IrGenericArg, p)
- //           *p = pawIr_normalize(C, *p);
-    }
+    IrGenericArgs *params = collect_generic_args(C, d->generics);
+    if (args == NULL) args = new_unknowns(C, d->generics);
 
-    struct Substitution const subst = {generics, unknowns};
+    struct Substitution const subst = {params, args};
     rhs = pawP_substitute(C, rhs, subst);
     return pawU_normalize(C->U, rhs);
 }
