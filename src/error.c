@@ -549,6 +549,7 @@ static void FormatPathTooLongError(paw_Env *P, struct PathTooLongError const *er
 static void FormatExpectedToplevelItemError(paw_Env *P, struct ExpectedToplevelItemError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer, "expected toplevel item");
 }
 
 static void FormatInvalidSelfPtrShorthandError(paw_Env *P, struct InvalidSelfPtrShorthandError const *error, Buffer *buffer)

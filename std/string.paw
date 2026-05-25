@@ -17,6 +17,12 @@ impl String {
         Self{inner: List::new()}
     }
 
+    pub fn from_slice(text: []char) -> mem::Result<Self> {
+        let s = Self::new();
+        s.extend(text)?;
+        Ok(s)
+    }
+
     pub fn len(*self) -> int {
         self.inner.len()
     }

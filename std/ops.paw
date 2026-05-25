@@ -776,3 +776,10 @@ impl<I: Iterator> IntoIterator for I {
     }
 }
 
+
+// TODO: This is a helper to make range indexing more ergonomic until Index can be specialized for Range* types (need unsized types so Index can return a slice, i.e. slices need to be a pointer type)
+pub trait IndexRange<Idx> {
+    type Output;
+    fn index_range(*self, index: Idx) -> []Self::Output;
+}
+

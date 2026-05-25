@@ -1695,10 +1695,13 @@ private:
 
     llvm::Value *create_cast(llvm::Value *target, BuiltinKind from, BuiltinKind to)
     {
-        paw_assert(from != BUILTIN_UNIT && IS_SCALAR_TYPE(from));
-        paw_assert(to != BUILTIN_UNIT && IS_SCALAR_TYPE(to));
-
         switch (from) {
+            case BUILTIN_PTR:
+                if (to == BUILTIN_INT) {
+                    return B->CreatePtrToInt(target, X.get_int_ty());
+                } else {
+                    return target;
+                }
             case BUILTIN_BOOL:
                 if (to == BUILTIN_CHAR) {
                     return B->CreateZExt(target, X.get_char_ty());
@@ -1722,8 +1725,11 @@ private:
                     return B->CreateCmp(llvm::CmpInst::ICMP_NE, target, X.create_int(0));
                 } else if (to == BUILTIN_CHAR) {
                     return B->CreateTrunc(target, X.get_char_ty());
-                } else { // to == BUILTIN_FLOAT
+                } else if (to == BUILTIN_FLOAT) {
                     return B->CreateSIToFP(target, X.get_float_ty());
+                } else {
+                    paw_assert(to == BUILTIN_PTR);
+                    return B->CreateIntToPtr(target, X.get_ptr_ty());
                 }
             default: // from == BUILTIN_FLOAT
                 if (to == BUILTIN_BOOL) {

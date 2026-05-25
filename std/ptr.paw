@@ -19,6 +19,10 @@ pub fn null<T>() -> *T {
 }
 
 
+pub fn difference<T>(lhs: *T, rhs: *T) -> int {
+    rhs as int - lhs as int
+}
+
 pub fn replace<T>(pointer: *T, value: T) -> T {
     let result = read(pointer);
     write(pointer, value);

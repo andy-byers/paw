@@ -100,3 +100,74 @@ impl<T> IntoIterator for []T {
 //        IterMut::new(self)
 //    }
 //}
+
+impl<T> IndexRange<Range<int>> for []T {
+    type Output = T;
+    fn index_range(*self, idx: Range<int>) -> []T {
+        if idx.start < 0 || idx.start > self.len() 
+                || idx.end < 0 || idx.end <= idx.start{
+            panic("range index out of bounds");
+        }
+        from_raw_parts(
+            ptr::add(self.as_ptr(), idx.start), 
+            idx.end - idx.start)
+    }
+}
+
+impl<T> IndexRange<RangeInclusive<int>> for []T {
+    type Output = T;
+    fn index_range(*self, idx: RangeInclusive<int>) -> []T {
+        if idx.start < 0 || idx.start > self.len() 
+                || idx.end < 0 || idx.end < idx.start{
+            panic("range index out of bounds");
+        }
+        // NOTE: the `+ 1` below cannot overflow unless `idx` spans the entire
+        //   address space, which is not possible 
+        from_raw_parts(
+            ptr::add(self.as_ptr(), idx.start), 
+            idx.end - idx.start + 1)
+    }
+}
+
+impl<T> IndexRange<RangeFrom<int>> for []T {
+    type Output = T;
+    fn index_range(*self, idx: RangeFrom<int>) -> []T {
+        if idx.start < 0 || idx.start > self.len() {
+            panic("range index out of bounds");
+        }
+        from_raw_parts(
+            ptr::add(self.as_ptr(), idx.start), 
+            self.len() - idx.start)
+    }
+}
+
+impl<T> IndexRange<RangeTo<int>> for []T {
+    type Output = T;
+    fn index_range(*self, idx: RangeTo<int>) -> []T {
+        if idx.end < 0 || idx.end > self.len() {
+            panic("range index out of bounds");
+        }
+        from_raw_parts(
+            self.as_ptr(), 
+            idx.end)
+    }
+}
+
+impl<T> IndexRange<RangeToInclusive<int>> for []T {
+    type Output = T;
+    fn index_range(*self, idx: RangeToInclusive<int>) -> []T {
+        if idx.end < 0 || idx.end >= self.len() {
+            panic("range index out of bounds");
+        }
+        from_raw_parts(
+            self.as_ptr(), 
+            idx.end + 1)
+    }
+}
+
+impl<T> IndexRange<RangeFull> for []T {
+    type Output = T;
+    fn index_range(*self, idx: RangeFull) -> []T {
+        self.to_slice()
+    }
+}

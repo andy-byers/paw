@@ -373,3 +373,49 @@ impl<T: Copy> List<T> {
 }
 
 
+impl<T> IndexRange<Range<int>> for List<T> {
+    type Output = T;
+    fn index_range(*self, idx: Range<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<T> IndexRange<RangeInclusive<int>> for List<T> {
+    type Output = T;
+    fn index_range(*self, idx: RangeInclusive<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<T> IndexRange<RangeFrom<int>> for List<T> {
+    type Output = T;
+    fn index_range(*self, idx: RangeFrom<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<T> IndexRange<RangeTo<int>> for List<T> {
+    type Output = T;
+    fn index_range(*self, idx: RangeTo<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<T> IndexRange<RangeToInclusive<int>> for List<T> {
+    type Output = T;
+    fn index_range(*self, idx: RangeToInclusive<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<T> IndexRange<RangeFull> for List<T> {
+    type Output = T;
+    fn index_range(*self, idx: RangeFull) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+fn call_index_range<R: IndexRange<Idx>, Idx>(r: *R, index: Idx) -> []R::Output {
+    r.index_range(index)
+}
+
