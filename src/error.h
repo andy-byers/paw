@@ -290,10 +290,6 @@
         Str const *modname; \
         struct SourceSpan span; \
     ) \
-    X(Unsupported, ERR_CATEGORY_SYNTAX, \
-        Str const *modname; \
-        struct SourceSpan span; \
-    ) \
     X(ModuleNotFound, ERR_CATEGORY_SYNTAX, \
         Str const *modname; \
         struct SourceSpan span; \
@@ -726,6 +722,15 @@
         Str const *modname; \
         struct SourceSpan span; \
         int limit; \
+    ) \
+    X(Unsupported, ERR_CATEGORY_ICE, \
+        Str const *modname; \
+        struct SourceSpan span; \
+    ) \
+    X(Internal, ERR_CATEGORY_ICE, \
+        Str const *modname; \
+        struct SourceSpan span; \
+        Str const *message; \
     )
 
 enum ErrorCategory {

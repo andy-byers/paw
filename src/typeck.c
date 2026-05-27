@@ -1847,7 +1847,7 @@ static IrType *CheckOrPat(struct TypeChecker *T, struct HirOrPat *p)
 
 static IrType *CheckRefPat(struct TypeChecker *T, struct HirRefPat *p)
 {
-    return new_ptr(T, check_pat(T, p->referent));
+    return check_pat(T, p->referent);
 }
 
 static IrType *CheckPtrPat(struct TypeChecker *T, struct HirPtrPat *p)
@@ -2017,6 +2017,11 @@ static IrType *check_pat(struct TypeChecker *T, struct HirPat *pat)
     type = normalize_type(T, type);
     SET_NODE_TYPE(T->C, pat, type);
 
+    if (HirIsBindingPat(pat)) {
+        struct HirBindingPat const *p = HirGetBindingPat(pat);
+        if (p->is_ref) SET_NODE_TYPE(T->C, pat, new_ptr(T, type));
+    }
+
     leave_pat(T);
     return type;
 }
@@ -2049,9 +2054,10 @@ static void unconditional_return(struct TypeChecker *T, struct SourceSpan span)
 {
     struct BlockState *bs = T->bs;
     do {
-         if (bs->outer == NULL) break;
+        // TODO: why was ! not being propagated to the outermost block (function-level block)
+//         if (bs->outer == NULL) break;
          unify_never_type(T, span, bs->result);
-         bs = bs->outer;
+         if ((bs = bs->outer) == NULL) break;
     } while (bs->kind != BLOCK_MATCH);
 }
 

@@ -12,13 +12,15 @@ struct MatchVar {
     struct IrType *type;
     int id;
 
-    paw_Bool deref : 1;
+    int deref;
 };
 
 struct Binding {
     struct MatchVar var;
     Str *name;
     NodeId id;
+
+    paw_Bool ref : 1;
 };
 
 enum ConstructorKind {

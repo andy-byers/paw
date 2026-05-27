@@ -637,12 +637,6 @@ static void FormatUnexpectedSymbolError(paw_Env *P, struct UnexpectedSymbolError
     pawL_add_fstring(P, buffer, "unexpected symbol");
 }
 
-static void FormatUnsupportedError(paw_Env *P, struct UnsupportedError const *error, Buffer *buffer)
-{
-    add_error_header(P, error->modname, error->span, buffer);
-    pawL_add_fstring(P, buffer, "unsupported");
-}
-
 
 // import errors
 static void FormatModuleNotFoundError(paw_Env *P, struct ModuleNotFoundError const *error, Buffer *buffer)
@@ -1266,6 +1260,18 @@ static void FormatTooManyConstantsError(paw_Env *P, struct TooManyConstantsError
     add_error_header(P, error->modname, error->span, buffer);
     pawL_add_fstring(P, buffer, "too many constants (limit is %d)",
             error->limit);
+}
+
+static void FormatUnsupportedError(paw_Env *P, struct UnsupportedError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer, "unsupported");
+}
+
+static void FormatInternalError(paw_Env *P, struct InternalError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer, "internal compiler error: %s", error->message->text);
 }
 
 _Noreturn void pawErr_throw(struct Compiler *C, enum ErrorKind kind, void *payload)

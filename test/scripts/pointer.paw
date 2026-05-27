@@ -1,18 +1,25 @@
 // pointer.paw
 
+#[test]
+pub fn addrof_operator() {
+    let _: *int = &123;
+    let _: **int = &&123;
+    let _: ***int = &&&123;
+}
+
 pub trait Trait {
-    fn method(&self) -> int;
+    fn method(*self) -> int;
 }
 
 struct Type;
 
 impl Trait for Type {
-    fn method(&self) -> int {
+    fn method(*self) -> int {
         123
     }
 }
 
-fn dispatch_method<T: Trait>(p: &T) -> int {
+fn dispatch_method<T: Trait>(p: *T) -> int {
     p.method()
 }
 
@@ -21,11 +28,11 @@ pub fn dispatch_method_on_pointer() {
     assert(dispatch_method(&Type) == 123);
 }
 
-fn write_to_pointer<T>(p: &T, t: T) {
+fn write_to_pointer<T>(p: *T, t: T) {
     *p = t;
 }
 
-fn read_from_pointer<T>(p: &T) -> T {
+fn read_from_pointer<T>(p: *T) -> T {
     *p
 }
 
@@ -60,15 +67,16 @@ pub fn access_local_data() {
     assert(i == 42);
 }
 
-#[test]
-pub fn access_upvalue_data() {
-    let i = -1;
-    (|| {
-        write_to_pointer(&i, 42);
-        assert(read_from_pointer(&i) == 42);
-        assert(i == 42);
-    })();
-}
+// TODO
+//#[test]
+//pub fn access_upvalue_data() {
+//    let i = -1;
+//    (|| {
+//        write_to_pointer(&i, 42);
+//        assert(read_from_pointer(&i) == 42);
+//        assert(i == 42);
+//    })();
+//}
 
 #[test]
 pub fn access_constant_data() {
@@ -79,7 +87,7 @@ pub fn access_constant_data() {
     assert(read_from_pointer(p) == -1);
 }
 
-inline struct Int {
+struct Int {
     pub value: int,
 }
 

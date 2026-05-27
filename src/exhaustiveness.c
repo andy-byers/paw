@@ -318,6 +318,14 @@ static void print_col(struct Compiler*C,struct Column *col)
 
 #endif // 0
 
+static int auto_deref_pat(struct HirPat **ppat)
+{
+    int deref = 0;
+    for (; HirIsPtrPat(*ppat); ++deref)
+        *ppat = HirGetPtrPat(*ppat)->pointee;
+    return deref;
+}
+
 static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
 {
     // filter list of columns while building list of variable declarations
@@ -325,28 +333,29 @@ static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
     struct Column *pcol;
     K_LIST_FOREACH (row->columns, pcol) {
         if (HirIsPtrPat(pcol->pat)) {
-            pcol->var.deref = PAW_TRUE;
-            struct HirPtrPat *pp = HirGetPtrPat(pcol->pat);
-            if (HirIsBindingPat(pp->pointee)) {
-                IrType *pointee = GET_NODE_TYPE(U->C, pp->pointee);
-                if (!pawIr_is_copyable(U->C, pointee))
-                    pawErr_generic_error(ENV(U), U->modname, pp->span,
+            struct HirPat *pointee = pcol->pat;
+            pcol->var.deref = auto_deref_pat(&pointee);
+            if (HirIsBindingPat(pointee)) {
+                IrType *pointee_type = GET_NODE_TYPE(U->C, pointee);
+                if (!pawIr_is_copyable(U->C, pointee_type))
+                    pawErr_generic_error(ENV(U), U->modname, pointee->hdr.span,
                             "cannot move out of pointer");
-                struct HirBindingPat const *p = HirGetBindingPat(pp->pointee);
+                struct HirBindingPat const *p = HirGetBindingPat(pointee);
                 BindingList_push(U->C, row->body.bindings, (struct Binding){
                     .name = p->ident.name,
                     .var = pcol->var,
+                    .ref = p->is_ref,
                     .id = p->id,
                 });
-            } else if (!HirIsWildcardPat(pp->pointee)) {
+            } else if (!HirIsWildcardPat(pointee)) {
                 ColumnList_push(U, columns, *pcol);
             }
-        } else
-        if (HirIsBindingPat(pcol->pat)) {
+        } else if (HirIsBindingPat(pcol->pat)) {
             struct HirBindingPat const *p = HirGetBindingPat(pcol->pat);
             BindingList_push(U->C, row->body.bindings, (struct Binding){
                 .name = p->ident.name,
                 .var = pcol->var,
+                .ref = p->is_ref,
                 .id = p->id,
             });
         } else if (!HirIsWildcardPat(pcol->pat)) {
@@ -413,11 +422,7 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
 
         struct HirPat *pat = col.pat;
         struct Row const r = copy_row(U, *prow);
-
-        if (HirIsPtrPat(pat)) {
-            pat = HirGetPtrPat(pat)->pointee;
-            col.var.deref = PAW_TRUE;
-        }
+        col.var.deref = auto_deref_pat(&pat);
 
         // pattern matrix specialization
         int index = 0;
@@ -480,11 +485,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
 
         struct HirPat *pat = col.pat;
         struct Row const r = copy_row(U, *prow);
-
-        if (HirIsPtrPat(col.pat)) {
-            pat = HirGetPtrPat(pat)->pointee;
-            col.var.deref = PAW_TRUE;
-        }
+        col.var.deref = auto_deref_pat(&pat);
 
         struct HirLiteralPat *p = HirGetLiteralPat(pat);
         struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
@@ -655,7 +656,7 @@ static enum BranchMode branch_mode(struct Usefulness *U, IrType *type)
     type = pawIr_remove_indirection(U->C, type);
     if (IrIsTuple(type) || IrIsUnit(type))
         return BRANCH_TUPLE;
-    enum BuiltinKind code = pawP_type2code(U->C, type);
+    enum BuiltinKind const code = pawP_type2code(U->C, type);
     if (IS_BASIC_TYPE(code))
         return BRANCH_LITERAL;
     struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(type));

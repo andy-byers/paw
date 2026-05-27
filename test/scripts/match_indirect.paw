@@ -1,0 +1,131 @@
+// match_indirect.paw
+
+fn modify_scalar(i: *int) {
+    match i {
+        *-1 => (),
+        *&p => *p = 123,
+    }
+}
+
+#[test]
+pub fn test_modify_scalar() {
+    let i = 1;
+    modify_scalar(&i);
+    assert(i == 123);
+
+    let i = -1;
+    modify_scalar(&i);
+    assert(i == -1);
+}
+
+fn modify_tuple(t: *(int, int)) {
+    match t {
+        *(10, &b) => *b = 20,
+        *(&a, &b) => {*a = 100; *b = 200},
+    }
+}
+
+#[test]
+pub fn test_modify_tuple() {
+    let t = (10, 0);
+    modify_tuple(&t);
+    assert(t.0 == 10);
+    assert(t.1 == 20);
+
+    let t = (0, 0);
+    modify_tuple(&t);
+    assert(t.0 == 100);
+    assert(t.1 == 200);
+}
+
+struct Struct<A, B> {
+    a: A,
+    b: B,
+}
+
+fn modify_struct(s: *Struct<int, float>) {
+    match s {
+        *Struct{a: 1, b: &b} => {*b = 2.3},
+        *Struct{a: &a, b: &b} => {*a = -1; *b = -2.3},
+    }
+}
+
+#[test]
+pub fn test_modify_struct() {
+    let s = Struct{a: 1, b: 0.0};
+    modify_struct(&s);
+    assert(s.a == 1);
+    assert(s.b == 2.3);
+
+    let s = Struct{a: 0, b: 0.0};
+    modify_struct(&s);
+    assert(s.a == -1);
+    assert(s.b == -2.3);
+}
+
+fn modify_variant(o: *Option<int>) {
+    match o {
+        *Some(&p) => *p = 42,
+        *None => (),
+    }
+}
+
+#[test]
+pub fn test_modify_variant() {
+    let o = Some(123);
+    modify_variant(&o);
+    match o {
+        // NOTE: reference to field of copy
+        Some(&i) => *i = -1,
+        None => (),
+    }
+    assert(o.unwrap() == 42);
+}
+
+fn modify_nested(t: *(int, *Struct<int, *Option<int>>)) {
+    match t {
+        *(1, *Struct{a: &b, b: *Some(&c)}) if *b == 2 && *c == 3 
+            => {*b = 23; *c = 123},
+        *(a, *Struct{a: b, b: c}) if c.is_some() => *c = None,
+        *(&a, *&b) => {*a = -1; *b = Struct{a: -2, b: b.b}},
+    }
+}
+
+#[test]
+pub fn test_modify_nested() {
+    let o = Some(3);
+    let s = Struct{a: 2, b: &o};
+    let t = (1, &s);
+    modify_nested(&t);
+    assert(t.0 == 1);
+    assert(s.a == 23);
+    assert(o.unwrap() == 123);
+
+    let o = Some(0);
+    let s = Struct{a: 0, b: &o};
+    let t = (0, &s);
+    modify_nested(&t);
+    assert(t.0 == 0);
+    assert(s.a == 0);
+    assert(o.is_none());
+
+    let o = None;
+    let s = Struct{a: 0, b: &o};
+    let t = (0, &s);
+    modify_nested(&t);
+    assert(t.0 == -1);
+    assert(s.a == -2);
+    assert(o.is_none());
+}
+
+#[test]
+pub fn test_modify_copy() {
+    let o = Some(123);
+    match o {
+        // NOTE: `p` is a reference to a field of a copy of `o`, so the
+        //   assignment here does not change `o`.
+        Some(&p) => *p = -1,
+        None => (),
+    }
+    assert(o.unwrap() == 123);
+}

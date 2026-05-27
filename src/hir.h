@@ -1457,6 +1457,7 @@ struct HirTuplePat {
 
 struct HirBindingPat {
     HIR_PAT_HEADER;
+    paw_Bool is_ref : 1;
     struct HirIdent ident;
 };
 

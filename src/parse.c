@@ -249,7 +249,7 @@ static unsigned right_prec(enum InfixOp op)
     return kInfixPrec[op].right;
 }
 
-static enum UnOp get_unop(TokenKind kind)
+static enum UnOp get_unop(struct Lex *lex, TokenKind kind)
 {
     switch (kind) {
         case '-':
@@ -260,6 +260,10 @@ static enum UnOp get_unop(TokenKind kind)
             return UN_BNOT;
         case '*':
             return UN_DEREF;
+        case TK_AMPER2:
+            lex->t.kind = '&';
+            lex->t2.kind = '&';
+            // (fallthrough)
         case '&':
             return UN_ADDROF;
         default:
@@ -756,12 +760,12 @@ static struct AstPat *wildcard_pat(struct Lex *lex)
 static struct AstPat *ref_pat(struct Lex *lex)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
-    skip(lex); // "*" token
+    skip(lex); // "&" token
     struct AstPat *referent = pattern(lex);
     return NEW_NODE(lex, ref_pat, span_from(lex, start), next_id(lex), referent);
 }
 
-static struct AstPat *ptr_pat(struct Lex *lex)
+static struct AstPat *deref_pat(struct Lex *lex)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
     skip(lex); // "*" token
@@ -857,7 +861,7 @@ static struct AstPat *alternative_pat(struct Lex *lex)
         case '&':
             return ref_pat(lex);
         case '*':
-            return ptr_pat(lex);
+            return deref_pat(lex);
         case '(':
             return tuple_pat(lex);
         default:
@@ -1826,7 +1830,7 @@ static struct AstExpr *infix_expr(struct Lex *lex, struct AstExpr *lhs, unsigned
 typedef struct AstExpr *(ExprParser)(struct Lex *);
 static struct AstExpr *parse_expr(struct Lex *lex, unsigned prec, ExprParser parser)
 {
-    unsigned op = get_unop(lex->t.kind);
+    unsigned op = get_unop(lex, lex->t.kind);
     struct AstExpr *expr = op == NOT_UNOP
                                ? parser(lex)
                                : unop_expr(lex, op);

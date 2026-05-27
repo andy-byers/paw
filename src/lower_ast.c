@@ -1080,7 +1080,12 @@ static struct HirPat *LowerRefPat(struct LowerAst *L, struct AstRefPat *p)
     if (!HirIsBindingPat(referent))
         pawErr_generic_error(ENV(L), L->m->name, p->span,
                 "reference can only be applied to a binding pattern");
-    return NEW_NODE(L, ref_pat, p->span, p->id, referent);
+    struct HirBindingPat *binding = HirGetBindingPat(referent);
+    if (binding->is_ref)
+        pawErr_generic_error(ENV(L), L->m->name, p->span,
+                "only one `&` is allowed on a binding");
+    binding->is_ref = PAW_TRUE;
+    return referent;
 }
 
 static struct HirPat *LowerPtrPat(struct LowerAst *L, struct AstPtrPat *p)
