@@ -61,6 +61,12 @@ struct MatchState {
     struct PatState *ps;
 };
 
+struct Type3 {
+    IrType *a;
+    IrType *b;
+    IrType *c;
+};
+
 // Common state for type-checking routines
 struct TypeChecker {
     struct Pool *pool;
@@ -71,9 +77,17 @@ struct TypeChecker {
     struct MatchState *ms;
     struct BlockState *bs;
     struct HirModule const *pm;
+
+    // used to defer insertion of type of `Index::index` method for object/index
+    // type pairs into hash map until all types have been determined (inference
+    // types cannot be hashed)
+    struct Type3List *defer_index;
+
     struct Hir *hir;
     paw_Env *P;
 };
+
+DEFINE_LIST(struct TypeChecker, Type3List, struct Type3)
 
 static IrType *new_ptr(struct TypeChecker *T, IrType *pointee)
 {
@@ -507,6 +521,15 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     IrType *result = check_operand(T, d->body);
     bs.result = unify_types(T, d->span, result, bs.result);
     unify_types(T, d->span, bs.result, ret);
+
+    K_LIST_XFOREACH (T->defer_index, struct Type3 const, t) {
+        IrType *a = pawU_normalize_projections(T->U, t->a);
+        IrType *b = pawU_normalize_projections(T->U, t->b);
+        IrType *c = pawU_normalize_projections(T->U, t->c);
+        struct IrType2 const type2 = {a, b};
+        IrType2Map_insert(T->C, T->C->indexes, type2, c);
+    }
+    T->defer_index->count = 0;
 
     leave_block(T);
     T->rs = rs.outer;
@@ -1673,8 +1696,11 @@ static IrType *find_index_fn_aux(struct TypeChecker *T, IrType *target, IrType *
             target, trait, SCAN_STR(T->C, "index"));
 
     if (inst != NULL) {
-        struct IrType2 const type2 = {target, index};
-        IrType2Map_insert(T->C, T->C->indexes, type2, inst->inst);
+        Type3List_push(T, T->defer_index, (struct Type3){
+                    .a = target,
+                    .b = index,
+                    .c = inst->inst,
+                });
         return inst->inst;
     }
     return NULL;
@@ -2311,6 +2337,7 @@ void pawP_check_types(struct Compiler *C)
         .U = C->U,
         .C = C,
     };
+    T.defer_index = Type3List_new(&T);
 
     void pawU_run_unit_tests(struct Unifier *U);
     pawU_run_unit_tests(C->U);

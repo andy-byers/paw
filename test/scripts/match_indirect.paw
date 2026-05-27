@@ -123,7 +123,7 @@ pub fn test_modify_copy() {
     let o = Some(123);
     match o {
         // NOTE: `p` is a reference to a field of a copy of `o`, so the
-        //   assignment here does not change `o`.
+        //   assignment here does not change the value of local `o`.
         Some(&p) => *p = -1,
         None => (),
     }

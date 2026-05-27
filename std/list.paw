@@ -225,12 +225,36 @@ impl<T> AsPtr<T> for List<T> {
 
 impl<T: Default> List<T> {
     pub fn with_length(length: int) -> mem::Result<Self> {
+        if length < 0 {
+            panic("list length must be nonnegative");
+        }
         let result = List::new();
         result.reserve(length)?;
         for i in 0..length {
             result.push(T::default())?;
         }
         Ok(result)
+    }
+
+    pub fn set_length(*self, length: int) -> mem::Result<()> {
+        if length < 0 {
+            panic("list length must be nonnegative");
+        }
+        if length < self.len() {
+            for ri in length..self.len() {
+                // TODO: get ptr::drop to work! this workaround won't work for "pinned" types
+                let _ = ptr::read(&self[self.len() - ri - 1]);
+//                ptr::drop(&self[self.len() - ri - 1]);
+            }
+        } else {
+            self.reserve(length)?;
+            for i in self.len()..length {
+                let elem = ptr::add(self.as_ptr(), i);
+                ptr::write(elem, T::default());
+            }
+        }
+        self.length = length;
+        Ok(())
     }
 }
 

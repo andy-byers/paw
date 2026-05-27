@@ -660,7 +660,7 @@ impl<T: Clone + Increment> Iterator for RangeFrom<T> {
 }
 
 
-pub struct RangeTo<T: Compare<T>> {
+pub struct RangeTo<T> {
     pub end: T,
 }
 
