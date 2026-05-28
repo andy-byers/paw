@@ -59,29 +59,30 @@ pub fn main() -> Result<(), mem::OutOfMemory> {
 
 ### Containers
 ```paw
-pub fn main() {
-    let list = Vec::new(); // [int]
+use hashmap;
+use io;
+use list;
+use mem;
+
+fn example() -> Result<(), mem::OutOfMemory> {
+    let list = list::List::new();
 
     // add a single element to the end
-    list.push(1); // [1]
+    list.push(1)?;
 
-    // concatenate with another list
-    list ++= [2, 3, 4]; // [1, 2, 3, 4]
-
-
-    let map = Map::new(); // [char: int]
+    let map = hashmap::HashMap::new();
 
     // add a few key-value pairs
-    map['a'] = 1;
-    map['b'] = 2;
-    map['c'] = 3;
+    map.insert('a', "(A)")?;
+    map.insert('b', "(B)")?;
+    map.insert('c', "(C)")?;
 
     match map.get('a') {
-        Some(v) => println("map['a'] = \{v}"),
+        Some(v) => io::println(v),
         None => panic("not found"),
     }
 
-    assert(map.get_or('d', 4) == 4);
+    map.remove('a');
 }
 ```
 
@@ -95,7 +96,7 @@ Methods and associated functions can be attached using an [`impl` block](#impl-b
 ```paw
 struct Statistic {
     pub name: String, // accessible from anywhere
-    value: float, // only accessible from a method
+    value: float, // only accessible from within the same module
 }
 ```
 
@@ -107,9 +108,11 @@ In the example below, an instance of `Expr` must contain space for an integer la
 ```paw
 pub enum Expr {
     Zero,
-    Succ(Expr),
-    Add(Expr, Expr)
+    Succ(*Expr),
+    Add(*Expr, *Expr)
 }
+
+impl Copy for Expr {}
 
 // import variants into the global value namespace
 use Expr::*;
@@ -118,16 +121,16 @@ pub fn eval(e: Expr) -> int {
     // match expressions must be exhaustive
     match e {
         Zero => 0,
-        Succ(x) => eval(x) + 1,
-        Add(x, y) => eval(x) + eval(y),
+        Succ(*x) => eval(x) + 1,
+        Add(*x, *y) => eval(x) + eval(y),
     }
 }
 
 pub fn three() -> int {
     let zero = Zero;
-    let one = Succ(zero);
-    let two = Add(one, one);
-    eval(Add(one, two))
+    let one = Succ(&zero);
+    let two = Add(&one, &one);
+    eval(Add(&one, &two))
 }
 ```
 
@@ -257,16 +260,16 @@ A panic can also be caused by calling the `panic` builtin function.
 + [ ] `#[must_use]` or similar annotation on type declarations
 + [ ] allow linking in a custom "panic handler" for platforms where the default panic handler doesn't make sense (no OS to return back to, nowhere for error messages to go, etc.)
 + [ ] prevent duplicate methods across compatible inherent impl blocks
-+ [ ] make sure to complain when generic params not mentioned on context of impl block. i.e. `impl<T> Trait<T> for Type {...}` is an error if `Type` has generic parameters.
++ [x] make sure to complain when generic params not mentioned on context of impl block. i.e. `impl<T> Trait<T> for Type {...}` is an error if `Type` has generic parameters.
 + [ ] add overflow checks for `paw_Int` operations during constant folding and codegen
++ [ ] remove dependency on clang (as a linker driver) and invoke linker manually
++ [ ] report multiple errors per invocation of compiler, emit warnings
 
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
 + Generic type parameters on type aliases can't be constrained with trait bounds
 + Type aliases need check for cycles. Also, compiler crashes when it encounters type alias in RHS that hasn't been defined yet.
 + Edge cases exist related to impl blocks and traits
-+ Need to keep track of source-to-source mappings that result from IR transformations (e.g. when ForExpr AST node is lowered into a Loop + Match)
-+ Don't throw errors in 'lex.c'. Return a token of type `TK_ERROR` and let the parser handle it. Allows for more sensible error messages.
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
     + See TODO comment in `test_error.c` `test_divergence` function
-+ Remove dependency on clang (as a linker driver) and invoke linker manually
+

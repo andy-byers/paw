@@ -191,7 +191,6 @@ static void validate_type_args(struct Resolver *R, enum AstDeclKind kind, AstDec
     int const num_args = count_nonitem_args(segment.args);
     if (generics != NULL && segment.args == NULL)
         RESOLVER_ERROR(R, ExpectedTypeArguments,
-                .what = SCAN_STR(R->C, decl_kind(kind)),
                 .name = segment.ident.name,
                 .span = segment.ident.span);
 

@@ -773,8 +773,8 @@ static void FormatIncorrectTypeArityError(paw_Env *P, struct IncorrectTypeArityE
 static void FormatExpectedTypeArgumentsError(paw_Env *P, struct ExpectedTypeArgumentsError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
-    pawL_add_fstring(P, buffer, "expected type arguments on %s `%s`",
-            error->what->text, error->name->text);
+    pawL_add_fstring(P, buffer, "expected type arguments on `%s`",
+            error->name->text);
 }
 
 static void FormatUnexpectedTypeArgumentsError(paw_Env *P, struct UnexpectedTypeArgumentsError const *error, Buffer *buffer)

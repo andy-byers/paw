@@ -5,77 +5,78 @@ pub fn deref_pattern() {
     assert(123 == match &123 {*v => v});
 }
 
-// TODO: need to box nested Num
-//enum Num {
-//    Zero,
-//    Succ(Num),
-//    Add(Num, Num),
-//    Mul(Num, Num),
-//}
-//
-//fn check_basic(a: Num) -> int {
-//    match a {
-//        Num::Zero            => 1,
-//        Num::Succ(Num::Zero) => 2,
-//        Num::Succ(x)         => 3,
-//        x                    => 4,
-//    }
-//}
-//
-//#[test]
-//pub fn test_basic() {
-//    assert(check_basic(Num::Zero) == 1);
-//    assert(check_basic(Num::Succ(Num::Zero)) == 2);
-//    assert(check_basic(Num::Succ(Num::Succ(Num::Zero))) == 3);
-//    assert(check_basic(Num::Add(Num::Zero, Num::Zero)) == 4);
-//}
-//
-//fn eval_num(num: Num) -> int {
-//    match num {
-//        Num::Zero      => 0,
-//        Num::Succ(x)   => eval_num(x) + 1,
-//        Num::Add(x, y) => eval_num(x) + eval_num(y),
-//        Num::Mul(x, y) => eval_num(x) * eval_num(y),
-//    }
-//}
-//
-//#[test]
-//pub fn test_bindings() {
-//    let zero = Num::Zero;
-//    let one = Num::Succ(zero);
-//    let two = Num::Succ(one);
-//
-//    assert(eval_num(zero) == 0);
-//    assert(eval_num(one) == 1);
-//    assert(eval_num(two) == 2);
-//    assert(eval_num(Num::Add(one, two)) == 3);
-//    assert(eval_num(Num::Mul(one, two)) == 2);
-//    assert(eval_num(Num::Mul(Num::Succ(two), two)) == 6);
-//}
-//
-//fn check_jacobs_example(a: Num) -> int {
-//    match a {
-//        Num::Add(Num::Zero, Num::Zero) => 1,
-//        Num::Mul(Num::Zero, x)         => 2,
-//        Num::Add(Num::Succ(x), y)      => 3,
-//        Num::Mul(x, Num::Zero)         => 4,
-//        Num::Mul(Num::Add(x, y), z)    => 5,
-//        Num::Add(x, Num::Zero)         => 6,
-//        x                              => 7,
-//    }
-//}
-//
-//#[test]
-//pub fn test_jacobs_example() {
-//    let check = check_jacobs_example;
-//    assert(check(Num::Add(Num::Zero, Num::Zero)) == 1);
-//    assert(check(Num::Mul(Num::Zero, Num::Zero)) == 2);
-//    assert(check(Num::Add(Num::Succ(Num::Zero), Num::Zero)) == 3);
-//    assert(check(Num::Mul(Num::Succ(Num::Zero), Num::Zero)) == 4);
-//    assert(check(Num::Mul(Num::Add(Num::Zero, Num::Zero), Num::Succ(Num::Zero))) == 5);
-//    assert(check(Num::Add(Num::Add(Num::Zero, Num::Zero), Num::Zero)) == 6);
-//    assert(check(Num::Mul(Num::Succ(Num::Zero), Num::Succ(Num::Zero))) == 7);
-//}
+enum Num {
+    Zero,
+    Succ(*Num),
+    Add(*Num, *Num),
+    Mul(*Num, *Num),
+}
+
+impl Copy for Num {}
+
+fn check_basic(a: Num) -> int {
+    match a {
+        Num::Zero             => 1,
+        Num::Succ(*Num::Zero) => 2,
+        Num::Succ(x)          => 3,
+        x                     => 4,
+    }
+}
+
+#[test]
+pub fn test_basic() {
+    assert(check_basic(Num::Zero) == 1);
+    assert(check_basic(Num::Succ(&Num::Zero)) == 2);
+    assert(check_basic(Num::Succ(&Num::Succ(&Num::Zero))) == 3);
+    assert(check_basic(Num::Add(&Num::Zero, &Num::Zero)) == 4);
+}
+
+fn eval_num(num: Num) -> int {
+    match num {
+        Num::Zero => 0,
+        Num::Succ(*x) => eval_num(x) + 1,
+        Num::Add(*x, *y) => eval_num(x) + eval_num(y),
+        Num::Mul(*x, *y) => eval_num(x) * eval_num(y),
+    }
+}
+
+#[test]
+pub fn test_bindings() {
+    let zero = Num::Zero;
+    let one = Num::Succ(&zero);
+    let two = Num::Succ(&one);
+
+    assert(eval_num(zero) == 0);
+    assert(eval_num(one) == 1);
+    assert(eval_num(two) == 2);
+    assert(eval_num(Num::Add(&one, &two)) == 3);
+    assert(eval_num(Num::Mul(&one, &two)) == 2);
+    assert(eval_num(Num::Mul(&Num::Succ(&two), &two)) == 6);
+}
+
+fn check_jacobs_example(a: Num) -> int {
+    match a {
+        Num::Add(*Num::Zero, *Num::Zero) => 1,
+        Num::Mul(*Num::Zero, x)          => 2,
+        Num::Add(*Num::Succ(x), y)       => 3,
+        Num::Mul(x, *Num::Zero)          => 4,
+        Num::Mul(*Num::Add(x, y), z)     => 5,
+        Num::Add(x, *Num::Zero)          => 6,
+        x                                => 7,
+    }
+}
+
+#[test]
+pub fn test_jacobs_example() {
+    let check = check_jacobs_example;
+    assert(check(Num::Add(&Num::Zero, &Num::Zero)) == 1);
+    assert(check(Num::Mul(&Num::Zero, &Num::Zero)) == 2);
+    assert(check(Num::Add(&Num::Succ(&Num::Zero), &Num::Zero)) == 3);
+    assert(check(Num::Mul(&Num::Succ(&Num::Zero), &Num::Zero)) == 4);
+    assert(check(Num::Mul(&Num::Add(&Num::Zero, &Num::Zero), &Num::Succ(&Num::Zero))) == 5);
+    assert(check(Num::Add(&Num::Add(&Num::Zero, &Num::Zero), &Num::Zero)) == 6);
+    assert(check(Num::Mul(&Num::Succ(&Num::Zero), &Num::Succ(&Num::Zero))) == 7);
+}
 
 struct Single<T> {
     pub value: T,
@@ -230,23 +231,23 @@ pub fn test_int_binding() {
     assert(match_int_binding(10) == 20);
 }
 
-//fn check_match_tuple(target: (int, str, float)) -> int {
-//    match target {
-//        (2, "two", 3.0) => {return 1;},
-//        (1, "three", 3.0) => {return 2;},
-//        (1, "two", 3.0) => {return 3;},
-//        (1, "two", 4.0) => {return 4;},
-//        (_, _, _) => {return 5;}
-//    };
-//}
-//
-//#[test]
-//pub fn test_tuple() {
-//    assert(check_match_tuple((2, "two", 3.0)) == 1);
-//    assert(check_match_tuple((1, "three", 3.0)) == 2);
-//    assert(check_match_tuple((1, "two", 3.0)) == 3);
-//    assert(check_match_tuple((1, "two", 4.0)) == 4);
-//}
+fn check_match_tuple(target: (int, int, float)) -> int {
+    match target {
+        (2, 2, 3.0) => {return 1;},
+        (1, 3, 3.0) => {return 2;},
+        (1, 2, 3.0) => {return 3;},
+        (1, 2, 4.0) => {return 4;},
+        (_, _, _) => {return 5;}
+    };
+}
+
+#[test]
+pub fn test_tuple() {
+    assert(check_match_tuple((2, 2, 3.0)) == 1);
+    assert(check_match_tuple((1, 3, 3.0)) == 2);
+    assert(check_match_tuple((1, 2, 3.0)) == 3);
+    assert(check_match_tuple((1, 2, 4.0)) == 4);
+}
 
 fn check_match_tuple_2(target: (int, int)) -> int {
     match target {

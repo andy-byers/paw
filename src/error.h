@@ -455,7 +455,6 @@
     X(ExpectedTypeArguments, ERR_CATEGORY_TYPE, \
         Str const *modname; \
         struct SourceSpan span; \
-        Str const *what; \
         Str const *name; \
     ) \
     X(UnexpectedTypeArguments, ERR_CATEGORY_TYPE, \

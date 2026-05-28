@@ -856,6 +856,9 @@ static void test_impl_error(void)
     test_compiler_status(kErrTraitImplUnknownAssocItem, "extra_trait_method",
             GENERATE("", "fn f() {}"), "");
 #undef GENERATE
+
+    test_compiler_status(kErrExpectedTypeArguments, "missing_type_args",
+            "struct Struct<T>; pub trait Trait {} impl Trait for Struct {}", "");
 }
 
 static void test_definite_assignment(void)
