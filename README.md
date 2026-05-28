@@ -252,7 +252,7 @@ A panic can also be caused by calling the `panic` builtin function.
 
 ## Roadmap
 + [ ] add `mut` keyword
-+ [ ] associated types (needed especially for iterator ergonomics)
++ [x] associated types (needed especially for iterator ergonomics)
 + [ ] const generics
 + [ ] `#[must_use]` or similar annotation on type declarations
 + [ ] allow linking in a custom "panic handler" for platforms where the default panic handler doesn't make sense (no OS to return back to, nowhere for error messages to go, etc.)
@@ -263,6 +263,7 @@ A panic can also be caused by calling the `panic` builtin function.
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
 + Generic type parameters on type aliases can't be constrained with trait bounds
++ Type aliases need check for cycles. Also, compiler crashes when it encounters type alias in RHS that hasn't been defined yet.
 + Edge cases exist related to impl blocks and traits
 + Need to keep track of source-to-source mappings that result from IR transformations (e.g. when ForExpr AST node is lowered into a Loop + Match)
 + Don't throw errors in 'lex.c'. Return a token of type `TK_ERROR` and let the parser handle it. Allows for more sensible error messages.

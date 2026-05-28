@@ -721,6 +721,17 @@
 //    }
 //}
 
+struct A<T> {
+    a: (T, T, T),
+    b: (T,)
+}
+
+use list;
+
 #[test]
 pub fn test() {
+    let x = list::List::new();
+    x.push(A{a: (1, 2, 3), b: (4,)}).unwrap();
+    assert(x[0].b.0 == 4);
 }
+

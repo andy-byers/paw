@@ -327,7 +327,8 @@ static void test_syntax_error(void)
     test_compiler_status(kErrInvalidSelector, "invalid_selector", "", "let x = \"abc\".1e-2;");
     test_compiler_status(kErrEmptyVariantFieldList, "empty_variant_field_list", "enum E {X()}", "");
     test_compiler_status(kErrFunctionTypeDecl, "function_type_decl", "type F = fn();", "");
-    test_compiler_status(kErrNone, "trait_bounds_on_alias_generic", "struct Struct<X>;", "type T<X: Hash> = Struct<X>;");
+    test_compiler_status(kErrUnsupported, "trait_bounds_on_alias_generic", "struct Struct<X>; type T<X: Hash> = Struct<X>;", "");
+    test_compiler_status(kErrUnsupported, "trait_bounds_on_local_alias_generic", "struct Struct<X>;", "type T<X: Hash> = Struct<X>;");
     test_compiler_status(kErrExpectedCommaSeparator, "expected_comma_separator", "struct X {a: int b: int}", "");
     test_compiler_status(kErrNonprimitiveAnnotationValue, "nonprimitive_annotation_value", "#[anno=(1,)] fn f() {}", "");
 

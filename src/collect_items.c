@@ -643,6 +643,7 @@ static void collect_constraints_from(struct ItemCollector *X, struct HirDecl *de
         collect_generic_bounds(X, d->generics, constraints);
         if (constraints->count > 0)
             COLLECTOR_ERROR(X, Unsupported, d->span);
+        collect_type_decl(X, d);
     } else if (HirIsFnDecl(decl)) {
         struct HirFnDecl const *d = HirGetFnDecl(decl);
         collect_generic_bounds(X, d->generics, constraints);
@@ -655,15 +656,6 @@ static void collect_constraints(struct ItemCollector *X, struct HirModule m)
 {
     K_LIST_XFOREACH (m.items, struct HirDecl *const, p)
         collect_constraints_from(X, *p);
-}
-
-static void collect_type_aliases(struct ItemCollector *X, struct HirModule m)
-{
-    K_LIST_XFOREACH (m.items, struct HirDecl *const, p) {
-        if (HirIsTypeDecl(*p)) {
-            collect_type_decl(X, HirGetTypeDecl(*p));
-        }
-    }
 }
 
 static void ensure_not_recursive(struct ItemCollector *X, IrType *type)
@@ -713,33 +705,6 @@ static void add_predicates_and_obligations(struct ItemCollector *X, DeclId did) 
 {
     IrGenericArgs *params = pawIr_get_generic_args(X->C, did);
     pawIr_solver_add_predicates_from(X->C->S, did, params);
-//    IrConstraints const *constraints = pawIr_get_constraints(X->C, did);
-//    K_LIST_XFOREACH (constraints, struct IrConstraint const, c) {
-//        switch (c->kind) {
-//            case IR_CONSTRAINT_IMPL_TRAIT: {
-//                struct HirGenericDecl const *d = HirGetGenericDecl(
-//                        pawHir_get_decl(X->hir, c->parent));
-//                ensure_type_is_well_formed(X, d->span, c->impl.type);
-//                ensure_trait_is_well_formed(X, d->span, c->impl.trait);
-//                pawIr_solver_add_predicate(X->C->S, c->impl.type, c->impl.trait,
-//                        (struct IrObligationCause){
-//                            .span = d->span,
-//                        });
-//                break;
-//            }
-//            case IR_CONSTRAINT_TYPE_EQUALS: {
-//                struct HirGenericDecl const *d = HirGetGenericDecl(
-//                        pawHir_get_decl(X->hir, c->parent));
-//                ensure_type_is_well_formed(X, d->span, c->eq.lhs);
-//                ensure_type_is_well_formed(X, d->span, c->eq.rhs);
-//                pawIr_solver_add_norm_target(X->C->S, c->eq.lhs, c->eq.rhs,
-//                        (struct IrObligationCause){
-//                            .span = d->span,
-//                        });
-//                break;
-//            }
-//        }
-//    }
 }
 
 struct AssocItemInfo {
@@ -926,7 +891,7 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
             add_predicates_and_obligations(X, d->did);
 
             IrType *rhs = GET_NODE_TYPE(X->C, d->rhs);
-            pawIr_solver_add_obligations_from_type(X->C->S, rhs);
+            ensure_type_is_well_formed(X, d->span, rhs);
         } else if (HirIsFnDecl(*p)) {
             struct HirFnDecl const *d = HirGetFnDecl(*p);
             add_predicates_and_obligations(X, d->did);
@@ -937,7 +902,6 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
     }
 }
 
-// TODO: likely need multiple passes to resolve local type aliases that reference one another, needs tests...
 static void collect_local_type_decl(struct HirVisitor *V, struct HirTypeDecl *d)
 {
     struct ItemCollector *X = V->ud;
@@ -948,6 +912,8 @@ static void collect_local_type_decl(struct HirVisitor *V, struct HirTypeDecl *d)
     collect_generic_bounds(X, d->generics, constraints);
     IrType *rhs = collect_type_decl(X, d);
 
+    if (constraints->count > 0)
+        COLLECTOR_ERROR(X, Unsupported, d->span);
     IrConstraintsMap_insert(X->C, X->C->ir_constraints, d->did, constraints);
 
     pawIr_push_solver(X->C);
@@ -999,7 +965,6 @@ static void validate_main_signature(struct ItemCollector *X, struct SourceSpan s
                 "return type of \"main\" must have type \"()\" or \"int\"");
 }
 
-#include"stdio.h"
 static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 {
     struct IrFnDef *fn_def = pawIr_get_fn_def(X->C, d->did);
@@ -1011,9 +976,7 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 
     IrGenericArgs *args = IrGenericArgs_new(X->C);
     IrTypeList *params = pawHir_collect_decl_types(X->C, d->params);
-    if(d->did.value==184){
-    puts("hi");
-    }
+
     IrType *result = collect_type(X, d->result);
     IrType *type = pawIr_new_signature(X->C, d->did, args);
     SET_TYPE(X, d->id, type);
@@ -1038,7 +1001,6 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
         fn_def->result = result;
         fn_def->params = params;
         fn_def->context = X->ctx;
-        // TODO: needs to be set here b/c parent ID is not known until right before this function is called. figure out earlier
         fn_def->parent = d->parent_id;
         transfer_fn_annotations(X, d, fn_def);
         set_def_type(X, d->did, type);
@@ -1172,7 +1134,6 @@ static void collect_item_defs(struct ItemCollector *X, struct HirModule m)
                 break;
         }
 
-        solve_all_obligations(X);
         pawIr_pop_solver(X->C);
     }
 }
@@ -1187,7 +1148,6 @@ static void run_collection_phases(struct ItemCollector *X, struct Hir *hir)
         }
 
     MAP_MODULES(X, hir->modules, collect_nominal_types);
-    MAP_MODULES(X, hir->modules, collect_type_aliases);
     MAP_MODULES(X, hir->modules, collect_constraints);
     MAP_MODULES(X, hir->modules, collect_definitions);
     MAP_MODULES(X, hir->modules, collect_item_defs);

@@ -30,14 +30,9 @@ pub fn test_container() {
     type L<T> = list::List<T>;
     let l: L<int> = L::new();
     list_function(l);
-
-    type M<K: Hash + Equals<K>, V> = hashmap::HashMap<K, V>;
-    let m: M<int, str> = M::new();
-    map_function(m);
 }
 
 fn list_function<T>(list: list::List<T>) {}
-fn map_function<K: Hash + Equals<K>, V>(map: hashmap::HashMap<K, V>) {}
 
 
 struct Mono {
