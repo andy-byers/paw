@@ -359,11 +359,6 @@ static struct HirExpr *into_range(struct LowerAst *L, struct AstRangeExpr *e)
     struct HirExprList *items = HirExprList_new(L->hir);
     push_literal_field(L, "start", lhs, items);
     push_literal_field(L, "end", rhs, items);
-    if (e->is_inclusive) {
-        // inclusive range has an extra field ".done" used for iterator functionality
-        struct HirExpr *kfalse = NEW_NODE(L, basic_lit, span, next_node_id(L), I2V(0), BUILTIN_BOOL);
-        push_literal_field(L, "done", kfalse, items);
-    }
     return NEW_NODE(L, composite_lit, span, e->id, path, items);
 }
 

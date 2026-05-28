@@ -721,12 +721,6 @@
 //    }
 //}
 
-struct A<T> {
-    a: (T, T, T),
-    b: (T,)
-}
-
-
 #[test]
 pub fn test() {
 }

@@ -680,25 +680,9 @@ impl RangeFull {
 }
 
 
-// TODO: `done` should not be public
 pub struct RangeInclusive<T> {
     pub start: T,
     pub end: T,
-    pub done: bool,
-}
-
-impl<T> RangeInclusive<T> {
-    pub fn new(start: T, end: T) -> Self {
-        Self{start, end, done: false}
-    }
-
-    pub fn start(*self) -> T {
-        self.start
-    }
-
-    pub fn end(*self) -> T {
-        self.end
-    }
 }
 
 impl<T: Compare<T>> RangeInclusive<T> {
@@ -707,7 +691,19 @@ impl<T: Compare<T>> RangeInclusive<T> {
     }
 }
 
-impl<T: Clone + Compare<T> + Increment> Iterator for RangeInclusive<T> {
+pub struct RangeInclusiveIter<T> {
+    start: T,
+    end: T,
+    done: bool,
+}
+
+impl<T> RangeInclusiveIter<T> {
+    pub fn new(start: T, end: T) -> Self {
+        Self{start, end, done: false}
+    }
+}
+
+impl<T: Clone + Compare<T> + Increment> Iterator for RangeInclusiveIter<T> {
     type Item = T;
 
     fn next(*self) -> Option<Self::Item> {
@@ -722,6 +718,19 @@ impl<T: Clone + Compare<T> + Increment> Iterator for RangeInclusive<T> {
         } else {
             self.done = true;
             None
+        }
+    }
+}
+
+impl<T: Clone + Compare<T> + Increment> IntoIterator for RangeInclusive<T> {
+    type Item = T;
+    type IntoIter = RangeInclusiveIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        RangeInclusiveIter{
+            start: self.start, 
+            end: self.end, 
+            done: false,
         }
     }
 }
@@ -782,4 +791,3 @@ pub trait IndexRange<Idx> {
     type Output;
     fn index_range(*self, index: Idx) -> []Self::Output;
 }
-
