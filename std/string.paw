@@ -35,6 +35,10 @@ impl String {
         self.inner.capacity()
     }
 
+    pub fn as_str(*self) -> str {
+        str::from_raw_parts(self.as_ptr(), self.len())
+    }
+
     pub fn from_raw_parts(start: *char, length: int, capacity: int) -> Self {
         Self{inner: List::from_raw_parts(start, length, capacity)}
     }

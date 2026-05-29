@@ -737,6 +737,12 @@ static void FormatCannotInferError(paw_Env *P, struct CannotInferError const *er
     pawL_add_fstring(P, buffer, "unable to infer type");
 }
 
+static void FormatCannotInferConstError(paw_Env *P, struct CannotInferConstError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer, "unable to infer constant");
+}
+
 static void FormatCyclicTypeError(paw_Env *P, struct CyclicTypeError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
@@ -1223,8 +1229,7 @@ static void FormatFalseConstObligationError(paw_Env *P, struct FalseConstObligat
 static void FormatUnsatisfiedConstObligationError(paw_Env *P, struct UnsatisfiedConstObligationError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
-    pawL_add_fstring(P, buffer, "unsatisfiable const obligation for `%s`",
-            error->name->text);
+    pawL_add_fstring(P, buffer, "unsatisfiable const obligation");
 }
 
 static void FormatConstantDivideByZeroError(paw_Env *P, struct ConstantDivideByZeroError const *error, Buffer *buffer)

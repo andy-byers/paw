@@ -150,7 +150,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
         MirBlock const block = push_basic_block(mir, &block_data);
 
         MirSwitchArmList_push(mir, arms, (struct MirSwitchArm){
-                .k = pawMir_kcache_add(mir, mir->kcache, I2V(discr), BUILTIN_INT),
+                .k = pawMir_kcache_add_value(mir, mir->kcache, I2V(discr), pawIr_new_int(mir->C)),
             });
 
         MirBlockList_push(mir, last_data->successors, block);

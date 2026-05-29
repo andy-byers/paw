@@ -94,24 +94,43 @@ static IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneric *t)
     return IR_CAST_TYPE(t);
 }
 
-static IrType *finalize_type(struct MonoCollector *M, IrType *type)
+typedef void *(*Finalizer)(struct MonoCollector *M, void *node, struct Substitution);
+static void *finalize(struct MonoCollector *M, Finalizer f, void *node)
 {
     struct GenericsState *gs = M->gs;
-    type = pawU_normalize_projections(M->C->U, type);
     while (gs != NULL) {
         if (gs->before != NULL) {
-            struct Substitution subst = {
-                .params = gs->before,
-                .args = gs->after,
-            };
-            struct IrTypeFolder F;
-            pawIr_type_folder_init(&F, M->C, &subst);
-            F.FoldGeneric = substitute_generic;
-            type = pawIr_fold_type(&F, type);
+            node = f(M, node,
+                    (struct Substitution){
+                        .params = gs->before,
+                        .args = gs->after,
+                    });
         }
         gs = gs->outer;
     }
+    return node;
+}
+
+static void *type_finalizer(struct MonoCollector *M, void *type, struct Substitution subst)
+{
+    type = pawU_normalize_projections(M->C->U, type);
+    type = pawP_substitute(M->C, type, subst);
     return pawU_normalize_projections(M->C->U, type);
+}
+
+static void *const_finalizer(struct MonoCollector *M, void *konst, struct Substitution subst)
+{
+    return pawP_substitute_const(M->C, konst, subst);
+}
+
+static IrType *finalize_type(struct MonoCollector *M, IrType *type)
+{
+    return finalize(M, type_finalizer, type);
+}
+
+static IrConst *finalize_const(struct MonoCollector *M, IrConst *konst)
+{
+    return finalize(M, const_finalizer, konst);
 }
 
 static IrGenericArg finalize_arg(struct MonoCollector *M, IrGenericArg arg)
@@ -234,7 +253,7 @@ static struct Mir *allocate_drop_template(struct MonoCollector *M, IrType *type,
 
     struct MirBlockData *data = pawMir_new_block(mir, MIR_SCOPE(0));
     MirBlockDataList_push(mir, mir->blocks, data);
-    MirConstant k = pawMir_kcache_add(mir, mir->kcache, I2V(0), BUILTIN_UNIT);
+    MirConstant k = pawMir_kcache_add_value(mir, mir->kcache, I2V(0), pawIr_new_unit(M->C));
     struct MirPlace const value = {.kind = MIR_PLACE_CONSTANT, .k = k};
     MirInstructionList_push(mir, data->instructions, pawMir_new_alloc_local(mir, TODO, SCAN_STR(M->C, "(result)"), result_local));
     MirInstructionList_push(mir, data->instructions, pawMir_new_alloc_local(mir, TODO, SCAN_STR(M->C, "self"), self_local));
@@ -456,7 +475,16 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
     {
         struct MirConstantData const *pdata;
         K_LIST_FOREACH (base->kcache->data, pdata) {
-            pawMir_kcache_add(inst, inst->kcache, pdata->value, pdata->kind);
+            IrConst *konst = pdata->data->kind == IR_CONST_DECL
+                ? finalize_const(M, pdata->data) : pdata->data;
+
+            if (konst->kind == IR_CONST_VALUE) {
+                struct IrConstValue const value = konst->value;
+                pawMir_kcache_add_value(inst, inst->kcache, value.value, value.type);
+            } else {
+                paw_assert(konst->kind == IR_CONST_DECL);
+                pawMir_kcache_add_param(inst, inst->kcache, konst->param.did);
+            }
         }
     }
 
@@ -640,13 +668,18 @@ static struct Mir *monomorphize(struct MonoCollector *M, IrType *type)
 
 static IrType *collect_other(struct MonoCollector *M, IrType *type)
 {
-    IrType *const *ptarget;
-    K_LIST_FOREACH (M->other, ptarget) {
-        if (pawU_unify(M->C->U, *ptarget, type) == 0)
-            return *ptarget;
-    }
-    IrTypeList_push(M->C, M->other, type);
+    // TODO: do we need to cannonicalize types here? don't think so... only need to do so for callables so can remove cannonicalize_adt as well
     return type;
+//    struct Unifier *U = M->C->U;
+//    IrType *const *ptarget;
+//    K_LIST_FOREACH (M->other, ptarget) {
+//        int const position = pawU_current_position(U);
+//        if (pawU_unify(U, *ptarget, type) == 0)
+//            return *ptarget;
+//        pawU_undo_unifications(U, position);
+//    }
+//    IrTypeList_push(M->C, M->other, type);
+//    return type;
 }
 
 static IrType *collect_type(struct IrTypeFolder *F, IrType *type)

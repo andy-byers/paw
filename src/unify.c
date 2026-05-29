@@ -20,9 +20,20 @@
 
 #define UID(Type_) (IrGetInfer(Type_)->index)
 
+enum InferenceVarKind {
+    IVAR_TYPE,
+    IVAR_CONST,
+};
+
+union InferenceVarData {
+    IrType *type;
+    IrConst *konst;
+};
+
 typedef struct InferenceVar {
     struct SourceSpan span;
-    IrType *type;
+    union InferenceVarData data;
+    enum InferenceVarKind kind;
     int parent;
     int rank;
     int id;
@@ -32,27 +43,24 @@ enum Action {
     ACTION_CREATE,
     ACTION_SET_RANK,
     ACTION_SET_PARENT,
-    ACTION_SET_TYPE,
+    ACTION_SET_DATA,
 };
 
 struct UndoEntry {
     enum Action action;
     int ivar_id;
     union {
-        IrType *old_type;
+        union InferenceVarData old_data;
         int old_parent;
         int old_rank;
     };
+    struct UnificationTable *table;
 };
 
 DEFINE_LIST(struct Compiler, VarList, struct InferenceVar)
 DEFINE_LIST(struct Compiler, UndoLog, struct UndoEntry)
 
 typedef struct UnificationTable {
-    struct UnificationTable *outer;
-
-    UndoLog *undo;
-
     // vector of type variables
     struct VarList *ivars;
 
@@ -60,87 +68,114 @@ typedef struct UnificationTable {
     int depth;
 } UnificationTable;
 
-static void record_create(struct Unifier *U, InferenceVar ivar)
+struct UnificationContext {
+    struct UnificationContext *outer;
+    struct UnificationTable *type_vars;
+    struct UnificationTable *const_vars;
+    struct UndoLog *undo;
+};
+
+static void record_create(struct Unifier *U, struct UnificationTable *table, InferenceVar ivar)
 {
-    UndoLog_push(U->C, U->table->undo, (struct UndoEntry){
+    UndoLog_push(U->C, U->ctx->undo, (struct UndoEntry){
                 .action = ACTION_CREATE,
                 .ivar_id = ivar.id,
+                .table = table,
             });
 }
 
-static void record_set_parent(struct Unifier *U, InferenceVar *ivar)
+static void record_set_parent(struct Unifier *U, struct UnificationTable *table, InferenceVar *ivar)
 {
-    UndoLog_push(U->C, U->table->undo, (struct UndoEntry){
+    UndoLog_push(U->C, U->ctx->undo, (struct UndoEntry){
                 .action = ACTION_SET_PARENT,
                 .old_parent = ivar->parent,
                 .ivar_id = ivar->id,
+                .table = table,
             });
 }
 
-static void record_set_rank(struct Unifier *U, InferenceVar *ivar)
+static void record_set_rank(struct Unifier *U, struct UnificationTable *table, InferenceVar *ivar)
 {
-    UndoLog_push(U->C, U->table->undo, (struct UndoEntry){
+    UndoLog_push(U->C, U->ctx->undo, (struct UndoEntry){
                 .action = ACTION_SET_RANK,
                 .old_rank = ivar->rank,
                 .ivar_id = ivar->id,
+                .table = table,
             });
 }
 
-static void record_set_type(struct Unifier *U, InferenceVar *ivar)
+static void record_set_data(struct Unifier *U, struct UnificationTable *table, InferenceVar *ivar)
 {
-    UndoLog_push(U->C, U->table->undo, (struct UndoEntry){
-                .action = ACTION_SET_TYPE,
-                .old_type = ivar->type,
+    UndoLog_push(U->C, U->ctx->undo, (struct UndoEntry){
+                .action = ACTION_SET_DATA,
+                .old_data = ivar->data,
                 .ivar_id = ivar->id,
+                .table = table,
             });
 }
 
 static void dump_snapshot(struct Unifier *U)
 {
     printf("Unification table snapshot\n");
-    for (int i = 0; i < U->table->ivars->count; ++i) {
-        InferenceVar const ivar = VarList_get(U->table->ivars, i);
-        printf("IVAR(%d, rank=%d, parent=%d, type=%s)\n", ivar.id, ivar.rank,
-                ivar.parent, pawIr_print_type(U->C, ivar.type));
+    for (int i = 0; i < U->ctx->type_vars->ivars->count; ++i) {
+        InferenceVar const ivar = VarList_get(U->ctx->type_vars->ivars, i);
+        printf("TypeVar(%d, rank=%d, parent=%d, type=%s)\n", ivar.id, ivar.rank,
+                ivar.parent, pawIr_print_type(U->C, ivar.data.type));
+    }
+    for (int i = 0; i < U->ctx->const_vars->ivars->count; ++i) {
+        InferenceVar const ivar = VarList_get(U->ctx->const_vars->ivars, i);
+        printf("TypeVar(%d, rank=%d, parent=%d)\n", ivar.id, ivar.rank, ivar.parent);
     }
 }
 
-static InferenceVar *get_ivar(struct Unifier *U, int index)
+static InferenceVar *get_ivar(UnificationTable const *table, int index)
 {
-    paw_assert(index < U->table->ivars->count);
-    return &K_LIST_AT(U->table->ivars, index);
+    paw_assert(index < table->ivars->count);
+    return &K_LIST_AT(table->ivars, index);
+}
+
+static InferenceVar *get_type_var(struct UnificationContext const *ctx, int index)
+{
+    paw_assert(index < ctx->type_vars->ivars->count);
+    return &K_LIST_AT(ctx->type_vars->ivars, index);
+}
+
+static InferenceVar *get_const_var(struct UnificationContext const *ctx, int index)
+{
+    paw_assert(index < ctx->const_vars->ivars->count);
+    return &K_LIST_AT(ctx->const_vars->ivars, index);
 }
 
 void pawU_undo_unifications(struct Unifier *U, int position)
 {
-    while (U->table->undo->count > position) {
-        struct UndoEntry const entry = UndoLog_last(U->table->undo);
-        UndoLog_pop(U->table->undo);
+    while (U->ctx->undo->count > position) {
+        struct UndoEntry const entry = UndoLog_last(U->ctx->undo);
+        UndoLog_pop(U->ctx->undo);
 
         switch (entry.action) {
             case ACTION_CREATE:
-                VarList_pop(U->table->ivars);
+                VarList_pop(entry.table->ivars);
                 break;
             case ACTION_SET_PARENT:
-                get_ivar(U, entry.ivar_id)
+                get_ivar(entry.table, entry.ivar_id)
                     ->parent = entry.old_parent;
                 break;
             case ACTION_SET_RANK:
-                get_ivar(U, entry.ivar_id)
+                get_ivar(entry.table, entry.ivar_id)
                     ->rank = entry.old_rank;
                 break;
-            case ACTION_SET_TYPE:
-                get_ivar(U, entry.ivar_id)
-                    ->type = entry.old_type;
+            case ACTION_SET_DATA:
+                get_ivar(entry.table, entry.ivar_id)
+                    ->data = entry.old_data;
                 break;
         }
     }
 }
 
-static void overwrite_type(struct Unifier *U, InferenceVar *ivar, IrType *src)
+static void overwrite_data(struct Unifier *U, InferenceVar *ivar, union InferenceVarData data)
 {
-    record_set_type(U, ivar);
-    ivar->type = src;
+    record_set_data(U, U->ctx->type_vars, ivar);
+    ivar->data = data;
 }
 
 static void debug_log(struct Unifier *U, char const *what, IrType *a, IrType *b)
@@ -161,34 +196,34 @@ static void debug_log(struct Unifier *U, char const *what, IrType *a, IrType *b)
 #endif
 }
 
-static InferenceVar *find_root(struct Unifier *U, int id)
+static InferenceVar *find_root(struct Unifier *U, struct UnificationTable *table, int id)
 {
-    InferenceVar *ivar = get_ivar(U, id);
+    InferenceVar *ivar = get_ivar(table, id);
     int up = ivar->parent;
     if (up != ivar->id) {
-        record_set_parent(U, ivar);
-        up = find_root(U, up)->id;
+        record_set_parent(U, table, ivar);
+        up = find_root(U, table, up)->id;
         ivar->parent = up;
     }
-    return get_ivar(U, up);
+    return get_ivar(table, up);
 }
 
-static void link_roots(struct Unifier *U, InferenceVar *a, InferenceVar *b)
+static void link_roots(struct Unifier *U, struct UnificationTable *table, InferenceVar *a, InferenceVar *b)
 {
     if (a->rank < b->rank) {
-        record_set_parent(U, a);
+        record_set_parent(U, table, a);
         a->parent = b->id;
     } else {
-        record_set_parent(U, b);
-        record_set_rank(U, a);
+        record_set_parent(U, table, b);
+        record_set_rank(U, table, a);
         b->parent = a->id;
         a->rank += a->rank == b->rank;
     }
 }
 
-static void check_occurs(struct Unifier *U, InferenceVar *ivar, IrType *type)
+static void check_type_occurs(struct Unifier *U, InferenceVar *ivar, IrType *type)
 {
-    if (ivar->type == type) {
+    if (ivar->data.type == type) {
         paw_assert(IrIsInfer(type));
         UNIFIER_ERROR(U, CyclicType, ivar->span);
     }
@@ -198,38 +233,54 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, IrType *type)
             K_LIST_XFOREACH (adt->args, IrGenericArg const, p) {
                 if (IrGenericArg_is_type(*p)) {
                     IrType *t = IrGenericArg_get_type(*p);
-                    check_occurs(U, ivar, t);
+                    check_type_occurs(U, ivar, t);
                 }
             }
         }
     }
 }
 
+static void check_const_occurs(struct Unifier *U, InferenceVar *ivar, IrConst *konst)
+{
+    if (ivar->data.konst == konst) {
+        UNIFIER_ERROR(U, CyclicType, ivar->span);
+    }
+}
+
 static int unify_var_type(struct Unifier *U, InferenceVar *ivar, IrType *type)
 {
-    debug_log(U, "unify_var_type", ivar->type, type);
+    debug_log(U, "unify_var_type", ivar->data.type, type);
 
-    check_occurs(U, ivar, type);
-    overwrite_type(U, ivar, type);
+    check_type_occurs(U, ivar, type);
+    record_set_data(U, U->ctx->type_vars, ivar);
+    ivar->data.type = type;
     return 0;
 }
 
-static int unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
+static int unify_var_const(struct Unifier *U, InferenceVar *ivar, IrConst *konst)
 {
-    a = find_root(U, a->id);
-    b = find_root(U, b->id);
+    check_const_occurs(U, ivar, konst);
+    record_set_data(U, U->ctx->const_vars, ivar);
+    ivar->data.konst = konst;
+    return 0;
+}
 
-    debug_log(U, "unify_var_var", a->type, b->type);
+static int unify_var_var(struct Unifier *U, UnificationTable *table, InferenceVar *a, InferenceVar *b)
+{
+    a = find_root(U, table, a->id);
+    b = find_root(U, table, b->id);
 
-    if (a != b) link_roots(U, a, b);
+    debug_log(U, "unify_var_var", a->data.type, b->data.type);
+
+    if (a != b) link_roots(U, table, a, b);
     return 0;
 }
 
 static IrType *normalize_unknown(struct Unifier *U, IrType *type)
 {
-    UnificationTable *table = U->table;
+    UnificationTable *table = U->ctx->type_vars;
     paw_assert(table->depth == IrGetInfer(type)->depth);
-    IrType *root = find_root(U, UID(type))->type;
+    IrType *root = find_root(U, table, UID(type))->data.type;
     if (IrIsInfer(root)) return root;
     return pawU_normalize(U, root);
 }
@@ -276,7 +327,16 @@ static IrTypeList *normalize_list(struct Unifier *U, IrTypeList *types)
 
 IrConst *pawU_normalize_const(struct Unifier *U, IrConst *k)
 {
-    PAW_UNUSED(U); // TODO: do something here...
+    if (k->kind == IR_CONST_PENDING) {
+        IrConst *const *evaluated = IrResolvedConstants_get(U->C, U->C->resolved_constants, k->pending.did);
+        if (evaluated != NULL) return *evaluated;
+    } else if (k->kind == IR_CONST_INFER) {
+        UnificationTable *table = U->ctx->const_vars;
+        paw_assert(table->depth == k->infer.depth);
+        IrConst *root = find_root(U, table, k->infer.index)->data.konst;
+        if (root->kind == IR_CONST_INFER) return root;
+        return pawU_normalize_const(U, root);
+    }
     return k;
 }
 
@@ -369,7 +429,7 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
             IrType *result = pawU_normalize_projections(U, t->result);
             return pawIr_new_fn_ptr(U->C, params, result);
         }
-        case kIrArray: { // TODO: normalize "length"
+        case kIrArray: {
             struct IrArray const *t = IrGetArray(type);
             IrType *elem = pawU_normalize_projections(U, t->type);
             IrConst *length = pawU_normalize_const(U, t->length);
@@ -398,7 +458,7 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
                 struct IrProjection const *t = IrGetProjection(type);
                 if (!IrIsInfer(t->type)) {
                     Str const *name = pawIr_get_assoc_item(U->C, t->assoc)->name;
-                    struct Instantiation *assoc = pawIr_find_assoc_type_projection(
+                    struct Instantiation const *assoc = pawIr_find_assoc_type_projection(
                             U->C, t->type, t->trait, name);
                     if (assoc != NULL) type = assoc->inst;
                 }
@@ -419,7 +479,7 @@ static int unify_lists(struct Unifier *U, IrTypeList *a, IrTypeList *b)
     if (a->count != b->count) return -1;
     IrType *const *pa, *const *pb;
     K_LIST_ZIP (a, pa, b, pb) {
-        if (pawU_unify(U, *pa, *pb))
+        if (pawU_unify(U, *pa, *pb) != 0)
             return -1;
     }
     return 0;
@@ -427,13 +487,16 @@ static int unify_lists(struct Unifier *U, IrTypeList *a, IrTypeList *b)
 
 static int unify_adt(struct Unifier *U, struct IrAdt *a, struct IrAdt *b)
 {
-    if (a->did.value != b->did.value) return -1;
-    if (a->args == NULL) return 0;
+    if (a->did.value != b->did.value)
+        return -1;
 
-    IrGenericArg const *x, *y;
-    K_LIST_ZIP(a->args, x, b->args, y) {
-        if (pawIr_unify(U->C, *x, *y))
-            return -1;
+    if (a->args != NULL) {
+        IrGenericArg const *x, *y;
+        paw_assert(a->args->count == b->args->count);
+        K_LIST_ZIP(a->args, x, b->args, y) {
+            if (pawIr_unify(U->C, *x, *y) != 0)
+                return -1;
+        }
     }
 
     return 0;
@@ -444,7 +507,9 @@ static int unify(struct Unifier *U, IrType *a, IrType *b);
 static int unify_array(struct Unifier *U, struct IrArray *a, struct IrArray *b)
 {
     // TODO: need to undo const obligations, maybe store in IrSolver. the problem is they can be long-lived
-    pawIr_add_const_obligation(U->C, a->length, b->length);
+    if (pawU_unify_const(U, a->length, b->length) != 0)
+        pawIr_add_const_obligation(U->C, a->length, b->length,
+                (struct IrConstObligationCause){0});
     return pawU_unify(U, a->type, b->type);
 }
 
@@ -525,20 +590,87 @@ int pawU_unify(struct Unifier *U, IrType *a, IrType *b)
     a = pawU_normalize(U, a);
     b = pawU_normalize(U, b);
     if (IrIsInfer(a)) {
-        InferenceVar *va = get_ivar(U, UID(a));
+        InferenceVar *va = get_type_var(U->ctx, UID(a));
         if (IrIsInfer(b)) {
-            InferenceVar *vb = get_ivar(U, UID(b));
-            return unify_var_var(U, va, vb);
+            InferenceVar *vb = get_type_var(U->ctx, UID(b));
+            return unify_var_var(U, U->ctx->type_vars, va, vb);
         } else {
             return unify_var_type(U, va, b);
         }
     } else if (IrIsInfer(b)) {
-        InferenceVar *vb = get_ivar(U, UID(b));
+        InferenceVar *vb = get_type_var(U->ctx, UID(b));
         return unify_var_type(U, vb, a);
     } else {
         // Both types are known: make sure they are compatible. This is the
         // only time we can encounter an error.
         return unify_types(U, a, b);
+    }
+    return 0;
+}
+
+static int unify_const_value(struct Unifier *U, struct IrConstValue a, struct IrConstValue b)
+{
+    if (pawU_unify(U, a.type, b.type) != 0)
+        return -1;
+
+    switch (IR_KINDOF(a.type)) {
+#define EQ(Lhs_, Rhs_, Field_) ((Lhs_).value.Field_ == (Rhs_).value.Field_ ? 0 : -1)
+
+        case kIrUnit:
+            return 0;
+        case kIrBool:
+            return EQ(a, b, b);
+        case kIrChar:
+            return EQ(a, b, c);
+        case kIrInt:
+            return EQ(a, b, i);
+        default:
+            paw_assert(IrIsFloat(a.type));
+            return EQ(a, b, f);
+
+#undef EQ
+    }
+}
+
+static int unify_const_param(struct Unifier *U, struct IrConstDecl a, struct IrConstDecl b)
+{
+    return P_ID_EQUALS(NULL, a.did, b.did) ? 0 : -1;
+}
+
+static int unify_const_pending(struct Unifier *U, struct IrConstPending a, struct IrConstPending b)
+{
+    return P_ID_EQUALS(NULL, a.did, b.did) ? 0 : -1;
+}
+
+static int unify_consts(struct Unifier *U, IrConst *a, IrConst *b)
+{
+    a = pawU_normalize_const(U, a);
+    b = pawU_normalize_const(U, b);
+    if (a->kind != b->kind)
+        return -1;
+    if (a->kind == IR_CONST_VALUE)
+        return unify_const_value(U, a->value, b->value);
+    if (a->kind == IR_CONST_PENDING)
+        return unify_const_pending(U, a->pending, b->pending);
+    paw_assert(a->kind == IR_CONST_DECL);
+    return unify_const_param(U, a->decl, b->decl);
+}
+
+int pawU_unify_const(struct Unifier *U, IrConst *a, IrConst *b)
+{
+    if (a->kind == IR_CONST_INFER) {
+        InferenceVar *va = get_const_var(U->ctx, a->infer.index);
+        if (b->kind == IR_CONST_INFER) {
+            InferenceVar *vb = get_const_var(U->ctx, b->infer.index);
+            return unify_var_var(U, U->ctx->const_vars, va, vb);
+        } else {
+            return unify_var_const(U, va, b);
+        }
+    } else if (b->kind == IR_CONST_INFER) {
+        InferenceVar *vb = get_const_var(U->ctx, b->infer.index);
+        return unify_var_const(U, vb, a);
+    } else {
+        return unify_consts(U, a, b);
     }
     return 0;
 }
@@ -556,60 +688,95 @@ static int equate(struct Unifier *U, IrType *a, IrType *b)
 
 int pawU_current_position(struct Unifier *U)
 {
-    return U->table->undo->count;
+    return U->ctx->undo->count;
 }
 
 void pawU_discard_variables(struct Unifier *U)
 {
-    U->table->undo->count = U->table->ivars->count = 0;
+    U->ctx->undo->count
+        = U->ctx->type_vars->ivars->count
+        = U->ctx->const_vars->ivars->count
+        = 0;
 }
 
 IrType *pawU_new_unknown(struct Unifier *U, struct SourceSpan span)
 {
-    UnificationTable *table = U->table;
+    UnificationTable *table = U->ctx->type_vars;
 
     int const index = table->ivars->count;
     IrType *type = pawIr_new_infer(U->C, table->depth, index);
     InferenceVar const ivar = {
+        .kind = IVAR_TYPE,
         .id = index,
         .parent = index,
-        .type = type,
+        .data.type = type,
         .rank = 0,
         .span = span,
     };
     VarList_push(U->C, table->ivars, ivar);
 
-    record_create(U, ivar);
+    record_create(U, table, ivar);
     return type;
+}
+
+IrConst *pawU_new_const_var(struct Unifier *U, struct SourceSpan span)
+{
+    UnificationTable *table = U->ctx->const_vars;
+
+    int const index = table->ivars->count;
+    IrConst *konst = pawIr_new_const_infer(U->C, table->depth, index);
+    InferenceVar const ivar = {
+        .kind = IVAR_CONST,
+        .id = index,
+        .parent = index,
+        .data.konst = konst,
+        .rank = 0,
+        .span = span,
+    };
+    VarList_push(U->C, table->ivars, ivar);
+
+    record_create(U, table, ivar);
+    return konst;
+}
+
+static UnificationTable *new_unification_table(struct Unifier *U)
+{
+    UnificationTable *table = P_ALLOC(U->C, NULL, 0, sizeof(*table));
+    table->ivars = VarList_new(U->C);
+    table->depth = U->depth;
+    return table;
 }
 
 void pawU_enter_binder(struct Unifier *U, Str const *modname)
 {
-    UnificationTable *table = P_ALLOC(U->C, NULL, 0, sizeof(UnificationTable));
-    table->ivars = VarList_new(U->C);
-    table->undo = UndoLog_new(U->C);
-    table->depth = U->depth;
-    table->outer = U->table;
+    struct UnificationContext *ctx = P_ALLOC(U->C, NULL, 0, sizeof(*ctx));
+    ctx->type_vars = new_unification_table(U);
+    ctx->const_vars = new_unification_table(U);
+    ctx->undo = UndoLog_new(U->C);
+    ctx->outer = U->ctx;
     U->modname = modname;
-    U->table = table;
+    U->ctx = ctx;
     ++U->depth;
 }
 
-static void check_table(struct Unifier *U)
+static void check_context(struct Unifier *U, struct UnificationContext *ctx)
 {
-    UnificationTable *table = U->table;
-    for (int i = 0; i < table->ivars->count; ++i) {
-        InferenceVar const *var = get_ivar(U, i);
-        IrType *type = pawU_normalize(U, var->type);
+    K_LIST_XFOREACH (ctx->type_vars->ivars, InferenceVar const, var) {
+        IrType *type = pawU_normalize(U, var->data.type);
         if (IrIsInfer(type))
             UNIFIER_ERROR(U, CannotInfer, var->span);
+    }
+    K_LIST_XFOREACH (ctx->const_vars->ivars, InferenceVar const, var) {
+        IrConst *konst = pawU_normalize_const(U, var->data.konst);
+        if (konst->kind == IR_CONST_INFER)
+            UNIFIER_ERROR(U, CannotInferConst, var->span);
     }
 }
 
 void pawU_leave_binder(struct Unifier *U)
 {
-    check_table(U);
-    U->table = U->table->outer;
+    check_context(U, U->ctx);
+    U->ctx = U->ctx->outer;
     --U->depth;
 
     U->modname = NULL;

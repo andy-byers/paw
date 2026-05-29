@@ -168,6 +168,6 @@ impl<T> IndexRange<RangeToInclusive<int>> for []T {
 impl<T> IndexRange<RangeFull> for []T {
     type Output = T;
     fn index_range(*self, idx: RangeFull) -> []T {
-        self.to_slice()
+        *self
     }
 }

@@ -414,14 +414,17 @@ int paw_ptr_memcmp(void *env, void *lhs, void *rhs, paw_Int size)
     return memcmp(lhs, rhs, (size_t)size);
 }
 
-void paw_builtin_check_bounds(void *env, paw_Int index, paw_Int length)
+void paw_builtin_check_bounds(paw_Int index, paw_Int length)
 {
-    PAW_UNUSED(env);
     if (index < 0 || index >= length) {
-        char message[] = "index out of bounds";
+        char buffer[200]; // space for error message
+        int const n = snprintf(buffer, PAW_COUNTOF(buffer),
+                "index %" PRId64 " out of bounds for sequence of length %" PRId64 "\n",
+                index, length);
+        PAW_ASSERT((size_t)n < PAW_COUNTOF(buffer));
         paw_panic_(NULL, (paw_Slice){
-                .start = message,
-                .length = PAW_LENGTHOF(message),
+                .start = buffer,
+                .length = n,
             });
     }
 }

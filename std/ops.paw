@@ -481,58 +481,6 @@ impl<T> Index<int> for []T {
     }
 }
 
-//impl<T> Index<Range<int>> for []T {
-//    type Output = []T;
-//    fn index(*self, index: Range<int>) -> []T {
-//        check_bounds(index.start, self.len(), false);
-//        check_bounds(index.end, self.len(), true);
-//        let ptr = ptr::add(self.as_ptr(), index.start);
-//        from_raw_parts(ptr, index.end - index.start)
-//    }
-//}
-//
-//impl<T> Index<RangeInclusive<int>> for []T {
-//    type Output = []T;
-//    fn index(*self, index: RangeInclusive<int>) -> []T {
-//        check_bounds(index.start, self.len(), false);
-//        check_bounds(index.end, self.len(), false);
-//        let ptr = ptr::add(self.as_ptr(), index.start);
-//        from_raw_parts(ptr, index.end - index.start + 1)
-//    }
-//}
-//
-//impl<T> Index<RangeFrom<int>> for []T {
-//    type Output = []T;
-//    fn index(*self, index: RangeFrom<int>) -> []T {
-//        check_bounds(index.start, self.len(), false);
-//        let ptr = ptr::add(self.as_ptr(), index.start);
-//        from_raw_parts(ptr, self.len() - index.start)
-//    }
-//}
-//
-//impl<T> Index<RangeTo<int>> for []T {
-//    type Output = []T;
-//    fn index(*self, index: RangeTo<int>) -> []T {
-//        check_bounds(index.end, self.len(), true);
-//        from_raw_parts(self.as_ptr(), index.end)
-//    }
-//}
-//
-//impl<T> Index<RangeToInclusive<int>> for []T {
-//    type Output = []T;
-//    fn index(*self, index: RangeToInclusive<int>) -> []T {
-//        check_bounds(index.end, self.len(), false);
-//        from_raw_parts(self.as_ptr(), index.end + 1)
-//    }
-//}
-//
-//impl<T> Index<RangeFull> for []T {
-//    type Output = []T;
-//    fn index(*self, index: RangeFull) -> []T {
-//        self
-//    }
-//}
-
 impl<T> ToSlice<T> for []T {
     fn to_slice(*self) -> []T {
         *self
@@ -557,7 +505,6 @@ impl Compare<Self> for []char {
     }
 }
 
-// TODO: would be nice to figure out a way to replace with "builtin_rawcmp(...) == 0"
 impl<T: Equals<T>> Equals<Self> for []T {
     fn eq(*self, rhs: *Self) -> bool {
         if self.len() != rhs.len() {

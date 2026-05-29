@@ -48,7 +48,7 @@
 #define FLOAT_BINARY_OP(Result_, X_, Y_, Op_) \
     V_SET_FLOAT(Result_, V_FLOAT(X_) Op_ V_FLOAT(Y_))
 
-paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v, Value *pr)
+paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, union IrValue v, union IrValue *pr)
 {
     PAW_UNUSED(C);
     switch (op) {
@@ -70,7 +70,7 @@ paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v,
     return PAW_TRUE;
 }
 
-paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceSpan span, enum MirBinaryOpKind op, Value x, Value y, Value *pr)
+paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceSpan span, enum MirBinaryOpKind op, union IrValue x, union IrValue y, union IrValue *pr)
 {
     switch (op) {
         case MIR_BINARY_CEQ:

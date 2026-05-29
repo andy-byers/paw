@@ -71,6 +71,15 @@ pub fn extend_list_with_list() {
     assert(list2[3] == "c");
 }
 
+#[test]
+pub fn list_from_array() {
+    let list = List::from_array([
+        "abc", "def"
+    ]).unwrap();
+    assert(list[0] == "abc");
+    assert(list[1] == "def");
+}
+
 //fn are_lists_eq(a: [int], b: [int]) -> bool {
 //    if #a != #b { return false; }
 //    for i in 0..#a {

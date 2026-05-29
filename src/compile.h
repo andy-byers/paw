@@ -115,14 +115,6 @@ struct Builtin {
     NodeId id;
 };
 
-struct GlobalInfo {
-    enum BuiltinKind b_kind : 8;
-    Str *name;
-    Value value;
-    int modno;
-    int index;
-};
-
 typedef struct Map Map;
 
 struct Compiler {
@@ -181,13 +173,12 @@ struct Compiler {
     struct IrDeclArgs *ir_decl_args;
     struct IrTraitBounds *ir_trait_bounds;
     struct IrPendingConstants *pending_constants;
+    struct IrResolvedConstants *resolved_constants;
     struct IrConstObligations *const_obligations;
     struct NodeMap *self_types;
     struct IrType2Map *indexes;
 
     struct SourceSpanRefs *source_span_refs;
-
-    struct GlobalList *globals;
 
     // TODO: use this in the frontend as well?
     struct {
@@ -398,7 +389,6 @@ DEFINE_MAP(struct Compiler, SourceSpanRefs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, 
 DEFINE_MAP_ITERATOR(StringMap, Str const *, void *)
 DEFINE_MAP_ITERATOR(HirTypeMap, NodeId, struct IrType *)
 
-DEFINE_LIST(struct Compiler, GlobalList, struct GlobalInfo)
 DEFINE_LIST(struct Compiler, BodyList, struct Mir *)
 DEFINE_LIST(struct Compiler, LineBuffer, char const *)
 

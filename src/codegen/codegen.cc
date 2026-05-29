@@ -702,6 +702,58 @@ public:
             && pawS_eq(mir->name, SCAN_STR(C, name));
     }
 
+    void generate_array_uninit(Mir const *mir, Fn *fn)
+    {
+        auto const *irargs = IR_GENERIC_ARGS(mir->type);
+        auto const *irconst = IrGenericArg_get_const(IrGenericArgs_get(irargs, 0));
+        auto *irtype = IrGenericArg_get_type(IrGenericArgs_get(irargs, 1));
+        paw_assert(irconst->kind == IR_CONST_VALUE);
+        paw_assert(IrIsInt(irconst->value.type));
+        auto const N = irconst->value.value.u;
+
+        State state(X, fn);
+
+        auto *array_ty = X.get_array_ty(*get_type(irtype), N);
+        auto *array = llvm::PoisonValue::get(array_ty);
+        state.create_return(array);
+    }
+
+    void generate_array_zeros(Mir const *mir, Fn *fn)
+    {
+        auto const *irargs = IR_GENERIC_ARGS(mir->type);
+        auto const *irconst = IrGenericArg_get_const(IrGenericArgs_get(irargs, 0));
+        auto *irtype = IrGenericArg_get_type(IrGenericArgs_get(irargs, 1));
+        paw_assert(irconst->kind == IR_CONST_VALUE);
+        paw_assert(IrIsInt(irconst->value.type));
+        auto const N = irconst->value.value.u;
+
+        State state(X, fn);
+
+        auto *array_ty = X.get_array_ty(*get_type(irtype), N);
+        auto *array = llvm::Constant::getNullValue(array_ty);
+        state.create_return(array);
+    }
+
+    // fn ops::repeat<const N: int, T: Copy>(value: T) -> [N]T
+    void generate_array_repeat(Mir const *mir, Fn *fn)
+    {
+        auto const *irargs = IR_GENERIC_ARGS(mir->type);
+        auto const *irconst = IrGenericArg_get_const(IrGenericArgs_get(irargs, 0));
+        auto *irtype = IrGenericArg_get_type(IrGenericArgs_get(irargs, 1));
+        paw_assert(irconst->kind == IR_CONST_VALUE);
+        paw_assert(IrIsInt(irconst->value.type));
+        auto const N = irconst->value.value.u;
+
+        State state(X, fn);
+
+        auto *array_ty = X.get_array_ty(*get_type(irtype), N);
+        llvm::Value *array = llvm::UndefValue::get(array_ty);
+        for (auto i = 0U; i < N; ++i)
+            array = B->CreateInsertValue(array, fn->get_arg(0), i);
+
+        state.create_return(array);
+    }
+
     // fn ptr::read<T>(p: *T) -> T
     void generate_ptr_read(Mir const *mir, Fn *fn)
     {
@@ -806,6 +858,15 @@ public:
             paw_Bool const materialize_return = builtin_kind(fptr->result) != BUILTIN_INT;
             create_main_fn_wrapper(*fn, materialize_return);
         }
+
+        if (is_core_op(mir, "array", "repeat"))
+            generate_array_repeat(mir, fn);
+
+        if (is_core_op(mir, "array", "uninit"))
+            generate_array_uninit(mir, fn);
+
+        if (is_core_op(mir, "array", "zeros"))
+            generate_array_zeros(mir, fn);
 
         if (is_core_op(mir, "ptr", "read"))
             generate_ptr_read(mir, fn);
@@ -1010,20 +1071,21 @@ public:
 
     llvm::Value *create_constant(MirConstantData kdata)
     {
-        switch (kdata.kind) {
-            case BUILTIN_UNIT:
+        paw_assert(kdata.data->kind == IR_CONST_VALUE);
+        switch (IR_KINDOF(kdata.data->value.type)) {
+            case kIrUnit:
                 return X.create_unit();
-            case BUILTIN_BOOL:
-                return X.create_bool(kdata.value.i);
-            case BUILTIN_CHAR:
-                return X.create_char(kdata.value.c);
-            case BUILTIN_INT:
-                return X.create_int(kdata.value.i);
-            case BUILTIN_FLOAT:
-                return X.create_float(kdata.value.f);
+            case kIrBool:
+                return X.create_bool(kdata.data->value.value.i);
+            case kIrChar:
+                return X.create_char(kdata.data->value.value.c);
+            case kIrInt:
+                return X.create_int(kdata.data->value.value.i);
+            case kIrFloat:
+                return X.create_float(kdata.data->value.value.f);
             default:
-                paw_assert(kdata.kind == BUILTIN_STR);
-                return get_constant_str((::Str const *)kdata.value.p);
+                paw_assert(IrIsString(kdata.data->value.type));
+                return get_constant_str((::Str const *)kdata.data->value.value.i);
         }
     }
 
@@ -1944,18 +2006,19 @@ private:
     {
         auto const kdata = state_->mir_
             ->kcache->data->data[k.value];
-        switch (kdata.kind) {
-            case BUILTIN_BOOL:
-                return X.create_bool(kdata.value.i);
-            case BUILTIN_CHAR:
-                return X.create_char(kdata.value.c);
-            case BUILTIN_INT:
-                return X.create_int(kdata.value.i);
+        paw_assert(kdata.data->kind == IR_CONST_VALUE);
+        switch (IR_KINDOF(kdata.data->value.type)) {
+            case kIrBool:
+                return X.create_bool(kdata.data->value.value.i);
+            case kIrChar:
+                return X.create_char(kdata.data->value.value.c);
+            case kIrInt:
+                return X.create_int(kdata.data->value.value.i);
             default:
-                paw_assert(kdata.kind == BUILTIN_FLOAT);
+                paw_assert(IrIsFloat(kdata.data->value.type));
                 return llvm::cast<llvm::ConstantInt>(
                         llvm::ConstantExpr::getBitCast(
-                            X.create_float(kdata.value.f),
+                            X.create_float(kdata.data->value.value.f),
                             X.get_int_ty()));
         }
     }
@@ -1997,9 +2060,9 @@ private:
         auto *discr = operand(x.discr);
         for (int i = 0; i < x.arms->count; ++i) {
             auto const kdata = *mir_const_data((Mir *)state_->mir_, x.arms->data[i].k);
-            paw_assert(kdata.kind == BUILTIN_STR);
+            paw_assert(IrIsString(kdata.data->value.type));
 
-            auto *target = get_constant_str((::Str const *)kdata.value.p);
+            auto *target = get_constant_str((::Str const *)kdata.data->value.value.i);
             auto *cond = B->CreateICmpEQ(create_strcmp(discr, target), X.create_int(0));
 
             auto *false_block = llvm::BasicBlock::Create(*c, "", *fn);

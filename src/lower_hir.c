@@ -24,6 +24,14 @@
 
 #define TODO (struct SourceSpan){0}
 
+struct GlobalInfo {
+    Str *name;
+    struct IrConst *value;
+    struct IrType *type;
+    int modno;
+    int index;
+};
+
 struct MatchResult {
     BindingList *bindings;
     MirBlock b;
@@ -102,7 +110,10 @@ struct LowerHir {
     struct LabelList *labels;
     struct VarStack *stack;
     struct LocalMap *locals;
-    struct GlobalMap *globals;
+    struct {
+        struct GlobalMap *mapping;
+        struct GlobalList *values;
+    } globals;
 };
 
 // Throw an ICE if the types cannot be unified
@@ -152,6 +163,7 @@ DEFINE_MAP(struct LowerHir, LocalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId
 DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, int)
 DEFINE_MAP(struct LowerHir, VarPlaces, pawP_alloc, var_hash, var_equals, struct MatchVar, struct PlaceInfo)
 DEFINE_MAP(struct LowerHir, MatchResults, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct MatchResult)
+DEFINE_LIST(struct LowerHir, GlobalList, struct GlobalInfo)
 
 static Str const *get_modname(struct FunctionState *fs)
 {
@@ -331,16 +343,46 @@ static IrType *new_ptr(struct FunctionState *fs, IrType *type)
     return pawIr_new_ptr(fs->C, type);
 }
 
-static struct MirPlace new_constant(struct FunctionState *fs, struct SourceSpan span, Value value, enum BuiltinKind kind)
+static struct MirPlace new_const_value(struct FunctionState *fs, struct SourceSpan span, union IrValue value, IrType *type)
 {
-    MirConstant const k = pawMir_kcache_add(fs->mir, fs->mir->kcache, value, kind);
+    MirConstant const k = pawMir_kcache_add_value(fs->mir, fs->mir->kcache, value, type);
 
     return (struct MirPlace){
         .kind = MIR_PLACE_CONSTANT,
-        .type = get_builtin_type(fs->L, kind),
+        .type = type,
         .span = span,
         .k = k,
     };
+}
+
+static struct MirPlace new_const_unit(struct FunctionState *fs, struct SourceSpan span)
+{
+    return new_const_value(fs, span, (union IrValue){0}, pawIr_new_unit(fs->C));
+}
+
+static struct MirPlace new_const_bool(struct FunctionState *fs, struct SourceSpan span, paw_Bool b)
+{
+    return new_const_value(fs, span, (union IrValue){.b = b}, pawIr_new_bool(fs->C));
+}
+
+static struct MirPlace new_const_char(struct FunctionState *fs, struct SourceSpan span, paw_Char c)
+{
+    return new_const_value(fs, span, (union IrValue){.c = c}, pawIr_new_char(fs->C));
+}
+
+static struct MirPlace new_const_int(struct FunctionState *fs, struct SourceSpan span, paw_Int i)
+{
+    return new_const_value(fs, span, (union IrValue){.i = i}, pawIr_new_int(fs->C));
+}
+
+static struct MirPlace new_const_float(struct FunctionState *fs, struct SourceSpan span, paw_Float f)
+{
+    return new_const_value(fs, span, (union IrValue){.f = f}, pawIr_new_float(fs->C));
+}
+
+static struct MirPlace new_const_str(struct FunctionState *fs, struct SourceSpan span, Str const *s)
+{
+    return new_const_value(fs, span, (union IrValue){.s = s}, pawIr_new_string(fs->C));
 }
 
 static struct MirPlace new_local(struct FunctionState *fs, Str const *name, IrType *type)
@@ -702,7 +744,7 @@ static paw_Bool resolve_nonglobal(struct FunctionState *fs, NodeId id, struct No
 
 static struct MirPlace unit_literal(struct FunctionState *fs, struct SourceSpan span)
 {
-    return new_constant(fs, span, I2V(0), BUILTIN_UNIT);
+    return new_const_unit(fs, span);
 }
 
 static struct MirPlace never_place(struct FunctionState *fs, struct SourceSpan span)
@@ -912,7 +954,8 @@ static struct MirPlace lower_basic_lit(struct HirVisitor *V, struct HirLiteralEx
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    return new_constant(fs, e->span, e->basic.value, e->basic.code);
+    union IrValue const value = {.p = e->basic.value.p};
+    return new_const_value(fs, e->span, value, get_builtin_type(L, e->basic.code));
 }
 
 static struct MirPlace lower_tuple_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
@@ -1044,7 +1087,7 @@ static struct MirPlace lower_unit_variant(struct HirVisitor *V, struct HirPathEx
     struct FunctionState *fs = L->fs;
 
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const discr = new_constant(fs, e->span, I2V(index), BUILTIN_INT);
+    struct MirPlace const discr = new_const_int(fs, e->span, index);
     MirPlaceList_push(fs->mir, fields, discr);
 
     struct MirPlace const output = new_register(fs, get_type(L, e->id));
@@ -1058,10 +1101,10 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d);
 
 static struct MirPlace lookup_global_constant(struct LowerHir *L, struct HirConstDecl *d)
 {
-    int const *pid = GlobalMap_get(L, L->globals, d->did);
+    int const *pid = GlobalMap_get(L, L->globals.mapping, d->did);
     if (pid != NULL) {
-        struct GlobalInfo const info = GlobalList_get(L->C->globals, *pid);
-        return new_constant(L->fs, d->span, info.value, info.b_kind);
+        struct GlobalInfo const info = GlobalList_get(L->globals.values, *pid);
+        return new_const_value(L->fs, d->span, info.value->value.value, info.type);
     }
     lower_global_constant(L, d);
     return lookup_global_constant(L, d);
@@ -1070,6 +1113,35 @@ static struct MirPlace lookup_global_constant(struct LowerHir *L, struct HirCons
 static struct MirPlace lower_ascription_expr(struct HirVisitor *V, struct HirAscriptionExpr *e)
 {
     return lower_rvalue(V, e->expr);
+}
+
+static struct MirPlace get_const_generic_param(struct FunctionState *fs, DeclId did)
+{
+    int index;
+    struct MirConstantData const *k;
+    IrType *type = pawIr_get_def_type(fs->C, did);
+    MirConstantDataList *constants = fs->mir->kcache->data;
+    K_LIST_ENUMERATE (constants, index, k) {
+        if (k->data->kind == IR_CONST_DECL
+                && P_ID_EQUALS(NULL, k->data->param.did, did)) {
+            return (struct MirPlace){
+                .kind = MIR_PLACE_CONSTANT,
+                .k = MIR_CONST(index),
+                .type = type,
+            };
+        }
+    }
+
+    MirConstantDataList_push(fs->mir, constants,
+            (struct MirConstantData){
+                .data = pawIr_new_const_decl(fs->C, did),
+                .type = type,
+            });
+    return (struct MirPlace){
+        .kind = MIR_PLACE_CONSTANT,
+        .k = MIR_CONST(constants->count - 1),
+        .type = type,
+    };
 }
 
 static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
@@ -1097,9 +1169,7 @@ static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr 
     } else if (HirIsAdtDecl(decl)) {
         return lower_unit_struct(V, e);
     } else if (HirIsGenericDecl(decl)) {
-        // TODO: fetch const generic value from typesystem
-        // NEW_INSTR(fs, loadk, e->span, decl->hdr.did, output);
-        LOWERING_ERROR(L, Unsupported, e->span);
+        return get_const_generic_param(fs, decl->hdr.did);
     } else {
         NEW_INSTR(fs, global, e->span, output);
     }
@@ -1127,7 +1197,7 @@ static struct MirSwitchArmList *allocate_switch_arms(struct FunctionState *fs, M
 static struct MirPlace option_try_error(struct FunctionState *fs, struct SourceSpan span)
 {
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const discr = new_constant(fs, span, I2V(PAW_OPTION_NONE), BUILTIN_INT);
+    struct MirPlace const discr = new_const_int(fs, span, PAW_OPTION_NONE);
     MirPlaceList_push(fs->mir, fields, discr);
 
     struct MirPlace const output = new_register(fs, fs->result);
@@ -1176,7 +1246,7 @@ static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceS
     NEW_INSTR(fs, call, span, into_fn, into_args, into_error);
 
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const error_discr = new_constant(fs, span, I2V(PAW_RESULT_ERR), BUILTIN_INT);
+    struct MirPlace const error_discr = new_const_int(fs, span, PAW_RESULT_ERR);
     MirPlaceList_push(fs->mir, fields, error_discr);
     MirPlaceList_push(fs->mir, fields, into_error);
 
@@ -1217,7 +1287,7 @@ static struct MirPlace lower_try_expr(struct HirVisitor *V, struct HirTryExpr *e
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, input_bb, 1);
     terminate_switch(fs, expr_span, discr, arms, PAW_TRUE);
     struct MirSwitchArm *arm = &K_LIST_FIRST(arms);
-    arm->k = new_constant(fs, TODO, I2V(EXISTS), BUILTIN_INT).k;
+    arm->k = new_const_int(fs, TODO, EXISTS).k;
 
     set_current_bb(fs, get_last_successor(fs));
     struct MirPlace const value = emit_get_field(fs, expr_span,
@@ -1550,7 +1620,7 @@ static struct MirPlace lower_variant_constructor(struct HirVisitor *V, struct Hi
 
     // set the discriminant: an "int" residing in the first Value slot of the variant
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const discr = new_constant(fs, d->span, I2V(d->index), BUILTIN_INT);
+    struct MirPlace const discr = new_const_int(fs, d->span, d->index);
     MirPlaceList_push(fs->mir, fields, discr);
 
     struct HirExpr *const *pexpr;
@@ -2007,7 +2077,8 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, struct 
     K_LIST_ZIP (cases, pmc, arms, parm) {
         set_current_bb(fs, *psucc++);
         enum BuiltinKind const kind = cons_kind(pmc->cons.kind);
-        parm->k = new_constant(fs, TODO, pmc->cons.value, kind).k;
+        union IrValue const temp = {.p = pmc->cons.value.p}; // TODO
+        parm->k = new_const_value(fs, TODO, temp, pawP_builtin_type(fs->C, kind)).k;
 
         visit_decision(V, pmc->dec, result);
         set_goto_edge(fs, span, join_bb);
@@ -2046,8 +2117,7 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, struct
     struct MatchCase const *pmc;
     MirBlock const *psucc = get_successors(fs);
     K_LIST_ZIP (cases, pmc, arms, parm) {
-        Value const discr = I2V(pmc->cons.variant.index);
-        parm->k = new_constant(fs, TODO, discr, BUILTIN_INT).k;
+        parm->k = new_const_int(fs, TODO, pmc->cons.variant.index).k;
         set_current_bb(fs, *psucc++);
 
         struct BlockState bs;
@@ -2312,16 +2382,16 @@ static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFnDecl *fn)
     return result;
 }
 
-static void register_global_constant(struct LowerHir *L, struct HirConstDecl *d, Value value, enum BuiltinKind b_kind)
+static void register_global_constant(struct LowerHir *L, struct HirConstDecl *d, union IrValue value, IrType *type)
 {
-    const int global_id = L->globals->count;
-    GlobalMap_insert(L, L->globals, d->did, global_id);
-    GlobalList_push(L->C, L->C->globals, (struct GlobalInfo){
+    const int global_id = L->globals.mapping->count;
+    GlobalMap_insert(L, L->globals.mapping, d->did, global_id);
+    GlobalList_push(L, L->globals.values, (struct GlobalInfo){
         .modno = (int)d->did.modno,
         .name = d->ident.name,
         .index = global_id,
-        .b_kind = b_kind,
-        .value = value,
+        .value = pawIr_new_const_value(L->C, value, type),
+        .type = type,
     });
 }
 
@@ -2387,7 +2457,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
     // not be part of a cycle. Evaluating any constant participating in a cycle will cause the
     // other constants in the cycle to be evaluated immediately, which will cause the call to
     // enter_constant_ctx to fail below.
-    if (GlobalMap_get(L, L->globals, d->did) != NULL)
+    if (GlobalMap_get(L, L->globals.mapping, d->did) != NULL)
         return;
 
     // Enter module where the constant is defined. Module context must be restored before this
@@ -2406,7 +2476,8 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
     enter_constant_ctx(L, &cctx, d);
 
     struct MirConstantData const kdata = lower_constant_expression(L, d->init);
-    register_global_constant(L, d, kdata.value, kdata.kind);
+    paw_assert(kdata.data->kind == IR_CONST_VALUE);
+    register_global_constant(L, d, kdata.data->value.value, kdata.data->value.type);
 
     leave_constant_ctx(L);
     L->pm = outer;
@@ -2432,14 +2503,12 @@ static void lower_pending_constants(struct LowerHir *L)
         IrPendingConstantsIterator_key(&iter);
         struct IrPendingConstant *p = IrPendingConstantsIterator_valuep(&iter);
 
+        DeclId const key = p->konst->pending.did;
         struct MirConstantData const kdata = lower_constant_expression(L, p->payload);
         paw_assert(p->konst->kind == IR_CONST_PENDING);
-        *p->konst = (IrConst){
-            .kind = IR_CONST_VALUE,
-            .value.value.i = kdata.value.i,
-            .value.type = get_builtin_type(L, kdata.kind),
-        };
+        *p->konst = *kdata.data;
 
+        IrResolvedConstants_insert(L->C, L->C->resolved_constants, key, p->konst);
         IrPendingConstantsIterator_next(&iter);
     }
 }
@@ -2463,7 +2532,8 @@ void pawP_lower_hir(struct Compiler *C)
         .C = C,
     };
     L.locals = LocalMap_new(&L);
-    L.globals = GlobalMap_new(&L);
+    L.globals.mapping = GlobalMap_new(&L);
+    L.globals.values = GlobalList_new(&L);
     L.labels = LabelList_new(&L);
     L.stack = VarStack_new(&L);
 

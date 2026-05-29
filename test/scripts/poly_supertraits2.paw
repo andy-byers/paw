@@ -1,0 +1,27 @@
+// supertraits2.paw
+
+pub trait Collector<T>: IntoIterator<Item = *T> {
+    fn collect_items(*self) -> List<T>;
+}
+
+impl<T> Collector<T> for []T {
+    fn collect_items(*self) -> List<T> {
+        let result = List::new();
+        for item in self {
+            result.push(*item).unwrap();
+        }
+        result
+    }
+}
+
+#[test]
+pub fn call_supertrait_method() {
+    let original = List::from_array([
+        1, 10, 100
+    ]).unwrap();
+    let values = original.to_slice()
+        .collect_items();
+    assert(values[0] == 1);
+    assert(values[1] == 10);
+    assert(values[2] == 100);
+}

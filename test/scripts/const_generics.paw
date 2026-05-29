@@ -1,0 +1,71 @@
+// const_generics.paw
+
+use array;
+use ptr;
+
+pub struct StaticVec<const CAPACITY: int, T> {
+    data: [CAPACITY]T,
+    len: int,
+}
+
+impl<const CAPACITY: int, T> StaticVec<{CAPACITY}, T> {
+    pub fn new() -> Self {
+        Self{
+            data: array::uninit(),
+            len: 0,
+        }
+    }
+
+    pub fn len(*self) -> int {
+        self.len
+    }
+
+    pub fn push(*self, value: T) -> Result<(), T> {
+        if self.len < CAPACITY {
+            ptr::write(&self.data[self.len], value);
+            self.len += 1;
+            Ok(())
+        } else {
+            Err(value)
+        }
+    }
+
+    pub fn pop(*self) -> T {
+        if self.len == 0 {
+            panic("pop from empty vector");
+        }
+        self.len -= 1;
+        ptr::read(&self.data[self.len])
+    }
+}
+
+#[test]
+pub fn test() {
+    let vec = StaticVec::<5, _>::new();
+    vec.push(1).unwrap();
+    vec.push(2).unwrap();
+    vec.push(3).unwrap();
+    vec.push(4).unwrap();
+    vec.push(5).unwrap();
+    assert(vec.push(6).unwrap_err() == 6);
+    assert(vec.push(7).unwrap_err() == 7);
+
+    assert(vec.pop() == 5);
+    assert(vec.pop() == 4);
+    vec.push(6).unwrap();
+    vec.push(7).unwrap();
+    assert(vec.push(8).unwrap_err() == 8);
+}
+
+
+pub struct ConstantInt<const N: int>;
+
+impl ConstantInt<3> {
+    pub fn three(*self) {}
+}
+
+#[test]
+pub fn const_constraint_gated_method() {
+    let c = ConstantInt::<3>;
+    c.three();
+}

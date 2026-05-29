@@ -36,7 +36,7 @@ struct Cell {
     struct CellInfo {
         enum CellKind kind;
         int k;
-        Value v;
+        union IrValue v;
     } info;
 
     IrType *type;
@@ -235,15 +235,15 @@ static void visit_phi(struct KProp *K, struct MirPhi *phi, MirBlock to)
         add_use_edges(K, presult->r);
 }
 
-static int add_constant(struct KProp *K, Value v, enum BuiltinKind kind)
+static int add_constant(struct KProp *K, union IrValue v, enum BuiltinKind kind)
 {
-    return pawMir_kcache_add(K->mir, K->kcache, v, kind).value;
+    return pawMir_kcache_add_value(K->mir, K->kcache, v, pawP_builtin_type(K->C, kind)).value;
 }
 
 static struct CellInfo constant_unary_op(struct KProp *K, struct Cell *val, struct Cell *output, enum MirUnaryOpKind op)
 {
-    Value const v = val->info.v;
-    Value r;
+    union IrValue const v = val->info.v;
+    union IrValue r;
 
     if (pawP_fold_unary_op(K->C, op, v, &r)) {
         enum BuiltinKind const kind = pawP_type2code(K->C, output->type);
@@ -255,9 +255,9 @@ static struct CellInfo constant_unary_op(struct KProp *K, struct Cell *val, stru
 
 static struct CellInfo constant_binary_op(struct KProp *K, struct SourceSpan span, struct Cell *lhs, struct Cell *rhs, struct Cell const *output, enum MirBinaryOpKind op)
 {
-    Value const x = lhs->info.v;
-    Value const y = rhs->info.v;
-    Value r;
+    union IrValue const x = lhs->info.v;
+    union IrValue const y = rhs->info.v;
+    union IrValue r;
 
     if (pawP_fold_binary_op(K->C, GET_MODNAME(K->mir), span, op, x, y, &r)) {
         enum BuiltinKind const kind = pawP_type2code(K->C, output->type);
@@ -277,7 +277,7 @@ static struct CellInfo binop_to_move(struct MirBinaryOp *binop, struct MirPlace 
     return TOP_INFO();
 }
 
-static struct CellInfo const_value(struct KProp *K, Value r, enum BuiltinKind kind)
+static struct CellInfo const_value(struct KProp *K, union IrValue r, enum BuiltinKind kind)
 {
     int const k = add_constant(K, r, kind);
     return CONST_INFO(k, r);
@@ -290,7 +290,7 @@ static struct CellInfo const_zero(struct KProp *K, enum BuiltinKind kind)
 
 static struct CellInfo const_nan(struct KProp *K)
 {
-    Value r;
+    union IrValue r;
     V_SET_FLOAT(&r, NAN);
     int const k = add_constant(K, r, BUILTIN_FLOAT);
     return CONST_INFO(k, r);
@@ -449,12 +449,14 @@ static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struc
 {
     paw_assert(pcell->info.kind == CELL_CONSTANT);
     enum BuiltinKind const kind = pawP_type2code(K->C, pcell->type);
-    Value const target = pcell->info.v;
+    union IrValue const target = pcell->info.v;
 
     MirBlock const *pb;
     struct MirSwitchArm const *parm;
     K_LIST_ZIP (s->arms, parm, bb->successors, pb) {
-        Value const value = mir_const_data(K->mir, parm->k)->value;
+        IrConst const *k = mir_const_data(K->mir, parm->k)->data;
+        paw_assert(k->kind == IR_CONST_VALUE);
+        union IrValue const value = k->value.value;
         if ((kind != BUILTIN_FLOAT && V_UINT(value) == V_UINT(target))
                 || (kind == BUILTIN_FLOAT && V_FLOAT(value) == V_FLOAT(target)))
             return *pb;
@@ -796,15 +798,31 @@ static void init_lattice(struct KProp *K)
 
     struct MirConstantData *kdata;
     K_LIST_ENUMERATE (mir->kcache->data, index, kdata) {
-        Lattice_set(K->lattice, key++,
-            (struct Cell){
-                .type = pawP_builtin_type(K->C, kdata->kind),
-                .info.kind = CELL_CONSTANT,
-                .info.v = kdata->value,
-                .info.k = index,
-            });
+        if (kdata->data->kind == IR_CONST_VALUE) {
+            struct IrConstValue const value = kdata->data->value;
+            Lattice_set(K->lattice, key++,
+                (struct Cell){
+                    .type = kdata->type,
+                    .info.kind = CELL_CONSTANT,
+                    .info.v = value.value,
+                    .info.k = index,
+                });
 
-        pawMir_kcache_add(mir, K->kcache, kdata->value, kdata->kind);
+            pawMir_kcache_add_value(mir, K->kcache,
+                    value.value, value.type);
+        } else {
+            paw_assert(kdata->data->kind == IR_CONST_DECL);
+            Lattice_set(K->lattice, key++,
+                (struct Cell){
+                    .type = kdata->type,
+                    .info.kind = CELL_BOTTOM,
+                    .info.v = {0},
+                    .info.k = index,
+                });
+
+            pawMir_kcache_add_param(mir, K->kcache,
+                    kdata->data->param.did);
+        }
     }
 
     paw_assert(key == cell_count);

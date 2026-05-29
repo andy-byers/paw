@@ -306,7 +306,6 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->builtin_lookup = BuiltinMap_new(C);
     C->hir_types = HirTypeMap_new(C);
     C->self_types = NodeMap_new(C);
-    C->globals = GlobalList_new(C);
     C->layouts = IrTypeLayouts_new(C);
 
     C->def_types = DefTypeMap_new(C);
@@ -323,6 +322,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->ir_assoc_items = IrAssocItemMap_new(C);
     C->ir_constraints = IrConstraintsMap_new(C);
     C->pending_constants = IrPendingConstants_new(C);
+    C->resolved_constants = IrResolvedConstants_new(C);
     C->const_obligations = IrConstObligations_new(C);
     C->indexes = IrType2Map_new(C);
 
@@ -373,9 +373,9 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
 
     // TODO: won't work, need to get symbol from linked C math lib (use #[extern = "M_PI"])
     // external constant values must be known in the frontend
-    set_extern_value(C, "paw_math_PI", F2V(M_PI));
-    set_extern_value(C, "paw_math_NAN", F2V(NAN));
-    set_extern_value(C, "paw_math_INFINITY", F2V(INFINITY));
+//    set_extern_value(C, "paw_math_PI", F2V(M_PI));
+//    set_extern_value(C, "paw_math_NAN", F2V(NAN));
+//    set_extern_value(C, "paw_math_INFINITY", F2V(INFINITY));
 }
 
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm)

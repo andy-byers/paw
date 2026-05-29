@@ -69,6 +69,7 @@ static void add_generic_arg(struct Compiler *C, Buffer *b, IrGenericArg arg)
         add_type(C, b, t);
     } else {
         IrConst *k = IrGenericArg_get_const(arg);
+        pawL_add_char(ENV(C), b, 'L');
         add_const(C, b, k);
     }
 }
@@ -136,6 +137,14 @@ static void add_type(struct Compiler *C, Buffer *b, IrType *type)
         case kIrSlice: {
             struct IrSlice const *t = IrGetSlice(type);
             pawL_add_char(P, b, 'S');
+            add_type(C, b, t->type);
+            break;
+        }
+        case kIrArray: {
+            struct IrArray const *t = IrGetArray(type);
+            pawL_add_char(P, b, 'A');
+            add_const(C, b, t->length);
+            pawL_add_char(P, b, '_');
             add_type(C, b, t->type);
             break;
         }

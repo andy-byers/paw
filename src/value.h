@@ -15,9 +15,9 @@
 #define V_INT(Value_) ((Value_).i)
 #define V_UINT(Value_) ((Value_).u)
 #define V_FLOAT(Value_) ((Value_).f)
+#define V_STR(Value_) ((Value_).s)
 
 #define V_OBJECT(Value_) ((Value_).o)
-#define V_STR(Value_) (O_STR(V_OBJECT(Value_)))
 #define V_TUPLE(Value_) (O_TUPLE(V_OBJECT(Value_)))
 #define V_TEXT(Value_) (V_STR(Value_)->text)
 
@@ -57,20 +57,21 @@ typedef struct Object {
     OBJECT_HEADER;
 } Object;
 
-
+// TODO: a lot of this code needs to be removed
 typedef union Value {
     void *p;
     paw_Char c;
     paw_Int i;
     paw_Uint u;
     paw_Float f;
+    struct Str const *s;
     Object *o;
 } Value;
 
-#define P2V(Ptr_) (Value) { .p = (void *)(Ptr_) }
-#define C2V(Char_) (Value) { .i = (paw_Char)(Char_) }
-#define I2V(Int_) (Value) { .i = (paw_Int)(Int_) }
-#define F2V(Float_) (Value) { .f = (paw_Float)(Float_) }
+#define P2V(Ptr_) (union IrValue) { .p = (void *)(Ptr_) }
+#define C2V(Char_) (union IrValue) { .i = (paw_Char)(Char_) }
+#define I2V(Int_) (union IrValue) { .i = (paw_Int)(Int_) }
+#define F2V(Float_) (union IrValue) { .f = (paw_Float)(Float_) }
 
 
 typedef struct Str {

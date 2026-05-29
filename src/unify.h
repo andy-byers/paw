@@ -7,12 +7,11 @@ struct Unifier;
 struct IrType;
 struct IrTypeList;
 
-typedef struct UnificationTable UnificationTable;
 typedef int (*Unify)(struct Unifier *, struct IrType *, struct IrType *);
 typedef int (*UnifyTrait)(struct Compiler *, struct IrTrait *, struct IrTrait *);
 
 struct Unifier {
-    UnificationTable *table;
+    struct UnificationContext *ctx;
     Str const *modname;
     struct Compiler *C;
     int depth;
@@ -24,9 +23,11 @@ struct IrConst *pawU_normalize_const(struct Unifier *U, IrConst *k);
 
 // Impose the constraint that types 'a' and 'b' are equal
 int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
+int pawU_unify_const(struct Unifier *U, struct IrConst *a, struct IrConst *b);
 
 // Create a new type variable
 struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceSpan span);
+struct IrConst *pawU_new_const_var(struct Unifier *U, struct SourceSpan span);
 
 // Inference context handling
 void pawU_enter_binder(struct Unifier *U, Str const *modname);

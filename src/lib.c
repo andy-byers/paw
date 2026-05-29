@@ -67,6 +67,7 @@ static char const *STD_NAMES[PAWL_NUM_STD_MODULES] = {
     [PAWL_STD_PTR] = "ptr",
     [PAWL_STD_MEM] = "mem",
     [PAWL_STD_SLICE] = "slice",
+    [PAWL_STD_ARRAY] = "array",
     [PAWL_STD_OPTION] = "option",
     [PAWL_STD_RESULT] = "result",
     [PAWL_STD_ITER] = "iter",

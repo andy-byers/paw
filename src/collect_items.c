@@ -186,12 +186,14 @@ static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, struct HirDe
     IrGenericDefs *result = IrGenericDefs_new(X->C);
     if (generics != NULL) {
         K_LIST_XFOREACH (generics, struct HirDecl *const, p) {
+            IrType *type;
             struct IrGenericDef *r;
             struct HirGenericDecl const *d = HirGetGenericDecl(*p);
             if (d->is_type) {
+                type = pawIr_new_generic(X->C, d->did);
                 r = pawIr_new_generic_type_def(X->C, d->did, d->t.ident.name, NULL);
             } else {
-                IrType *type = collect_type(X, d->k.type);
+                type = collect_type(X, d->k.type);
                 if (!IrIsBool(type) && !IrIsChar(type)
                         && !IrIsInt(type) && !IrIsFloat(type))
                     pawErr_generic_error(ENV(X), X->pm->name, d->span,
@@ -201,7 +203,6 @@ static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, struct HirDe
             GenericDefMap_insert(X->C, X->C->generic_defs, d->did, r);
             IrGenericDefs_push(X->C, result, r);
 
-            IrType *type = pawIr_new_generic(X->C, d->did);
             set_def_type(X, d->did, type);
             SET_TYPE(X, d->id, type);
         }
@@ -269,12 +270,16 @@ static void transfer_fn_annotations(struct ItemCollector *X, struct HirFnDecl *d
 static struct IrVariantDefs *create_struct_variant(struct ItemCollector *X, struct HirIdent ident, struct HirDeclList *decls)
 {
     paw_assert(decls->count == 1);
-    struct HirVariantDecl *v = HirGetVariantDecl(K_LIST_FIRST(decls));
+    struct HirVariantDecl const *v = HirGetVariantDecl(K_LIST_FIRST(decls));
     struct IrFieldDefs *fields = collect_field_defs(X, v->fields);
     struct IrVariantDef *r = pawIr_new_variant_def(X->C, v->did, NO_DECL, v->base_did, 0, ident.name, fields);
     struct IrVariantDefs *variants = IrVariantDefs_new(X->C);
     VariantDefMap_insert(X->C, X->C->variant_defs, v->did, r);
     IrVariantDefs_push(X->C, variants, r);
+
+    SET_TYPE(X, v->id, X->ctx);
+    r->cons_did = NO_DECL;
+
     return variants;
 }
 
@@ -291,8 +296,9 @@ static struct IrVariantDefs *collect_variant_defs(struct ItemCollector *X, struc
         VariantDefMap_insert(X->C, X->C->variant_defs, d->did, r);
         IrVariantDefs_push(X->C, variants, r);
 
-        IrType *type = pawIr_get_type(X->C, d->id);
-        set_def_type(X, d->did, type);
+        IrType *type = pawIr_new_signature(X->C, d->did, X->binder);
+        SET_TYPE(X, d->id, type);
+        r->cons_did = d->did;
     }
     return variants;
 }
@@ -454,9 +460,13 @@ static void collect_generic_bounds(struct ItemCollector *X, struct HirDeclList *
     }
 }
 
-static paw_Bool is_builtin(struct ItemCollector *X, DeclId did, enum BuiltinKind kind)
+static paw_Bool is_builtin(struct ItemCollector *X, DeclId did)
 {
-    return did.value == pawP_builtin_info(X->C, kind)->did.value;
+    for (unsigned i = 0; i <= BUILTIN_STR; ++i) {
+        if (P_ID_EQUALS(NULL, did, X->C->builtins[i].did))
+            return PAW_TRUE;
+    }
+    return PAW_FALSE;
 }
 
 static IrType *collect_type_decl(struct ItemCollector *X, struct HirTypeDecl const *d)
@@ -467,33 +477,60 @@ static IrType *collect_type_decl(struct ItemCollector *X, struct HirTypeDecl con
     return type;
 }
 
+static void collect_builtin_type(struct ItemCollector *X, enum BuiltinKind kind)
+{
+    IrType *type = pawP_builtin_type(X->C, kind);
+    DeclId const did = pawP_builtin_info(X->C, kind)->did;
+    struct HirDecl *decl = pawHir_get_decl(X->hir, did);
+    SET_TYPE(X, decl->hdr.id, type);
+    set_def_type(X, did, type);
+}
+
+static void collect_builtin_types(struct ItemCollector *X)
+{
+    collect_builtin_type(X, BUILTIN_UNIT);
+    collect_builtin_type(X, BUILTIN_BOOL);
+    collect_builtin_type(X, BUILTIN_CHAR);
+    collect_builtin_type(X, BUILTIN_INT);
+    collect_builtin_type(X, BUILTIN_FLOAT);
+    collect_builtin_type(X, BUILTIN_STR);
+}
+
+static void collect_adt(struct ItemCollector *X, struct HirAdtDecl const *d)
+{
+    if (!is_builtin(X, d->did)) {
+        IrGenericArgs *args = collect_generic_args(X, d->did, d->generics);
+        IrType *type = pawIr_new_adt(X->C, d->did, args);
+
+        set_def_type(X, d->did, type);
+        SET_TYPE(X, d->id, type);
+    }
+}
+
+static void collect_trait(struct ItemCollector *X, struct HirTraitDecl const *d)
+{
+    IrGenericArgs *args = collect_generic_args(X, d->did, d->generics);
+    IrTrait *trait = pawIr_new_trait(X->C, d->did, args);
+    IrType *self = IrGenericArg_get_type(IrGenericArgs_first(args));
+
+    K_LIST_XFOREACH (d->types, struct HirDecl *const, p) {
+        struct HirGenericDecl const *t = HirGetGenericDecl(*p);
+        paw_assert(t->is_type);
+        IrType *item_type = pawIr_new_projection(X->C, self, trait, t->did);
+        set_def_type(X, t->did, item_type);
+        SET_TYPE(X, t->id, item_type);
+    }
+}
+
 static void collect_adt_def(struct ItemCollector *X, struct HirAdtDecl const *d)
 {
-    IrType *type;
-    if (is_builtin(X, d->did, BUILTIN_UNIT)) {
-        type = pawIr_new_unit(X->C);
-    } else if (is_builtin(X, d->did, BUILTIN_BOOL)) {
-        type = pawIr_new_bool(X->C);
-    } else if (is_builtin(X, d->did, BUILTIN_CHAR)) {
-        type = pawIr_new_char(X->C);
-    } else if (is_builtin(X, d->did, BUILTIN_INT)) {
-        type = pawIr_new_int(X->C);
-    } else if (is_builtin(X, d->did, BUILTIN_FLOAT)) {
-        type = pawIr_new_float(X->C);
-    } else if (is_builtin(X, d->did, BUILTIN_STR)) {
-        type = pawIr_new_string(X->C);
-    } else {
-        IrGenericArgs *args = collect_generic_args(X, d->did, d->generics);
-        type = pawIr_new_adt(X->C, d->did, args);
-
+    IrType *type = pawIr_get_def_type(X->C, d->did);
+    if (IrIsAdt(type)) {
         IrGenericDefs *generics = collect_generic_defs(X, d->generics);
         struct IrAdtDef *r = pawIr_new_adt_def(X->C, d->did, d->ident.name,
                 generics, NULL, d->is_pub, d->is_struct);
         AdtDefMap_insert(X->C, X->C->adt_defs, d->did, r);
     }
-
-    set_def_type(X, d->did, type);
-    SET_TYPE(X, d->id, type);
 }
 
 static void collect_fn_def(struct ItemCollector *X, struct HirFnDecl const *d)
@@ -508,20 +545,14 @@ static void collect_fn_def(struct ItemCollector *X, struct HirFnDecl const *d)
 static void collect_trait_def(struct ItemCollector *X, struct HirTraitDecl const *d)
 {
     X->in_trait_decl = PAW_TRUE;
-    IrGenericArgs *args = collect_generic_args(X, d->did, d->generics);
-    IrTrait *trait = pawIr_new_trait(X->C, d->did, args);
-    IrType *self = IrGenericArg_get_type(IrGenericArgs_first(args));
 
     IrAssocItems *items = IrAssocItems_new(X->C);
     K_LIST_XFOREACH (d->types, struct HirDecl *const, p) {
         struct HirGenericDecl const *t = HirGetGenericDecl(*p);
         paw_assert(t->is_type);
         struct IrAssocItem *item = pawIr_new_assoc_item(X->C, t->did, t->t.ident.name, d->did, d->is_pub);
-        IrType *item_type = pawIr_new_projection(X->C, self, trait, t->did);
         IrAssocItemMap_insert(X->C, X->C->ir_assoc_items, t->did, item);
         IrAssocItems_push(X->C, items, item);
-        set_def_type(X, t->did, item_type);
-        SET_TYPE(X, t->id, item_type);
     }
 
     K_LIST_XFOREACH (d->methods, struct HirDecl *const, p)
@@ -586,6 +617,28 @@ static void collect_impl_def(struct ItemCollector *X, struct HirImplDecl const *
 }
 
 static void collect_nominal_types(struct ItemCollector *X, struct HirModule m)
+{
+    K_LIST_XFOREACH (m.items, struct HirDecl *const, p) {
+        if (HirIsAdtDecl(*p)) {
+            collect_adt(X, HirGetAdtDecl(*p));
+        } else if (HirIsTraitDecl(*p)) {
+            collect_trait(X, HirGetTraitDecl(*p));
+        }
+    }
+}
+
+static void collect_nominal_types2(struct ItemCollector *X, struct HirModule m)
+{
+    K_LIST_XFOREACH (m.items, struct HirDecl *const, p) {
+        if (HirIsAdtDecl(*p)) {
+            collect_adt_def(X, HirGetAdtDecl(*p));
+        } else if (HirIsTraitDecl(*p)) {
+            collect_trait_def(X, HirGetTraitDecl(*p));
+        }
+    }
+}
+
+static void collect_generics(struct ItemCollector *X, struct HirModule m)
 {
     K_LIST_XFOREACH (m.items, struct HirDecl *const, p) {
         if (HirIsAdtDecl(*p)) {
@@ -1040,11 +1093,16 @@ static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
     if (!IrIsAdt(type)) return;
 
     struct IrAdtDef *def = pawIr_get_adt_def(X->C, d->did);
-    def->variants = collect_variant_defs(X, d);
-
     WITH_CONTEXT(X, type, IR_GENERIC_ARGS(type),
-        collect_variant_types(X, d->variants, d->is_struct);
+        def->variants = collect_variant_defs(X, d);
     );
+
+    // TODO: store parent ID and use that instead
+    IrGenericArgs *generics = IR_GENERIC_ARGS(type);
+    if (generics != NULL) {
+        K_LIST_XFOREACH (d->variants, struct HirDecl *const, pdecl)
+            pawIr_set_generic_args(X->C, (*pdecl)->hdr.did, generics);
+    }
 }
 
 static void collect_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
@@ -1147,7 +1205,10 @@ static void run_collection_phases(struct ItemCollector *X, struct Hir *hir)
             finish_module(X_); \
         }
 
+    // TODO: should only need a few passes
+    collect_builtin_types(X);
     MAP_MODULES(X, hir->modules, collect_nominal_types);
+    MAP_MODULES(X, hir->modules, collect_generics);
     MAP_MODULES(X, hir->modules, collect_constraints);
     MAP_MODULES(X, hir->modules, collect_definitions);
     MAP_MODULES(X, hir->modules, collect_item_defs);

@@ -227,6 +227,11 @@ static struct ImportScope const *find_containing_module(struct Resolver *R, stru
         struct AstDecl *decl = pawAst_get_node(R->ast, psymbol->id);
         if (AstIsModuleDecl(decl)) {
             struct AstSegment const segment = *pc_segment(*pc);
+            if (segment.args != NULL)
+                RESOLVER_ERROR(R, UnexpectedTypeArguments,
+                        .what = SCAN_STR(R->C, "module"),
+                        .name = segment.ident.name,
+                        .span = segment.span);
             set_result(R, segment.id, psymbol->id, RESOLVED_MODULE);
             module_id = psymbol->id;
             pc_next(pc);
@@ -397,7 +402,7 @@ static paw_Bool find_value_in_generic(struct Resolver *R, struct AstGenericDecl 
         paw_Bool found = PAW_FALSE;
         struct AstGenericBound const *pbound;
         K_LIST_FOREACH (d->t.bounds, pbound) {
-            struct ResolvedSegment res = get_path_result(R, pbound->path);
+            struct ResolvedSegment const res = get_path_result(R, pbound->path);
             if (find_value_in_scope(R, res.id, pc, out)) {
                 if (found) // more than 1 bound contains a method with the given name
                     RESOLVER_ERROR(R, MultipleApplicableItems,

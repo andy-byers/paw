@@ -534,16 +534,6 @@ void pawIr_solver_rollback(IrSolver *S)
 
 void pawIr_solver_commit(IrSolver *S)
 {
-//    if (S->outer != NULL) {
-//        // TODO: likely going to end up with many duplicates. should probably do something about that as performance could get very bad
-//        K_LIST_XFOREACH (S->obligations, struct IrObligation const, p)
-//            IrObligations_push(S->C, S->outer->obligations, *p);
-//        K_LIST_XFOREACH (S->predicates, struct IrObligation const, p)
-//            IrObligations_push(S->C, S->outer->predicates, *p);
-//        K_LIST_XFOREACH (S->norm_targets, struct IrType2 const, p)
-//            pawIr_solver_add_norm_target(S->outer, p->first, p->second, (struct IrObligationCause){0});
-//    }
-
     S->obligations->count = 0;
 }
 

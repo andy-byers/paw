@@ -153,7 +153,8 @@ paw_Bool paw_ops_str_Compare_le(void *env, paw_Str self, paw_Str rhs);
 
 uint32_t paw_builtin_hash_bytes(void *env, paw_Char const *bytes, paw_Int length, uint32_t hash);
 paw_Int paw_builtin_rawcmp(void *env, paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length);
-void paw_builtin_check_bounds(void *env, paw_Int index, paw_Int length);
+
+void paw_builtin_check_bounds(paw_Int index, paw_Int length);
 
 void *paw_ops_Slice_AsPtr_as_ptr(void *env, paw_Slice *self);
 paw_Int paw_slice_Slice_len(void *env, paw_Slice self);

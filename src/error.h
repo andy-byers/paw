@@ -429,6 +429,10 @@
         Str const *modname; \
         struct SourceSpan span; \
     ) \
+    X(CannotInferConst, ERR_CATEGORY_TYPE, \
+        Str const *modname; \
+        struct SourceSpan span; \
+    ) \
     X(CyclicType, ERR_CATEGORY_TYPE, \
         Str const *modname; \
         struct SourceSpan span; \

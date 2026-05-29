@@ -6,7 +6,6 @@
 #define PAW_IR_TYPE_H
 
 #include "hir.h"
-#include "mir.h"
 
 typedef struct IrType IrType;
 typedef struct IrTrait IrTrait;
@@ -199,7 +198,10 @@ union IrValue {
     paw_Bool b;
     paw_Char c;
     paw_Int i;
+    paw_Uint u;
     paw_Float f;
+    Str const *s;
+    void *p;
 };
 
 enum IrConstKind {
@@ -227,7 +229,8 @@ struct IrConstDecl {
 };
 
 struct IrConstInfer {
-    int unimplemented; // TODO: make some identifier that allows us to reference a special inference variable
+    int depth;
+    int index;
 };
 
 struct IrConst {
@@ -244,7 +247,7 @@ struct IrConst {
 IrConst *pawIr_new_const_value(struct Compiler *C, union IrValue value, IrType *type);
 IrConst *pawIr_new_const_pending(struct Compiler *C, DeclId did);
 IrConst *pawIr_new_const_decl(struct Compiler *C, DeclId did);
-IrConst *pawIr_new_const_infer(struct Compiler *C);
+IrConst *pawIr_new_const_infer(struct Compiler *C, int depth, int index);
 
 
 enum IrGenericArgKind {
@@ -475,8 +478,8 @@ EXTERN_C paw_Bool pawIr_trait_equals(struct Compiler *C, IrTrait *a, IrTrait *b)
 #define IR_TRAIT_HASH(Ctx_, Trait_) pawIr_trait_hash((Ctx_)->C, Trait_)
 #define IR_TRAIT_EQUALS(Ctx_, A_, B_) pawIr_trait_equals((Ctx_)->C, A_, B_)
 
-EXTERN_C paw_Uint pawIr_const_hash(struct Compiler *C, IrConst *k);
-EXTERN_C paw_Bool pawIr_const_equals(struct Compiler *C, IrConst *a, IrConst *b);
+EXTERN_C paw_Uint pawIr_const_hash(struct Compiler *C, IrConst const *k);
+EXTERN_C paw_Bool pawIr_const_equals(struct Compiler *C, IrConst const *a, IrConst const *b);
 #define IR_CONST_HASH(Ctx_, Const_) pawIr_const_hash((Ctx_)->C, Const_)
 #define IR_CONST_EQUALS(Ctx_, A_, B_) pawIr_const_equals((Ctx_)->C, A_, B_)
 
@@ -519,20 +522,26 @@ DEFINE_MAP(struct Compiler, IrTraitBounds, pawP_alloc, P_ID_HASH, P_ID_EQUALS, D
 DEFINE_MAP(struct Compiler, IrDefKinds, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, enum IrDefKind)
 DEFINE_MAP(struct Compiler, IrType2Map, pawP_alloc, pawIr_type2_hash, pawIr_type2_equals, struct IrType2, void *)
 DEFINE_MAP(struct Compiler, IrPendingConstants, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrPendingConstant)
+DEFINE_MAP(struct Compiler, IrResolvedConstants, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrConst *)
 DEFINE_MAP_ITERATOR(IrPendingConstants, DeclId, struct IrPendingConstant)
 
 DEFINE_MAP(struct Compiler, TypeCollection, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *)
 DEFINE_MAP_ITERATOR(TypeCollection, IrType *, void *)
 DEFINE_LIST(struct Compiler, IrType2List, struct IrType2)
 
+struct IrConstObligationCause {
+    struct SourceSpan span;
+};
+
 struct IrConstObligation {
+    struct IrConstObligationCause cause;
     IrConst *lhs;
     IrConst *rhs;
 };
 
 DEFINE_LIST(struct Compiler, IrConstObligations, struct IrConstObligation)
 
-void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs);
+void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs, struct IrConstObligationCause cause);
 int pawIr_solve_const_obligations(struct Compiler *C);
 
 paw_Bool pawIr_type_contains_inference_var(struct Compiler *C, IrType *type);
@@ -585,6 +594,7 @@ EXTERN_C char const *pawIr_print_trait(struct Compiler *C, IrTrait *trait);
 EXTERN_C char const *pawIr_print_impl_trait_obligation(struct Compiler *C, IrType *type, IrTrait *trait);
 
 // TODO: use these and get rid of the old ones
+EXTERN_C Str const *pawIr_print_const(struct Compiler *C, IrConst *konst);
 EXTERN_C Str const *pawIr_print_type_v2(struct Compiler *C, IrType *type);
 EXTERN_C Str const *pawIr_print_trait_v2(struct Compiler *C, IrTrait *trait);
 EXTERN_C Str const *pawIr_print_impl_trait_obligation_v2(struct Compiler *C, IrType *type, IrTrait *trait);

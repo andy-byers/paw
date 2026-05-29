@@ -496,7 +496,7 @@ static struct AstType *unit_type(struct Lex *lex, struct SourceSpan span)
 
 static struct AstExpr *emit_bool(struct Lex *lex, struct SourceSpan span, paw_Bool b)
 {
-    return new_basic_lit(lex, span, I2V(b), BUILTIN_BOOL);
+    return new_basic_lit(lex, span, (Value){.i = b}, BUILTIN_BOOL);
 }
 
 static struct AstType *parse_type(struct Lex *lex);
@@ -961,7 +961,7 @@ static struct AstType *parse_pointer_type(struct Lex *lex, struct SourceLoc star
     return NEW_NODE(lex, ref_type, RANGE(start, lex->loc), next_id(lex), pointee, is_mut);
 }
 
-static struct AstExpr *block_expr(struct Lex *lex);
+static struct AstExpr *block(struct Lex *lex);
 
 static struct AstGenericArg generic_arg(struct Lex *lex)
 {
@@ -977,28 +977,36 @@ static struct AstGenericArg generic_arg(struct Lex *lex)
     struct Token const t = lex->t;
     switch (t.kind) {
         case TK_TRUE:
+            skip(lex);
             expr = emit_bool(lex, t.span, PAW_TRUE);
             break;
         case TK_FALSE:
+            skip(lex);
             expr = emit_bool(lex, t.span, PAW_FALSE);
             break;
         case TK_CHAR:
+            skip(lex);
             expr = new_basic_lit(lex, t.span, t.value, BUILTIN_CHAR);
             break;
         case TK_INT:
+            skip(lex);
             expr = new_basic_lit(lex, t.span, t.value, BUILTIN_INT);
             break;
         case TK_FLOAT:
+            skip(lex);
             expr = new_basic_lit(lex, t.span, t.value, BUILTIN_FLOAT);
             break;
         case TK_STR:
+            skip(lex);
             expr = new_basic_lit(lex, t.span, t.value, BUILTIN_STR);
+            break;
+        case '{':
+            expr = block(lex);
             break;
         default:
             PARSE_ERROR(lex, Unsupported, t.span);
     }
 
-    skip(lex);
     return (struct AstGenericArg){
         .id = next_id(lex),
         .is_type = PAW_FALSE,
@@ -1198,7 +1206,7 @@ static struct AstExpr *paren_expr(struct Lex *lex)
     if (test(lex, ')')) {
         struct SourceLoc const end = TOKEN_END(lex->t);
         skip(lex); // ")" token
-        return new_basic_lit(lex, RANGE(start, end), I2V(0), BUILTIN_UNIT);
+        return new_basic_lit(lex, RANGE(start, end), (Value){0}, BUILTIN_UNIT);
     }
 
     ++lex->expr_depth;

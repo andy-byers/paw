@@ -39,18 +39,14 @@ static IrType *lower_fn_ptr(struct LowerType *L, struct HirFnPtr *t)
     return pawIr_new_fn_ptr(L->C, params, result);
 }
 
+static IrConst *lower_const(struct LowerType *L, struct HirExpr *expr);
+
 static IrType *lower_array_type(struct LowerType *L, struct HirArrayType *t)
 {
-    DeclId const did = next_did(L);
     IrType *type = lower_type(L, t->type);
-    SET_NODE_TYPE(L->C, t->length, pawIr_new_int(L->C));
 
-    IrConst *length = pawIr_new_const_pending(L->C, did);
-    IrPendingConstants_insert(L->C, L->C->pending_constants, did,
-            (struct IrPendingConstant){
-                .payload = t->length,
-                .konst = length,
-            });
+    // note that the type of `t->length` is determined in typeck
+    IrConst *length = lower_const(L, t->length);
     return pawIr_new_array(L->C, type, length);
 }
 
@@ -303,26 +299,68 @@ static IrType *lower_type(struct LowerType *L, struct HirType *type)
     return result;
 }
 
+static void contains_const_param_callback(struct HirVisitor *V, struct HirPathExpr *e)
+{
+    DeclId *pdid = V->ud;
+    if (!DECL_ID_EXISTS(*pdid) && e->path.kind == HIR_PATH_ITEM) {
+        struct HirSegment const segment = HirSegments_last(e->path.segments);
+        struct HirDecl *item = pawHir_get_node(V->hir, segment.target);
+        if (HirIsGenericDecl(item)) *pdid = item->hdr.did;
+    }
+}
+
+static paw_Bool contains_const_param(struct LowerType *L, struct HirExpr *expr)
+{
+    struct HirVisitor V;
+    DeclId param_did = INVALID_DECL_ID;
+    pawHir_visitor_init(&V, L->hir, &param_did);
+    V.PostVisitPathExpr = contains_const_param_callback;
+    pawHir_visit_expr(&V, expr);
+    return DECL_ID_EXISTS(param_did);
+}
+
 static IrConst *lower_const(struct LowerType *L, struct HirExpr *expr)
 {
-    struct HirLiteralExpr const *t = HirGetLiteralExpr(expr);
-    union IrValue value;
-    switch (t->basic.code) {
-        case BUILTIN_BOOL:
-            value.b = V_TRUE(t->basic.value);
-            break;
-        case BUILTIN_CHAR:
-            value.c = V_CHAR(t->basic.value);
-            break;
-        case BUILTIN_INT:
-            value.i = V_INT(t->basic.value);
-            break;
-        default:
-            paw_assert(t->basic.code == BUILTIN_FLOAT);
-            value.f = V_FLOAT(t->basic.value);
+    if (HirIsLiteralExpr(expr)) {
+        struct HirLiteralExpr const *t = HirGetLiteralExpr(expr);
+        union IrValue value;
+        switch (t->basic.code) {
+            case BUILTIN_BOOL:
+                value.b = V_TRUE(t->basic.value);
+                break;
+            case BUILTIN_CHAR:
+                value.c = V_CHAR(t->basic.value);
+                break;
+            case BUILTIN_INT:
+                value.i = V_INT(t->basic.value);
+                break;
+            default:
+                paw_assert(t->basic.code == BUILTIN_FLOAT);
+                value.f = V_FLOAT(t->basic.value);
+        }
+        return pawIr_new_const_value(L->C, value,
+                pawP_builtin_type(L->C, t->basic.code));
+    } else if (HirIsPathExpr(expr)) {
+        struct HirPathExpr const *e = HirGetPathExpr(expr);
+        struct HirSegment const segment = HirSegments_last(e->path.segments);
+        struct HirDecl *item = pawHir_get_node(L->hir, segment.target);
+        if (HirIsGenericDecl(item))
+            return pawIr_new_const_decl(L->C, item->hdr.did);
+    } else if (HirIsBlock(expr)) {
+        struct HirBlock const *e = HirGetBlock(expr);
+        return lower_const(L, e->result);
+    } else if (contains_const_param(L, expr)) {
+        // const generic used in expression
+        LOWERING_ERROR(L, Unsupported, expr->hdr.span);
     }
-    return pawIr_new_const_value(L->C, value,
-            pawP_builtin_type(L->C, t->basic.code));
+    DeclId const did = next_did(L);
+    IrConst *konst = pawIr_new_const_pending(L->C, did);
+    IrPendingConstants_insert(L->C, L->C->pending_constants, did,
+            (struct IrPendingConstant){
+                .payload = expr,
+                .konst = konst,
+            });
+    return konst;
 }
 
 static IrGenericArg lower_generic_arg(struct LowerType *L, struct HirGenericArg arg)

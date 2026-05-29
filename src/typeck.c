@@ -699,7 +699,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                 if (IrIsSignature(assoc)) {
                     base = instantiate(T, base, NULL);
                     return pawP_instantiate_assoc(T->C, base, assoc).inst;
-                } else { // TODO: need to demonstrate that this branch is hit. add a comment
+                } else { // TODO: need to demonstrate that this branch is hit. add a test + explanatory comment
                     IrType *target = GET_TYPE(T, segment.target);
                     IrGenericArgs *args = lower_generic_args(T, segment.args);
                     target = instantiate(T, target, args);
@@ -708,7 +708,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             } else {
                 IrType *target = GET_TYPE(T, segment.target);
                 target = instantiate(T, target, NULL);
-                IrGenericArgs *args = lower_generic_args(T, segment.args); // TODO: just pass this to instantiate()...
+                IrGenericArgs *args = lower_generic_args(T, segment.args);
                 if (args != NULL) {
                     IrGenericArgs *params = IR_GENERIC_ARGS(target);
                     params = arglist_suffix(T, params, args->count);
@@ -1595,14 +1595,15 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
                 .span = adt->ident.span);
 
     HirDeclList *fields = pawHir_struct_fields(adt);
-    IrTypeList *field_types = pawHir_collect_decl_types(T->C, fields);
+//    IrTypeList *field_types = pawHir_collect_decl_types(T->C, fields);
+    IrTypeList *field_types = pawP_instantiate_struct_fields(T->C, IrGetAdt(type));
     if (fields->count == 0)
         TYPECK_ERROR(T, UnitStructWithBraces,
                 .type = adt->ident.name,
                 .span = adt->ident.span);
 
-    IrType *base_type = GET_TYPE(T, adt->id);
-    field_types = substitute_types(T, IR_GENERIC_ARGS(base_type), IR_GENERIC_ARGS(type), field_types);
+//    IrType *base_type = GET_TYPE(T, adt->id);
+//    field_types = substitute_types(T, IR_GENERIC_ARGS(base_type), IR_GENERIC_ARGS(type), field_types);
     HirExprList *order = collect_field_exprs(T, e->items, map, adt->ident.name);
 
     HirExprList *items = HirExprList_new(T->hir);
@@ -2080,8 +2081,6 @@ static void unconditional_return(struct TypeChecker *T, struct SourceSpan span)
 {
     struct BlockState *bs = T->bs;
     do {
-        // TODO: why was ! not being propagated to the outermost block (function-level block)
-//         if (bs->outer == NULL) break;
          unify_never_type(T, span, bs->result);
          if ((bs = bs->outer) == NULL) break;
     } while (bs->kind != BLOCK_MATCH);
@@ -2234,7 +2233,6 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
     return type;
 }
 
-
 static void check_item(struct TypeChecker *T, struct HirDecl *item)
 {
     // create a new solver to hold the item's predicates
@@ -2290,20 +2288,73 @@ static void check_module_types(struct TypeChecker *T, struct HirModule m)
     pawHir_fold_decl_types(&F, m.items);
 }
 
+static void contains_const_param_callback(struct HirVisitor *V, struct HirPathExpr *e)
+{
+    DeclId *pdid = V->ud;
+    if (!DECL_ID_EXISTS(*pdid) && e->path.kind == HIR_PATH_ITEM) {
+        struct HirSegment const segment = HirSegments_last(e->path.segments);
+        struct HirDecl *item = pawHir_get_node(V->hir, segment.target);
+        if (HirIsGenericDecl(item)) *pdid = item->hdr.did;
+    }
+}
+
+static paw_Bool is_const_generic(struct TypeChecker *T, struct HirExpr *expr, DeclId *param_did)
+{
+    switch (HIR_KINDOF(expr)) {
+        case kHirPathExpr: {
+            paw_assert(!DECL_ID_EXISTS(*param_did));
+            struct HirPathExpr const *e = HirGetPathExpr(expr);
+            if (e->path.kind == HIR_PATH_ITEM) {
+                struct HirSegment const segment = HirSegments_last(e->path.segments);
+                struct HirDecl *item = pawHir_get_node(T->hir, segment.target);
+                if (HirIsGenericDecl(item)) {
+                    struct HirGenericDecl const *d = HirGetGenericDecl(item);
+                    paw_assert(!d->is_type);
+                    *param_did = d->did;
+                    return PAW_TRUE;
+                }
+            }
+            break;
+        }
+        case kHirBlock: {
+            struct HirBlock const *e = HirGetBlock(expr);
+            if (e->stmts->count == 0)
+                return is_const_generic(T, e->result, param_did);
+            break;
+        }
+        default:
+            break;
+    }
+    return PAW_FALSE;
+}
+
 static void check_constant_types(struct TypeChecker *T)
 {
+    T->pm = T->C->hir->modules->data; // TODO
     enter_inference_ctx(T);
 
     IrPendingConstantsIterator iter;
     IrPendingConstantsIterator_init(T->C->pending_constants, &iter);
     while (IrPendingConstantsIterator_is_valid(&iter)) {
-        IrPendingConstantsIterator_key(&iter);
+        DeclId const did = IrPendingConstantsIterator_key(&iter);
         struct IrPendingConstant *p = IrPendingConstantsIterator_valuep(&iter);
+        struct HirExpr *expr = p->payload;
 
-        IrType *type = check_operand(T, p->payload);
-        check_const(T, p->payload, type);
+        IrType *type = check_operand(T, expr);
+        check_const(T, expr, type);
 
-        IrPendingConstantsIterator_next(&iter);
+        DeclId param_did;
+        if (is_const_generic(T, expr, &param_did)) {
+            *p->konst = (struct IrConst){
+                .kind = IR_CONST_DECL,
+                .decl.did = param_did,
+            };
+
+            IrResolvedConstants_insert_unique(T->C, T->C->resolved_constants, did, p->konst);
+            IrPendingConstantsIterator_erase(&iter);
+        } else {
+            IrPendingConstantsIterator_next(&iter);
+        }
     }
 
     leave_inference_ctx(T);
@@ -2311,6 +2362,8 @@ static void check_constant_types(struct TypeChecker *T)
 
 static void check_types(struct TypeChecker *T)
 {
+    check_constant_types(T);
+
     struct HirModule const *pm;
     K_LIST_FOREACH (T->hir->modules, pm) {
         use_module(T, pm);
@@ -2318,8 +2371,6 @@ static void check_types(struct TypeChecker *T)
         check_module_types(T, *pm);
         leave_inference_ctx(T);
     }
-
-    check_constant_types(T);
 }
 
 void pawP_check_types(struct Compiler *C)

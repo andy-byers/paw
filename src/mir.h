@@ -6,6 +6,7 @@
 #define PAW_MIR_H
 
 #include "compile.h"
+#include "ir_type.h"
 
 struct Mir;
 
@@ -760,8 +761,8 @@ inline static struct MirInstruction *pawMir_new_return(struct Mir *mir, struct S
 }
 
 struct MirConstantData {
-    enum BuiltinKind kind;
-    Value value;
+    IrConst *data;
+    IrType *type;
 };
 
 struct MirRegisterData {
@@ -786,19 +787,22 @@ struct MirBlockData {
 struct MirConstantCache {
     struct MirConstantDataList *data;
 
-    struct ValueMap *ints;
-    struct ValueMap *floats;
-    struct ValueMap *strs;
+    struct MirConstMap *chars;
+    struct MirConstMap *ints;
+    struct MirConstMap *floats;
+    struct MirConstMap *strs;
+    struct MirConstMap *params;
 
-    // TODO: don't duplicate for each MIR
     MirConstant unitk;
     MirConstant boolk[2];
-    MirConstant chark[256];
 };
+
+DEFINE_MAP(struct Compiler, MirConstMap, pawP_alloc, pawIr_const_hash, pawIr_const_equals, IrConst *, MirConstant)
 
 struct MirConstantCache *pawMir_kcache_new(struct Mir *mir);
 void pawMir_kcache_delete(struct Mir *mir, struct MirConstantCache *kcache);
-MirConstant pawMir_kcache_add(struct Mir *mir, struct MirConstantCache *kcache, Value value, enum BuiltinKind kind);
+MirConstant pawMir_kcache_add_value(struct Mir *mir, struct MirConstantCache *kcache, union IrValue value, IrType *type);
+MirConstant pawMir_kcache_add_param(struct Mir *mir, struct MirConstantCache *kcache, DeclId did);
 
 // TODO: nested closures should be hoisted out into separate Mir objects, but this is complicated
 //       for a few reasons, namely upvalues, generics, and naming.
@@ -1045,8 +1049,8 @@ DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegiste
 DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(BodyMap, DeclId, struct Mir *)
 
-paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v, Value *pr);
-paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceSpan span, enum MirBinaryOpKind op, Value x, Value y, Value *pr);
+paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, union IrValue v, union IrValue *pr);
+paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceSpan span, enum MirBinaryOpKind op, union IrValue x, union IrValue y, union IrValue *pr);
 
 // Push a human-readable representation of the MIR on to the stack
 // Returns a pointer to the buffer containing null-terminated text.

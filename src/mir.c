@@ -85,19 +85,21 @@ struct MirConstantCache *pawMir_kcache_new(struct Mir *mir)
     struct MirConstantCache *kcache = P_ALLOC(mir, NULL, 0, sizeof(struct MirConstantCache));
     *kcache = (struct MirConstantCache){
         .data = MirConstantDataList_new(mir),
-        .ints = ValueMap_new_from(mir->C, mir->pool),
-        .floats = ValueMap_new_from(mir->C, mir->pool),
-        .strs = ValueMap_new_from(mir->C, mir->pool),
+        .chars = MirConstMap_new_from(mir->C, mir->pool),
+        .ints = MirConstMap_new_from(mir->C, mir->pool),
+        .floats = MirConstMap_new_from(mir->C, mir->pool),
+        .strs = MirConstMap_new_from(mir->C, mir->pool),
+        .params = MirConstMap_new_from(mir->C, mir->pool),
     };
 
-#define LOADK(Value_, Kind_) (MirConstantDataList_push(mir, kcache->data, \
-        (struct MirConstantData){.kind = (Kind_), .value = (Value_)}), \
+#define LOADK(Kind_, Value_) (MirConstantDataList_push(mir, kcache->data, \
+            (struct MirConstantData){.data = pawIr_new_const_value(mir->C, Value_, \
+                        pawIr_new_##Kind_(mir->C)), \
+                    .type = pawIr_new_##Kind_(mir->C)}), \
         MIR_CONST(kcache->data->count - 1));
-    kcache->unitk = LOADK(P2V(NULL), BUILTIN_UNIT);
-    kcache->boolk[PAW_FALSE] = LOADK(I2V(PAW_FALSE), BUILTIN_BOOL);
-    kcache->boolk[PAW_TRUE] = LOADK(I2V(PAW_TRUE), BUILTIN_BOOL);
-    for (unsigned i = 0; i < PAW_COUNTOF(kcache->chark); ++i)
-        kcache->chark[i] = LOADK(C2V(i), BUILTIN_CHAR);
+    kcache->unitk = LOADK(unit, I2V(0));
+    kcache->boolk[PAW_FALSE] = LOADK(bool, I2V(PAW_FALSE));
+    kcache->boolk[PAW_TRUE] = LOADK(bool, I2V(PAW_TRUE));
 #undef LOADK
 
     return kcache;
@@ -106,32 +108,50 @@ struct MirConstantCache *pawMir_kcache_new(struct Mir *mir)
 void pawMir_kcache_delete(struct Mir *mir, struct MirConstantCache *kcache)
 {
     MirConstantDataList_delete(mir, kcache->data);
-    ValueMap_delete(mir->C, kcache->ints);
-    ValueMap_delete(mir->C, kcache->floats);
-    ValueMap_delete(mir->C, kcache->strs);
+    MirConstMap_delete(mir->C, kcache->ints);
+    MirConstMap_delete(mir->C, kcache->floats);
+    MirConstMap_delete(mir->C, kcache->strs);
 
     P_ALLOC(mir, kcache, sizeof(struct MirConstantCache), 0);
 }
 
-MirConstant pawMir_kcache_add(struct Mir *mir, struct MirConstantCache *kcache, Value k, enum BuiltinKind kind)
+MirConstant pawMir_kcache_add_value(struct Mir *mir, struct MirConstantCache *kcache, union IrValue value, IrType *type)
 {
-    if (kind == BUILTIN_UNIT) return kcache->unitk;
-    if (kind == BUILTIN_BOOL) return kcache->boolk[V_TRUE(k)];
-    if (kind == BUILTIN_CHAR) return kcache->chark[(unsigned char)k.c];
-    ValueMap *map = kind == BUILTIN_FLOAT ? kcache->floats :
-        kind == BUILTIN_STR ? kcache->strs : kcache->ints;
-    Value const *pvalue = ValueMap_get(mir->C, map, k);
-    if (pvalue != NULL) return MIR_CONST((int)V_INT(*pvalue));
+    if (IrIsUnit(type)) return kcache->unitk;
+    if (IrIsBool(type)) return kcache->boolk[V_TRUE(value)];
+    MirConstMap *map = IrIsChar(type) ? kcache->chars :
+        IrIsFloat(type) ? kcache->floats :
+        IrIsString(type) ? kcache->strs :
+        kcache->ints;
+    IrConst *k = pawIr_new_const_value(mir->C, value, type);
+    MirConstant const *pk = MirConstMap_get(mir->C, map, k);
+    if (pk != NULL) return *pk;
 
-    int const id = kcache->data->count;
-    ValueMap_insert(mir->C, map, k, I2V(id));
+    MirConstant const id = MIR_CONST(kcache->data->count);
     MirConstantDataList_push(mir, kcache->data,
         (struct MirConstantData){
-            .kind = kind,
-            .value = k,
+            .data = k,
+            .type = type,
         });
 
-    return MIR_CONST(id);
+    MirConstMap_insert(mir->C, map, k, id);
+    return id;
+}
+
+MirConstant pawMir_kcache_add_param(struct Mir *mir, struct MirConstantCache *kcache, DeclId did)
+{
+    IrConst *konst = pawIr_new_const_decl(mir->C, did);
+    MirConstant const *pk = MirConstMap_get(mir->C, mir->kcache->params, konst);
+    if (pk != NULL) return *pk;
+
+    MirConstant const id = MIR_CONST(kcache->data->count);
+    MirConstantDataList_push(mir, kcache->data,
+        (struct MirConstantData){
+            .type = pawIr_get_def_type(mir->C, did),
+            .data = konst,
+        });
+    MirConstMap_insert(mir->C, mir->kcache->params, konst, id);
+    return id;
 }
 
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions)
@@ -1306,35 +1326,10 @@ static char const *binop_name(enum MirBinaryOpKind op)
     }
 }
 
-static void print_constant(struct Printer *P, Value value, enum BuiltinKind kind)
+static void print_constant(struct Printer *P, IrConst *konst)
 {
-    switch (kind) {
-        case BUILTIN_UNIT:
-            PRINT_LITERAL(P, "()");
-            break;
-        case BUILTIN_BOOL:
-            PRINT_FORMAT(P, "%s", V_TRUE(value) ? "true" : "false");
-            break;
-        case BUILTIN_CHAR:
-            if (V_CHAR(value) < 0x20 || V_CHAR(value) > 0x7F) {
-                char const HEX[] = "0123456789ABCDEF";
-                PRINT_FORMAT(P, "'\\x%c%c'",
-                        HEX[(unsigned char)V_CHAR(value) >> 4],
-                        HEX[(unsigned char)V_CHAR(value) & 0x0F]);
-            } else {
-                PRINT_FORMAT(P, "'%c'", V_CHAR(value));
-            }
-            break;
-        case BUILTIN_INT:
-            PRINT_FORMAT(P, "%I", V_INT(value));
-            break;
-        case BUILTIN_FLOAT:
-            PRINT_FORMAT(P, "%f", V_FLOAT(value));
-            break;
-        default:
-            paw_assert(kind == BUILTIN_STR);
-            PRINT_FORMAT(P, "\"%s\"", V_TEXT(value));
-    }
+    Str const *s = pawIr_print_const(P->C, konst);
+    PRINT_STRING(P, s);
 }
 
 static void print_place(struct Printer *P, struct MirPlace place)
@@ -1348,7 +1343,7 @@ static void print_place(struct Printer *P, struct MirPlace place)
         }
     } else if (place.kind == MIR_PLACE_CONSTANT) {
         struct MirConstantData const *k = mir_const_data(P->mir, place.k);
-        print_constant(P, k->value, k->kind);
+        print_constant(P, k->data);
     } else {
         PRINT_FORMAT(P, "up%d", place.up);
     }
@@ -1372,7 +1367,7 @@ static void dump_instruction_list(struct Printer *P, struct MirInstructionList *
     }
 }
 
-static void print_constant(struct Printer *P, Value value, enum BuiltinKind kind);
+static void print_constant(struct Printer *P, IrConst *konst);
 
 static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
 {
@@ -1604,7 +1599,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
                 if (i > 0) PRINT_LITERAL(P, ", ");
                 struct MirSwitchArm arm = MirSwitchArmList_get(t->arms, i);
                 struct MirConstantData const *kdata = mir_const_data(P->mir, arm.k);
-                print_constant(P, kdata->value, kdata->kind);
+                print_constant(P, kdata->data);
                 PRINT_FORMAT(P, ": bb%d", MirBlockList_get(P->bb->successors, i).value);
             }
             if (t->has_otherwise) {

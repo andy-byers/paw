@@ -24,6 +24,7 @@ enum pawL_StdModule {
     PAWL_STD_PTR,
     PAWL_STD_MEM,
     PAWL_STD_SLICE,
+    PAWL_STD_ARRAY,
     PAWL_STD_OPTION,
     PAWL_STD_RESULT,
     PAWL_STD_ITER,

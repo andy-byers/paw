@@ -143,6 +143,11 @@ void pawIr_type_visitor_init(struct IrTypeVisitor *V, struct Compiler *C, void *
     };
 }
 
+void pawIr_visit_const(struct IrTypeVisitor *V, IrConst *node)
+{
+    V->VisitConst(V, node);
+}
+
 void pawIr_visit_type(struct IrTypeVisitor *V, IrType *node)
 {
     VisitType(V, node);
@@ -211,9 +216,10 @@ static IrConst *fold_const(struct IrTypeFolder *F, IrConst *k)
             return pawIr_new_const_value(F->C, k->value.value, type);
         }
         case IR_CONST_INFER:
-            return pawIr_new_const_infer(F->C);
-        case IR_CONST_DECL:
+            return k;
+        case IR_CONST_DECL: {
             return pawIr_new_const_decl(F->C, k->decl.did);
+        }
     }
 }
 
@@ -253,6 +259,13 @@ static IrType *FoldSlice(struct IrTypeFolder *F, struct IrSlice *t)
 {
     IrType *type = FoldType(F, t->type);
     return pawIr_new_slice(F->C, type);
+}
+
+static IrType *FoldArray(struct IrTypeFolder *F, struct IrArray *t)
+{
+    IrConst *length = F->FoldConst(F, t->length);
+    IrType *type = FoldType(F, t->type);
+    return pawIr_new_array(F->C, type, length);
 }
 
 static IrType *FoldTuple(struct IrTypeFolder *F, struct IrTuple *t)
@@ -309,6 +322,7 @@ void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud
         .FoldProjection = FoldProjection,
         .FoldFnPtr = FoldFnPtr,
         .FoldSlice = FoldSlice,
+        .FoldArray = FoldArray,
         .FoldTuple = FoldTuple,
         .FoldNever = FoldNever,
     };

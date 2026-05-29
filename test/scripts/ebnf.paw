@@ -9,9 +9,12 @@
 // File I/O
 //
 
+use fmt;
 use io;
 use hashmap::HashMap;
 use list::List;
+use os;
+use string::String;
 use str_builder;
 
 const CHUNK_SIZE: int = 1 << 12;
@@ -55,7 +58,7 @@ fn is_hex(c: char) -> bool {
     ('a'..='f').contains(c) || ('A'..='F').contains(c) || is_numeric(c)
 }
 
-inline struct SourceLoc {
+struct SourceLoc {
     pub line: int,
     pub column: int,
 }
@@ -363,7 +366,7 @@ impl TokenKind {
     }
 }
 
-inline enum TokenErrorKind {
+enum TokenErrorKind {
     UnknownToken,
     UnterminatedString,
     UnterminatedComment,
@@ -401,7 +404,7 @@ impl TokenErrorKind {
 
 type ParseResult<T> = Result<T, ParseError>;
 
-inline struct ParseError {
+struct ParseError {
     pub kind: ParseErrorKind,
     pub location: SourceLoc,
 }
@@ -412,7 +415,7 @@ impl ParseError {
     }
 }
 
-inline enum ParseErrorKind {
+enum ParseErrorKind {
     UnterminatedComment,
     UnterminatedString(str),
 
@@ -460,7 +463,7 @@ impl Production {
     }
 }
 
-inline struct Expression {
+struct Expression {
     pub alts: List<Alternative>,
 }
 
@@ -475,7 +478,7 @@ impl Expression {
     }
 }
 
-inline struct Alternative {
+struct Alternative {
     pub terms: List<Term>,
 }
 
@@ -750,7 +753,7 @@ fn analyze_definitions(g: Grammer, reserved: [str: ()]) -> Analysis {
     Analysis::Ok(result)
 }
 
-inline enum Verbosity {
+enum Verbosity {
     Quiet,
     Verbose,
 }
@@ -785,15 +788,15 @@ impl App {
         }
     }
 
-    pub fn info(self, msg: str) {
+    pub fn info(self, message: str) {
         if self.verbosity.should_print_info() {
-            io::println(msg);
+            io::println(message);
         }
     }
 
-    pub fn error(self, msg: str) -> ! {
+    pub fn error(self, message: str) -> ! {
         let parts = self.program_name.split("/");
-        panic("\{parts[-1]}: \{msg}\n");
+        panic("\{parts[-1]}: \{message}\n");
     }
 
     pub fn help(self) {
@@ -872,8 +875,50 @@ const SUCCESS: int = 0;
 const FAILURE: int = 1;
 
 
-pub fn main(args: List<str>) -> int {
-    let app = App::new(args.get_or(0, "ebnf"));
+fn run_app() -> Result<(), EbnfError> {
+    let args = os::args();
+    let app = App::new(args.get(0).unwrap_or("ebnf"));
+    let builtins = HashMap::new();
+
+    let path = if #args < 2 {
+        app.error("missing PATH argument");
+    } else {
+        args[1]
+    };
+
+    let source = match read_to_str(path) {
+        Err(e) => app.error("unable to read EBNF file \"\{path}\" (\{e})"),
+        Ok(s) => s,
+    };
+
+    let scanner = Scanner::new(source);
+
+    // Parse the token stream into a tree describing the given grammer. If "Parser::parse()"
+    // completes without encountering an error, then the EBNF is syntactically correct.
+    let parser = Parser::new();
+    let grammer = match parser.parse(scanner) {
+        Err(e) => app.error("\{e}"),
+        Ok(g) => g,
+    };
+
+    // Ensure that all identifiers are defined.
+    let mapping = match analyze_definitions(grammer, builtins) {
+        Analysis::DuplicateIdent(ident) =>
+            app.error("duplicate identifier \"\{ident}\""),
+        Analysis::ReservedIdent(ident) =>
+            app.error("definition of builtin identifier \"\{ident}\""),
+        Analysis::UnrecognizedIdent(ident) =>
+            app.error("missing identifier \"\{ident}\""),
+        Analysis::Ok(r) => r,
+    };
+
+    app.info("OK");
+    Ok(())
+}
+
+pub fn main() -> int {
+    let args = os::args();
+    let app = App::new(args.get(0).unwrap_or("ebnf"));
     let builtins = HashMap::new();
 
     let path = if #args < 2 {

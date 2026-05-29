@@ -1,0 +1,93 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+use slice;
+
+
+#[extern]
+pub fn repeat<const N: int, T: Copy>(value: T) -> [N]T;
+
+#[extern]
+pub fn uninit<const N: int, T>() -> [N]T;
+
+#[extern]
+pub fn zeros<const N: int, T>() -> [N]T;
+
+
+impl<const N: int, T> AsPtr<T> for [N]T {
+    fn as_ptr(*self) -> *T {
+        &self[0]
+    }
+}
+
+impl<const N: int, T> ToSlice<T> for [N]T {
+    fn to_slice(*self) -> []T {
+        slice::from_raw_parts(self.as_ptr(), N)
+    }
+}
+
+impl<const N: int, T> Index<int> for [N]T {
+    type Output = T;
+    fn index(*self, index: int) -> *T {
+        &self.to_slice()[index]
+    }
+}
+
+impl<const N: int, T> IndexRange<Range<int>> for [N]T {
+    type Output = T;
+    fn index_range(*self, idx: Range<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<const N: int, T> IndexRange<RangeInclusive<int>> for [N]T {
+    type Output = T;
+    fn index_range(*self, idx: RangeInclusive<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<const N: int, T> IndexRange<RangeFrom<int>> for [N]T {
+    type Output = T;
+    fn index_range(*self, idx: RangeFrom<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<const N: int, T> IndexRange<RangeTo<int>> for [N]T {
+    type Output = T;
+    fn index_range(*self, idx: RangeTo<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<const N: int, T> IndexRange<RangeToInclusive<int>> for [N]T {
+    type Output = T;
+    fn index_range(*self, idx: RangeToInclusive<int>) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+impl<const N: int, T> IndexRange<RangeFull> for [N]T {
+    type Output = T;
+    fn index_range(*self, idx: RangeFull) -> []T {
+        call_index_range(&self.to_slice(), idx)
+    }
+}
+
+fn call_index_range<R: IndexRange<Idx>, Idx>(r: *R, index: Idx) -> []R::Output {
+    r.index_range(index)
+}
+
+
+impl<const N: int, T> IntoIterator for *[N]T {
+    type Item = *T;
+    type IntoIter = slice::Iter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.to_slice().into_iter()
+    }
+}
+
+

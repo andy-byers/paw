@@ -259,11 +259,13 @@ IrConst *pawIr_new_const_decl(struct Compiler *C, DeclId did)
     return k;
 }
 
-IrConst *pawIr_new_const_infer(struct Compiler *C)
+IrConst *pawIr_new_const_infer(struct Compiler *C, int depth, int index)
 {
     IrConst *k = NEW_NODE(C, IrConst);
     *k = (struct IrConst){
         .kind = IR_CONST_INFER,
+        .infer.depth = depth,
+        .infer.index = index,
     };
     return k;
 }
@@ -356,7 +358,7 @@ IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did)
             IrType *t = pawU_new_unknown(C->U, TODO);
             r = IrGenericArg_from_type(t);
         } else {
-            IrConst *k = pawIr_new_const_infer(C);
+            IrConst *k = pawU_new_const_var(C->U, TODO);
             r = IrGenericArg_from_const(k);
         }
         IrGenericArgs_push(C, result, r);
@@ -373,7 +375,7 @@ IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did)
         IrType *t = pawU_new_unknown(C->U, TODO);
         r = IrGenericArg_from_type(t);
     } else {
-        IrConst *k = pawIr_new_const_infer(C);
+        IrConst *k = pawU_new_const_var(C->U, TODO);
         r = IrGenericArg_from_const(k);
     }
     return r;
@@ -392,7 +394,7 @@ int pawIr_unify(struct Compiler *C, IrGenericArg a, IrGenericArg b)
     } else {
         IrConst *x = IrGenericArg_get_const(a);
         IrConst *y = IrGenericArg_get_const(b);
-        return 0; // TODO
+        return pawU_unify_const(C->U, x, y);
     }
 
     return 0;
@@ -407,7 +409,7 @@ IrGenericArg pawIr_normalize(struct Compiler *C, IrGenericArg g)
     } else {
         IrConst *x = IrGenericArg_get_const(g);
         return IrGenericArg_from_const(
-                x); // TODO: normalize constant (i.e. normalize contained types if present?)
+                pawU_normalize_const(C->U, x));
     }
 }
 
@@ -420,7 +422,7 @@ IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g)
     } else {
         IrConst *x = IrGenericArg_get_const(g);
         return IrGenericArg_from_const(
-                x); // TODO: normalize constant (i.e. normalize contained types if present?)
+                pawU_normalize_const(C->U, x));
     }
 }
 
@@ -783,10 +785,10 @@ IrTrait *pawIr_get_trait_context(struct Compiler *C, IrType *fn)
             impl_def->did, IR_GENERIC_ARGS(fn)).trait;
 }
 
-
-void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs)
+void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs, struct IrConstObligationCause cause)
 {
     IrConstObligations_push(C, C->const_obligations, (struct IrConstObligation){
+                .cause = cause,
                 .lhs = lhs,
                 .rhs = rhs,
             });
@@ -813,14 +815,17 @@ static enum ObligationResult {
     OR_UNKNOWN,
 } solve_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs)
 {
-    if (lhs->kind == IR_CONST_VALUE
-            && rhs->kind == IR_CONST_VALUE) {
-        struct IrConstValue const x = lhs->value;
-        struct IrConstValue const y = rhs->value;
-        paw_assert(pawIr_type_equals(C, x.type, y.type));
-        return const_equals(x.value, y.value, x.type);
-    }
+    if (pawU_unify_const(C->U, lhs, rhs) == 0)
+        return OR_SOLVED;
     return OR_UNKNOWN;
+//    if (lhs->kind == IR_CONST_VALUE
+//            && rhs->kind == IR_CONST_VALUE) {
+//        struct IrConstValue const x = lhs->value;
+//        struct IrConstValue const y = rhs->value;
+//        paw_assert(pawIr_type_equals(C, x.type, y.type));
+//        return const_equals(x.value, y.value, x.type);
+//    }
+//    return OR_UNKNOWN;
 }
 
 int pawIr_solve_const_obligations(struct Compiler *C)
@@ -840,32 +845,47 @@ int pawIr_solve_const_obligations(struct Compiler *C)
     return C->const_obligations->count;
 }
 
-static void report_inference_var(struct IrTypeVisitor *V, struct IrInfer *t)
+static void report_type_var(struct IrTypeVisitor *V, struct IrInfer *t)
 {
     PAW_UNUSED(t);
     *((paw_Bool *)V->ud) = PAW_TRUE;
 }
 
+static void report_const_var(struct IrTypeVisitor *V, struct IrConst *k)
+{
+    if (k->kind == IR_CONST_INFER)
+        *((paw_Bool *)V->ud) = PAW_TRUE;
+}
+
+struct IrTypeVisitor init_ivar_visitor(struct Compiler *C, paw_Bool *flag_ptr)
+{
+    struct IrTypeVisitor V;
+    pawIr_type_visitor_init(&V, C, flag_ptr);
+    V.VisitInfer = report_type_var;
+    V.VisitConst = report_const_var;
+    return V;
+}
+
 paw_Bool pawIr_type_contains_inference_var(struct Compiler *C, IrType *type)
 {
     paw_Bool found_inference_var = PAW_FALSE;
-
-    struct IrTypeVisitor V;
-    pawIr_type_visitor_init(&V, C, &found_inference_var);
-    V.VisitInfer = report_inference_var;
-
+    struct IrTypeVisitor V = init_ivar_visitor(C, &found_inference_var);
     pawIr_visit_type(&V, type);
+    return found_inference_var;
+}
+
+paw_Bool pawIr_const_contains_inference_var(struct Compiler *C, IrConst *konst)
+{
+    paw_Bool found_inference_var = PAW_FALSE;
+    struct IrTypeVisitor V = init_ivar_visitor(C, &found_inference_var);
+    pawIr_visit_const(&V, konst);
     return found_inference_var;
 }
 
 paw_Bool pawIr_trait_contains_inference_var(struct Compiler *C, IrTrait *trait)
 {
     paw_Bool found_inference_var = PAW_FALSE;
-
-    struct IrTypeVisitor V;
-    pawIr_type_visitor_init(&V, C, &found_inference_var);
-    V.VisitInfer = report_inference_var;
-
+    struct IrTypeVisitor V = init_ivar_visitor(C, &found_inference_var);
     pawIr_visit_trait(&V, trait);
     return found_inference_var;
 }
@@ -900,7 +920,7 @@ static paw_Uint hash_trait(IrTrait const *trait)
     return hash;
 }
 
-static paw_Uint hash_const(IrConst *k)
+static paw_Uint hash_const(IrConst const *k)
 {
     paw_Uint hash = 0;
     switch (k->kind) {
@@ -911,12 +931,9 @@ static paw_Uint hash_const(IrConst *k)
             hash = hash_combine(hash, hash_type(k->value.type));
             hash = hash_combine(hash, (paw_Uint)k->value.value.i);
             break;
-        case IR_CONST_DECL:
+        default:
+            paw_assert(k->kind == IR_CONST_DECL);
             hash = hash_combine(hash, k->decl.did.value);
-            break;
-        case IR_CONST_INFER:
-            hash = hash_combine(hash, k->infer.unimplemented); // TODO
-            break;
     }
     return hash;
 }
@@ -1127,13 +1144,13 @@ paw_Bool pawIr_type2_equals(struct Compiler *C, struct IrType2 a, struct IrType2
         && pawIr_type_equals(C, a.second, b.second);
 }
 
-paw_Uint pawIr_const_hash(struct Compiler *C, IrConst *k)
+paw_Uint pawIr_const_hash(struct Compiler *C, IrConst const *k)
 {
     PAW_UNUSED(C);
     return hash_const(k);
 }
 
-paw_Bool pawIr_const_equals(struct Compiler *C, IrConst *a, IrConst *b)
+paw_Bool pawIr_const_equals(struct Compiler *C, IrConst const *a, IrConst const *b)
 {
     if (a->kind != b->kind)
         return PAW_FALSE;
@@ -1145,7 +1162,9 @@ paw_Bool pawIr_const_equals(struct Compiler *C, IrConst *a, IrConst *b)
             return pawIr_type_equals(C, a->value.type, b->value.type)
                 && a->value.value.i == b->value.value.i;
         case IR_CONST_INFER:
-            return a->infer.unimplemented == b->infer.unimplemented;
+            // TODO: either expect never to call this function on an inference var or at least normalize and try again
+            return a->infer.depth == b->infer.depth
+                && a->infer.index == b->infer.index;
         case IR_CONST_DECL:
             return P_ID_EQUALS(C, a->decl.did, b->decl.did);
     }
@@ -1301,11 +1320,13 @@ paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type)
 {
     if (IrIsAdt(type)) {
         IrSolver *S = pawIr_push_solver(C);
+        int const position = pawU_current_position(C->U);
         DeclId const copy_did = C->core_traits[CORE_TRAIT_COPY];
         IrGenericArgs *copy_args = IrGenericArgs_new(C);
         IrGenericArgs_push(C, copy_args, IrGenericArg_from_type(type));
         IrTrait *copy = pawIr_solver_instantiate_trait_with(S, copy_did, copy_args);
         paw_Bool const result = pawIr_type_implements_trait(S, type, copy);
+        pawU_undo_unifications(C->U, position);
         pawIr_pop_solver(C);
         return result;
     } else if (IrIsTuple(type)) {
@@ -1562,10 +1583,7 @@ static void print_type(struct Printer *P, IrType *type)
             if (def->is_type) {
                 PRINT_STRING(P, def->type.name);
             } else {
-                PRINT_LITERAL(P, "const ");
                 PRINT_STRING(P, def->konst.name);
-                PRINT_LITERAL(P, ": ");
-                print_type(P, def->konst.type);
             }
             break;
         }
@@ -1600,7 +1618,9 @@ static void print_const(struct Printer *P, IrConst *konst)
 {
     switch (konst->kind) {
         case IR_CONST_VALUE:
-            if (IrIsBool(konst->value.type)) {
+            if (IrIsUnit(konst->value.type)) {
+                PRINT_LITERAL(P, "()");
+            } else if (IrIsBool(konst->value.type)) {
                 if (konst->value.value.b) {
                     PRINT_LITERAL(P, "true");
                 } else {
@@ -1610,17 +1630,22 @@ static void print_const(struct Printer *P, IrConst *konst)
                 PRINT_CHAR(P, konst->value.value.c);
             } else if (IrIsInt(konst->value.type)) {
                 pawL_add_int(ENV(P), P->buf, konst->value.value.i);
-            } else {
-                paw_assert(IrIsFloat(konst->value.type));
+            } else if (IrIsFloat(konst->value.type)) {
                 pawL_add_float(ENV(P), P->buf, konst->value.value.f);
+            } else {
+                paw_assert(IrIsString(konst->value.type));
+                L_ADD_STRING(ENV(P), P->buf, konst->value.value.s);
             }
             break;
         case IR_CONST_PENDING:
-            PRINT_LITERAL(P, "?");
+            PRINT_LITERAL(P, "<unevaluated>");
             break;
-        case IR_CONST_DECL:
-            PRINT_FORMAT(P, "DeclId(%d)", konst->decl.did.value);
+        case IR_CONST_DECL: {
+            struct IrGenericDef const *def = pawIr_get_generic_def(P->C, konst->decl.did);
+            paw_assert(!def->is_type);
+            PRINT_STRING(P, def->konst.name);
             break;
+        }
         case IR_CONST_INFER:
             PRINT_LITERAL(P, "_");
             break;
@@ -1692,6 +1717,22 @@ Str const *pawIr_print_type_v2(struct Compiler *C, IrType *type)
                    .C = C,
                },
                type);
+
+    return pawL_buffer_finish(P, &buf);
+}
+
+Str const *pawIr_print_const(struct Compiler *C, IrConst *konst)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &buf);
+
+    print_const(&(struct Printer){
+                   .P = ENV(C),
+                   .buf = &buf,
+                   .C = C,
+               },
+               konst);
 
     return pawL_buffer_finish(P, &buf);
 }

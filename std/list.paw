@@ -10,6 +10,7 @@ pub struct List<T> {
     capacity: int,
 }
 
+use array;
 use mem;
 use ptr;
 use slice;
@@ -17,7 +18,7 @@ use slice;
 impl<T> List<T> {
     pub fn new() -> Self {
         Self{
-            start: ptr::null::<T>(), 
+            start: ptr::null(), 
             length: 0, 
             capacity: 0,
         }
@@ -181,6 +182,15 @@ impl<T> List<T> {
     fn get_element_ptr(*self, index: int) -> *T {
         ptr::add(self.as_ptr(), index)
     }
+
+    pub fn from_array<const LENGTH: int>(arr: [LENGTH]T) -> mem::Result<Self> {
+        let result = Self::new();
+        result.reserve(LENGTH)?;
+        for value in &arr {
+            result.push(*value).unwrap();
+        }
+        Ok(result)
+    }
 }
 
 
@@ -257,29 +267,6 @@ impl<T: Default> List<T> {
         Ok(())
     }
 }
-
-//TODO use string_builder;
-//TODO 
-//TODO impl List<char> {
-//TODO     pub fn from_str(value: str) -> Self {
-//TODO         let result = [];
-//TODO         for i in 0..#value {
-//TODO             result.push(value[i]);
-//TODO         }
-//TODO         result
-//TODO     }
-//TODO 
-//TODO     pub fn as_str(*self) -> str {
-//TODO         let b = string_builder::Builder::new();
-//TODO         for i in 0..self.len() {
-//TODO             b.append_char(self[i]);
-//TODO         }
-//TODO         for c in self {
-//TODO             b.append_char(c);
-//TODO         }
-//TODO         b.string()
-//TODO     }
-//TODO }
 
 impl<T> Default for List<T> {
     fn default() -> Self {

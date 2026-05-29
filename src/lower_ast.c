@@ -149,7 +149,7 @@ static struct HirType *unit_type(struct LowerAst *L, struct SourceSpan span)
 
 static struct HirExpr *unit_lit(struct LowerAst *L, struct SourceSpan span)
 {
-    return NEW_NODE(L, basic_lit, span, next_node_id(L), P2V(NULL), BUILTIN_UNIT);
+    return NEW_NODE(L, basic_lit, span, next_node_id(L), (Value){0}, BUILTIN_UNIT);
 }
 
 static struct HirPath new_unary_path(struct LowerAst *L, struct HirIdent ident, NodeId id, enum HirPathKind kind, NodeId target)
@@ -307,7 +307,7 @@ static struct HirExpr *LowerUnOpExpr(struct LowerAst *L, struct AstUnOpExpr *e)
                         .span = e->span);
 
             paw_Int const i = u < (paw_Uint)PAW_INT_MAX + 1 ? -(paw_Int)u : PAW_INT_MIN;
-            return NEW_NODE(L, basic_lit, e->span, e->id, I2V(i), BUILTIN_INT);
+            return NEW_NODE(L, basic_lit, e->span, e->id, (Value){.i = i}, BUILTIN_INT);
         }
     }
     struct HirExpr *target = lower_expr(L, e->target);
@@ -639,7 +639,7 @@ static struct HirExpr *new_boolean_match(struct LowerAst *L, struct SourceSpan s
     struct Hir *hir = L->hir;
     struct HirExprList *arms = HirExprList_new(hir);
 
-    struct HirExpr *true_expr = NEW_NODE(L, basic_lit, span, next_node_id(L), I2V(PAW_TRUE), BUILTIN_BOOL);
+    struct HirExpr *true_expr = NEW_NODE(L, basic_lit, span, next_node_id(L), (Value){.i = PAW_TRUE}, BUILTIN_BOOL);
     struct HirPat *true_pat = NEW_NODE(L, literal_pat, cond->hdr.span, next_node_id(L), true_expr);
     struct HirExpr *true_arm = NEW_NODE(L, match_arm, span, next_node_id(L), true_pat, NULL, then_block);
     HirExprList_push(hir, arms, true_arm);

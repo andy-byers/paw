@@ -82,14 +82,14 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, char const *s, size_t n)
 void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int i)
 {
     size_t len;
-    char const *str = pawV_to_str(P, &I2V(i), PAW_TINT, &len);
+    char const *str = pawV_to_str(P, &(Value){.i = i}, PAW_TINT, &len);
     add_nstring(P, buf, str, len);
 }
 
 void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 {
     size_t len;
-    char const *str = pawV_to_str(P, &F2V(f), PAW_TFLOAT, &len);
+    char const *str = pawV_to_str(P, &(Value){.f = f}, PAW_TFLOAT, &len);
     add_nstring(P, buf, str, len);
 }
 
