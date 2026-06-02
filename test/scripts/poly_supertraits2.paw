@@ -1,5 +1,7 @@
 // supertraits2.paw
 
+use list::List;
+
 pub trait Collector<T>: IntoIterator<Item = *T> {
     fn collect_items(*self) -> List<T>;
 }

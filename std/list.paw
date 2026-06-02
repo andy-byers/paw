@@ -204,8 +204,8 @@ impl<T> Drop for List<T> {
     fn drop(*self) {
         // drop each element in-place, in reverse order
         for r in 0..self.length {
-            let i = self.length - r - 1;
-            mem::drop_in_place(self.get_element_ptr(i));
+            let index = self.length - r - 1;
+            mem::drop_in_place(&self[index]);
         }
 
         mem::dealloc(self.start);
@@ -253,9 +253,8 @@ impl<T: Default> List<T> {
         }
         if length < self.len() {
             for ri in length..self.len() {
-                // TODO: get ptr::drop to work! this workaround won't work for "pinned" types
-                let _ = ptr::read(&self[self.len() - ri - 1]);
-//                ptr::drop(&self[self.len() - ri - 1]);
+                let index = self.len() - ri - 1;
+                mem::drop_in_place(&self[index]);
             }
         } else {
             self.reserve(length)?;
