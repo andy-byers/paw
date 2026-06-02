@@ -204,7 +204,8 @@ impl<T> Drop for List<T> {
     fn drop(*self) {
         // drop each element in-place, in reverse order
         for r in 0..self.length {
-            ptr::drop(self.get_element_ptr(self.length - r - 1));
+            let i = self.length - r - 1;
+            mem::drop_in_place(self.get_element_ptr(i));
         }
 
         mem::dealloc(self.start);

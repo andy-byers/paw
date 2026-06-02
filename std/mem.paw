@@ -17,7 +17,7 @@ pub fn sizeof<T>() -> int;
 pub fn alignof<T>() -> int;
 
 
-fn strideof<T>() -> int {
+pub fn strideof<T>() -> int {
     let size = sizeof::<T>();
     let alignment = alignof::<T>();
     (size + (alignment - 1)) & ~(alignment - 1)
@@ -45,6 +45,11 @@ pub fn realloc<T>(ptr: *T, count: int) -> Result<*T> {
 pub fn dealloc<T>(ptr: *T) {
     raw_dealloc(ptr as *char)
 }
+
+
+pub fn drop<T>(value: T) {}
+
+pub fn drop_in_place<T>(ptr: *T) {}
 
 
 #[extern = "paw_mem_raw_alloc"] 

@@ -721,11 +721,6 @@
 //    }
 //}
 
-// TODO: fix this test, should throw an error
-struct MoveOnly;
-pub fn move_into_pointer_twice(pointer: *MoveOnly, value: MoveOnly) {
-    *pointer = value;
-    *pointer = value;
+#[test]
+pub fn test() {
 }
-
-

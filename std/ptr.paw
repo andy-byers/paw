@@ -11,9 +11,6 @@ pub fn write<T>(ptr: *T, value: T);
 #[extern]
 pub fn add<T>(ptr: *T, offset: int) -> *T;
 
-#[extern]
-pub fn drop<T>(ptr: *T);
-
 pub fn null<T>() -> *T {
     0 as *T
 }

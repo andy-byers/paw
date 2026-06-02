@@ -754,6 +754,19 @@ public:
         state.create_return(array);
     }
 
+    void generate_mem_drop_in_place(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *irfn = IrGetFnPtr(IR_SIGNATURE_FN(C, mir->type));
+        auto *irtype = ir_deref(IrTypeList_first(irfn->params));
+        if (pawIr_needs_drop(C, irtype)) {
+            auto *irdrop = pawIr_get_custom_drop_type(C, irtype);
+            B->CreateCall(get_fn(irdrop)->get_fn(), {
+                    X.create_null_ptr(), state.get_arg(0)});
+        }
+        state.create_return();
+    }
+
     // fn ptr::read<T>(p: *T) -> T
     void generate_ptr_read(Mir const *mir, Fn *fn)
     {
@@ -891,6 +904,9 @@ public:
 
         if (is_core_op(mir, "mem", "alignof"))
             generate_alignof_intrinsic(mir, fn);
+
+        if (is_core_op(mir, "mem", "drop_in_place"))
+            generate_mem_drop_in_place(mir, fn);
 
         if (mir->blocks->count == 0)
             return;
