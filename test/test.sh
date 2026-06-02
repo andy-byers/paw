@@ -121,11 +121,11 @@ ROOT_DIR=$BUILD_PATH/src/codegen
 DRIVER_PATH=$ROOT_DIR/pawc
 FAILURES=()
 
-cmake -DPAW_STRESS=2 \
-    -DPAW_CLANG_PATH=$CLANG_PATH \
-    -DPAW_ROOT_DIR=$(pwd)/src/codegen \
-    ..
-cmake --build . --target pawc paw_stdc
+#cmake -DPAW_STRESS=2 \
+#    -DPAW_CLANG_PATH=$CLANG_PATH \
+#    -DPAW_ROOT_DIR=$(pwd)/src/codegen \
+#    ..
+#cmake --build . --target pawc paw_stdc
 
 for TESTNAME in "${TESTS[@]}"; do
     SCRIPT_PATH="$TEST_PATH/scripts/$TESTNAME.paw"

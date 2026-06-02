@@ -191,6 +191,7 @@ static void meet_states(struct VariableAnalyzer *V, VariableStates const *x, Var
     }
 }
 
+#if defined(PAW_DEBUG_EXTRA)
 #include <stdio.h>
 
 void visualize_block(struct VariableStates const *bs)
@@ -219,6 +220,8 @@ void visualize_blocks(struct VariableAnalyzer const *V)
         visualize_block(V->blocks->data[i]);
     }
 }
+
+#endif
 
 static void indicate_variable_use(struct VariableAnalyzer *V, struct Variable const *v)
 {

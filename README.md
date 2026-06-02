@@ -256,7 +256,7 @@ A panic can also be caused by calling the `panic` builtin function.
 ## Roadmap
 + [ ] add `mut` keyword
 + [x] associated types (needed especially for iterator ergonomics)
-+ [ ] const generics
++ [x] minimal const generics (no type expressions involving const generics)
 + [ ] `#[must_use]` or similar annotation on type declarations
 + [ ] allow linking in a custom "panic handler" for platforms where the default panic handler doesn't make sense (no OS to return back to, nowhere for error messages to go, etc.)
 + [ ] prevent duplicate methods across compatible inherent impl blocks

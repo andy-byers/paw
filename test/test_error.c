@@ -635,12 +635,15 @@ static void test_trait_error(void)
     test_compiler_status(kErrExpectedTrait, "trait_type_as_trait",
         "struct Type; struct S; impl Type for S {}", "");
     test_compiler_status(kErrUnknownPath, "trait_does_not_exist",
-        "struct S; impl Trait for S {}", "");
+        "struct S; impl Trait<int> for S {}", "");
     test_compiler_status(kErrUnknownPath, "trait_missing_generic_in_bounds",
         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
-    test_compiler_status(kErrExpectedTypeArguments, "trait_cannot_infer_generic",
+    test_compiler_status(kErrExpectedTypeArguments, "trait_bound_missing_args",
         POLY_TRAIT POLY_STRUCT "fn call_f<T: Trait>(t: T) {t.f();}",
         "let x = S{v: 123}; call_f(x);");
+    test_compiler_status(kErrExpectedTypeArguments, "trait_target_missing_args",
+        POLY_TRAIT "struct S<T> {v: T}"
+        "impl<T> Trait for S {fn f(self) -> T {self.v}}", "");
 
 #undef POLY_FUNCTION
 #undef POLY_STRUCT
