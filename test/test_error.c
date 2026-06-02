@@ -944,6 +944,12 @@ static void test_definite_assignment(void)
             "let pointer = &value;"
             "let new_value = *pointer;");
 
+    TESTCASE(move_twice_into_pointer, kErrUseAfterMove,
+            "let pointee = MoveOnly;"
+            "let pointer = &pointee;"
+            "*pointer = pointee;"
+            "*pointer = pointee;");
+
 #undef TESTCASE
 }
 

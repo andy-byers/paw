@@ -33,7 +33,6 @@ enum VariableState {
     VAR_INIT,
     VAR_MOVED,
     VAR_UNINIT,
-    VAR_MAYBE_MOVED,
 };
 
 struct VariableAnalyzer {
@@ -330,14 +329,14 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
 
             case kMirLoad: {
                 struct MirLoad const *x = MirGetLoad(*pinstr);
-                maybe_indicate_move(V, x->pointer);
+                maybe_indicate_use(V, x->pointer);
                 maybe_indicate_def(V, x->output);
                 break;
             }
 
             case kMirStore: {
                 struct MirStore const *x = MirGetStore(*pinstr);
-                maybe_indicate_use(V, x->value);
+                maybe_indicate_move(V, x->value);
                 maybe_indicate_def(V, x->pointer);
                 break;
             }
