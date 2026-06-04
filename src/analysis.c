@@ -399,7 +399,7 @@ static struct MirPlace add_drop_flag(struct Mir *mir, MirRegister r)
 {
     int const num_registers = mir->registers->count;
     IrType *bool_type = pawP_builtin_type(mir->C, BUILTIN_BOOL);
-    Str const *name = pawP_format_string(mir->C, "%%drop_flag_%d)", r.value);
+    Str const *name = pawP_format_string(mir->C, "(%%drop_flag_%d)", r.value);
     MirRegisterDataList_push(mir, mir->registers, (struct MirRegisterData){
                 .is_nontrivial = PAW_FALSE,
                 .is_captured = PAW_FALSE,
@@ -416,7 +416,8 @@ static void determine_cmoves_aux(struct VariableAnalyzer *V, VariableStates cons
     unsigned char const *b;
     MirRegister local = MIR_RESULT_REG;
     K_LIST_ZIP (x, a, y, b) {
-        if (*a != *b && (*a == VAR_MOVED || *b == VAR_MOVED)) {
+        if ((*a == VAR_MOVED && *b == VAR_INIT)
+                || (*a == VAR_INIT && *b == VAR_MOVED)) {
             if (!is_known_cmove(V, local.value)) {
                 struct MirPlace const flag = add_drop_flag(V->mir, local);
                 ConditionalMoves_insert(V, V->cmoves, local, flag);
@@ -509,35 +510,52 @@ static void determine_cmoves(struct VariableAnalyzer *V)
         }
     }
 
-    K_LIST_XFOREACH (mir->blocks, struct MirBlockData *const, pbb) {
-        struct MirBlockData *bb = *pbb;
-
-        for (int i = 0; i < bb->instructions->count; ++i) {
-#define SET_DROP_FLAG(Id_, Value_, Index_) do { \
+#define SET_DROP_FLAG(Bb_, Id_, Value_, Index_) do { \
             struct MirInstruction *setter = drop_flag_setter(V, Id_, Value_); \
-            MirInstructionList_insert(mir, bb->instructions, Index_, setter); \
+            MirInstructionList_insert(mir, (Bb_)->instructions, Index_, setter); \
         } while (0)
 
+    struct IrFnPtr const *fptr = IrGetFnPtr(IR_GET_FN(V->C, mir->type));
+    for (int i = 0; i < fptr->params->count; ++i) {
+        struct MirPlace const arg = pawMir_get_register(mir, MIR_REG(1 + i));
+        struct Variable *const *pvar = find_variable(V, arg);
+        if (pvar != NULL && is_known_cmove(V, (*pvar)->id)) {
+            // Drop flags default to `true` for function arguments. Add setter to the
+            // end of the entry block.
+            struct MirBlockData *entry = MirBlockDataList_first(mir->blocks);
+            paw_assert(entry->instructions->count > 0); // requires terminator
+            SET_DROP_FLAG(entry, (*pvar)->id, PAW_TRUE, entry->instructions->count - 1);
+        }
+    }
+
+    for (int b = 1; b < mir->blocks->count; ++b) {
+        struct MirBlockData *bb = MirBlockDataList_get(mir->blocks, b);
+
+        for (int i = 0; i < bb->instructions->count; ++i) {
+            // TODO: AddrOf doesn't really "load" from its input register, leading to the awkward situation below
             struct MirInstruction *instr = MirInstructionList_get(bb->instructions, i);
-            if (!MirIsKill(instr)) {
-                struct MirPlacePtrList const *loads = pawMir_get_loads(mir, instr);
-                K_LIST_XFOREACH (loads, struct MirPlace *const, p) {
-                    struct Variable *const *pvar = find_variable(V, **p);
-                    if (pvar != NULL && is_known_cmove(V, (*pvar)->id))
-                        SET_DROP_FLAG((*pvar)->id, PAW_FALSE, i++);
+            if (!MirIsKill(instr) && !MirIsDrop(instr)) {
+                if (!MirIsAddrOf(instr)) {
+                    struct MirPlacePtrList const *loads = pawMir_get_loads(mir, instr);
+                    K_LIST_XFOREACH (loads, struct MirPlace *const, p) {
+                        struct Variable *const *pvar = find_variable(V, **p);
+                        if (pvar != NULL && is_known_cmove(V, (*pvar)->id))
+                            SET_DROP_FLAG(bb, (*pvar)->id, PAW_FALSE, i++);
+                    }
                 }
 
-                struct MirPlacePtrList const *stores = pawMir_get_loads(mir, instr);
+                struct MirPlacePtrList const *stores = pawMir_get_stores(mir, instr);
                 K_LIST_XFOREACH (stores, struct MirPlace *const, p) {
                     struct Variable *const *pvar = find_variable(V, **p);
                     if (pvar != NULL && is_known_cmove(V, (*pvar)->id))
-                        SET_DROP_FLAG((*pvar)->id, PAW_TRUE, i++);
+                        SET_DROP_FLAG(bb, (*pvar)->id, PAW_TRUE, i++);
                 }
             }
-
-#undef SET_DROP_FLAG
         }
     }
+
+#undef SET_DROP_FLAG
+
     // BEFORE
     //
     //     %before:
@@ -557,7 +575,7 @@ static void determine_cmoves(struct VariableAnalyzer *V)
     //       ...
     //
     BlockSet *omit_blocks = BlockSet_new(V);
-    for (int i = 0; i < mir->blocks->count; ++i) {
+    for (int i = 1; i < mir->blocks->count; ++i) {
         MirBlock const before = MIR_BB(i);
         if (BlockSet_get(V, omit_blocks, before) != NULL)
             continue; // block contains generated drop
@@ -667,7 +685,9 @@ static void ensure_variable_initialization_before_use(struct Mir *mir)
         visit_block(V, w);
         remove_work_item(V, w);
     }
-
+if(pawS_eq(mir->name,SCAN_STR(C,"xinsert"))){
+extern volatile int *x;
+}
     determine_cmoves(V);
 
     for (int b = 0; b < mir->blocks->count; ++b)

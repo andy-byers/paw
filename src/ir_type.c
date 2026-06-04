@@ -185,6 +185,17 @@ IrType *pawIr_new_fn_ptr(struct Compiler *C, IrTypeList *params, IrType *result)
     return t;
 }
 
+IrType *pawIr_new_closure(struct Compiler *C, DeclId did, IrGenericArgs *args)
+{
+    IrType *t = NEW_NODE(C, IrType);
+    t->Closure_ = (struct IrClosure){
+        .kind = kIrClosure,
+        .did = did,
+        .args = args,
+    };
+    return t;
+}
+
 IrType *pawIr_new_signature(struct Compiler *C, DeclId did, IrGenericArgs *args)
 {
     paw_assert(args != NULL);
@@ -966,6 +977,12 @@ static paw_Uint hash_type(IrType *type)
             hash = hash_combine(hash, hash_type(t->result));
             break;
         }
+        case kIrClosure: {
+            struct IrClosure const *t = IrGetClosure(type);
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_arg_list(t->args));
+            break;
+        }
         case kIrSignature: {
             struct IrSignature const *t = IrGetSignature(type);
             hash = hash_combine(hash, t->did.value);
@@ -1318,28 +1335,35 @@ paw_Bool pawIr_needs_drop(struct Compiler *C, IrType *type)
 
 paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type)
 {
-    if (IrIsAdt(type)) {
-        IrSolver *S = pawIr_push_solver(C);
-        int const position = pawU_current_position(C->U);
-        DeclId const copy_did = C->core_traits[CORE_TRAIT_COPY];
-        IrGenericArgs *copy_args = IrGenericArgs_new(C);
-        IrGenericArgs_push(C, copy_args, IrGenericArg_from_type(type));
-        IrTrait *copy = pawIr_solver_instantiate_trait_with(S, copy_did, copy_args);
-        paw_Bool const result = pawIr_type_implements_trait(S, type, copy);
-        pawU_undo_unifications(C->U, position);
-        pawIr_pop_solver(C);
-        return result;
-    } else if (IrIsTuple(type)) {
+    if (IrIsTuple(type)) {
         // a tuple is copyable if all of its elements are copyable
         struct IrTuple const *t = IrGetTuple(type);
         paw_Bool accum = PAW_TRUE;
         K_LIST_XFOREACH (t->elems, IrType *const, p)
             accum &= pawIr_is_copyable(C, *p);
         return accum;
-    } else if (IrIsArray(type)) {
-        return pawIr_is_copyable(C, IrGetArray(type)->type);
     }
-    return PAW_TRUE;
+
+    if (IrIsArray(type))
+        return pawIr_is_copyable(C, IrGetArray(type)->type);
+
+    if (IR_IS_FUNC_TYPE(type)) {
+        if (!IrIsFnPtr(type))
+            // TODO: deal with closures that capture
+            type = IR_SIGNATURE_FN(C, type);
+        return IrIsFnPtr(type);
+    }
+
+    IrSolver *S = pawIr_push_solver(C);
+    int const position = pawU_current_position(C->U);
+    DeclId const copy_did = C->core_traits[CORE_TRAIT_COPY];
+    IrGenericArgs *copy_args = IrGenericArgs_new(C);
+    IrGenericArgs_push(C, copy_args, IrGenericArg_from_type(type));
+    IrTrait *copy = pawIr_solver_instantiate_trait_with(S, copy_did, copy_args);
+    paw_Bool const result = pawIr_type_implements_trait(S, type, copy);
+    pawU_undo_unifications(C->U, position);
+    pawIr_pop_solver(C);
+    return result;
 }
 
 IrType *pawIr_materialize_fn(struct Compiler *C, DeclId did, IrGenericArgs *type_args)
@@ -1539,6 +1563,14 @@ static void print_type(struct Printer *P, IrType *type)
             if (tup->elems->count == 1)
                 PRINT_CHAR(P, ',');
             PRINT_CHAR(P, ')');
+            break;
+        }
+        case kIrClosure: {
+            struct IrClosure *t = IrGetClosure(type);
+            PRINT_FORMAT(P, "$closure_%d", t->did.value);
+            print_binder(P, t->args);
+            IrType *fn = pawIr_materialize_fn(P->C, t->did, t->args);
+            PRINT_FORMAT(P, "{%s}", pawIr_print_type(P->C, fn));
             break;
         }
         case kIrSignature: {

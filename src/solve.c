@@ -816,7 +816,6 @@ void debug_typesystem(struct Compiler *C)
                     break;
                 }
                 case kHirFnDecl: {
-                    IrGenericArgs *args = pawIr_get_generic_args(C, did);
                     IrType *type = pawIr_get_def_type(C, did);
                     printf("Fn %s\n", pawIr_print_type_v2(C, type)->text);
                     break;

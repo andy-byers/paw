@@ -870,7 +870,7 @@ static struct HirExpr *FoldClosureExpr(struct HirFolder *F, struct HirClosureExp
     HirDeclList *params = pawHir_fold_decl_list(F, e->params);
     struct HirType *result = FOLD_TYPE0(F, e->result);
     struct HirExpr *expr = F->FoldExpr(F, e->expr);
-    return pawHir_new_closure_expr(F->hir, e->span, next_node_id(F), params, result, expr);
+    return pawHir_new_closure_expr(F->hir, e->span, next_node_id(F), e->did, params, result, expr);
 }
 
 static struct HirDecl *FoldFieldDecl(struct HirFolder *F, struct HirFieldDecl *d)

@@ -339,6 +339,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->impls.trait = IrDefs_new(C);
 
     C->segtab = SegmentTable_new(C);
+    C->capflags = CaptureFlags_new(C);
 
     ModuleInfo_push(C, C->modinfo, (struct Module){
                 .pathname = pathname,

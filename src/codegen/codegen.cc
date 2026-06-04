@@ -1849,22 +1849,23 @@ private:
         auto *child = MirBodyList_get(state_->mir_->children, x.child_id);
         auto const num_upvalues = child->upvalues->count;
 
-        auto *env_ty = create_env_ty(child->upvalues);
-        auto *env_ptr = num_upvalues > 0
-            ? X.create_alloc(env_ty)
-            : X.create_null_ptr();
+        llvm::Value *env_ptr = NULL;
+        if (num_upvalues > 0) {
+            auto *env_ty = create_env_ty(child->upvalues);
+            env_ptr = state_->get_raw_value(x.output.r);
 
-        // initialize upvalues from parent locals or environment
-        for (int i = 0; i < num_upvalues; ++i) {
-            auto const up = MirUpvalueList_get(child->upvalues, i);
-            // If "up.is_local", then "up.index" refers to a local variable in the current function.
-            // Otherwise, it refers to an upvalue in the current function backed by a local in one of
-            // its callers.
-            auto *source = up.is_local
-                ? state_->values_.at(up.index)
-                : state_->get_upvalue_ptr(up.index);
-            auto *source_ptr = B->CreateStructGEP(env_ty, env_ptr, unsigned(i));
-            B->CreateStore(source, source_ptr);
+            // initialize upvalues from parent locals or environment
+            for (int i = 0; i < num_upvalues; ++i) {
+                auto const up = MirUpvalueList_get(child->upvalues, i);
+                // If "up.is_local", then "up.index" refers to a local variable in the current function.
+                // Otherwise, it refers to an upvalue in the current function backed by a local in one of
+                // its callers.
+                auto *source = up.is_local
+                    ? state_->values_.at(up.index)
+                    : state_->get_upvalue_ptr(up.index);
+                auto *source_ptr = B->CreateStructGEP(env_ty, env_ptr, unsigned(i));
+                B->CreateStore(source, source_ptr);
+            }
         }
 
         auto *closure = state_->get_closure(unsigned(child->child_id));

@@ -182,12 +182,14 @@ impl<T> List<T> {
     fn get_element_ptr(*self, index: int) -> *T {
         ptr::add(self.as_ptr(), index)
     }
+}
 
+impl<T: Clone> List<T> {
     pub fn from_array<const LENGTH: int>(arr: [LENGTH]T) -> mem::Result<Self> {
         let result = Self::new();
         result.reserve(LENGTH)?;
         for value in &arr {
-            result.push(*value).unwrap();
+            result.push(value.clone()).unwrap();
         }
         Ok(result)
     }

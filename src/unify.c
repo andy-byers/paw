@@ -164,18 +164,17 @@ void pawU_undo_unifications(struct Unifier *U, int position)
                 get_ivar(entry.table, entry.ivar_id)
                     ->rank = entry.old_rank;
                 break;
-            case ACTION_SET_DATA:
-                get_ivar(entry.table, entry.ivar_id)
-                    ->data = entry.old_data;
+            case ACTION_SET_DATA: {
+                struct InferenceVar const *ivar = get_ivar(entry.table, entry.ivar_id);
+                if (ivar->kind == IVAR_TYPE) {
+                    *ivar->data.type = *entry.old_data.type;
+                } else {
+                    *ivar->data.konst = *entry.old_data.konst;
+                }
                 break;
+            }
         }
     }
-}
-
-static void overwrite_data(struct Unifier *U, InferenceVar *ivar, union InferenceVarData data)
-{
-    record_set_data(U, U->ctx->type_vars, ivar);
-    ivar->data = data;
 }
 
 static void debug_log(struct Unifier *U, char const *what, IrType *a, IrType *b)
@@ -253,7 +252,7 @@ static int unify_var_type(struct Unifier *U, InferenceVar *ivar, IrType *type)
 
     check_type_occurs(U, ivar, type);
     record_set_data(U, U->ctx->type_vars, ivar);
-    ivar->data.type = type;
+    *ivar->data.type = *type;
     return 0;
 }
 
@@ -261,7 +260,7 @@ static int unify_var_const(struct Unifier *U, InferenceVar *ivar, IrConst *konst
 {
     check_const_occurs(U, ivar, konst);
     record_set_data(U, U->ctx->const_vars, ivar);
-    ivar->data.konst = konst;
+    *ivar->data.konst = *konst;
     return 0;
 }
 
@@ -358,6 +357,11 @@ IrType *pawU_normalize(struct Unifier *U, IrType *type)
             IrType *pointee = pawU_normalize(U, IrGetPtr(type)->pointee);
             return pawIr_new_ptr(U->C, pointee);
         }
+        case kIrClosure: {
+            struct IrClosure const *t = IrGetClosure(type);
+            IrGenericArgs *args = normalize_args(U, t->args);
+            return pawIr_new_closure(U->C, t->did, args);
+        }
         case kIrSignature: {
             struct IrSignature const *t = IrGetSignature(type);
             IrGenericArgs *args = normalize_args(U, t->args);
@@ -417,6 +421,11 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
         case kIrPtr: {
             IrType *pointee = pawU_normalize_projections(U, IrGetPtr(type)->pointee);
             return pawIr_new_ptr(U->C, pointee);
+        }
+        case kIrClosure: {
+            struct IrClosure const *t = IrGetClosure(type);
+            IrGenericArgs *args = normalize_args_projections(U, t->args);
+            return pawIr_new_closure(U->C, t->did, args);
         }
         case kIrSignature: {
             struct IrSignature const *t = IrGetSignature(type);
@@ -485,21 +494,26 @@ static int unify_lists(struct Unifier *U, IrTypeList *a, IrTypeList *b)
     return 0;
 }
 
-static int unify_adt(struct Unifier *U, struct IrAdt *a, struct IrAdt *b)
+static int unify_nominal_type(struct Unifier *U, DeclId did, IrGenericArgs *args, DeclId did2, IrGenericArgs *args2)
 {
-    if (a->did.value != b->did.value)
+    if (did.value != did2.value)
         return -1;
 
-    if (a->args != NULL) {
+    if (args != NULL) {
         IrGenericArg const *x, *y;
-        paw_assert(a->args->count == b->args->count);
-        K_LIST_ZIP(a->args, x, b->args, y) {
+        paw_assert(args->count == args2->count);
+        K_LIST_ZIP(args, x, args2, y) {
             if (pawIr_unify(U->C, *x, *y) != 0)
                 return -1;
         }
     }
 
     return 0;
+}
+
+static int unify_adt(struct Unifier *U, struct IrAdt *a, struct IrAdt *b)
+{
+    return unify_nominal_type(U, a->did, a->args, b->did, b->args);
 }
 
 static int unify(struct Unifier *U, IrType *a, IrType *b);
@@ -530,6 +544,11 @@ static int unify_fptr(struct Unifier *U, struct IrFnPtr *a, struct IrFnPtr *b)
     return pawU_unify(U, a->result, b->result);
 }
 
+static int unify_closure(struct Unifier *U, struct IrClosure *a, struct IrClosure *b)
+{
+    return unify_nominal_type(U, a->did, a->args, b->did, b->args);
+}
+
 static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneric *b)
 {
     PAW_UNUSED(U);
@@ -543,9 +562,19 @@ static int unify_projection(struct Unifier *U, struct IrProjection *a, struct Ir
     return P_ID_EQUALS(U->C, a->assoc, b->assoc) ? 0 : -1;
 }
 
-static IrType *materialize_fn(struct Unifier *U, struct IrSignature const *t)
+static IrType *materialize_fn(struct Unifier *U, IrType *type)
 {
-    return pawIr_materialize_fn(U->C, t->did, t->args);
+    if (IrIsFnPtr(type))
+        return type;
+
+    if (IrIsClosure(type)) {
+        // only closures that capture no variables can be coerced to a raw
+        // function pointer type
+        struct IrFnDef const *def = pawIr_get_fn_def(U->C, IR_TYPE_DID(type));
+        if (def->has_captures) return type;
+    }
+
+    return pawIr_materialize_fn(U->C, IR_TYPE_DID(type), IR_GENERIC_ARGS(type));
 }
 
 static int unify_types(struct Unifier *U, IrType *a, IrType *b)
@@ -555,10 +584,10 @@ static int unify_types(struct Unifier *U, IrType *a, IrType *b)
     if (IrIsNever(a)) return 0;
     if (IrIsNever(b)) return 0;
 
-    if (IrIsSignature(a))
-        a = materialize_fn(U, IrGetSignature(a));
-    if (IrIsSignature(b))
-        b = materialize_fn(U, IrGetSignature(b));
+    if (IR_IS_FUNC_TYPE(a))
+        a = materialize_fn(U, a);
+    if (IR_IS_FUNC_TYPE(b))
+        b = materialize_fn(U, b);
 
     if (IR_KINDOF(a) != IR_KINDOF(b))
         return -1;
@@ -566,6 +595,8 @@ static int unify_types(struct Unifier *U, IrType *a, IrType *b)
     switch (IR_KINDOF(a)) {
         case kIrFnPtr:
             return unify_fptr(U, IrGetFnPtr(a), IrGetFnPtr(b));
+        case kIrClosure:
+            return unify_closure(U, IrGetClosure(a), IrGetClosure(b));
         case kIrArray:
             return unify_array(U, IrGetArray(a), IrGetArray(b));
         case kIrSlice:
@@ -759,14 +790,14 @@ void pawU_enter_binder(struct Unifier *U, Str const *modname)
     ++U->depth;
 }
 
-static void check_context(struct Unifier *U, struct UnificationContext *ctx)
+void pawU_check_context(struct Unifier *U)
 {
-    K_LIST_XFOREACH (ctx->type_vars->ivars, InferenceVar const, var) {
+    K_LIST_XFOREACH (U->ctx->type_vars->ivars, InferenceVar const, var) {
         IrType *type = pawU_normalize(U, var->data.type);
         if (IrIsInfer(type))
             UNIFIER_ERROR(U, CannotInfer, var->span);
     }
-    K_LIST_XFOREACH (ctx->const_vars->ivars, InferenceVar const, var) {
+    K_LIST_XFOREACH (U->ctx->const_vars->ivars, InferenceVar const, var) {
         IrConst *konst = pawU_normalize_const(U, var->data.konst);
         if (konst->kind == IR_CONST_INFER)
             UNIFIER_ERROR(U, CannotInferConst, var->span);
@@ -775,7 +806,7 @@ static void check_context(struct Unifier *U, struct UnificationContext *ctx)
 
 void pawU_leave_binder(struct Unifier *U)
 {
-    check_context(U, U->ctx);
+    pawU_check_context(U);
     U->ctx = U->ctx->outer;
     --U->depth;
 

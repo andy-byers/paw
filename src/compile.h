@@ -148,6 +148,7 @@ struct Compiler {
     struct Pool *mir_pool;
 
     struct SegmentTable *segtab;
+    struct CaptureFlags *capflags;
     struct BodyMap *bodies;
 
     struct StringMap *strings;

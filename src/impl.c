@@ -36,7 +36,8 @@ void finish_query(struct Compiler *C, struct QueryState q)
 }
 
 struct Candidate {
-    struct IrImpl const *impl;
+    IrGenericArgs *impl_args;
+    DeclId impl_did;
     DeclId target;
 };
 
@@ -132,11 +133,12 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrIm
 
 struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str const *name)
 {
-#define ADD_APPLICABLE_METHODS(ImplDid_) do { \
-            struct Candidate c_; \
+#define ADD_APPLICABLE_METHODS(ImplDid_, ImplArgs_) do { \
+            struct Candidate c_ = {.impl_did = INVALID_DECL_ID}; \
             struct IrImpl const *impl_def = pawIr_get_impl_def(C, ImplDid_); \
             if (find_method_in_list(C, impl_def->methods, name, &c_)) { \
-                c_.impl = impl_def; \
+                c_.impl_did = ImplDid_; \
+                c_.impl_args = ImplArgs_; \
                 Candidates_push(C, candidates, c_); \
             } \
         } while (0)
@@ -152,6 +154,8 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
                     if (pawS_eq(fn_def->name, name)) {
                         Candidates_push(C, candidates, (struct Candidate){
                                     .target = fn_def->did,
+                                    .impl_did = INVALID_DECL_ID,
+                                    .impl_args = NULL,
                                 });
                     }
                 }
@@ -168,7 +172,7 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
             pawIr_solver_add_obligations_from(q.S, *p, inst.args);
             if (types_are_compatible(C, self, inst.type))
-                ADD_APPLICABLE_METHODS(*p);
+                ADD_APPLICABLE_METHODS(*p, inst.args);
             finish_query(C, q);
         }
 
@@ -178,7 +182,7 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
             pawIr_solver_add_obligations_from(q.S, *p, inst.args);
             if (types_are_compatible(C, self, inst.type))
-                ADD_APPLICABLE_METHODS(*p);
+                ADD_APPLICABLE_METHODS(*p, inst.args);
             finish_query(C, q);
         }
 
@@ -188,7 +192,7 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
             pawIr_solver_add_obligations_from(q.S, *p, inst.args);
             if (types_are_compatible(C, self, inst.type))
-                ADD_APPLICABLE_METHODS(*p);
+                ADD_APPLICABLE_METHODS(*p, inst.args);
             finish_query(C, q);
         }
     }
@@ -206,12 +210,12 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
     struct Candidate const result = Candidates_first(candidates);
     IrType *method = pawIr_solver_instantiate_type(C->S, result.target);
 
-    // TODO: may need to prove constraints from here later once fn args have been unified
-//    struct IrImplInstance const impl = pawIr_solver_instantiate_impl(C->S, result.impl->did);
+    // TODO: call this and use `inst.args` instead of `tesult.impl_args`, won't work when `self` is a generic or projection
+//    struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, result.impl_did);
 
     // apply information known about the context type
     IrType *context = pawIr_get_context(C, method);
-//    pawU_unify_unchecked(C->U, impl.type, self);
+//    pawU_unify_unchecked(C->U, inst.type, self);
     pawU_unify_unchecked(C->U, context, self);
     method = pawU_normalize(C->U, method);
 
@@ -221,6 +225,9 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
         .subst.args = IR_GENERIC_ARGS(method),
         .inst = method,
     };
+    if (DECL_ID_EXISTS(result.impl_did))
+        pawIr_solver_add_obligations_from(C->S, result.impl_did, result.impl_args);
+    pawIr_solver_add_obligations_from(C->S, IR_TYPE_DID(method), IR_GENERIC_ARGS(method));
     return out;
 
 #undef ADD_APPLICABLE_METHODS
@@ -423,15 +430,15 @@ struct Instantiation *pawIr_find_assoc_type_generic(struct Compiler *C, IrType *
 
 struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrType *self, IrTrait *trait, Str const *name)
 {
-#define ADD_APPLICABLE_TYPES(Impl_, Methods_) do { \
-            struct Candidate c_; \
+#define ADD_APPLICABLE_TYPES(ImplDid_, ImplArgs_, Methods_) do { \
+            struct Candidate c_ = {.impl_did = INVALID_DECL_ID}; \
             if (find_type_in_list(Methods_, name, &c_)) { \
+                c_.impl_did = ImplDid_; \
+                c_.impl_args = ImplArgs_; \
                 Candidates_push(C, candidates, c_); \
-                target_impl = Impl_; \
             } \
         } while (0)
 
-    struct IrImpl const *target_impl;
     Candidates *candidates = Candidates_new(C);
     {
         // search trait implementations
@@ -442,7 +449,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
             pawIr_solver_add_obligations_from(q.S, impl->did, inst.args);
             if (traits_are_compatible(C, C->S, trait, inst.trait)
                     && types_are_compatible(C, self, inst.type))
-                ADD_APPLICABLE_TYPES(impl, impl->items);
+                ADD_APPLICABLE_TYPES(*p, inst.args, impl->items);
             finish_query(C, q);
         }
 
@@ -454,29 +461,23 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
             pawIr_solver_add_obligations_from(q.S, impl->did, inst.args);
             if (impl->trait != NULL
                     && traits_are_compatible(C, C->S, trait, inst.trait))
-                ADD_APPLICABLE_TYPES(impl, impl->items);
+                ADD_APPLICABLE_TYPES(*p, inst.args, impl->items);
             finish_query(C, q);
         }
     }
 
-    if (candidates->count == 0)
+    if (candidates->count != 1)
         return NULL;
 
-    // TODO: return error indicator
-    if (candidates->count > 1)
-        LOOKUP_ERROR(C, MultipleApplicableItems,
-                .modname = SCAN_STR(C, ""),
-                .span = TODO);
-
-    struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, target_impl->did);
+    struct Candidate const result = Candidates_first(candidates);
+    struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, result.impl_did);
 
     self = pawIr_remove_indirection(C, self);
     IrType *impl_type = pawIr_remove_indirection(C, inst.type);
     pawU_unify_unchecked(C->U, impl_type, self);
 
-    IrGenericArgs *params = pawIr_get_generic_args(C, target_impl->did);
+    IrGenericArgs *params = pawIr_get_generic_args(C, result.impl_did);
     struct Substitution const subst = {params, inst.args};
-    struct Candidate const result = Candidates_first(candidates);
     IrType *assoc = pawIr_get_def_type(C, result.target);
     assoc = pawP_substitute(C, assoc, subst);
 

@@ -28,14 +28,20 @@ pub trait GetValue {
     fn get_value(*self) -> int;
 }
 
-pub fn poly_recursive<T: GetValue>(n: int, t: T, value: int) -> int {
+pub fn poly_recursive<T: Clone + GetValue>(n: int, t: T, value: int) -> int {
     if n > 0 {
-        return mod_b::poly_recursive(n - 1, t, value + t.get_value());
+        return mod_b::poly_recursive(n - 1, t.clone(), value + t.get_value());
     }
     value
 }
 
 pub struct Test;
+
+impl Clone for Test {
+    fn clone(*self) -> Self {
+        Test
+    }
+}
 
 impl GetValue for Test {
     fn get_value(*self) -> int {
@@ -79,12 +85,12 @@ pub struct Obj<T> {
     t: T,
 }
 
-impl<T> Obj<T> {
+impl<T: Clone> Obj<T> {
     pub fn new(x: T) -> Self {
         return Self{t: x};
     }
     
     pub fn get_t(self) -> T {
-        return self.t;
+        return self.t.clone();
     }
 }

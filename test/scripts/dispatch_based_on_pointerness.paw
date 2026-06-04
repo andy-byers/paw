@@ -1,6 +1,6 @@
 // dispatch_based_on_pointerness.paw 
 
-pub trait Trait<X> {
+pub trait Trait<X: Clone> {
     fn method(*self) -> X;
 }
 
@@ -9,19 +9,19 @@ pub struct Struct<X> {
     pub y: X,
 }
 
-impl<Y> Trait<Y> for Struct<Y> {
+impl<Y: Clone> Trait<Y> for Struct<Y> {
     fn method(*self) -> Y {
-        self.x
+        self.x.clone()
     }
 }
 
-impl<Z> Trait<Z> for *Struct<Z> {
+impl<Z: Clone> Trait<Z> for *Struct<Z> {
     fn method(*self) -> Z {
-        self.y
+        self.y.clone()
     }
 }
 
-fn function<T: Trait<X>, X>(t: T) -> X {
+fn function<T: Trait<X>, X: Clone>(t: T) -> X {
     t.method()
 }
 

@@ -764,6 +764,7 @@ struct HirLiteralExpr {
 
 struct HirClosureExpr {
     HIR_EXPR_HEADER;
+    DeclId did;
     struct HirDeclList *params;
     struct HirType *result;
     struct HirExpr *expr;
@@ -1003,11 +1004,12 @@ static struct HirExpr *pawHir_new_composite_lit(struct Hir *hir, struct SourceSp
     return e;
 }
 
-static struct HirExpr *pawHir_new_closure_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirDeclList *params, struct HirType *result, struct HirExpr *expr)
+static struct HirExpr *pawHir_new_closure_expr(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirDeclList *params, struct HirType *result, struct HirExpr *expr)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->ClosureExpr_ = (struct HirClosureExpr){
         .id = id,
+        .did = did,
         .span = span,
         .kind = kHirClosureExpr,
         .params = params,

@@ -257,6 +257,7 @@ A panic can also be caused by calling the `panic` builtin function.
 + [ ] add `mut` keyword
 + [x] associated types (needed especially for iterator ergonomics)
 + [x] minimal const generics (no type expressions involving const generics)
++ [ ] reimplement capturing closures
 + [ ] `#[must_use]` or similar annotation on type declarations
 + [ ] allow linking in a custom "panic handler" for platforms where the default panic handler doesn't make sense (no OS to return back to, nowhere for error messages to go, etc.)
 + [ ] prevent duplicate methods across compatible inherent impl blocks
@@ -272,4 +273,26 @@ A panic can also be caused by calling the `panic` builtin function.
 + Edge cases exist related to impl blocks and traits
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
     + See TODO comment in `test_error.c` `test_divergence` function
++ The design for closures needs some work.
+    + Right now, captures are not supported to make the implementation simple 
+    + I'm thinking that capture-by-reference should not be supported, since this can easily lead to use after "free" (return from function).
+    + All closures will have type `IrClosure`, and the type of a closure with no upvalues can coerce to `IrFnPtr`
+    + Capturing closures have an anonymous struct type that unifies with itself only 
+    + The closure env struct is stored in an automatic variable. The env owns all of its upvalues, i.e. it stores them by value. `call` takes `*self` so it can be called multiple times. Mutable versions will be called `FnMut`/`call_mut`.
+    + An impl of trait `Fn` should be generated for each unique closure (DeclId + GenericArgs pair) which looks like [this](#closure-generated-code-example).
+
+### Closure generated code example
+```paw
+// Closure = anonymous closure type
+// Args = tuple containing closure args
+// ReturnType = return type of closure
+impl Fn<Args> for Closure {
+    type Output = ReturnType;
+    fn call(*self, args: Args) -> Self::Output {
+        // closure body goes here...
+        //     access of arg number N translated to access of field N on tuple `args`
+        //     access of upvalue N translated to access of field N on struct `self`
+    }
+}
+```
 

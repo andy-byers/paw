@@ -150,9 +150,9 @@ static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
 }
 
 #define LATTICE_KEY(K_, Place_) \
-        CHECK_EXP((Place_).kind != MIR_PLACE_UPVALUE, \
-            (Place_).kind == MIR_PLACE_REGISTER ? (Place_).r.value \
-            : (Place_).k.value + (K_)->mir->registers->count)
+        ((Place_).kind == MIR_PLACE_REGISTER ? (Place_).r.value : \
+         (Place_).kind == MIR_PLACE_UPVALUE ? (Place_).up + (K_)->mir->registers->count : \
+         (Place_).k.value + (K_)->mir->registers->count + (K_)->mir->upvalues->count)
 
 static struct Cell *get_cell(struct KProp *K, struct MirPlace place)
 {
@@ -752,6 +752,10 @@ static void propagate_constants(struct KProp *K)
         K_LIST_FOREACH (start->successors, pb) {
             FlowWorklist_push(K, K->flow, FLOW_EDGE(MIR_ENTRY_BB, *pb));
         }
+
+        // visit entry block instructions
+        K_LIST_XFOREACH (start->instructions, struct MirInstruction *const, pinstr)
+            visit_expr(K, *pinstr, MIR_ENTRY_BB);
     }
 
     while (K->flow->count > 0 || K->ssa->count > 0) {
@@ -773,14 +777,16 @@ static void propagate_constants(struct KProp *K)
 static void init_lattice(struct KProp *K)
 {
     struct Mir *mir = K->mir;
-    int const cell_count = mir->registers->count + mir->kcache->data->count;
+    int const cell_count = mir->registers->count
+        + mir->upvalues->count
+        + mir->kcache->data->count;
     Lattice_reserve(K, K->lattice, cell_count);
     K->lattice->count = cell_count;
 
     int key = 0;
     int index;
 
-    struct IrFnPtr const *fptr = IrIsSignature(mir->type)
+    struct IrFnPtr const *fptr = !IrIsFnPtr(mir->type)
         ? IrGetFnPtr(IR_SIGNATURE_FN(K->C, mir->type))
         : IrGetFnPtr(mir->type);
 
@@ -793,6 +799,15 @@ static void init_lattice(struct KProp *K)
                 .info.kind = kind,
                 .type = pdata->type,
                 .r = MIR_REG(index),
+            });
+    }
+
+    struct MirUpvalueInfo *udata;
+    K_LIST_ENUMERATE (mir->upvalues, index, udata) {
+        Lattice_set(K->lattice, key++,
+            (struct Cell){
+                .info.kind = CELL_BOTTOM,
+                .type = udata->type,
             });
     }
 

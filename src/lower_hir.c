@@ -15,6 +15,7 @@
 #include "lib.h"
 #include "match.h"
 #include "mir.h"
+#include "resolve.h"
 #include "ssa.h"
 #include "unify.h"
 
@@ -179,6 +180,68 @@ static void mark_nontrivial(struct FunctionState *fs, struct MirPlace place)
 static enum BuiltinKind builtin_kind(struct LowerHir *L, IrType *type)
 {
     return pawP_type2code(L->C, type);
+}
+
+static void fix_upvalue_accessors(struct Mir *mir, DeclId did)
+{
+    struct IrFnDef const *def = pawIr_get_fn_def(mir->C, did);
+
+    if (def->has_captures)
+        __builtin_trap();
+
+#if 0
+    int const *pflag = CaptureFlags_get(mir->C, mir->C->capflags, id);
+    if (pflag == NULL) return; // no upvalues
+
+    K_LIST_XFOREACH (mir->blocks, struct MirBlockData *const, pbb) {
+        MirInstructionList *rewrite = MirInstructionList_new(mir);
+        MirInstructionList_reserve(mir, rewrite, (*pbb)->instructions->count);
+        K_LIST_XFOREACH ((*pbb)->instructions, struct MirInstruction *const, pinstr) {
+            if (MirIsAddrOf(*pinstr)) {
+                struct MirAddrOf const *p = MirGetAddrOf(*pinstr);
+                if (p->input.kind == MIR_PLACE_UPVALUE) {
+                }
+                if (p->output.kind == MIR_PLACE_UPVALUE) {
+                }
+            } else if (MirIsMove(*pinstr)){
+                struct MirMove const *p = MirGetMove(*pinstr);
+                if (p->target.kind == MIR_PLACE_UPVALUE) {
+                }
+                if (p->output.kind == MIR_PLACE_UPVALUE) {
+                }
+            } else if (MirIsLoad(*pinstr)){
+                struct MirLoad const *p = MirGetLoad(*pinstr);
+                if (p->pointer.kind == MIR_PLACE_UPVALUE) {
+                }
+                if (p->output.kind == MIR_PLACE_UPVALUE) {
+                }
+            } else if (MirIsStore(*pinstr)){
+                struct MirStore const *p = MirGetStore(*pinstr);
+                if (p->pointer.kind == MIR_PLACE_UPVALUE) {
+                }
+                if (p->value.kind == MIR_PLACE_UPVALUE) {
+                }
+            } else {
+                struct MirPlacePtrList const *loads = pawMir_get_loads(mir, *pinstr);
+                struct MirPlacePtrList const *stores = pawMir_get_stores(mir, *pinstr);
+                K_LIST_XFOREACH (loads, struct MirPlace *const, pp) {
+                    struct MirPlace const place = **pp;
+                    if (place.kind == MIR_PLACE_UPVALUE) {
+                    }
+                }
+
+                MirInstructionList_push(mir, rewrite, *pinstr);
+
+                K_LIST_XFOREACH (stores, struct MirPlace *const, pp) {
+                    struct MirPlace const place = **pp;
+                    if (place.kind == MIR_PLACE_UPVALUE) {
+                    }
+                }
+            }
+        }
+        (*pbb)->instructions = rewrite;
+    }
+#endif // 0
 }
 
 static void postprocess(struct Mir *mir)
@@ -580,8 +643,7 @@ static void mark_upvalue(struct FunctionState *fs, int target, struct MirPlace r
         data->is_nontrivial = PAW_TRUE;
         data->is_captured = PAW_TRUE;
 
-        IrType *pointee = ir_deref(r.type);
-        if (!pawIr_is_copyable(fs->C, pointee))
+        if (!pawIr_is_copyable(fs->C, r.type))
             pawErr_generic_error(ENV(fs->C), get_modname(fs),
                     r.span, "captured variable must be copyable");
     }
@@ -589,6 +651,9 @@ static void mark_upvalue(struct FunctionState *fs, int target, struct MirPlace r
 
 static void add_upvalue(struct FunctionState *fs, struct NonGlobal *info, paw_Bool is_local)
 {
+    // TODO: captures are not currently supported. needs a lot of work. see note in README.md
+    LOWERING_ERROR(fs->L, Unsupported, TODO);
+
     info->is_upvalue = PAW_TRUE;
     info->r.kind = MIR_PLACE_UPVALUE;
 
@@ -635,9 +700,9 @@ static void drop_if_necessary(struct FunctionState *fs, struct MirPlace p, IrTyp
 
 static void drop_locals(struct FunctionState *fs, struct BlockState *bs)
 {
-    for (int i = fs->stack->count - 1; i >= bs->nvars; --i) {
+    for (int i = fs->nlocals - 1; i >= bs->nvars; --i) {
         if (i == 0) return; // never drop return value
-        struct LocalVar const var = VarStack_get(fs->stack, i);
+        struct LocalVar const var = VarStack_get(fs->stack, fs->level + i);
         paw_assert(var.depth == bs->depth);
         drop_if_necessary(fs, var.r, var.r.type);
     }
@@ -1574,6 +1639,7 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
         result->upvalues = fs.up;
         leave_function(L);
 
+        fix_upvalue_accessors(result, e->did);
         postprocess(result);
     }
 
@@ -1739,7 +1805,8 @@ static void write_to_lhs(struct HirVisitor *V, struct SourceSpan span, struct Mi
 
     switch (lhs_kind) {
         case LHS_VALUE:
-            drop_if_necessary(fs, lhs, lhs.type);
+            if (!mir_place_equals(fs->mir, lhs, rhs))
+                drop_if_necessary(fs, lhs, lhs.type);
             move_to(fs, span, rhs, lhs);
             break;
         case LHS_POINTER:
@@ -2311,10 +2378,7 @@ static struct MirPlace lower_rvalue(struct HirVisitor *V, struct HirExpr *expr)
             return load_from(fs, NODE_SPAN(expr),
                     lower_index(V, HirGetIndex(expr)));
         case kHirPathExpr: {
-            struct MirPlace const place = lower_path_expr(V, HirGetPathExpr(expr));
-            if (mir_is_lvalue(place)) // TODO
-                return load_from(fs, place.span, place);
-            return place;
+            return lower_path_expr(V, HirGetPathExpr(expr));
         }
 
         GENERATE_COMMON_CASES(V, expr);
@@ -2323,6 +2387,14 @@ static struct MirPlace lower_rvalue(struct HirVisitor *V, struct HirExpr *expr)
 
 #undef GENERATE_COMMON_CASES
 
+static void insert_upvalue_accessors(struct FunctionState *fs)
+{
+    for (int i = 0; i < fs->mir->upvalues->count; ++i) {
+
+    }
+}
+
+#include"stdio.h"
 static void lower_hir_body_aux(struct LowerHir *L, struct HirFnDecl *fn, struct Mir *mir)
 {
     struct BlockState bs;
@@ -2337,6 +2409,7 @@ static void lower_hir_body_aux(struct LowerHir *L, struct HirFnDecl *fn, struct 
     set_current_bb(&fs, first);
 
     lower_function_block(L, fn->body);
+    insert_upvalue_accessors(&fs);
 
     leave_function(L);
 }

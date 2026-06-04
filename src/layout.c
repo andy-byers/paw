@@ -185,6 +185,9 @@ static struct IrLayout compute_field_layout(struct LayoutState *L, IrType *type)
             return SCALAR_LAYOUTS[kIrPtr];
         case kIrArray:
             return compute_array_layout(L, IrGetArray(type));
+        case kIrClosure:
+            // TODO: layout of env?
+            return SCALAR_LAYOUTS[kIrPtr];
         default:
             paw_assert(IrIsTuple(type));
             return compute_tuple_layout(L, IrGetTuple(type));

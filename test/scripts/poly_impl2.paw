@@ -4,7 +4,7 @@ pub trait TestFrom<T> {
     fn test_from(value: T) -> Self;
 }
 
-pub trait TestInto<T> {
+pub trait TestInto<T: Clone> {
     fn test_into(*self) -> T;
 }
 
@@ -18,13 +18,13 @@ impl<T> TestFrom<T> for CustomType<T> {
     }
 }
 
-impl<T> TestInto<T> for CustomType<T> {
+impl<T: Clone> TestInto<T> for CustomType<T> {
     fn test_into(*self) -> T {
-        self.value
+        self.value.clone()
     }
 }
 
-fn roundtrip<T>(value: T) -> T {
+fn roundtrip<T: Clone>(value: T) -> T {
     let t = CustomType::test_from(value);
     t.test_into()
 }

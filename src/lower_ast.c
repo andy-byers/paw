@@ -119,6 +119,14 @@ static NodeId next_node_id(struct LowerAst *L)
     return (NodeId){(unsigned)++L->hir->node_count};
 }
 
+static DeclId next_decl_id(struct LowerAst *L)
+{
+    return (DeclId){
+        .value = (unsigned)++L->C->decl_count,
+        .modno = (unsigned)L->m->modno,
+    };
+}
+
 static struct HirIdent make_ident(Str *name, struct SourceSpan span)
 {
     return (struct HirIdent){
@@ -456,7 +464,7 @@ static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExp
     }
     struct HirType *result = e->result != NULL ? lower_type(L, e->result) : NULL;
     struct HirExpr *expr = lower_expr(L, e->expr);
-    return NEW_NODE(L, closure_expr, e->span, e->id, params, result, expr);
+    return NEW_NODE(L, closure_expr, e->span, e->id, next_decl_id(L), params, result, expr);
 }
 
 static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)

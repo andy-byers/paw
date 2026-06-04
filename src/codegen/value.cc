@@ -128,7 +128,7 @@ llvm::Value *Fn::get_value() const
     auto *B = X->get_builder();
     llvm::Value *object = llvm::UndefValue::get(X->get_callable_ty());
     object = B->CreateInsertValue(object, value_, 0);
-    object = B->CreateInsertValue(object, env_, 1);
+//TODO    object = B->CreateInsertValue(object, env_, 1);
     return object;
 }
 

@@ -721,6 +721,41 @@
 //    }
 //}
 
+//use mem;
+//use list::List;
+
+//pub fn map<I: IntoIterator<Item = *A>, A, B>(f: fn(*A) -> B, iter: I) -> mem::Result<List<B>> {
+//    let b = List::new();
+//    for v in iter {
+//        b.push(f(v))?;
+//    }
+//    Ok(b) 
+//}
+//
+//#[test]
+//pub fn test() {
+//    let input = List::from_array([
+//        1, 2, 3, 4, 5
+//    ]).unwrap();
+//
+//    let output = map(
+//        |x: *int| *x * 2 , 
+//        &input).unwrap();
+//    assert(input[0] == 1);
+//    assert(input[4] == 5);
+//    assert(output[0] == 2);
+//    assert(output[4] == 10);
+//}
+
+//#[test]
+//pub fn test() {
+//    let list = List::new();
+//    let list2 = List::new();
+//    list2.extend(&list).unwrap();
+//    let a = list2[0];
+//}
+
 #[test]
 pub fn test() {
 }
+

@@ -15,6 +15,7 @@ struct Resolver {
     struct Ast *ast;
     paw_Env *P;
 
+    struct FnState *fs;
     struct OrState const *os;
 
     struct Symtab *symtab;
@@ -29,6 +30,12 @@ struct OrState {
     struct OrState const *outer;
     struct BoundNames *names;
     int alt_index;
+};
+
+struct UpvalueInfo {
+    paw_Bool is_local;
+    NodeId id;
+    int index;
 };
 
 struct BoundName {
@@ -81,6 +88,7 @@ DEFINE_MAP_ITERATOR(ImportNames, Str const *, struct ImportName *)
 enum ResolvedKind {
     RESOLVED_MODULE,
     RESOLVED_LOCAL,
+    RESOLVED_UPVALUE,
     RESOLVED_DECL,
     RESOLVED_ASSOC,
 };
@@ -94,6 +102,8 @@ struct ResolvedSegment {
 };
 
 DEFINE_MAP(struct Compiler, SegmentTable, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct ResolvedSegment)
+DEFINE_MAP(struct Compiler, CaptureFlags, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, int)
+DEFINE_LIST(struct Compiler, UpvalueList, struct UpvalueInfo)
 
 enum Namespace {
     // contains ADTs, traits, and type aliases

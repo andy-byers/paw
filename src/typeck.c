@@ -16,6 +16,7 @@
 #include "map.h"
 #include "parse.h"
 #include "solve.h"
+#include "resolve.h"
 #include "str.h"
 #include "type_folder.h"
 #include "unify.h"
@@ -85,6 +86,8 @@ struct TypeChecker {
 
     struct Hir *hir;
     paw_Env *P;
+
+    DeclId enclosing_body;
 };
 
 DEFINE_LIST(struct TypeChecker, Type3List, struct Type3)
@@ -346,7 +349,16 @@ static IrType *check_operandx(struct TypeChecker *T, struct HirExpr *expr)
 static void ensure_valid_rvalue(struct TypeChecker *T, struct HirExpr *expr)
 {
     IrType *type = GET_TYPE(T, expr->hdr.id);
-    if (!pawIr_is_copyable(T->C, type)) {
+    if (IrIsInfer(type) && (HirIsIndex(expr)
+                || HirIsSelector(expr)
+                || HIR_IS_UNOP(expr, UNARY_DEREF))) {
+        IrGenericArgs *copy_args = IrGenericArgs_new(T->C);
+        IrGenericArgs_push(T->C, copy_args, IrGenericArg_from_type(type));
+        DeclId const copy_did = T->C->core_traits[CORE_TRAIT_COPY];
+        IrTrait *copy_trait = pawIr_solver_instantiate_trait_with(T->C->S, copy_did, copy_args);
+        pawIr_solver_add_impl_trait_obligation(T->C->S, type, copy_trait,
+                (struct IrObligationCause){.span = expr->hdr.span});
+    } else if (!pawIr_is_copyable(T->C, type)) {
         if (HirIsIndex(expr)) {
             TYPECK_ERROR(T, MoveOutOfElement,
                     .type = pawIr_print_type_v2(T->C, type),
@@ -502,6 +514,7 @@ static paw_Bool is_unit_type(struct TypeChecker *T, IrType *type)
 static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
 {
     if (d->body == NULL) return;
+    T->enclosing_body = d->did;
     struct BlockState bs;
     enter_block(T, &bs, d->span, BLOCK_NORMAL);
 
@@ -517,10 +530,11 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     };
     T->rs = &rs;
 
-
     IrType *result = check_operand(T, d->body);
     bs.result = unify_types(T, d->span, result, bs.result);
     unify_types(T, d->span, bs.result, ret);
+
+    pawU_check_context(T->U);
 
     K_LIST_XFOREACH (T->defer_index, struct Type3 const, t) {
         IrType *a = pawU_normalize_projections(T->U, t->a);
@@ -533,6 +547,7 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
 
     leave_block(T);
     T->rs = rs.outer;
+    T->enclosing_body = INVALID_DECL_ID;
 }
 
 static void check_item(struct TypeChecker *T, struct HirDecl *item);
@@ -1089,7 +1104,30 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
     T->bs = outer;
     T->rs = rs.outer;
 
-    return pawIr_new_fn_ptr(T->C, params, ret);
+    {
+        IrParams *ir_params = IrParams_new(T->C);
+        IrParams_reserve(T->C, ir_params, e->params->count);
+        K_LIST_XFOREACH (e->params, struct HirDecl *const, pdecl) {
+            struct HirParamDecl const *p = HirGetParamDecl(*pdecl);
+            IrParams_push(T->C, ir_params, (struct IrParam){
+                        .type = GET_TYPE(T, p->id),
+                        .name = p->ident.name,
+                    });
+        }
+
+        struct IrFnDef *r = pawIr_new_fn_def(T->C, e->did, SCAN_STR(T->C, "(closure)"),
+                IrGenericDefs_new(T->C), ret, ir_params, NULL, NO_DECL, PAW_FALSE);
+        FnDefMap_insert(T->C, T->C->fn_defs, e->did, r);
+
+        int const *pflag = CaptureFlags_get(T->C, T->C->capflags, e->id);
+        r->has_captures = pflag != NULL;
+    }
+
+    // generic args are those from the enclosing function, since closures have no generic
+    // args of their own
+    IrGenericArgs *enclosing_args = pawIr_get_generic_args(T->C, T->enclosing_body);
+    IrGenericTypes_insert(T->C, T->C->ir_generic_args, e->did, enclosing_args);
+    return pawIr_new_closure(T->C, e->did, enclosing_args);
 }
 
 static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjectionExpr *e)

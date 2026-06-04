@@ -153,6 +153,12 @@ pub trait Iterator {
 }
 
 
+pub trait Fn<Args> {
+    type Output;
+
+    fn call(*self, args: Args) -> Self::Output;
+}
+
 impl Hash for unit {
     fn hash(*self) -> int { 
         0 
@@ -675,8 +681,8 @@ impl<T: Clone + Compare<T> + Increment> IntoIterator for RangeInclusive<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         RangeInclusiveIter{
-            start: self.start, 
-            end: self.end, 
+            start: self.start.clone(), 
+            end: self.end.clone(), 
             done: false,
         }
     }

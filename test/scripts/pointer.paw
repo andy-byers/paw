@@ -32,7 +32,7 @@ fn write_to_pointer<T>(p: *T, t: T) {
     *p = t;
 }
 
-fn read_from_pointer<T>(p: *T) -> T {
+fn read_from_pointer<T: Copy>(p: *T) -> T {
     *p
 }
 

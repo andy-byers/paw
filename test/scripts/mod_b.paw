@@ -10,6 +10,12 @@ pub struct PolyExternal<T> {
     pub value: T,
 }
 
+impl<T: Clone> Clone for PolyExternal<T> {
+    fn clone(*self) -> Self {
+        Self{value: self.value.clone()}
+    }
+}
+
 pub fn external(value: str) -> External {
     return External{value: value};
 }
@@ -25,9 +31,9 @@ pub fn recursive(n: int) -> int {
     return 0;
 }
 
-pub fn poly_recursive<T: mod_a::GetValue>(n: int, t: T, value: int) -> int {
+pub fn poly_recursive<T: Clone + mod_a::GetValue>(n: int, t: T, value: int) -> int {
     if n > 0 {
-        return mod_a::poly_recursive(n - 1, t, value + t.get_value());
+        return mod_a::poly_recursive(n - 1, t.clone(), value + t.get_value());
     }
     value
 }

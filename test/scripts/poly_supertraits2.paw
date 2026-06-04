@@ -2,11 +2,11 @@
 
 use list::List;
 
-pub trait Collector<T>: IntoIterator<Item = *T> {
+pub trait Collector<T: Copy>: IntoIterator<Item = *T> {
     fn collect_items(*self) -> List<T>;
 }
 
-impl<T> Collector<T> for []T {
+impl<T: Copy> Collector<T> for []T {
     fn collect_items(*self) -> List<T> {
         let result = List::new();
         for item in self {

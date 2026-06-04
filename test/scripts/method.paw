@@ -30,13 +30,13 @@ struct PolyStruct<Ty> {
     value: Ty,
 }
 
-impl<Ty> PolyStruct<Ty> {
+impl<Ty: Clone> PolyStruct<Ty> {
     pub fn new(value: Ty) -> Self {
         Self{value}
     }
 
     pub fn get(*self) -> Ty {
-        self.value
+        self.value.clone()
     }
 }
 
@@ -46,7 +46,7 @@ pub fn test_poly_struct_methods() {
     assert(x.get() == 1.23);
 }
 
-fn call_poly_struct_methods<T>(value: T) -> T {
+fn call_poly_struct_methods<T: Clone>(value: T) -> T {
     PolyStruct::new(value).get()
 }
 

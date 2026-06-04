@@ -25,6 +25,7 @@ typedef struct IrGenericArg IrGenericArg;
     X(Ptr) \
     X(Adt) \
     X(FnPtr) \
+    X(Closure) \
     X(Signature) \
     X(Array) \
     X(Slice) \
@@ -86,6 +87,12 @@ struct IrFnPtr {
     IR_TYPE_HEADER;
     struct IrTypeList *params;
     IrType *result;
+};
+
+struct IrClosure {
+    IR_TYPE_HEADER;
+    DeclId did;
+    struct IrGenericArgs *args;
 };
 
 struct IrSignature {
@@ -176,6 +183,7 @@ IrType *pawIr_new_string(struct Compiler *C);
 IrType *pawIr_new_ptr(struct Compiler *C, IrType *pointee);
 IrType *pawIr_new_adt(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
 IrType *pawIr_new_fn_ptr(struct Compiler *C, struct IrTypeList *params, IrType *result);
+IrType *pawIr_new_closure(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
 IrType *pawIr_new_signature(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
 IrType *pawIr_new_slice(struct Compiler *C, IrType *type);
 IrType *pawIr_new_tuple(struct Compiler *C, struct IrTypeList *elems);
@@ -355,6 +363,7 @@ struct IrFnDef {
     DeclId parent;
     paw_Bool is_pub : 1;
     paw_Bool is_extern : 1;
+    paw_Bool has_captures : 1;
 };
 
 struct IrAdtDef {
@@ -409,15 +418,17 @@ struct IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did);
 #define IR_CAST_TYPE(p) CAST(IrType *, p)
 #define IR_TYPE_DID(type) (IrIsAdt(type) ? IrGetAdt(type)->did : \
         IrIsSignature(type) ? IrGetSignature(type)->did : \
+        IrIsClosure(type) ? IrGetClosure(type)->did : \
         IrIsProjection(type) ? IrGetProjection(type)->assoc : \
         IrGetGeneric(type)->did)
+// TODO: not really correct since signatures (and closures esp.) can have args belonging to enclosing impl block
 #define IR_TYPE_IS_POLYMORPHIC(Type_) ((IrIsAdt(Type_) || IrIsSignature(Type_)) \
         && IR_GENERIC_ARGS(Type_)->count > 0)
 #define IR_FIRST_GENERIC_ARG(Type_) IrGenericArgs_first(IR_GENERIC_ARGS(Type_))
 #define IR_GENERIC_ARGS(Type_) (IrIsAdt(Type_) ? IrGetAdt(Type_)->args : \
-        IrIsSignature(Type_) ? IrGetSignature(Type_)->args : NULL)
-#define IR_IS_FUNC_TYPE(p) (IrIsFnPtr(p) || IrIsSignature(p))
-#define IR_FPTR(p) CHECK_EXP(IR_IS_FUNC_TYPE(p), &(p)->FnPtr_)
+        IrIsSignature(Type_) ? IrGetSignature(Type_)->args : \
+        IrIsClosure(Type_) ? IrGetClosure(Type_)->args : NULL)
+#define IR_IS_FUNC_TYPE(p) (IrIsFnPtr(p) || IrIsSignature(p) || IrIsClosure(p))
 
 DEFINE_LIST(struct Compiler, IrTypeList, IrType *)
 DEFINE_LIST(struct Compiler, IrTraitList, IrTrait *)

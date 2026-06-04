@@ -1335,6 +1335,10 @@ static void print_constant(struct Printer *P, IrConst *konst)
 static void print_place(struct Printer *P, struct MirPlace place)
 {
     if (place.kind == MIR_PLACE_REGISTER) {
+        if (place.r.value < 0) {
+            PRINT_LITERAL(P, "%?");
+            return;
+        }
         struct MirRegisterData const *data = mir_reg_data(P->mir, place.r);
         if (data->name != NULL) {
             PRINT_FORMAT(P, "%s", data->name->text);
@@ -1586,7 +1590,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             struct MirBranch *t = MirGetBranch(instr);
             PRINT_LITERAL(P, "branch ");
             print_place(P, t->cond);
-            PRINT_FORMAT(P, " => [0: bb%d, 1: bb%d]", MirBlockList_get(P->bb->successors, 0),
+            PRINT_FORMAT(P, " => [true: bb%d, false: bb%d]", MirBlockList_get(P->bb->successors, 0),
                     MirBlockList_get(P->bb->successors, 1));
             break;
         }
@@ -1621,7 +1625,16 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
 static void dump_block(struct Printer *P, MirBlock bb)
 {
     struct MirBlockData *block = mir_bb_data(P->mir, bb);
-    DUMP_FORMAT(P, "bb%d:\n", bb.value);
+    {
+        indentation(P);
+        PRINT_FORMAT(P, "bb%d: // preds = [", bb.value);
+        int index = 0;
+        K_LIST_XFOREACH (mir_bb_data(P->mir, bb)->predecessors, MirBlock const, p) {
+            if (index++ != 0) PRINT_LITERAL(P, ", ");
+            PRINT_FORMAT(P, "bb%d", p->value);
+        }
+        PRINT_LITERAL(P, "]\n");
+    }
     ++P->indent;
 
     P->bb = block;
@@ -1644,7 +1657,12 @@ static void dump_mir(struct Printer *P, struct Mir *mir)
     ++P->indent;
     for (int i = 0; i < mir->registers->count; ++i) {
         struct MirRegisterData const data = MirRegisterDataList_get(mir->registers, i);
-        DUMP_FORMAT(P, "_%d: %s\n", i, pawIr_print_type(P->C, data.type));
+        Str const *type = pawIr_print_type_v2(P->C, data.type);
+        if (data.name != NULL) {
+            DUMP_FORMAT(P, "%s: %s\n", data.name->text, type->text);
+        } else {
+            DUMP_FORMAT(P, "_%d: %s\n", i, type->text);
+        }
     }
     --P->indent;
     DUMP_FORMAT(P, "}\n");

@@ -32,6 +32,7 @@ struct IrConst *pawU_new_const_var(struct Unifier *U, struct SourceSpan span);
 // Inference context handling
 void pawU_enter_binder(struct Unifier *U, Str const *modname);
 void pawU_leave_binder(struct Unifier *U);
+void pawU_check_context(struct Unifier *U);
 
 int pawU_current_position(struct Unifier *U);
 void pawU_undo_unifications(struct Unifier *U, int position);

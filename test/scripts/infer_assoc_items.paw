@@ -36,7 +36,7 @@ struct Obj<T> {
     inner: T,
 }
 
-impl<T> Obj<T> {
+impl<T: Copy> Obj<T> {
     pub fn new(x: T) -> Self {
         return Obj{inner: x};
     }
@@ -53,14 +53,14 @@ pub fn test_user_adt() {
 }
 
 fn infer_using_result() -> Option<Unit> {
-    return Option::None;
+    return None;
 }
 
 #[test]
 pub fn test_infer_functions() {
     infer_using_result();
 
-    let f = |x| Option::Some(x);
+    let f = |x| Some(x);
     assert(f(123).unwrap() == 123);
 }
 

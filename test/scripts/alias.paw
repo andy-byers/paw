@@ -134,34 +134,34 @@ pub fn test_poly2_partial() {
     check_poly2(p);
 }
 
-fn check_nested_poly<T>(t: T) -> T {
+fn check_nested_poly<T: Clone>(t: T) -> T {
     type P = Poly2<T, T>;
 
     check_poly2(P{
-        first: t,
-        second: t,
+        first: t.clone(),
+        second: t.clone(),
     });
 
     let p = P{
-        first: t,
-        second: t,
+        first: t.clone(),
+        second: t.clone(),
     };
-    p.second
+    p.second.clone()
 }
 
-fn check_nested_poly2<T>(t: T) -> T {
+fn check_nested_poly2<T: Clone>(t: T) -> T {
     type P<X> = Poly2<X, T>;
 
     check_poly2(P{
         first: 456,
-        second: t,
+        second: t.clone(),
     });
 
     let p = P{
         first: 456,
-        second: t,
+        second: t.clone(),
     };
-    p.second
+    p.second.clone()
 }
 
 #[test]

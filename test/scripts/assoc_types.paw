@@ -40,7 +40,9 @@ impl<T: Copy> Copy for Opaque<T> {}
 impl<T> TestAdd<Opaque<T>> for Opaque<T> {
     type Output = (T, T);
     fn add(self, rhs: Opaque<T>) -> Self::Output {
-        (self.v, rhs.v)
+        let Self{v: first} = self;
+        let Opaque{v: second} = rhs;
+        (first, second)
     }
 }
 
