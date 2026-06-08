@@ -793,6 +793,7 @@ static void init_lattice(struct KProp *K)
     struct MirRegisterData *pdata;
     K_LIST_ENUMERATE (mir->registers, index, pdata) {
         enum CellKind const kind = index <= fptr->params->count
+            || pdata->is_nontrivial || pdata->is_captured
                 ? CELL_BOTTOM : CELL_TOP;
         Lattice_set(K->lattice, key++,
             (struct Cell){

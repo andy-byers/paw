@@ -344,6 +344,15 @@ static void test_closure_error(void)
     test_compiler_status(kErrIncompatibleTypes, "call_with_wrong_type_annotation", "", "let f = |x: int| x; f(2.0);");
     test_compiler_status(kErrIncompatibleTypes, "call_with_wrong_type_inference", "", "let f = |x| x; f(1); f(2.0);");
     test_compiler_status(kErrCannotInfer, "cannot_infer_unused_param", "", "let f = |x| {};");
+
+#define ONCE_CLOSURE_TEST(Status_, Name_, Code_) \
+    test_compiler_status(Status_, Name_, "struct MoveOnly;", \
+            "let m = MoveOnly; let f = || m;" Code_);
+
+    ONCE_CLOSURE_TEST(kErrUseAfterMove, "capture_moves_variable", "let m2 = m;");
+    ONCE_CLOSURE_TEST(kErrUseAfterMove, "use_once_closure_after_move", "let g = f; f();");
+    ONCE_CLOSURE_TEST(kErrUseAfterMove, "once_closure_consumed_by_call", "f(); f();");
+    ONCE_CLOSURE_TEST(kErrIncompatibleTypes, "once_closure_not_compatible_with_fn_ptr", "let g: fn() -> MoveOnly = f;");
 }
 
 static void test_arithmetic_error(void)
@@ -609,16 +618,16 @@ static void test_trait_error(void)
 #undef TRAIT
 
 #define POLY_TRAIT \
-    "pub trait Trait<T> {\n" \
+    "pub trait Trait<T: Clone> {\n" \
     "    fn f(self) -> T;\n" \
     "}\n"
 #define POLY_STRUCT \
     "struct S<T> {\n" \
     "    pub v: T,\n" \
     "}\n" \
-    "impl<T> Trait<T> for S<T> {" \
+    "impl<T: Clone> Trait<T> for S<T> {" \
     "    fn f(self) -> T {\n" \
-    "        self.v\n" \
+    "        self.v.clone()\n" \
     "    }\n" \
     "}\n"
 #define POLY_FUNCTION(g, rest) \
@@ -627,17 +636,17 @@ static void test_trait_error(void)
     "}"
 
     test_compiler_status(kErrFalseObligation, "trait_not_implemented",
-        POLY_TRAIT "struct S;" POLY_FUNCTION("int", ),
+        POLY_TRAIT "struct S;" POLY_FUNCTION("int", " + Clone"),
         "let x = S; call_f(x);");
     test_compiler_status(kErrFalseObligation, "trait_generic_mismatch",
-        POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int", ),
+        POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int", " + Clone"),
         "let x = S{v: true}; call_f(x);");
     test_compiler_status(kErrExpectedTrait, "trait_type_as_trait",
         "struct Type; struct S; impl Type for S {}", "");
     test_compiler_status(kErrUnknownPath, "trait_does_not_exist",
         "struct S; impl Trait<int> for S {}", "");
     test_compiler_status(kErrUnknownPath, "trait_missing_generic_in_bounds",
-        POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
+        POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", " + Clone"), "");
     test_compiler_status(kErrExpectedTypeArguments, "trait_bound_missing_args",
         POLY_TRAIT POLY_STRUCT "fn call_f<T: Trait>(t: T) {t.f();}",
         "let x = S{v: 123}; call_f(x);");
@@ -958,6 +967,8 @@ static void test_definite_assignment(void)
 
 int main(void)
 {
+    test_closure_error();
+    return 42;
     test_syntax_error();
     test_underscore();
     test_annotations();
@@ -965,7 +976,7 @@ int main(void)
     test_name_error();
     test_type_error();
     test_definite_assignment();
-//    test_closure_error();
+    test_closure_error();
     test_arithmetic_error();
     test_tuple_error();
     test_struct_error();

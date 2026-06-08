@@ -12,12 +12,9 @@ static constexpr char const *BUILTIN_NAMES[(size_t)BuiltinFn::NUM_BUILTINS] = {
     [(unsigned)BuiltinFn::PAW_REALLOC] = "paw_mem_realloc",
     [(unsigned)BuiltinFn::PAW_DEALLOC] = "paw_mem_dealloc",
     [(unsigned)BuiltinFn::PAW_ALIGNED_ALLOC] = "paw_aligned_alloc",
-    [(unsigned)BuiltinFn::CKD_IMUL] = "paw_builtin_ckd_imul",
-    [(unsigned)BuiltinFn::CKD_IADD] = "paw_builtin_ckd_iadd",
     [(unsigned)BuiltinFn::PAW_BKPT] = "paw_builtin_bkpt",
     [(unsigned)BuiltinFn::HASH_BYTES] = "paw_builtin_hash_bytes",
     [(unsigned)BuiltinFn::CHECK_BOUNDS] = "paw_builtin_check_bounds",
-    [(unsigned)BuiltinFn::ABS_INDEX] = "paw_builtin_abs_index",
     [(unsigned)BuiltinFn::RAWCMP] = "paw_builtin_rawcmp",
     [(unsigned)BuiltinFn::PANIC] = "paw_panic_handler",
     [(unsigned)BuiltinFn::PRINT] = "_PN7prelude5printIScE",
@@ -121,9 +118,9 @@ ObjectType *Context::get_object_type(llvm::ArrayRef<ObjectType::FieldTypes> fiel
 }
 
 FnType *Context::get_fn_type(Type *return_type, llvm::ArrayRef<Type *> param_types,
-        FnKind fn_kind, bool has_env, bool never_returns)
+        Type *env_type, bool never_returns)
 {
-    FnType fn_type(*this, return_type, param_types, fn_kind, has_env, never_returns);
+    FnType fn_type(*this, return_type, param_types, env_type, never_returns);
     return (FnType *)intern_type(&fn_type);
 }
 

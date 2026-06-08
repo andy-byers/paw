@@ -11,35 +11,32 @@
 #include <stdlib.h>
 #include <string.h>
 
-void paw_assert(void *env, paw_Bool cond)
+void paw_assert(paw_Bool cond)
 {
     if (!cond) {
         char message[] = "assertion failed";
-        paw_panic_(env, (paw_Slice){
+        paw_panic_((paw_Slice){
                 .start = message,
                 .length = PAW_LENGTHOF(message),
             });
     }
 }
 
-_Noreturn void paw_panic_(void *env, paw_Slice message)
+_Noreturn void paw_panic_(paw_Slice message)
 {
-    PAW_UNUSED(env);
     fwrite(message.start, 1, (size_t)message.length, stderr);
     exit(EXIT_FAILURE);
 }
 
 
 // TODO: recast these as functions that write to a "Format" object
-//paw_Str paw_char_to_str(void *env, paw_Char *self)
+//paw_Str paw_char_to_str(paw_Char *self)
 //{
-//    PAW_UNUSED(env);
 //    return new_str(self, 1);
 //}
 //
-//paw_Str paw_int_to_str(void *env, paw_Int *self)
+//paw_Str paw_int_to_str(paw_Int *self)
 //{
-//    PAW_UNUSED(env);
 //    paw_Char temp[32];
 //    paw_Bool const negative = *self < 0;
 //    paw_Char *end = temp + PAW_COUNTOF(temp);
@@ -63,39 +60,35 @@ _Noreturn void paw_panic_(void *env, paw_Slice message)
 //    return new_str(ptr, end - ptr);
 //}
 //
-//paw_Str paw_float_to_str(void *env, paw_Float *self)
+//paw_Str paw_float_to_str(paw_Float *self)
 //{
-//    PAW_UNUSED(env);
 //    paw_Char temp[32];
 //    int const n = snprintf(temp, PAW_COUNTOF(temp), "%.*g", 17, *self);
 //    return new_str(temp, n);
 //}
 
-paw_Str paw_str_from_raw_parts(void *env, char const *ptr, paw_Int len)
+paw_Str paw_str_from_raw_parts(char const *ptr, paw_Int len)
 {
-    PAW_UNUSED(env);
     return (paw_Str){
         .text = ptr,
         .length = len,
     };
 }
 
-paw_Int paw_str_len(void *env, paw_Str self)
+paw_Int paw_str_len(paw_Str self)
 {
-    PAW_UNUSED(env);
     return self.length;
 }
 
-char const *paw_ops_str_AsPtr_as_ptr(void *env, paw_Str *self)
+char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self)
 {
-    PAW_UNUSED(env);
     return self->text;
 }
 
 // pub fn parse_int(self) -> Option<int>
-paw_Option_Int paw_str_parse_int(void *env, paw_Str self)
+paw_Option_Int paw_str_parse_int(paw_Str self)
 {
-    return paw_str_parse_int_radix(env, self, 10);
+    return paw_str_parse_int_radix(self, 10);
 }
 
 static unsigned char_to_digit(paw_Char c)
@@ -149,9 +142,8 @@ static int parse_int_radix(paw_Char const *text, paw_Int length, paw_Int base, p
 }
 
 // fn parse_int_radix(self, base: int) -> Option<int>
-paw_Option_Int paw_str_parse_int_radix(void *env, paw_Str self, paw_Int base)
+paw_Option_Int paw_str_parse_int_radix(paw_Str self, paw_Int base)
 {
-    PAW_UNUSED(env);
     paw_Int result;
     if (parse_int_radix(self.text, self.length, base, &result) == 0) {
         return paw_Option_Int_some(result);
@@ -194,9 +186,8 @@ static int parse_float(paw_Char const *text, paw_Float *result_ptr)
 }
 
 // fn parse_float(self) -> Option<float>
-paw_Option_Float paw_str_parse_float(void *env, paw_Str self)
+paw_Option_Float paw_str_parse_float(paw_Str self)
 {
-    PAW_UNUSED(env);
     paw_Float result;
     if (parse_float(self.text, &result) == 0) {
         return paw_Option_Float_some(result);
@@ -222,13 +213,13 @@ static paw_Char const *find_substr(paw_Char const *str, paw_Int nstr, paw_Char c
 }
 
 //// pub fn split(self, sep: str) -> [str]
-//paw_List_Str paw_str_split(void *env, paw_Str self, paw_Str sep)
+//paw_List_Str paw_str_split(paw_Str self, paw_Str sep)
 //{
 //#define LIST_PUSH_STR _PM4list4ListIsE4list4push
 //    extern void LIST_PUSH_STR(void *, paw_List_Str, paw_Str);
 //
 //    if (sep->length == 0)
-//        paw_panic(env, NEW_LITERAL("empty separator"));
+//        paw_panic(NEW_LITERAL("empty separator"));
 //
 //    size_t const INITIAL_CAPACITY = 4;
 //    paw_List_Str list = PAW_MALLOC(sizeof *list);
@@ -242,7 +233,7 @@ static paw_Char const *find_substr(paw_Char const *str, paw_Int nstr, paw_Char c
 //    paw_Char const *rest_text = self->text;
 //    while ((part = find_substr(rest_text, rest_length, sep->text, sep->length))) {
 //        if (num_parts == INT_MAX)
-//            paw_panic(env, NEW_LITERAL("too many substrings"));
+//            paw_panic(NEW_LITERAL("too many substrings"));
 //        paw_Int const n = part - rest_text;
 //        LIST_PUSH_STR(NULL, list, new_str(rest_text, n));
 //        part += sep->length; // skip separator
@@ -259,9 +250,8 @@ static paw_Char const *find_substr(paw_Char const *str, paw_Int nstr, paw_Char c
 //}
 //
 //// pub fn join(self, parts: [str]) -> str;
-//paw_Str paw_str_join(void *env, paw_Str self, paw_List_Str parts)
+//paw_Str paw_str_join(paw_Str self, paw_List_Str parts)
 //{
-//    PAW_UNUSED(env);
 //    paw_Str joined;
 //    {
 //        struct StringBuilder sb;
@@ -278,9 +268,8 @@ static paw_Char const *find_substr(paw_Char const *str, paw_Int nstr, paw_Char c
 //}
 
 // fn find(self, target: str) -> Option<int>
-paw_Option_Int paw_str_find(void *env, paw_Str self, paw_Str target)
+paw_Option_Int paw_str_find(paw_Str self, paw_Str target)
 {
-    PAW_UNUSED(env);
     paw_Char const *result = find_substr(
         self.text, self.length,
         target.text, target.length);
@@ -292,17 +281,15 @@ paw_Option_Int paw_str_find(void *env, paw_Str self, paw_Str target)
 }
 
 // fn starts_with(self, prefix: str) -> bool
-paw_Bool paw_str_starts_with(void *env, paw_Str self, paw_Str prefix)
+paw_Bool paw_str_starts_with(paw_Str self, paw_Str prefix)
 {
-    PAW_UNUSED(env);
     return self.length >= prefix.length
         && 0 == memcmp(prefix.text, self.text, (size_t)prefix.length);
 }
 
 // fn ends_with(*self, suffix: str) -> bool
-paw_Bool paw_str_ends_with(void *env, paw_Str self, paw_Str suffix)
+paw_Bool paw_str_ends_with(paw_Str self, paw_Str suffix)
 {
-    PAW_UNUSED(env);
     if (self.length >= suffix.length) {
         paw_Char const *ptr = self.text + self.length - suffix.length;
         return 0 == memcmp(suffix.text, ptr, (size_t)suffix.length);
@@ -312,27 +299,24 @@ paw_Bool paw_str_ends_with(void *env, paw_Str self, paw_Str suffix)
 
 
 // From http://www.cse.yorku.ca/~oz/hash.html
-uint32_t paw_builtin_hash_bytes(void *env, paw_Char const *bytes, paw_Int length, uint32_t hash)
+uint32_t paw_builtin_hash_bytes(paw_Char const *bytes, paw_Int length, uint32_t hash)
 {
-    PAW_UNUSED(env);
     for (paw_Int i = 0; i < length; ++i)
         hash = (uint32_t)bytes[i] + (hash << 6) + (hash << 16) - hash;
 
     return hash;
 }
 
-paw_Int paw_builtin_rawcmp(void *env, paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length)
+paw_Int paw_builtin_rawcmp(paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length)
 {
-    PAW_UNUSED(env);
     paw_Int const n = PAW_MIN(lhs_length, rhs_length);
     int const r = n == 0 ? 0 : memcmp(lhs, rhs, (size_t)n);
     return r != 0 ? r : lhs_length - rhs_length;
 }
 
 // fn paw_slice_from_raw_parts<T>(start: *T, length: int) -> []T
-paw_Slice paw_slice_from_raw_parts(void *env, void *start, paw_Int length)
+paw_Slice paw_slice_from_raw_parts(void *start, paw_Int length)
 {
-    PAW_UNUSED(env);
     return (paw_Slice){
         .start = start,
         .length = length,
@@ -340,77 +324,67 @@ paw_Slice paw_slice_from_raw_parts(void *env, void *start, paw_Int length)
 }
 
 // fn as_ptr(*self) -> *T
-void *paw_ops_Slice_AsPtr_as_ptr(void *env, paw_Slice *self)
+void *paw_ops_Slice_AsPtr_as_ptr(paw_Slice *self)
 {
-    PAW_UNUSED(env);
     return self->start;
 }
 
 // fn len(self) -> int
-paw_Int paw_slice_Slice_len(void *env, paw_Slice self)
+paw_Int paw_slice_Slice_len(paw_Slice self)
 {
-    PAW_UNUSED(env);
     return self.length;
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(void *env, unsigned long size)
+paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(unsigned long size)
 {
-    PAW_UNUSED(env);
     void *ptr = malloc(size);
     return ptr != NULL
         ? paw_Result_Ptr_mem_OOM_ok(ptr)
         : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *env, void *ptr, unsigned long size)
+paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, unsigned long size)
 {
-    PAW_UNUSED(env);
     ptr = realloc(ptr, size);
     return ptr != NULL
         ? paw_Result_Ptr_mem_OOM_ok(ptr)
         : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(void *env, unsigned alignment, unsigned long size)
+paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(unsigned alignment, unsigned long size)
 {
-    PAW_UNUSED(env);
     void *ptr = aligned_alloc(alignment, size);
     return ptr != NULL
         ? paw_Result_Ptr_mem_OOM_ok(ptr)
         : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
 }
 
-void paw_mem_raw_dealloc(void *env, void *ptr)
+void paw_mem_raw_dealloc(void *ptr)
 {
-    PAW_UNUSED(env);
     free(ptr);
 }
 
 // fn memcpy(dest: *char, src: *char, size: int) -> *char
-void *paw_ptr_memcpy(void *env, void *dest, void *src, paw_Int size)
+void *paw_ptr_memcpy(void *dest, void *src, paw_Int size)
 {
-    PAW_UNUSED(env);
     return memcpy(dest, src, (size_t)size);
 }
 
 // fn memmove(dest: *char, src: *char, size: int) -> *char
-void *paw_ptr_memmove(void *env, void *dest, void *src, paw_Int size)
+void *paw_ptr_memmove(void *dest, void *src, paw_Int size)
 {
-    PAW_UNUSED(env);
     return memmove(dest, src, (size_t)size);
 }
 
 // fn memset(ptr: *char, value: char, size: int) -> *char
-void *paw_ptr_memset(void *env, void *ptr, char value, paw_Int size)
+void *paw_ptr_memset(void *ptr, char value, paw_Int size)
 {
-    PAW_UNUSED(env);
     return memset(ptr, value, (size_t)size);
 }
 
 // fn memcmp(lhs: *char, rhs: *char, size: int) -> int
-int paw_ptr_memcmp(void *env, void *lhs, void *rhs, paw_Int size)
+int paw_ptr_memcmp(void *lhs, void *rhs, paw_Int size)
 {
-    PAW_UNUSED(env);
     return memcmp(lhs, rhs, (size_t)size);
 }
 
@@ -422,16 +396,15 @@ void paw_builtin_check_bounds(paw_Int index, paw_Int length)
                 "index %" PRId64 " out of bounds for sequence of length %" PRId64 "\n",
                 index, length);
         PAW_ASSERT((size_t)n < PAW_COUNTOF(buffer));
-        paw_panic_(NULL, (paw_Slice){
+        paw_panic_((paw_Slice){
                 .start = buffer,
                 .length = n,
             });
     }
 }
 
-paw_Int paw_fmt_write_float(void *env, paw_Float value, paw_Int precision, char *output, paw_Int output_len)
+paw_Int paw_fmt_write_float(paw_Float value, paw_Int precision, char *output, paw_Int output_len)
 {
-    PAW_UNUSED(env);
     return snprintf(output, output_len, "%.*g", (int)precision, value);
 }
 

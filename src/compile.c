@@ -262,6 +262,14 @@ static void set_extern_value(struct Compiler *C, char const *name, Value value)
     StringMap_insert(C, C->symbols, SCAN_STR(C, name), value.p);
 }
 
+DeclId pawP_next_decl_id(struct Compiler *C, int modno)
+{
+    return (DeclId){
+        .value = (unsigned)++C->decl_count,
+        .modno = (unsigned)modno,
+    };
+}
+
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str const *modname, Str const *pathname, Str const *dirname)
 {
     *C = (struct Compiler){
@@ -339,7 +347,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->impls.trait = IrDefs_new(C);
 
     C->segtab = SegmentTable_new(C);
-    C->capflags = CaptureFlags_new(C);
+    C->upvtab = UpvalueTable_new(C);
 
     ModuleInfo_push(C, C->modinfo, (struct Module){
                 .pathname = pathname,

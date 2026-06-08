@@ -101,13 +101,18 @@ struct HirSegment {
     struct SourceSpan span;
     struct HirIdent ident;
     struct HirGenericArgs *args;
-    NodeId id, target;
+    NodeId id;
+    union {
+        NodeId id;
+        int index;
+    } target;
 };
 
 enum HirPathKind {
     HIR_PATH_ITEM,
     HIR_PATH_ASSOC,
     HIR_PATH_LOCAL,
+    HIR_PATH_UPVALUE,
 };
 
 struct HirPath {
@@ -1794,6 +1799,19 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DeclId id);
 #define HIR_FPTR(t) CHECK_EXP(HirIsFnType(t), &(t)->fptr)
 
 static inline struct HirSegment *pawHir_add_segment(struct Hir *hir, struct HirSegments *segments,
+        struct SourceSpan span, NodeId id, struct HirIdent ident, struct HirGenericArgs *args, NodeId target)
+{
+    HirSegments_push(hir, segments, (struct HirSegment){
+        .id = id,
+        .span = span,
+        .ident = ident,
+        .target.id = target,
+        .args = args,
+    });
+    return &K_LIST_LAST(segments);
+}
+
+static inline struct HirSegment *pawHir_init_(struct Hir *hir, struct HirSegments *segments,
         struct SourceSpan span, NodeId id, struct HirIdent ident, struct HirGenericArgs *args, NodeId target)
 {
     HirSegments_push(hir, segments, (struct HirSegment){

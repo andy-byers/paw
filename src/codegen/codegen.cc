@@ -162,10 +162,11 @@ public:
     }
 
     template<class V>
-    void insert(IrType *key, V &&value)
+    Value &insert(IrType *key, V &&value)
     {
-        paw_assert(lookup(key) == nullptr); // must be unique
-        types_.emplace(key, std::forward<V>(value));
+        auto const [iter, inserted] = types_.insert({key, std::forward<V>(value)});
+        paw_assert(inserted); // must be unique
+        return iter->second;
     }
 
 private:
@@ -188,25 +189,18 @@ private:
 };
 
 
+class CodeGenerator;
+
 class TypeTranslator {
 public:
-    explicit TypeTranslator(Context &X, IrTypeHashMap<Type *> &types)
-        : C(X.get_compiler())
-        , X(&X)
-        , types_(&types)
-    {
-    }
+    explicit TypeTranslator(CodeGenerator &G, IrTypeHashMap<Type *> &types);
 
-    Type *get_or_create_type(IrType *irtype)
-    {
-        auto *const *type_ptr = types_->lookup(irtype);
-        if (type_ptr != nullptr) return *type_ptr;
-        auto *type = create_type(irtype);
-        types_->insert(irtype, type);
-        return type;
-    }
+    Type *translate_type(IrType *irtype);
+    Type *get_or_create_type(IrType *irtype);
 
 private:
+    Type *create_env_type(IrType *irtype);
+
     Type *create_type(IrType *irtype)
     {
         switch (IR_KINDOF(irtype)) {
@@ -245,21 +239,7 @@ private:
         }
     }
 
-    Type *create_fn_type(IrType *irtype)
-    {
-        auto *params = ir_fn_params(C, irtype);
-        auto *result = ir_fn_result(C, irtype);
-        auto const is_closure = !IrIsSignature(irtype);
-        auto const is_method = is_method_type(irtype);
-        auto *return_type = get_or_create_type(result);
-        return X->get_fn_type(return_type,
-                get_or_create_types(params),
-                is_closure ? FUNC_CLOSURE :
-                    is_method ? FUNC_METHOD :
-                    FUNC_FUNCTION,
-                true /* has_env */,
-                IrIsNever(result));
-    }
+    Type *create_fn_type(IrType *irtype);
 
     Type *create_tuple_type(IrType *irtype)
     {
@@ -367,6 +347,7 @@ private:
         return types;
     }
 
+    CodeGenerator *G;
     Compiler *C;
     Context *X;
 
@@ -386,15 +367,11 @@ struct Closure {
     explicit Closure(std::unique_ptr<Fn> fn, size_t num_upvalues)
         : upvalues(num_upvalues)
         , fn(std::move(fn))
-        , env_ptr(nullptr)
-        , env_ty(nullptr)
     {
     }
 
     std::vector<Upvalue> upvalues;
     std::unique_ptr<Fn> fn;
-    llvm::Value *env_ptr;
-    llvm::Type *env_ty;
 };
 
 enum class ValueKind {
@@ -417,7 +394,7 @@ class PawState final: public State {
 public:
     friend class CodeGenerator;
 
-    explicit PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue> *upvalues, PawState *outer);
+    explicit PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer);
     ~PawState();
 
     Closure *get_closure(unsigned index)
@@ -465,8 +442,9 @@ private:
     std::vector<ValueKind> value_kinds_;
     std::vector<llvm::Value *> constants_;
     std::vector<llvm::Value *> captured_;
-    std::vector<Upvalue> *upvalues_;
+    std::vector<llvm::Value *> upvalues_;
     std::vector<Closure> closures_;
+    llvm::Value *env_;
 };
 
 static void remove_global_if_exists(llvm::Module &M, std::string name)
@@ -629,8 +607,7 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
             B->CreateCall(callee, {
                         B->CreateGlobalString("TEST " + name + '\n'),
                     });
-            B->CreateCall(m->getFunction(name),
-                    X->create_null_ptr());
+            B->CreateCall(m->getFunction(name));
         }
 
         B->CreateRet(X->create_i32(0));
@@ -643,6 +620,7 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
 class CodeGenerator final {
 public:
     friend class PawState;
+    friend class TypeTranslator;
 
     explicit CodeGenerator(Compiler *C, std::string name, CodegenOptions options)
         : ctx_(std::make_unique<llvm::LLVMContext>())
@@ -654,7 +632,7 @@ public:
         , options_(options)
         , types_(*C)
         , fns_(*C)
-        , methods_(*C)
+        , mirs_(*C)
     {
         llvm::InitializeNativeTarget();
         llvm::InitializeNativeTargetAsmPrinter();
@@ -761,8 +739,7 @@ public:
         auto *irtype = ir_deref(IrTypeList_first(irfn->params));
         if (pawIr_needs_drop(C, irtype)) {
             auto *irdrop = pawIr_get_custom_drop_type(C, irtype);
-            B->CreateCall(get_fn(irdrop)->get_fn(), {
-                    X.create_null_ptr(), state.get_arg(0)});
+            B->CreateCall(get_fn(irdrop)->get_fn(), state.get_arg(0));
         }
         state.create_return();
     }
@@ -856,16 +833,8 @@ public:
 
     void define_fn(Mir const *mir)
     {
-        Fn *fn;
-        std::vector<Upvalue> *upvalues = nullptr;
-        if (mir->fn_kind == FUNC_CLOSURE) {
-            auto *closure = state_->get_closure(unsigned(mir->child_id));
-            upvalues = &closure->upvalues;
-            fn = closure->fn.get();
-        } else {
-            fn = get_fn(mir->type);
-        }
-
+        // TODO: should be able to just call get_fn since closures have unique types
+        auto *fn = get_fn(mir->type);
         if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {
             auto const *fptr = IrGetFnPtr(IR_GET_FN(C, mir->type));
             paw_Bool const materialize_return = builtin_kind(fptr->result) != BUILTIN_INT;
@@ -911,7 +880,7 @@ public:
         if (mir->blocks->count == 0)
             return;
 
-        PawState state(*this, fn, mir, upvalues, state_);
+        PawState state(*this, fn, mir, state_);
         enter_fn(state);
 
         for (int b = 0; b < mir->blocks->count; ++b) {
@@ -943,18 +912,21 @@ public:
             TypeCollectionIterator_next(&iter_); \
         } \
     } while (0)
+        TypeTranslator translator(*this, types_);
 
-        TypeTranslator translator(X, types_);
+        // TODO: needed because `env` type must be known for closures (need access to upvalue types) since it is passed by-value to the function
+        for (int i = 0; i < mir_count; ++i)
+            register_mir(mirs[i]);
+
         FOREACH_TYPE(C->typesystem.types, irtype, {
-                    translator.get_or_create_type(irtype);
+                    translator.translate_type(irtype);
                 });
 
 #undef FOREACH_TYPE
 
         // declare all toplevel functions
         for (int i = 0; i < mir_count; ++i) {
-            auto const *mir = mirs[i];
-            declare_fn(mir);
+            declare_fn(mirs[i]);
         }
 
         // declare/generate internal functions that are only called from
@@ -970,7 +942,7 @@ public:
                 llvm::GlobalValue::InternalLinkage,
                 X.create_null_ptr(), "paw_argv");
 
-        FnType constructor_type(X, X.get_unit_type(), {}, FUNC_FUNCTION);
+        FnType constructor_type(X, X.get_unit_type(), {});
         auto constructor_fn = Fn(
                 X, "paw_constructor",
                 llvm::GlobalValue::InternalLinkage,
@@ -1003,7 +975,7 @@ public:
             state.create_return();
         }
 
-        FnType destructor_type(X, X.get_unit_type(), {}, FUNC_FUNCTION);
+        FnType destructor_type(X, X.get_unit_type(), {});
         auto destructor_fn = Fn(X, "paw_destructor",
                 llvm::GlobalValue::InternalLinkage,
                 &destructor_type);
@@ -1041,7 +1013,7 @@ public:
         FnType main_type(X, X.get_int32_type(), {
                     X.get_int32_type(),
                     X.get_ptr_type(),
-                }, FUNC_FUNCTION, false);
+                });
         Fn main_fn(X, "main", llvm::Function::ExternalLinkage, &main_type);
         State state(X, &main_fn);
 
@@ -1049,7 +1021,7 @@ public:
         B->CreateStore(argc64, os_argc_);
         B->CreateStore(main_fn.get_arg(1), os_argv_);
 
-        auto *ret = B->CreateCall(inner, {X.create_null_ptr(), X.create_null_ptr()});
+        auto *ret = B->CreateCall(inner);
         state.create_return(materialize_return ? X.create_i32(0)
                 : B->CreateTrunc(ret, X.get_i32_ty()));
     }
@@ -1065,6 +1037,13 @@ public:
     }
 
     Type *get_type(IrType *irtype) const
+    {
+        if (ir_is_capturing_closure(C, irtype))
+            return create_env_type(mirs_.lookup(irtype)[0]->upvalues);
+        return get_raw_type(irtype);
+    }
+
+    Type *get_raw_type(IrType *irtype) const
     {
         auto *itr = types_.lookup(irtype);
         if (itr != nullptr) return *itr;
@@ -1126,7 +1105,7 @@ private:
     Owned<Fn> create_internal_method(IrType *irself, std::string name, Type *return_type, llvm::ArrayRef<Type *> param_types)
     {
         auto type = std::make_unique<FnType>(X,
-                return_type, param_types, FUNC_METHOD);
+                return_type, param_types);
         auto value = std::make_unique<Fn>(X,
                 mangle_internal_method_name(C, irself, name),
                 llvm::Function::PrivateLinkage,
@@ -1172,12 +1151,12 @@ private:
                     .getCallee());
 
             // ABI type of "*[char]" in argument position
-            auto *payload_ty = X.get_slice_type(
-                    X.get_char_type())->get_abi_ty();
+            auto *message_type = X.get_slice_type(
+                    X.get_char_type());
             auto callee = M->get_module()
                 ->getOrInsertFunction("paw_panic_handler",
                     llvm::FunctionType::get(X.get_void_ty(),
-                        {X.get_ptr_ty(), payload_ty}, false));
+                        {message_type->get_abi_ty()}, false));
             auto *fn = llvm::cast<llvm::Function>(callee.getCallee());
             fn->setDoesNotThrow();
             fn->setDoesNotReturn();
@@ -1190,8 +1169,9 @@ private:
                 stream_ptr,
                 "stream");
 
-            auto *ptr = B->CreateExtractValue(fn->getArg(1), 0ULL);
-            auto *len = B->CreateExtractValue(fn->getArg(1), 1ULL);
+            auto *ptr_as_int = B->CreateExtractValue(fn->getArg(0), 0ULL);
+            auto *ptr = B->CreateIntToPtr(ptr_as_int, X.get_ptr_ty());
+            auto *len = B->CreateExtractValue(fn->getArg(0), 1ULL);
             B->CreateCall(write, {ptr, X.create_i64(1), len, stream});
 
             auto *trap = llvm::Intrinsic::getOrInsertDeclaration(*M, llvm::Intrinsic::trap);
@@ -1204,7 +1184,7 @@ private:
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_ptr_ty(),
-                        {X.get_ptr_ty(), X.get_i64_ty()}, false),
+                        {X.get_i64_ty()}, false),
                     llvm::GlobalValue::ExternalLinkage,
                     get_builtin_name(BuiltinFn::PAW_ALLOC),
                     *M);
@@ -1215,7 +1195,7 @@ private:
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_ptr_ty(),
-                        {X.get_ptr_ty(), X.get_ptr_ty(), X.get_i64_ty()}, false),
+                        {X.get_ptr_ty(), X.get_i64_ty()}, false),
                     llvm::GlobalValue::ExternalLinkage,
                     get_builtin_name(BuiltinFn::PAW_REALLOC),
                     *M);
@@ -1226,7 +1206,7 @@ private:
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_void_ty(),
-                        {X.get_ptr_ty(), X.get_ptr_ty()}, false),
+                        {X.get_ptr_ty()}, false),
                     llvm::GlobalValue::ExternalLinkage,
                     get_builtin_name(BuiltinFn::PAW_DEALLOC),
                     *M);
@@ -1279,108 +1259,39 @@ private:
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_i64_ty(), {
-                        X.get_ptr_ty(),
-                        X.get_ptr_ty(),
-                        X.get_i64_ty(),
-                        X.get_ptr_ty(),
-                        X.get_i64_ty(),
+                        X.get_ptr_ty(), X.get_i64_ty(),
+                        X.get_ptr_ty(), X.get_i64_ty(),
                     }, false),
                     llvm::GlobalValue::ExternalLinkage,
                     get_builtin_name(BuiltinFn::RAWCMP),
                     *M);
             fn->setDoesNotThrow();
         }
-
-        // TODO: ckd_i* are broken b/c panic() cannot be easily called anymore (it takes a
-        // TODO: slice by value which needs to have type "i64[2]" per the ABI), implement directly in Paw
-
-        // generate "i64 @ckd_iadd(i64, i64)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_i64_ty(), {
-                        X.get_i64_ty(),
-                        X.get_i64_ty(),
-                    }, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::CKD_IADD),
-                    *M);
-            fn->setDoesNotThrow();
-
-            auto *entry_block = llvm::BasicBlock::Create(*c, "entry", fn);
-            auto *ok_block = llvm::BasicBlock::Create(*c, "ok", fn);
-            auto *error_block = llvm::BasicBlock::Create(*c, "error", fn);
-
-            B->SetInsertPoint(entry_block);
-            auto *result = B->CreateCall(
-                    llvm::Intrinsic::getOrInsertDeclaration(*M,
-                        llvm::Intrinsic::sadd_with_overflow,
-                        {X.get_i64_ty()}),
-                    {fn->getArg(0), fn->getArg(1)});
-            auto *overflow = B->CreateExtractValue(result, 1);
-            B->CreateCondBr(overflow, error_block, ok_block);
-
-            B->SetInsertPoint(error_block);
-            CG_PANIC_LITERAL(X, "encountered signed integer overflow during operator \"*\"");
-            B->CreateUnreachable();
-
-            B->SetInsertPoint(ok_block);
-            auto *value = B->CreateExtractValue(result, 0);
-            B->CreateRet(value);
-        }
-
-        // generate "i64 @ckd_imul(i64, i64)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_i64_ty(), {
-                        X.get_i64_ty(),
-                        X.get_i64_ty(),
-                    }, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::CKD_IMUL),
-                    *M);
-            fn->setDoesNotThrow();
-
-            auto *entry_block = llvm::BasicBlock::Create(*c, "entry", fn);
-            auto *ok_block = llvm::BasicBlock::Create(*c, "ok", fn);
-            auto *error_block = llvm::BasicBlock::Create(*c, "error", fn);
-
-            B->SetInsertPoint(entry_block);
-            auto *result = B->CreateCall(
-                    llvm::Intrinsic::getOrInsertDeclaration(*M,
-                        llvm::Intrinsic::smul_with_overflow,
-                        {X.get_i64_ty()}),
-                    {fn->getArg(0), fn->getArg(1)});
-            auto *overflow = B->CreateExtractValue(result, 1);
-            B->CreateCondBr(overflow, error_block, ok_block);
-
-            B->SetInsertPoint(error_block);
-            CG_PANIC_LITERAL(X, "encountered signed integer overflow during operator \"*\"");
-            B->CreateUnreachable();
-
-            B->SetInsertPoint(ok_block);
-            auto *value = B->CreateExtractValue(result, 0);
-            B->CreateRet(value);
-        }
     }
 
-    Fn *get_method(IrType *self, std::string name)
+    void register_mir(Mir const *mir)
     {
-        auto &methods = methods_[self];
-        auto const itr = methods.find(name);
-        return itr != end(methods) ? itr->second : nullptr;
+        mirs_.insert(mir->type, mir);
+        K_LIST_XFOREACH (mir->children, Mir *const, child)
+            register_mir(*child);
     }
 
-    void declare_fn(Mir const *mir)
+    llvm::Function::LinkageTypes get_linkage(Mir const *mir)
     {
-        auto *type = cast<FnType>(get_type(mir->type));
+        if (!mir->is_pub) {
+            auto const *def = pawIr_get_fn_def(C, IR_TYPE_DID(mir->type));
+            if (!def->is_extern)
+                return llvm::Function::InternalLinkage;
+        }
+
+        return llvm::Function::ExternalLinkage;
+    }
+
+    Fn *declare_fn(Mir const *mir)
+    {
+        auto *type = cast<FnType>(get_raw_type(mir->type));
         auto const mangled_name = mangle_mir_name(mir);
-        auto fn = std::make_unique<Fn>(X, mangled_name, mir->is_pub
-                    ? llvm::Function::ExternalLinkage
-                    : llvm::Function::InternalLinkage,
-                type);
-
-        if (mir->self != nullptr)
-            methods_[mir->self][to_string(mir->name)] = fn.get();
+        auto fn = std::make_unique<Fn>(X, mangled_name, get_linkage(mir), type);
 
         if (has_annotation(C, mir->annotations, "test")) {
             struct IrFnPtr const *fn = IrGetFnPtr(IR_GET_FN(C, mir->type));
@@ -1397,7 +1308,7 @@ private:
             test_names_.push_back(mangled_name);
         }
 
-        fns_.insert(mir->type, std::move(fn));
+        return fns_.insert(mir->type, std::move(fn)).get();
     }
 
     bool is_thin_ptr(IrType *type)
@@ -1549,8 +1460,8 @@ private:
         }
         if (pawIr_needs_drop(C, target_type)) {
             auto *irtype = pawIr_get_custom_drop_type(C, target_type);
-            B->CreateCall(get_fn(irtype)->get_fn(), {
-                    X.create_null_ptr(), target});
+            auto *fn = get_fn(irtype)->get_fn();
+            B->CreateCall(fn, target);
         }
     }
 
@@ -1592,13 +1503,14 @@ private:
 
     bool needs_upvalue_slot(MirRegister r)
     {
-        auto *fn = state_->fn_;
-
-        // NOTE: the return value (%0) cannot be captured and slots for captured
-        //   arguments (%1..%N) are allocated and initialized at the start of the
-        //   function.
-        auto const data = *mir_reg_data((Mir *)state_->mir_, r);
-        return data.is_captured && unsigned(r.value) > fn->get_num_args();
+        return false;
+//TODO        auto *fn = state_->fn_;
+//TODO
+//TODO        // NOTE: the return value (%0) cannot be captured and slots for captured
+//TODO        //   arguments (%1..%N) are allocated and initialized at the start of the
+//TODO        //   function.
+//TODO        auto const data = *mir_reg_data((Mir *)state_->mir_, r);
+//TODO        return data.is_captured && unsigned(r.value) > fn->get_num_args();
     }
 
     void create_alloclocal(MirAllocLocal const &x)
@@ -1630,6 +1542,11 @@ private:
                     case ValueKind::SSA:
                         return state_->get_raw_value(place.r);
                     case ValueKind::MEMORY:
+                        if (ir_is_capturing_closure(C, place.type)) {
+                            auto const *mir = *mirs_.lookup(place.type);
+                            llvm::Type *env_ty = *create_env_type(mir->upvalues);
+                            return B->CreateLoad(env_ty, state_->get_raw_value(place.r));
+                        }
                         return B->CreateLoad(*get_type(place.type),
                                 state_->get_raw_value(place.r));
                 }
@@ -1692,82 +1609,27 @@ private:
         return pawP_type2code(C, type);
     }
 
-    std::string get_inherent_context_name(IrType *type)
-    {
-        if (IrIsSignature(type)) {
-            auto const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(type));
-            if (fn_def->parent.value != (unsigned)-1) {
-                if (pawIr_get_kind(C, fn_def->parent) == IR_IMPL_DEF) {
-                    auto const *impl_def = pawIr_get_impl_def(C, fn_def->parent);
-                    if (impl_def->trait == nullptr && IrIsAdt(impl_def->type)) {
-                        auto const *adt_def = pawIr_get_adt_def(C, IR_TYPE_DID(impl_def->type));
-                        return to_string(adt_def->name);
-                    }
-                }
-            }
-        }
-        return "";
-    }
-
-    std::string get_fn_name(IrType *type)
-    {
-        if (IrIsSignature(type)) {
-            auto const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(type));
-            return to_string(fn_def->name);
-        }
-        return "";
-    }
-
-    void generate_pointer_add(Type *element_type,  llvm::Value *pointer, llvm::Value *offset, MirPlace output)
-    {
-        auto *result = B->CreateInBoundsGEP(element_type->get_ty(), pointer, offset);
-        set_result(output, result);
-    }
-
-    void generate_pointer_read(Type *element_type,  llvm::Value *pointer, MirPlace output)
-    {
-        auto *result = B->CreateLoad(element_type->get_ty(), pointer);
-        set_result(output, result);
-    }
-
-    void generate_pointer_write(llvm::Value *pointer, llvm::Value *value)
-    {
-        B->CreateStore(value, pointer);
-    }
-
     // Generate code for performing a function call
     void create_call(MirCall const &x)
     {
-        if (get_inherent_context_name(x.target.type) == "Pointer") {
-            auto const arg = IR_FIRST_GENERIC_ARG(
-                        pawIr_get_context(C, x.target.type));
-            auto *element_type = get_type(IrGenericArg_get_type(arg));
-            auto const pointer = operand(MirPlaceList_get(x.args, 0));
-            if (get_fn_name(x.target.type) == "add") {
-                auto const index = operand(MirPlaceList_get(x.args, 1));
-                generate_pointer_add(element_type, pointer, index, x.output);
-            } else if (get_fn_name(x.target.type) == "read") {
-                generate_pointer_read(element_type, pointer, x.output);
-            } else if (get_fn_name(x.target.type) == "write") {
-                auto const value = operand(MirPlaceList_get(x.args, 1));
-                generate_pointer_write(pointer, value);
-            }
-            return;
-        }
-
         auto *value = operand(x.target);
-        auto *fn = B->CreateExtractValue(value, 0);
-        auto *env = B->CreateExtractValue(value, 1);
-
-        auto *fn_type = cast<FnType>(get_type(x.target.type));
-        Callable callable(*state_, fn, env, fn_type);
 
         std::vector<llvm::Value *> args;
         args.reserve((size_t)x.args->count);
         K_LIST_XFOREACH (x.args, MirPlace const, p)
             args.push_back(operand(*p));
 
-        auto *result = state_->create_call(callable, args);
+        auto *fn = value;
+        llvm::Value *env = nullptr;
+        if (ir_is_capturing_closure(C, x.target.type)) {
+            fn = get_fn(x.target.type)->get_value();
+            env = value;
+        }
+
+        auto *fn_type = cast<FnType>(get_raw_type(x.target.type));
+        Callable callable(*state_, fn, fn_type);
+
+        auto *result = state_->create_call(callable, env, args);
         set_result(x.output, result);
     }
 
@@ -1835,46 +1697,44 @@ private:
     {
     }
 
-    llvm::Type *create_env_ty(MirUpvalueList const *upvalues)
+    Type *create_env_type(MirUpvalueList const *upvalues) const
     {
-        std::vector<llvm::Type *> upvalue_tys(unsigned(upvalues->count));
-        for (int i = 0; i < upvalues->count; ++i)
-            upvalue_tys[unsigned(i)] = X.get_ptr_ty();
-        return X.get_env_ty(upvalue_tys);
+        std::vector<Type *> fields;
+        fields.reserve(unsigned(upvalues->count));
+        K_LIST_XFOREACH (upvalues, MirUpvalueInfo const, up)
+            fields.push_back(get_type(up->type));
+        return X.get_tuple_type(fields);
     }
 
     void create_closure(MirClosure const &x)
     {
-        auto *block = B->GetInsertBlock(); // save position
         auto *child = MirBodyList_get(state_->mir_->children, x.child_id);
-        auto const num_upvalues = child->upvalues->count;
+        auto *fn = declare_fn(child);
 
-        llvm::Value *env_ptr = NULL;
-        if (num_upvalues > 0) {
-            auto *env_ty = create_env_ty(child->upvalues);
-            env_ptr = state_->get_raw_value(x.output.r);
+        auto *block = B->GetInsertBlock(); // save position
+        define_fn(child); // generate code for closure
+        B->SetInsertPoint(block); // restore position
+
+        if (child->upvalues->count == 0) {
+            set_result(x.output, fn->get_value());
+        } else {
+            llvm::Type *env_ty = *create_env_type(child->upvalues);
+            llvm::Value *env = llvm::UndefValue::get(env_ty);
 
             // initialize upvalues from parent locals or environment
-            for (int i = 0; i < num_upvalues; ++i) {
+            for (int i = 0; i < child->upvalues->count; ++i) {
                 auto const up = MirUpvalueList_get(child->upvalues, i);
                 // If "up.is_local", then "up.index" refers to a local variable in the current function.
-                // Otherwise, it refers to an upvalue in the current function backed by a local in one of
-                // its callers.
+                // Otherwise, it refers to an upvalue in the current function (value originally supplied
+                // by a local in one of the callers).
                 auto *source = up.is_local
                     ? state_->values_.at(up.index)
                     : state_->get_upvalue_ptr(up.index);
-                auto *source_ptr = B->CreateStructGEP(env_ty, env_ptr, unsigned(i));
-                B->CreateStore(source, source_ptr);
+                auto *value = B->CreateLoad(*get_type(up.type), source);
+                env = B->CreateInsertValue(env, value, unsigned(i));
             }
+            set_result(x.output, env);
         }
-
-        auto *closure = state_->get_closure(unsigned(child->child_id));
-        closure->fn = std::make_unique<Fn>(X, env_ptr,
-                cast<FnType>(get_type(child->type)));
-        define_fn(child);
-
-        B->SetInsertPoint(block); // restore position
-        set_result(x.output, closure->fn->get_value());
     }
 
     llvm::Value *new_unary_op(MirUnaryOpKind op, llvm::Value *value)
@@ -1906,7 +1766,6 @@ private:
         Str a(*state_, lhs, get_str_methods());
         Str b(*state_, rhs, get_str_methods());
         return B->CreateCall(X.get_rawcmp_callee(), {
-                X.create_null_ptr(),
                 a.get_text(), a.get_length(),
                 b.get_text(), b.get_length()});
     }
@@ -2158,9 +2017,7 @@ private:
     IrTypeHashMap<Type *> types_;
 
     IrTypeHashMap<std::unique_ptr<Fn>> fns_;
-
-    using MethodTable = std::unordered_map<std::string, Fn *>;
-    IrTypeHashMap<MethodTable> methods_;
+    IrTypeHashMap<Mir const *> mirs_;
 
     template<class V>
     struct ScalarInfo {
@@ -2179,7 +2036,55 @@ private:
 };
 
 
-PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue> *upvalues, PawState *outer)
+TypeTranslator::TypeTranslator(CodeGenerator &G, IrTypeHashMap<Type *> &types)
+    : G(&G)
+    , C(G.X.get_compiler())
+    , X(&G.X)
+    , types_(&types)
+{
+}
+
+Type *TypeTranslator::create_env_type(IrType *irtype)
+{
+    auto const *upvalues = G->mirs_.lookup(irtype)[0]->upvalues;
+    std::vector<Type *> fields;
+    fields.reserve(unsigned(upvalues->count));
+    K_LIST_XFOREACH (upvalues, MirUpvalueInfo const, up)
+        fields.push_back(get_or_create_type(up->type));
+    return X->get_tuple_type(fields);
+}
+
+Type *TypeTranslator::translate_type(IrType *irtype)
+{
+    auto *const *type_ptr = types_->lookup(irtype);
+    if (type_ptr != nullptr) return *type_ptr;
+    auto *type = create_type(irtype);
+    types_->insert(irtype, type);
+    return type;
+}
+
+Type *TypeTranslator::get_or_create_type(IrType *irtype)
+{
+    if (ir_is_capturing_closure(G->C, irtype))
+        return create_env_type(irtype);
+    return translate_type(irtype);
+}
+
+Type *TypeTranslator::create_fn_type(IrType *irtype)
+{
+    Type *env_type = NULL;
+    if (ir_is_capturing_closure(C, irtype))
+        env_type = create_env_type(irtype);
+
+    auto *params = ir_fn_params(C, irtype);
+    auto *result = ir_fn_result(C, irtype);
+    auto *return_type = get_or_create_type(result);
+    return X->get_fn_type(return_type,
+            get_or_create_types(params),
+            env_type, IrIsNever(result));
+}
+
+PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
     : State(*G.get_context(), fn)
     , G(&G)
     , B(X->get_builder())
@@ -2191,12 +2096,15 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
     , value_kinds_(unsigned(mir->registers->count))
     , constants_(unsigned(mir->kcache->data->count))
     , captured_(unsigned(mir->captured->count))
-    , upvalues_(upvalues)
+    , upvalues_(unsigned(mir->upvalues->count))
     , closures_(unsigned(mir->children->count))
 {
     auto *X = G.get_context();
     auto *B = X->get_builder();
     auto *c = X->get_context();
+
+    auto const is_capturing_closure = ir_is_capturing_closure(G.C, mir->type);
+    auto const *fptr = IrGetFnPtr(IR_GET_FN(G.C, mir->type));
 
     // create debug information for the function
     {
@@ -2237,22 +2145,33 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
         } else {
             values_.front() = fn->get_fn()->getArg(0);
         }
-        // copy arguments from base class
-        for (auto i = 0U; i < fn->get_num_args(); ++i)
+        // copy arguments from base class, accounting for the `env` argument on
+        // capturing closures
+        auto const num_args = unsigned(fptr->params->count);
+        for (auto i = 0U; i < num_args; ++i)
             values_[1 + i] = get_arg(i);
-        for (auto i = 0U; i <= fn->get_num_args(); ++i)
+        for (auto i = 0U; i <= num_args; ++i)
             value_kinds_[i] = ValueKind::MEMORY;
         // allocate stack memory for the rest of the locals
-        for (auto i = 1 + fn->get_num_args(); i < mir->registers->count; ++i) {
+        for (auto i = 1 + num_args; i < mir->registers->count; ++i) {
             auto const data = MirRegisterDataList_get(mir->registers, i);
             if (data.is_nontrivial) {
-                if (!data.is_captured)
-                    values_[i] = B->CreateAlloca(*G.get_type(data.type));
+                auto *type = G.get_type(data.type);
+                values_[i] = B->CreateAlloca(*type);
                 value_kinds_[i] = ValueKind::MEMORY;
             } else {
                 value_kinds_[i] = ValueKind::SSA;
             }
         }
+    }
+
+    if (is_capturing_closure) {
+        llvm::Type *env_ty = *G.create_env_type(mir->upvalues);
+        env_ = B->CreateAlloca(env_ty);
+
+        B->CreateStore(fn->get_env(), env_);
+        for (auto i = 0U; i < upvalues_.size(); ++i)
+            upvalues_[i] = B->CreateStructGEP(env_ty, env_, i);
     }
 
     // There should be no alloca instructions after this point. alloca can
@@ -2261,19 +2180,19 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
     // blocks not represented in the MIR.
     B->SetInsertPoint(get_entry());
 
-    for (auto i = 0U; i < captured_.size(); ++i) {
-        auto const r = unsigned(MirCaptureList_get(mir->captured, i).local.value);
-        auto *type = G.get_type(MirRegisterDataList_get(mir->registers, r).type);
-        paw_assert(r > 0);
-
-        if (r <= fn->get_num_args()) {
-            auto *capture_slot = X->create_alloc(*type);
-            // initialize with value of argument
-            auto *arg = X->load_value(*type, values_.at(r));
-            X->store_value(arg, capture_slot);
-            values_.at(r) = capture_slot;
-        }
-    }
+//TODO    for (auto i = 0U; i < captured_.size(); ++i) {
+//TODO        auto const r = unsigned(MirCaptureList_get(mir->captured, i).local.value);
+//TODO        auto *type = G.get_type(MirRegisterDataList_get(mir->registers, r).type);
+//TODO        paw_assert(r > 0);
+//TODO
+//TODO        if (r <= fn->get_num_args()) {
+//TODO            auto *capture_slot = X->create_alloc(*type);
+//TODO            // initialize with value of argument
+//TODO            auto *arg = X->load_value(*type, values_.at(r));
+//TODO            X->store_value(arg, capture_slot);
+//TODO            values_.at(r) = capture_slot;
+//TODO        }
+//TODO    }
 
     for (int i = 0; i < mir->blocks->count; ++i) {
         auto const name = "bb" + std::to_string(i);
@@ -2283,20 +2202,10 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, std::vector<Upvalue
     for (int i = 0; i < mir->kcache->data->count; ++i)
         constants_[i] = G.create_constant(mir->kcache->data->data[i]);
 
-    for (int i = 0; i < mir->captured->count; ++i) {
-        auto const capture = mir->captured->data[i];
-        captured_[i] = values_[capture.local.value];
-    }
-
-    if (mir->fn_kind == FUNC_CLOSURE) {
-        auto *env_ty = G.create_env_ty(mir->upvalues);
-        // initialize upvalues from parent locals or environment
-        auto *env_ptr = fn->get_env_ptr();
-        auto const n = upvalues_->size();
-        for (auto i = 0U; i < n; ++i) {
-            (*upvalues_)[i].ptr = B->CreateStructGEP(env_ty, env_ptr, i);
-        }
-    }
+//TODO    for (int i = 0; i < mir->captured->count; ++i) {
+//TODO        auto const capture = mir->captured->data[i];
+//TODO        captured_[i] = values_[capture.local.value];
+//TODO    }
 
     for (int i = 0; i < mir->children->count; ++i) {
         auto *child = mir->children->data[i];
@@ -2326,7 +2235,7 @@ llvm::Value *PawState::get_local_ptr(unsigned index)
 
 llvm::Value *PawState::get_upvalue_ptr(unsigned index)
 {
-    return X->load_ptr(upvalues_->at(index).ptr);
+    return upvalues_.at(index);
 }
 
 static void link_compilation_artifact(paw_Env *P, std::string prefix)

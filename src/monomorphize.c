@@ -496,6 +496,9 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
     }
 
     {
+        if (base->env_type != NULL)
+            inst->env_type = finalize_type(M, base->env_type);
+
         struct MirUpvalueInfo const *pup;
         K_LIST_FOREACH (base->upvalues, pup) {
             struct MirUpvalueInfo up = *pup;

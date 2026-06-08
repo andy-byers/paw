@@ -1469,7 +1469,7 @@ static struct AstExpr *closure(struct Lex *lex)
         expr = expect_expr0(lex);
     }
     return NEW_NODE(lex, closure_expr, RANGE(start, NODE_END(expr)),
-            next_id(lex), params, result, expr);
+            next_id(lex), next_did(lex), params, result, expr);
 }
 
 static struct AstExpr *if_expr(struct Lex *lex)

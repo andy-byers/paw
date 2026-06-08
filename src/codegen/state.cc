@@ -84,7 +84,7 @@ void State::create_return(llvm::Value *value)
     }
 }
 
-static llvm::Value *into_arg(Context &X, State &state, llvm::Value *arg, Type *type, Type *fntype, unsigned index)
+static llvm::Value *into_abi_arg(Context &X, State &state, llvm::Value *arg, Type *type)
 {
     auto *B = X.get_builder();
     switch (type->get_abi_class()) {
@@ -111,17 +111,24 @@ llvm::Value *State::get_scratch(llvm::Type *type)
     return scratch_.get(type);
 }
 
-llvm::Value *State::create_call(Callable const &call, llvm::ArrayRef<llvm::Value *> args)
+llvm::Value *State::get_arg(unsigned index) const
+{
+    return args_.at(index);
+}
+
+llvm::Value *State::create_call(Callable const &call, llvm::Value *env, llvm::ArrayRef<llvm::Value *> args)
 {
     auto *B = X->get_builder();
     auto const callee = call.get_callee();
     auto *type = call.get_type();
 
-    std::vector<llvm::Value *> rewrite = {call.env_};
-    rewrite.reserve(1 + args.size());
+    std::vector<llvm::Value *> rewrite;
+    rewrite.reserve((env != nullptr) + args.size());
 
+    if (env != nullptr)
+        rewrite.push_back(into_abi_arg(*X, *this, env, type->get_env_type()));
     for (auto i = 0U; i < args.size(); ++i)
-        rewrite.push_back(into_arg(*X, *this, args[i], type->get_param_type(i), type, i));
+        rewrite.push_back(into_abi_arg(*X, *this, args[i], type->get_param_type(i)));
 
     auto *return_type = type->get_return_type();
     auto *return_ty = return_type->get_ty();

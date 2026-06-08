@@ -344,6 +344,12 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
                 break;
             }
 
+            case kMirCapture: {
+                struct MirCapture *x = MirGetCapture(*pinstr);
+                maybe_indicate_move(V, x->target);
+                break;
+            }
+
             case kMirKill:
                 maybe_indicate_move(V, MirGetKill(*pinstr)->target);
                 break;

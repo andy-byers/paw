@@ -74,6 +74,16 @@ static void add_generic_arg(struct Compiler *C, Buffer *b, IrGenericArg arg)
     }
 }
 
+static void add_generic_args(struct Compiler *C, Buffer *buf, IrGenericArgs *args)
+{
+    if (args->count > 0) {
+        start_generic_args(C, buf);
+        K_LIST_XFOREACH (args, IrGenericArg const, p)
+            add_generic_arg(C, buf, *p);
+        finish_generic_args(C, buf);
+    }
+}
+
 static void add_type(struct Compiler *C, Buffer *b, IrType *type)
 {
     paw_Env *P = ENV(C);
@@ -106,19 +116,13 @@ static void add_type(struct Compiler *C, Buffer *b, IrType *type)
             struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
             add_module_name(C, b, (int)def->did.modno);
             add_rle_string(C, b, def->name);
-            if (t->args != NULL && t->args->count > 0) {
-                start_generic_args(C, b);
-                K_LIST_XFOREACH (t->args, IrGenericArg const, p)
-                    add_generic_arg(C, b, *p);
-                finish_generic_args(C, b);
-            }
+            add_generic_args(C, b, t->args);
             break;
         }
+        case kIrClosure:
         case kIrSignature:
-            type = IR_SIGNATURE_FN(C, type);
-            // (fallthrough)
         case kIrFnPtr: {
-            struct IrFnPtr const *fn = IrGetFnPtr(type);
+            struct IrFnPtr const *fn = IrGetFnPtr(IR_GET_FN(C, type));
             pawL_add_char(P, b, 'F');
             add_type(C, b, fn->result);
             K_LIST_XFOREACH (fn->params, IrType *const, p)
@@ -159,13 +163,7 @@ static void add_trait(struct Compiler *C, Buffer *b, IrTrait *trait)
 {
     struct IrTraitDef const *def = pawIr_get_trait_def(C, trait->did);
     add_rle_string(C, b, def->name);
-
-    start_generic_args(C, b);
-    for (int i = 1; i < trait->args->count; ++i) {
-        IrGenericArg const p = IrGenericArgs_get(trait->args, i);
-        add_generic_arg(C, b, p);
-    }
-    finish_generic_args(C, b);
+    add_generic_args(C, b, trait->args);
 }
 
 static void add_fn_part(struct Compiler *C, Buffer *b, IrType *type)
@@ -173,13 +171,7 @@ static void add_fn_part(struct Compiler *C, Buffer *b, IrType *type)
     struct IrFnDef const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(type));
     add_module_name(C, b, (int)fn_def->did.modno);
     add_rle_string(C, b, fn_def->name);
-    if (fn_def->generics->count > 0) {
-        start_generic_args(C, b);
-        IrGenericArgs *args = IR_GENERIC_ARGS(type);
-        K_LIST_XFOREACH (args, IrGenericArg const, p)
-            add_generic_arg(C, b, *p);
-        finish_generic_args(C, b);
-    }
+    add_generic_args(C, b, IR_GENERIC_ARGS(type));
 }
 
 Str *mangle_type(struct Compiler *C, IrType *type)
@@ -211,6 +203,10 @@ Str *mangle_type(struct Compiler *C, IrType *type)
             }
             add_fn_part(C, &b, type);
         }
+    } else if (IrIsClosure(type)) {
+        struct IrClosure const *t = IrGetClosure(type);
+        pawL_add_fstring(P, &b, "C%d", t->did.value);
+        add_generic_args(C, &b, t->args);
     } else {
         add_type(C, &b, type);
     }

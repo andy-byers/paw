@@ -61,20 +61,14 @@ Float::Float(State &state, llvm::Value *value, Methods const *methods)
 }
 
 
-Callable::Callable(State &state, llvm::Value *fn, llvm::Value *env, FnType *type)
+Callable::Callable(State &state, llvm::Value *fn, FnType *type)
     : Value(state, fn, type)
-    , env_(env)
 {
 }
 
 llvm::Value *Callable::get_value() const
 {
-    auto *X = state_->get_context();
-    auto *B = X->get_builder();
-    llvm::Value *object = llvm::UndefValue::get(X->get_callable_ty());
-    object = B->CreateInsertValue(object, value_, 0);
-    object = B->CreateInsertValue(object, env_, 1);
-    return object;
+    return value_;
 }
 
 
@@ -98,7 +92,6 @@ Fn::Fn(Context &X, std::string name,
         FnType *type)
     : X(&X)
     , type_(type)
-    , env_(X.create_null_ptr())
 {
     llvm::Module *m = *X.get_module();
     value_ = m->getFunction(name);
@@ -112,29 +105,14 @@ Fn::Fn(Context &X, std::string name,
     setup_fn(X, get_fn(), type);
 }
 
-Fn::Fn(Context &X, llvm::Value *env, FnType *type)
-    : X(&X)
-    , type_(type)
-    , value_(llvm::Function::Create(type->get_fn_ty(),
-                llvm::Function::PrivateLinkage,
-                "closure", *X.get_module()))
-    , env_(env)
-{
-    setup_fn(X, get_fn(), type);
-}
-
 llvm::Value *Fn::get_value() const
 {
-    auto *B = X->get_builder();
-    llvm::Value *object = llvm::UndefValue::get(X->get_callable_ty());
-    object = B->CreateInsertValue(object, value_, 0);
-//TODO    object = B->CreateInsertValue(object, env_, 1);
-    return object;
+    return value_;
 }
 
 Callable Fn::as_callable(State &state) const
 {
-    return Callable(state, value_, env_, type_);
+    return Callable(state, value_, type_);
 }
 
 std::string Fn::get_name() const
@@ -142,7 +120,7 @@ std::string Fn::get_name() const
     return get_fn()->getName().str();
 }
 
-llvm::Value *Fn::get_env_ptr() const
+llvm::Value *Fn::get_env() const
 {
     return get_fn()->getArg(env_pointer_offset(get_type()));
 }

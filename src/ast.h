@@ -780,6 +780,7 @@ struct AstStringExpr {
 
 struct AstClosureExpr {
     AST_EXPR_HEADER;
+    DeclId did;
     struct AstDeclList *params;
     struct AstType *result;
     struct AstExpr *expr;
@@ -1131,11 +1132,12 @@ inline static struct AstExpr *pawAst_new_string_expr(struct Ast *ast, struct Sou
     return e;
 }
 
-inline static struct AstExpr *pawAst_new_closure_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstDeclList *params, struct AstType *result, struct AstExpr *expr)
+inline static struct AstExpr *pawAst_new_closure_expr(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstDeclList *params, struct AstType *result, struct AstExpr *expr)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->ClosureExpr_ = (struct AstClosureExpr){
         .id = id,
+        .did = did,
         .span = span,
         .kind = kAstClosureExpr,
         .params = params,

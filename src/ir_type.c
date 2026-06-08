@@ -6,6 +6,7 @@
 #include "ir_type.h"
 #include "map.h"
 #include "solve.h"
+#include "resolve.h"
 #include "type_folder.h"
 #include "unify.h"
 
@@ -476,7 +477,7 @@ struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str *name
     return def;
 }
 
-struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str *name, struct IrFieldDefs *fields)
+struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str const *name, struct IrFieldDefs *fields)
 {
     struct IrVariantDef *def = (struct IrVariantDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrVariantDef){
@@ -1131,6 +1132,12 @@ static paw_Bool type_equals(struct Compiler *C, IrType *lhs, IrType *rhs)
                 && pawIr_trait_equals(C, x->trait, y->trait)
                 && P_ID_EQUALS(C, x->assoc, y->assoc);
         }
+        case kIrClosure: {
+            struct IrClosure const *x = IrGetClosure(lhs);
+            struct IrClosure const *y = IrGetClosure(rhs);
+            return P_ID_EQUALS(C, x->did, y->did)
+                && arglist_equals(C, x->args, y->args) ;
+        }
         default:
             paw_assert(IR_KINDOF(lhs) == IR_KINDOF(rhs));
             return PAW_TRUE;
@@ -1348,10 +1355,15 @@ paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type)
         return pawIr_is_copyable(C, IrGetArray(type)->type);
 
     if (IR_IS_FUNC_TYPE(type)) {
-        if (!IrIsFnPtr(type))
-            // TODO: deal with closures that capture
-            type = IR_SIGNATURE_FN(C, type);
-        return IrIsFnPtr(type);
+        if (ir_is_capturing_closure(C, type)) {
+            UpvalueList const *upvalues = *UpvalueTable_get(C, C->upvtab, IR_TYPE_DID(type));
+            K_LIST_XFOREACH (upvalues, struct UpvalueInfo const, u) {
+                IrType *upvalue = pawIr_get_type(C, u->id);
+                if (!pawIr_is_copyable(C, upvalue))
+                    return PAW_FALSE;
+            }
+        }
+        return PAW_TRUE;
     }
 
     IrSolver *S = pawIr_push_solver(C);

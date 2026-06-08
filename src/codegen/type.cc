@@ -189,24 +189,21 @@ bool PrimitiveType::equals(Type const *rhs) const
 // making it a ABIClass::BINARY_STRUCT.
 FnType::FnType(Context &X, Type *return_type,
         llvm::ArrayRef<Type *> param_types,
-        FnKind fn_kind, bool has_env,
-        bool never_returns)
-    : Type(X, DEFERRED_INIT, Kind::FN, ABIClass::BINARY_STRUCT)
-    , fn_kind_(fn_kind)
+        Type *env_type, bool never_returns)
+    : Type(X, DEFERRED_INIT, Kind::FN, ABIClass::SCALAR)
     , return_kind_(ReturnKind::NORMAL)
     , param_types_(param_types)
     , return_type_(return_type)
+    , env_type_(env_type)
     , never_returns_(never_returns)
-    , has_env_(has_env)
 {
     auto *B = X.get_builder();
-    std::vector<llvm::Type *> param_tys(has_env + param_types.size());
-    auto first = begin(param_tys);
+    std::vector<llvm::Type *> param_tys((env_type != nullptr) + param_types.size());
+    auto param = begin(param_tys);
 
-    if (has_env)
-        *first++ = X.get_ptr_ty();
+    if (env_type != nullptr)
+        *param++ = env_type->get_abi_ty();
 
-    auto param = first;
     for (auto *type: param_types)
         *param++ = type->get_abi_ty();
 
@@ -246,7 +243,7 @@ FnType::FnType(Context &X, Type *return_type,
 
 llvm::Type *FnType::get_ty() const
 {
-    return X->get_callable_ty();
+    return X->get_ptr_ty();
 }
 
 static llvm::Type *object_to_abi(Context &X, llvm::Type *ty, ABIClass abi_class)
@@ -268,7 +265,7 @@ static llvm::Type *object_to_abi(Context &X, llvm::Type *ty, ABIClass abi_class)
 
 llvm::Type *FnType::get_abi_ty() const
 {
-    return object_to_abi(*X, get_ty(), get_abi_class());
+    return X->get_ptr_ty();
 }
 
 unsigned long FnType::hash() const
@@ -299,10 +296,10 @@ bool FnType::equals(Type const *rhs) const
     if (!rhs->is_fn_type()) return false;
 
     auto *fn = (FnType *)rhs;
-    if (fn_kind_ != fn->fn_kind_) return false;
     if (return_kind_ != fn->return_kind_) return false;
     if (never_returns_ != fn->never_returns_) return false;
-    if (has_env_ != fn->has_env_) return false;
+    if (!env_type_ != !fn->env_type_) return false;
+    if (env_type_ != nullptr && !env_type_->equals(fn->env_type_)) return false;
 
     if (return_type_ != fn->return_type_) return false;
     return are_types_equal(param_types_, fn->param_types_);

@@ -225,11 +225,23 @@ static struct HirPath lower_path(struct LowerAst *L, struct AstPath path)
     struct AstSegment *psrc;
     enum ResolvedKind last_kind;
     K_LIST_FOREACH (path.segments, psrc) {
-        struct HirGenericArgs *types = lower_generic_args(L, psrc->args);
+        struct HirGenericArgs *args = lower_generic_args(L, psrc->args);
         struct HirIdent const ident = lower_ident(psrc->ident);
         struct ResolvedSegment const *res = SegmentTable_get(L->C, L->segtab, psrc->id);
-        if (res->kind != RESOLVED_MODULE) // strip off module prefix
-            pawHir_add_segment(L->hir, segments, psrc->span, psrc->id, ident, types, res->id);
+        if (res->kind != RESOLVED_MODULE) { // strip off module prefix
+            struct HirSegment segment = {
+                .ident = ident,
+                .args = args,
+                .span = psrc->span,
+                .id = psrc->id,
+            };
+            if (res->kind == RESOLVED_UPVALUE) {
+                segment.target.index = res->upvalue;
+            } else {
+                segment.target.id = res->id;
+            }
+            HirSegments_push(L->hir, segments, segment);
+        }
         last_kind = res->kind;
     }
 
@@ -238,6 +250,10 @@ static struct HirPath lower_path(struct LowerAst *L, struct AstPath path)
         case RESOLVED_LOCAL:
             paw_assert(path.segments->count == 1);
             kind = HIR_PATH_LOCAL;
+            break;
+        case RESOLVED_UPVALUE:
+            paw_assert(path.segments->count == 1);
+            kind = HIR_PATH_UPVALUE;
             break;
         case RESOLVED_ASSOC:
             kind = HIR_PATH_ASSOC;
@@ -464,7 +480,7 @@ static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExp
     }
     struct HirType *result = e->result != NULL ? lower_type(L, e->result) : NULL;
     struct HirExpr *expr = lower_expr(L, e->expr);
-    return NEW_NODE(L, closure_expr, e->span, e->id, next_decl_id(L), params, result, expr);
+    return NEW_NODE(L, closure_expr, e->span, e->id, e->did, params, result, expr);
 }
 
 static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
@@ -1145,6 +1161,8 @@ static struct HirPat *LowerIdentPat(struct LowerAst *L, struct AstIdentPat *p)
             pat->hdr.id = res->id;
             return pat;
         }
+        case RESOLVED_UPVALUE:
+            LOWERING_ERROR(L, Unsupported, .span = ident.span);
         default: {
             struct AstDecl *decl = pawAst_get_node(L->ast, res->id);
             if (AstIsParamDecl(decl))
@@ -1166,15 +1184,17 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
 {
     struct HirPath const path = lower_path(L, p->path);
     switch (path.kind) {
+        case HIR_PATH_UPVALUE:
+            LOWERING_ERROR(L, Unsupported, .span = p->span);
         case HIR_PATH_LOCAL: {
             struct HirSegment const segment = K_LIST_FIRST(path.segments);
             struct HirPat *pat = NEW_NODE(L, binding_pat, p->span, p->id, segment.ident);
-            pat->hdr.id = segment.target;
+            pat->hdr.id = segment.target.id;
             return pat;
         }
         case HIR_PATH_ITEM: {
             struct HirSegment const segment = K_LIST_FIRST(path.segments);
-            struct AstDecl *decl = pawAst_get_node(L->ast, segment.target);
+            struct AstDecl *decl = pawAst_get_node(L->ast, segment.target.id);
             if (AstIsParamDecl(decl)) {
                 return NEW_NODE(L, binding_pat, p->span, p->id, segment.ident);
             } else if (AstIsAdtDecl(decl)) {
@@ -1183,7 +1203,7 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
             // (fallthrough)
         }
         case HIR_PATH_ASSOC: {
-            NodeId const variant_id = K_LIST_LAST(path.segments).target;
+            NodeId const variant_id = K_LIST_LAST(path.segments).target.id;
             int const discr = AstGetVariantDecl(
                     pawAst_get_node(L->ast, variant_id))->index;
             HirPatList *empty = HirPatList_new(L->hir);

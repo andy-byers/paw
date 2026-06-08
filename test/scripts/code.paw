@@ -755,7 +755,87 @@
 //    let a = list2[0];
 //}
 
+fn black_box<T>(t: T) -> T {t}
+
 #[test]
-pub fn test() {
+pub fn upvalues_are_copied() {
+    let u = 10;
+
+    let f = || u;
+    assert(f() == 10);
+
+    u = -1;
+    assert(f() == 10);
 }
 
+#[test]
+pub fn passthrough_upvalue() {
+    let u = 123;
+    let f = || || u;
+    assert(f()() == 123);
+}
+
+#[test]
+pub fn capture_arg() {
+    let f = |arg| || arg;
+    assert(f(1)() == 1);
+    assert(f(2)() == 2);
+}
+
+#[test]
+pub fn multiple_upvalues() {
+    let u = 1;
+    let u2 = 2;
+    let f = || u + u2;
+    assert(f() == 3);
+}
+
+#[test]
+pub fn multiple_upvalues2() {
+    let f = || {
+        let a = 10;
+        let b = 20;
+        || a + b
+    };
+    assert(f()() == 30);
+}
+
+#[test]
+pub fn multiple_levels() {
+    let u = 100;
+    let f = || {
+        let u2 = 200;
+        || u + u2
+    };
+    assert(f()() == 300);
+}
+
+#[test]
+pub fn capture_closure() {
+    let u = 21;
+    let f1 = || u * 2;
+    let f2 = || f1;
+    let f3 = || f2;
+    assert(f3()()() == 42);
+}
+
+#[test]
+pub fn copy_closure() {
+    let i = 123;
+    let f = || i;
+    let g = f;
+    f();
+    g();
+    g();
+}
+
+struct MoveOnly;
+
+#[test]
+pub fn move_only_closure() {
+    let m = MoveOnly;
+    let f = || m;
+    let g = f;
+    // can only be called once
+    g();
+}

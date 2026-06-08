@@ -817,6 +817,7 @@ struct Mir {
     struct MirConstantCache *kcache;
     struct MirScopeInfoList *scopes;
     struct SourceSpan span;
+    struct IrType *env_type;
     struct IrType *type;
     struct IrType *self;
     struct Compiler *C;

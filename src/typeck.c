@@ -62,6 +62,11 @@ struct MatchState {
     struct PatState *ps;
 };
 
+struct FnState {
+    struct FnState *outer;
+    struct UpvalueList *upvalues;
+};
+
 struct Type3 {
     IrType *a;
     IrType *b;
@@ -77,6 +82,7 @@ struct TypeChecker {
     struct ResultState *rs;
     struct MatchState *ms;
     struct BlockState *bs;
+    struct FnState *fs;
     struct HirModule const *pm;
 
     // used to defer insertion of type of `Index::index` method for object/index
@@ -423,6 +429,21 @@ static void leave_inference_ctx(struct TypeChecker *T)
     pawU_leave_binder(T->U);
 }
 
+static void enter_fn(struct TypeChecker *T, struct FnState *fs, DeclId did)
+{
+    UpvalueList *const *pupvalues = UpvalueTable_get(T->C, T->C->upvtab, did);
+    *fs = (struct FnState){
+        .upvalues = pupvalues != NULL ? *pupvalues : NULL,
+        .outer = T->fs,
+    };
+    T->fs = fs;
+}
+
+static void leave_fn(struct TypeChecker *T)
+{
+    T->fs = T->fs->outer;
+}
+
 static void enter_block(struct TypeChecker *T, struct BlockState *bs, struct SourceSpan span, enum BlockKind kind)
 {
     *bs = (struct BlockState){
@@ -514,6 +535,8 @@ static paw_Bool is_unit_type(struct TypeChecker *T, IrType *type)
 static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
 {
     if (d->body == NULL) return;
+    struct FnState fs;
+    enter_fn(T, &fs, d->did);
     T->enclosing_body = d->did;
     struct BlockState bs;
     enter_block(T, &bs, d->span, BLOCK_NORMAL);
@@ -548,6 +571,7 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     leave_block(T);
     T->rs = rs.outer;
     T->enclosing_body = INVALID_DECL_ID;
+    leave_fn(T);
 }
 
 static void check_item(struct TypeChecker *T, struct HirDecl *item);
@@ -613,14 +637,14 @@ static paw_Bool is_enum_decl(struct HirDecl *decl)
 
 static IrType *lower_adt_segment(struct TypeChecker *T, struct HirSegment segment)
 {
-    struct HirDecl *decl = pawHir_get_node(T->hir, segment.target);
+    struct HirDecl *decl = pawHir_get_node(T->hir, segment.target.id);
     if (HirIsTypeDecl(decl)) {
         // TODO: handle count == 0 case same as ret == NULL case
         IrGenericArgs *args = segment.args != NULL ? lower_generic_args(T, segment.args) : NULL;
         return pawP_lower_type_alias(T->C, segment, decl, args);
     }
 
-    IrType *type = GET_TYPE(T, segment.target);
+    IrType *type = GET_TYPE(T, segment.target.id);
 
     // TODO: hack to avoid instantiating "Self" since it is already instantiated. Probably need a way to distinguish between
     // TODO: generic params (type schemes) and generic args (concrete not-yet-known types). currently IrGeneric is used for both
@@ -692,21 +716,26 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
 {
     switch (path.kind) {
         case HIR_PATH_LOCAL: {
-            struct HirSegment const segment = K_LIST_FIRST(path.segments);
-            return GET_TYPE(T, segment.target);
+            struct HirSegment const segment = HirSegments_first(path.segments);
+            return GET_TYPE(T, segment.target.id);
+        }
+        case HIR_PATH_UPVALUE: {
+            struct HirSegment const segment = HirSegments_first(path.segments);
+            struct UpvalueInfo const upvalue = UpvalueList_get(T->fs->upvalues, segment.target.index);
+            return GET_TYPE(T, upvalue.id);
         }
         case HIR_PATH_ITEM: {
-            struct HirSegment const segment = K_LIST_FIRST(path.segments);
-            struct HirDecl *item = pawHir_get_node(T->hir, segment.target);
+            struct HirSegment const segment = HirSegments_first(path.segments);
+            struct HirDecl *item = pawHir_get_node(T->hir, segment.target.id);
 
             if (HirIsAdtDecl(item)) {
                 return lower_adt_segment(T, segment);
             } else if (HirIsParamDecl(item)) {
-                return GET_TYPE(T, segment.target);
+                return GET_TYPE(T, segment.target.id);
             } else if (HirIsVariantDecl(item)) {
                 struct HirVariantDecl *v = HirGetVariantDecl(item);
                 IrType *base = pawIr_get_def_type(T->C, v->base_did);
-                IrType *assoc = GET_TYPE(T, segment.target);
+                IrType *assoc = GET_TYPE(T, segment.target.id);
                 if (IS_BASIC_TYPE(TYPE2CODE(T, base)))
                     TYPECK_ERROR(T, UnexpectedType,
                             .type = pawIr_print_type_v2(T->C, base),
@@ -715,13 +744,13 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                     base = instantiate(T, base, NULL);
                     return pawP_instantiate_assoc(T->C, base, assoc).inst;
                 } else { // TODO: need to demonstrate that this branch is hit. add a test + explanatory comment
-                    IrType *target = GET_TYPE(T, segment.target);
+                    IrType *target = GET_TYPE(T, segment.target.id);
                     IrGenericArgs *args = lower_generic_args(T, segment.args);
                     target = instantiate(T, target, args);
                     return target;
                 }
             } else {
-                IrType *target = GET_TYPE(T, segment.target);
+                IrType *target = GET_TYPE(T, segment.target.id);
                 target = instantiate(T, target, NULL);
                 IrGenericArgs *args = lower_generic_args(T, segment.args);
                 if (args != NULL) {
@@ -742,10 +771,10 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             pawIr_set_type(T->C, first.id, base);
 
             IrType *assoc;
-            if (last.target.value != INVALID_NODE_ID.value) {
+            if (last.target.id.value != INVALID_NODE_ID.value) {
                 // the value was located during name resolution, meaning it must be an enum
                 // variant or a method/associated function called on a type parameter
-                assoc = GET_TYPE(T, last.target);
+                assoc = GET_TYPE(T, last.target.id);
                 if (IrIsGeneric(base)) {
                     paw_assert(first.args == NULL);
                     struct IrSignature const *fn = IrGetSignature(assoc);
@@ -784,7 +813,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             }
             // fill in rest of possibly unfinished path segment
             struct HirDecl const *fn = pawHir_get_decl(T->hir, IR_TYPE_DID(assoc));
-            K_LIST_LAST(path.segments).target = fn->hdr.id;
+            K_LIST_LAST(path.segments).target.id = fn->hdr.id;
             pawIr_set_type(T->C, last.id, assoc);
             return assoc;
         }
@@ -794,12 +823,14 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
 static IrType *check_path_expr(struct TypeChecker *T, struct HirPathExpr *e)
 {
     IrType *type = lower_value_path(T, e->path);
-    if (e->path.kind == HIR_PATH_LOCAL)
+    if (e->path.kind == HIR_PATH_LOCAL
+            || e->path.kind == HIR_PATH_UPVALUE)
         return type;
 
     if (e->path.segments->count == 1) {
         // TODO: args should be considered local paths to avoid this check
-        struct HirDecl *decl = pawHir_get_node(T->hir, K_LIST_LAST(e->path.segments).target);
+        struct HirSegment const segment = HirSegments_first(e->path.segments);
+        struct HirDecl *decl = pawHir_get_node(T->hir, segment.target.id);
         if (HirIsParamDecl(decl)) return type;
     }
 
@@ -1072,6 +1103,9 @@ static IrTypeList *erase_signature_types(struct TypeChecker *T, IrTypeList *type
 
 static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *e)
 {
+    struct FnState fs;
+    enter_fn(T, &fs, e->did);
+
     struct ResultState rs = {.outer = T->rs};
     T->rs = &rs;
 
@@ -1119,14 +1153,16 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
                 IrGenericDefs_new(T->C), ret, ir_params, NULL, NO_DECL, PAW_FALSE);
         FnDefMap_insert(T->C, T->C->fn_defs, e->did, r);
 
-        int const *pflag = CaptureFlags_get(T->C, T->C->capflags, e->id);
-        r->has_captures = pflag != NULL;
+        UpvalueList *const *pupvalues = UpvalueTable_get(T->C, T->C->upvtab, e->did);
+        r->has_captures = pupvalues != NULL;
     }
 
     // generic args are those from the enclosing function, since closures have no generic
     // args of their own
     IrGenericArgs *enclosing_args = pawIr_get_generic_args(T->C, T->enclosing_body);
     IrGenericTypes_insert(T->C, T->C->ir_generic_args, e->did, enclosing_args);
+    leave_fn(T);
+
     return pawIr_new_closure(T->C, e->did, enclosing_args);
 }
 
@@ -1135,7 +1171,7 @@ static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjection
     IrType *type = check_type(T, e->type, NODE_SPAN(e->type));
 
     struct HirSegment const segment = HirSegments_last(e->trait.segments);
-    struct HirDecl *trait_decl = pawHir_get_node(T->hir, segment.target);
+    struct HirDecl *trait_decl = pawHir_get_node(T->hir, segment.target.id);
     if (!HirIsTraitDecl(trait_decl)) {
         TYPECK_ERROR(T, ExpectedTrait,
                 .path = segment.ident.name,
@@ -2331,7 +2367,7 @@ static void contains_const_param_callback(struct HirVisitor *V, struct HirPathEx
     DeclId *pdid = V->ud;
     if (!DECL_ID_EXISTS(*pdid) && e->path.kind == HIR_PATH_ITEM) {
         struct HirSegment const segment = HirSegments_last(e->path.segments);
-        struct HirDecl *item = pawHir_get_node(V->hir, segment.target);
+        struct HirDecl *item = pawHir_get_node(V->hir, segment.target.id);
         if (HirIsGenericDecl(item)) *pdid = item->hdr.did;
     }
 }
@@ -2344,7 +2380,7 @@ static paw_Bool is_const_generic(struct TypeChecker *T, struct HirExpr *expr, De
             struct HirPathExpr const *e = HirGetPathExpr(expr);
             if (e->path.kind == HIR_PATH_ITEM) {
                 struct HirSegment const segment = HirSegments_last(e->path.segments);
-                struct HirDecl *item = pawHir_get_node(T->hir, segment.target);
+                struct HirDecl *item = pawHir_get_node(T->hir, segment.target.id);
                 if (HirIsGenericDecl(item)) {
                     struct HirGenericDecl const *d = HirGetGenericDecl(item);
                     paw_assert(!d->is_type);

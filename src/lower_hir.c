@@ -50,9 +50,9 @@ struct FunctionState {
     struct FunctionState *outer;
     struct MirConstantDataList *constants;
     struct MirRegisterDataList *registers;
+    struct MirUpvalueList *upvalues;
     struct MirPlaceList *locals;
     struct LocalMap *mapping;
-    struct MirUpvalueList *up;
     struct LabelList *labels;
     struct VarStack *stack;
     struct MatchState *ms;
@@ -110,7 +110,6 @@ struct LowerHir {
     struct FunctionState *fs;
     struct LabelList *labels;
     struct VarStack *stack;
-    struct LocalMap *locals;
     struct {
         struct GlobalMap *mapping;
         struct GlobalList *values;
@@ -160,7 +159,7 @@ struct PlaceInfo {
 
 DEFINE_LIST(struct LowerHir, VarStack, struct LocalVar)
 DEFINE_LIST(struct LowerHir, LabelList, struct Label)
-DEFINE_MAP(struct LowerHir, LocalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, int)
+DEFINE_MAP(struct LowerHir, LocalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, MirRegister)
 DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, int)
 DEFINE_MAP(struct LowerHir, VarPlaces, pawP_alloc, var_hash, var_equals, struct MatchVar, struct PlaceInfo)
 DEFINE_MAP(struct LowerHir, MatchResults, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct MatchResult)
@@ -190,8 +189,8 @@ static void fix_upvalue_accessors(struct Mir *mir, DeclId did)
         __builtin_trap();
 
 #if 0
-    int const *pflag = CaptureFlags_get(mir->C, mir->C->capflags, id);
-    if (pflag == NULL) return; // no upvalues
+    UpvalueList *const *pupvalues = UpvalueTable_get(mir->C, mir->C->upvtab, id);
+    if (pupvalues == NULL) return; // no upvalues
 
     K_LIST_XFOREACH (mir->blocks, struct MirBlockData *const, pbb) {
         MirInstructionList *rewrite = MirInstructionList_new(mir);
@@ -620,67 +619,6 @@ static enum BuiltinKind kind_of_builtin(struct LowerHir *L, struct HirExpr *expr
     return builtin_kind(L, type);
 }
 
-// Represents a local variable or an upvalue
-struct NonGlobal {
-    IrType *type;
-    struct MirPlace r;
-    int index;
-    paw_Bool is_upvalue;
-};
-
-// Mark a block as containing an upvalue
-static void mark_upvalue(struct FunctionState *fs, int target, struct MirPlace r)
-{
-    struct BlockState *bs = fs->bs;
-    while (bs->nvars > target)
-        bs = bs->outer;
-    bs->has_upvalue = PAW_TRUE;
-
-    paw_assert(r.kind == MIR_PLACE_REGISTER);
-    struct MirRegisterData *data = mir_reg_data(fs->mir, r.r);
-    if (!data->is_captured) {
-        NEW_INSTR(fs, capture, TODO, r);
-        data->is_nontrivial = PAW_TRUE;
-        data->is_captured = PAW_TRUE;
-
-        if (!pawIr_is_copyable(fs->C, r.type))
-            pawErr_generic_error(ENV(fs->C), get_modname(fs),
-                    r.span, "captured variable must be copyable");
-    }
-}
-
-static void add_upvalue(struct FunctionState *fs, struct NonGlobal *info, paw_Bool is_local)
-{
-    // TODO: captures are not currently supported. needs a lot of work. see note in README.md
-    LOWERING_ERROR(fs->L, Unsupported, TODO);
-
-    info->is_upvalue = PAW_TRUE;
-    info->r.kind = MIR_PLACE_UPVALUE;
-
-    int index;
-    struct MirUpvalueInfo *pup;
-    K_LIST_ENUMERATE (fs->up, index, pup) {
-        if (is_local == pup->is_local && pup->index == info->index) {
-            info->index = index;
-            info->r.up = index;
-            return;
-        }
-    }
-    if (fs->up->count > PAW_MAX_UPVALUES)
-        LOWERING_ERROR(fs->L, TooManyUpvalues,
-                .limit = PAW_MAX_UPVALUES,
-                .span = fs->mir->span);
-
-    MirUpvalueList_push(fs->mir, fs->up, (struct MirUpvalueInfo){
-        .is_local = is_local,
-        .index = info->index,
-        .type = info->type,
-    });
-    // indicate new upvalue index
-    info->index = fs->up->count - 1;
-    info->r.up = fs->up->count - 1;
-}
-
 static void enter_scope(struct FunctionState *fs)
 {
     fs->scope = pawMir_new_scope(fs->mir, fs->scope);
@@ -739,7 +677,7 @@ static struct LocalVar *set_local(struct FunctionState *fs, struct HirIdent iden
 {
     NEW_INSTR(fs, alloc_local, ident.span, ident.name, place);
 
-    LocalMap_insert(fs->L, fs->mapping, id, fs->stack->count);
+    LocalMap_insert(fs->L, fs->mapping, id, place.r);
     VarStack_push(fs->L, fs->stack, (struct LocalVar){
         .index = fs->nlocals,
         .depth = fs->bs->depth,
@@ -776,37 +714,6 @@ static struct LocalVar *alloc_anon_local(struct FunctionState *fs, struct Source
             }, (NodeId){(unsigned)-1}, type);
 }
 
-static paw_Bool resolve_upvalue(struct FunctionState *fs, struct LocalVar local, struct NonGlobal *png)
-{
-    struct FunctionState *caller = fs->outer;
-    if (caller == NULL) return PAW_FALSE;
-
-    if (caller == local.fs) {
-        mark_upvalue(caller, png->index, png->r);
-        add_upvalue(fs, png, PAW_TRUE);
-    } else if (resolve_upvalue(caller, local, png)) {
-        add_upvalue(fs, png, PAW_FALSE);
-    }
-    return PAW_TRUE;
-}
-
-static paw_Bool resolve_nonglobal(struct FunctionState *fs, NodeId id, struct NonGlobal *png)
-{
-    int const *pindex = LocalMap_get(fs->L, fs->mapping, id);
-    if (pindex == NULL) return PAW_FALSE;
-
-    struct LocalVar const local = VarStack_get(fs->stack, *pindex);
-    *png = (struct NonGlobal){
-        .type = local.r.type,
-        .index = local.index,
-        .r = local.r,
-    };
-
-    if (local.fs != fs)
-        resolve_upvalue(fs, local, png);
-    return PAW_TRUE;
-}
-
 static struct MirPlace unit_literal(struct FunctionState *fs, struct SourceSpan span)
 {
     return new_const_unit(fs, span);
@@ -840,10 +747,9 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
     *fs = (struct FunctionState){
         .result = fn->result,
         .registers = mir->registers,
-        .up = MirUpvalueList_new(mir),
         .level = L->stack->count,
         .scope = MIR_INVALID_SCOPE,
-        .mapping = L->locals,
+        .mapping = LocalMap_new(L),
         .locals = MirPlaceList_new(mir),
         .labels = L->labels,
         .stack = L->stack,
@@ -1209,36 +1115,59 @@ static struct MirPlace get_const_generic_param(struct FunctionState *fs, DeclId 
     };
 }
 
+static MirRegister get_local(struct FunctionState *fs, NodeId id)
+{
+    MirRegister const *pr = LocalMap_get(fs->L, fs->mapping, id);
+    paw_assert(pr != NULL);
+    return *pr;
+}
+
 static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    struct NonGlobal ng;
-    struct HirSegment const last = K_LIST_LAST(e->path.segments);
-    if (resolve_nonglobal(fs, last.target, &ng)) return ng.r;
-
-    struct HirDecl *decl = pawHir_get_node(L->hir, last.target);
-    struct MirPlace const output = new_register(fs, get_type(L, e->id));
-
-    if (HirIsVariantDecl(decl)) {
-        struct HirVariantDecl const *v = HirGetVariantDecl(decl);
-        struct IrAdtDef const *def = pawIr_get_adt_def(L->C, v->base_did);
-        if (def->is_struct) {
-            return lower_unit_struct(V, e);
-        } else {
-            return lower_unit_variant(V, e, v->index);
+    struct HirSegment const last = HirSegments_last(e->path.segments);
+    switch (e->path.kind) {
+        case HIR_PATH_LOCAL: {
+            return (struct MirPlace){
+                .kind = MIR_PLACE_REGISTER,
+                .r = get_local(fs, last.target.id),
+                .type = get_type(L, last.target.id),
+            };
         }
-    } else if (HirIsConstDecl(decl)) {
-        return lookup_global_constant(L, HirGetConstDecl(decl));
-    } else if (HirIsAdtDecl(decl)) {
-        return lower_unit_struct(V, e);
-    } else if (HirIsGenericDecl(decl)) {
-        return get_const_generic_param(fs, decl->hdr.did);
-    } else {
-        NEW_INSTR(fs, global, e->span, output);
+        case HIR_PATH_UPVALUE: {
+            struct MirUpvalueInfo const up = MirUpvalueList_get(fs->upvalues, last.target.index);
+            return (struct MirPlace){
+                .kind = MIR_PLACE_UPVALUE,
+                .up = last.target.index,
+                .type = up.type,
+            };
+        }
+        case HIR_PATH_ASSOC:
+        case HIR_PATH_ITEM: {
+            struct MirPlace const output = new_register(fs, get_type(L, e->id));
+            struct HirDecl *decl = pawHir_get_node(L->hir, last.target.id);
+            if (HirIsVariantDecl(decl)) {
+                struct HirVariantDecl const *v = HirGetVariantDecl(decl);
+                struct IrAdtDef const *def = pawIr_get_adt_def(L->C, v->base_did);
+                if (def->is_struct) {
+                    return lower_unit_struct(V, e);
+                } else {
+                    return lower_unit_variant(V, e, v->index);
+                }
+            } else if (HirIsConstDecl(decl)) {
+                return lookup_global_constant(L, HirGetConstDecl(decl));
+            } else if (HirIsAdtDecl(decl)) {
+                return lower_unit_struct(V, e);
+            } else if (HirIsGenericDecl(decl)) {
+                return get_const_generic_param(fs, decl->hdr.did);
+            } else {
+                NEW_INSTR(fs, global, e->span, output);
+            }
+            return output;
+        }
     }
-    return output;
 }
 
 static struct MirPlace emit_get_field(struct FunctionState *fs, struct SourceSpan span, struct MirPlace object, int index, int discr, IrType *field_type)
@@ -1607,6 +1536,11 @@ static void visit_params(struct HirVisitor *V, HirDeclList *params)
     pawHir_visit_decl_list(V, params);
 }
 
+static DeclId next_did(struct FunctionState *fs)
+{
+    return pawP_next_decl_id(fs->C, fs->mir->modno);
+}
+
 static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     struct LowerHir *L = V->ud;
@@ -1619,10 +1553,69 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
             PAW_FALSE, PAW_FALSE);
 
     {
+        UpvalueList *const *pupvalues = UpvalueTable_get(L->C, L->C->upvtab, e->did);
+        if (pupvalues != NULL) {
+            UpvalueList const *upvalues = *pupvalues;
+            IrTypeList *env_fields = IrTypeList_new(L->C);
+            IrTypeList_reserve(L->C, env_fields, upvalues->count);
+            K_LIST_XFOREACH (upvalues, struct UpvalueInfo const, up) {
+                IrType *type = get_type(L, up->id);
+                int index = up->index;
+                if (up->is_local) {
+                    MirRegister const r = get_local(outer, up->id);
+
+                    struct MirRegisterData *rdata = mir_reg_data(outer->mir, r);
+                    rdata->is_captured = PAW_TRUE;
+                    rdata->is_nontrivial = PAW_TRUE;
+
+                    struct MirPlace const place = pawMir_get_register(outer->mir, r);
+                    NEW_INSTR(outer, capture, TODO, place);
+
+                    index = r.value;
+                }
+                MirUpvalueList_push(result, result->upvalues,
+                        (struct MirUpvalueInfo){
+                            .is_local = up->is_local,
+                            .index = index,
+                            .type = type,
+                        });
+                IrTypeList_push(L->C, env_fields, type);
+            }
+            result->env_type = pawIr_new_tuple(L->C, env_fields);
+        }
+    }
+
+    {
         struct BlockState bs;
         struct FunctionState fs;
         MirBlock const entry = enter_function(L, &fs, &bs, result);
         MirBlock const first = new_bb(&fs);
+
+        fs.upvalues = result->upvalues;
+//TODO        UpvalueList *const *pupvalues = UpvalueTable_get(L->C, L->C->upvtab, e->did);
+//TODO        if (pupvalues != NULL) {
+//TODO            fs.upvalues = *pupvalues;
+//TODO            IrTypeList *env_fields = IrTypeList_new(L->C);
+//TODO            IrTypeList_reserve(L->C, env_fields, fs.upvalues->count);
+//TODO            K_LIST_XFOREACH (fs.upvalues, struct UpvalueInfo const, up) {
+//TODO                IrType *type = get_type(L, up->id);
+//TODO                int index = up->index;
+//TODO                if (up->is_local) {
+//TODO                    MirRegister const r = get_local(fs.outer, up->id);
+//TODO                    mir_reg_data(fs.outer->mir, r)->is_captured = PAW_TRUE;
+//TODO                    mir_reg_data(fs.outer->mir, r)->is_nontrivial = PAW_TRUE;
+//TODO                    index = r.value;
+//TODO                }
+//TODO                MirUpvalueList_push(result, result->upvalues,
+//TODO                        (struct MirUpvalueInfo){
+//TODO                            .is_local = up->is_local,
+//TODO                            .index = index,
+//TODO                            .type = type,
+//TODO                        });
+//TODO                IrTypeList_push(L->C, env_fields, type);
+//TODO            }
+//TODO            result->env_type = pawIr_new_tuple(L->C, env_fields);
+//TODO        }
 
         visit_params(L->V, e->params);
         terminate_goto(&fs, e->span);
@@ -1636,10 +1629,8 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
             struct MirPlace const result = lower_rvalue(V, e->expr);
             terminate_return(&fs, e->span, result);
         }
-        result->upvalues = fs.up;
         leave_function(L);
 
-        fix_upvalue_accessors(result, e->did);
         postprocess(result);
     }
 
@@ -2604,7 +2595,6 @@ void pawP_lower_hir(struct Compiler *C)
         .P = ENV(C),
         .C = C,
     };
-    L.locals = LocalMap_new(&L);
     L.globals.mapping = GlobalMap_new(&L);
     L.globals.values = GlobalList_new(&L);
     L.labels = LabelList_new(&L);

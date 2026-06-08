@@ -796,7 +796,7 @@ static struct HirSegment FoldSegment(struct HirFolder *F, struct HirSegment seg)
 {
     struct HirSegment result;
     HirGenericArgs *args = pawHir_fold_generic_args(F, seg.args);
-    pawHir_init_segment(F->hir, &result, next_node_id(F), seg.ident, args, seg.target);
+    pawHir_init_segment(F->hir, &result, next_node_id(F), seg.ident, args, seg.target.id);
     return result;
 }
 

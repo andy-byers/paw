@@ -344,7 +344,7 @@ struct IrGenericDef {
 };
 
 struct IrVariantDef {
-    Str *name;
+    Str const *name;
     struct IrFieldDefs *fields;
     DeclId did;
     DeclId cons_did;
@@ -403,7 +403,7 @@ struct IrImpl {
 struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str *name, struct IrTraitList *bounds);
 struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str *name);
 struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str *name, paw_Bool is_pub);
-struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str *name, struct IrFieldDefs *fields);
+struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str const *name, struct IrFieldDefs *fields);
 struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub);
 struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct);
 struct IrAssocItem *pawIr_new_assoc_item(struct Compiler *C, DeclId did, Str const *name, DeclId parent, paw_Bool is_pub);
@@ -518,6 +518,12 @@ static void pawIr_unify_unchecked(struct Compiler *C, IrGenericArg a, IrGenericA
 {
     int const rc = pawIr_unify(C, a, b);
     paw_assert(rc == 0); PAW_UNUSED(rc);
+}
+
+static paw_Bool ir_is_capturing_closure(struct Compiler *C, IrType *type)
+{
+    return IrIsClosure(type)
+        && pawIr_get_fn_def(C, IR_TYPE_DID(type))->has_captures;
 }
 
 struct IrPendingConstant {

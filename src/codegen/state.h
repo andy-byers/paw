@@ -59,17 +59,14 @@ public:
     llvm::BasicBlock *get_entry() const { return entry_; }
     Fn *get_fn() const { return fn_; }
 
-    llvm::Value *get_arg(unsigned index) const
-    {
-        return args_.at(index);
-    }
+    llvm::Value *get_arg(unsigned index) const;
 
     llvm::Value *get_scratch(llvm::Type *type);
 
     void create_return(llvm::Value *value = nullptr);
-    llvm::Value *create_call(Callable const &call, llvm::ArrayRef<llvm::Value *> args);
-    llvm::Value *create_call(Callable const &call, llvm::Value *arg) { return create_call(call, llvm::ArrayRef<llvm::Value *>{arg}); }
-    llvm::Value *create_call(Callable const &call) { return create_call(call, llvm::ArrayRef<llvm::Value *>{}); }
+    llvm::Value *create_call(Callable const &call, llvm::Value *env, llvm::ArrayRef<llvm::Value *> args);
+    llvm::Value *create_call(Callable const &call, llvm::Value *env, llvm::Value *arg) { return create_call(call, env, llvm::ArrayRef<llvm::Value *>{arg}); }
+    llvm::Value *create_call(Callable const &call, llvm::Value *env) { return create_call(call, env, llvm::ArrayRef<llvm::Value *>{}); }
 
 protected:
     Context *X;

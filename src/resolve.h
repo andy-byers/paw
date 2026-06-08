@@ -16,6 +16,7 @@ struct Resolver {
     paw_Env *P;
 
     struct FnState *fs;
+    struct BlockState *bs;
     struct OrState const *os;
 
     struct Symtab *symtab;
@@ -98,11 +99,12 @@ struct ResolvedSegment {
     union {
         int modno;
         NodeId id;
+        int upvalue;
     };
 };
 
 DEFINE_MAP(struct Compiler, SegmentTable, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct ResolvedSegment)
-DEFINE_MAP(struct Compiler, CaptureFlags, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, int)
+DEFINE_MAP(struct Compiler, UpvalueTable, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct UpvalueList *)
 DEFINE_LIST(struct Compiler, UpvalueList, struct UpvalueInfo)
 
 enum Namespace {

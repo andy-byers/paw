@@ -375,7 +375,7 @@ class FnType: public Type {
 public:
     explicit FnType(Context &X, Type *return_type,
             llvm::ArrayRef<Type *> param_types,
-            FnKind fn_kind, bool has_env = true,
+            Type *env_type = nullptr,
             bool never_returns = false);
     ~FnType() override = default;
 
@@ -386,8 +386,8 @@ public:
         return llvm::cast<llvm::FunctionType>(ty_);
     }
 
-    bool has_env() const { return has_env_; }
-    FnKind get_fn_kind() const { return fn_kind_; }
+    bool has_env() const { return env_type_ != nullptr; }
+    Type *get_env_type() const { return env_type_; }
     ReturnKind get_return_kind() const { return return_kind_; }
     bool never_returns() const { return never_returns_; }
     Type *get_return_type() const { return return_type_; }
@@ -408,12 +408,11 @@ public:
     std::string to_string() const override;
 
 private:
-    FnKind fn_kind_;
     ReturnKind return_kind_;
     std::vector<Type *> param_types_;
     Type *return_type_;
+    Type *env_type_;
     bool never_returns_;
-    bool has_env_;
 };
 
 

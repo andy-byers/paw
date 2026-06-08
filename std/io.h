@@ -46,18 +46,18 @@ PAW_DEFINE_RESULT(Int, io_Error)
 // pub type Result<T> = result::Result<T, Error>;
 #define PAW_IO_RESULT(T) paw_Result_##T##_io_Error
 
-PAW_IO_RESULT(io_File) paw_io_File_open(void *, paw_Slice, paw_Slice);
-PAW_IO_RESULT(Unit) paw_io_File_seek(void *, paw_io_File *, paw_Int, paw_io_Seek);
-PAW_IO_RESULT(Int) paw_io_File_tell(void *, paw_io_File *);
-PAW_IO_RESULT(Unit) paw_io_File_flush(void *, paw_io_File *);
+PAW_IO_RESULT(io_File) paw_io_File_open(paw_Slice, paw_Slice);
+PAW_IO_RESULT(Unit) paw_io_File_seek(paw_io_File *, paw_Int, paw_io_Seek);
+PAW_IO_RESULT(Int) paw_io_File_tell(paw_io_File *);
+PAW_IO_RESULT(Unit) paw_io_File_flush(paw_io_File *);
 
-PAW_IO_RESULT(Int) paw_io_File_read(void *, paw_io_File *, paw_Slice);
-PAW_IO_RESULT(Int) paw_io_File_write(void *, paw_io_File *, paw_Slice);
-void paw_io_File_drop(void *, paw_io_File *);
+PAW_IO_RESULT(Int) paw_io_File_read(paw_io_File *, paw_Slice);
+PAW_IO_RESULT(Int) paw_io_File_write(paw_io_File *, paw_Slice);
+void paw_io_File_drop(paw_io_File *);
 
-paw_io_File *paw_io_stdin(void *);
-paw_io_File *paw_io_stdout(void *);
-paw_io_File *paw_io_stderr(void *);
+paw_io_File *paw_io_stdin(void);
+paw_io_File *paw_io_stdout(void);
+paw_io_File *paw_io_stderr(void);
 
 #endif // PAW_STD_IO_H
 

@@ -66,7 +66,7 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
     IrType *type = lower_type(L, t->type);
 
     struct HirSegment const segment = HirSegments_last(t->trait.segments);
-    struct HirDecl *trait_decl = pawHir_get_node(L->hir, segment.target);
+    struct HirDecl *trait_decl = pawHir_get_node(L->hir, segment.target.id);
     if (!HirIsTraitDecl(trait_decl)) {
         LOWERING_ERROR(L, ExpectedTrait,
                 .path = segment.ident.name,
@@ -216,22 +216,22 @@ static IrType *instantiate_segment(struct LowerType *L, struct HirSegment segmen
 static IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
 {
     struct HirSegment const segment = HirSegments_first(t->path.segments);
-    struct HirDecl *base_decl = pawHir_get_node(L->hir, segment.target);
+    struct HirDecl *base_decl = pawHir_get_node(L->hir, segment.target.id);
     if (HirIsTypeDecl(base_decl)) {
         IrGenericArgs *args = segment.args != NULL
             ? lower_generic_args(L, segment.args) : NULL;
         return lower_type_alias(L, segment, base_decl, args);
     }
-    IrType *type = pawIr_get_type(L->C, segment.target);
+    IrType *type = pawIr_get_type(L->C, segment.target.id);
     if (type == NULL)
         LOWERING_ERROR(L, UnexpectedTrait,
                 .span = segment.span);
     type = instantiate_segment(L, segment, type);
     for (int i = 1; i < t->path.segments->count; ++i) {
         struct HirSegment const segment = HirSegments_get(t->path.segments, i);
-        if (NODE_ID_EXISTS(segment.target)) {
+        if (NODE_ID_EXISTS(segment.target.id)) {
             paw_assert(segment.args == NULL);
-            type = pawIr_get_type(L->C, segment.target);
+            type = pawIr_get_type(L->C, segment.target.id);
         } else {
             // Encountered a construct like `T::Type` where `T` is a generic type. There
             // must exist a single trait bound on `T` that declares an associated type
@@ -304,7 +304,7 @@ static void contains_const_param_callback(struct HirVisitor *V, struct HirPathEx
     DeclId *pdid = V->ud;
     if (!DECL_ID_EXISTS(*pdid) && e->path.kind == HIR_PATH_ITEM) {
         struct HirSegment const segment = HirSegments_last(e->path.segments);
-        struct HirDecl *item = pawHir_get_node(V->hir, segment.target);
+        struct HirDecl *item = pawHir_get_node(V->hir, segment.target.id);
         if (HirIsGenericDecl(item)) *pdid = item->hdr.did;
     }
 }
@@ -342,8 +342,9 @@ static IrConst *lower_const(struct LowerType *L, struct HirExpr *expr)
                 pawP_builtin_type(L->C, t->basic.code));
     } else if (HirIsPathExpr(expr)) {
         struct HirPathExpr const *e = HirGetPathExpr(expr);
+        paw_assert(e->path.kind != HIR_PATH_UPVALUE);
         struct HirSegment const segment = HirSegments_last(e->path.segments);
-        struct HirDecl *item = pawHir_get_node(L->hir, segment.target);
+        struct HirDecl *item = pawHir_get_node(L->hir, segment.target.id);
         if (HirIsGenericDecl(item))
             return pawIr_new_const_decl(L->C, item->hdr.did);
     } else if (HirIsBlock(expr)) {

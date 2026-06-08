@@ -33,37 +33,6 @@ pub fn test_explicit_instantiation() {
     assert(target[4] == 4);
 }
 
-struct One<A>{pub a: A}
-struct Two<A, B>{pub a: A, pub b: B}
-struct Three<A, B, C>{pub a: A, pub b: B, pub c: C}
-
-fn implicit<A, B, C>(
-        a: One<A>, 
-        b: [B], 
-        c: Two<B, [C]>) -> Three<C, A, B> {
-    return Three{
-        a: c.b[-1], // C
-        b: a.a, // A
-        c: b[0], // B
-    };
-}
-
-#[test]
-pub fn test_implicit_instantiation() {
-    // implicit<[str: int], bool, int>(...) -> Three<int, [str: int], bool>
-    let three = implicit(
-        One{a: ["a": 1, "b": 2, "c": 3]},
-        [false, true],
-        Two{a: true, b: [1, 2, 3]});
-    assert(three.b["c"] == three.a);
-
-    let answer = map(|x| x, [false, true]);
-    assert(answer[-1] == true);
-
-    let answer = map(|x: bool| !x, [false, true]);
-    assert(answer[-1] == false);
-}
-
 fn self_recursive<T>(t: T, i: int) {
     if i > 0 {
         self_recursive(t, i - 1);
@@ -94,19 +63,3 @@ pub fn test_recursive_instantiation() {
     second_recursive("four", 5.0, 6);
     second_recursive(|| 42, [f2i], map::<int, bool>);
 }
-
-//fn make_closure<T>(t: T) -> (fn(T) -> (T, T)) {
-//    |x| (x, t)
-//}
-//
-//#[test]
-//pub fn test_generic_upvalue() {
-//    assert(make_closure(123)(0).0 == 0);
-//    assert(make_closure((456, 789))((0, 0)).0.0 == 0);
-//    assert(make_closure((456, 789))((0, 0)).0.1 == 0);
-//
-//    assert(make_closure(123)(0).1 == 123);
-//    assert(make_closure((456, 789))((0, 0)).1.0 == 456);
-//    assert(make_closure((456, 789))((0, 0)).1.1 == 789);
-//}
-

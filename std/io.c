@@ -20,9 +20,8 @@
 #define INTR_TIMEOUT 100
 
 #define DEFINE_STREAM_GETTER(Stream_) \
-    paw_io_File *paw_io_##Stream_(void *env) \
+    paw_io_File *paw_io_##Stream_(void) \
     { \
-        PAW_UNUSED(env); \
         static struct paw_io_File s_file; \
         s_file.inner = Stream_; \
         return &s_file; \
@@ -162,16 +161,14 @@ static int seek_kind(paw_Int kind)
 
 
 // pub fn drop(&self)
-void paw_io_File_drop(void *env, paw_io_File *self)
+void paw_io_File_drop(paw_io_File *self)
 {
-    PAW_UNUSED(env);
     os_close(self);
 }
 
 // pub fn open(pathname: str, mode: str) -> Result<Self>
-PAW_IO_RESULT(io_File) paw_io_File_open(void *env, paw_Slice pathname, paw_Slice mode)
+PAW_IO_RESULT(io_File) paw_io_File_open(paw_Slice pathname, paw_Slice mode)
 {
-    PAW_UNUSED(env);
     paw_io_File file = {0};
     if (os_open(pathname.start, mode.start, &file) == 0) {
         return IO_RESULT_OK(io_File, file);
@@ -181,9 +178,8 @@ PAW_IO_RESULT(io_File) paw_io_File_open(void *env, paw_Slice pathname, paw_Slice
 }
 
 // pub fn seek(self, offset: int, whence: Seek) -> Result<()>
-PAW_IO_RESULT(Unit) paw_io_File_seek(void *env, paw_io_File *self, paw_Int offset, paw_io_Seek whence)
+PAW_IO_RESULT(Unit) paw_io_File_seek(paw_io_File *self, paw_Int offset, paw_io_Seek whence)
 {
-    PAW_UNUSED(env);
     if (os_seek(self, offset, seek_kind(whence.discr)) == 0) {
         return IO_RESULT_OK(Unit, PAW_UNIT());
     } else {
@@ -192,9 +188,8 @@ PAW_IO_RESULT(Unit) paw_io_File_seek(void *env, paw_io_File *self, paw_Int offse
 }
 
 // pub fn tell(self) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_tell(void *env, paw_io_File *self)
+PAW_IO_RESULT(Int) paw_io_File_tell(paw_io_File *self)
 {
-    PAW_UNUSED(env);
     paw_Int const offset = os_tell(self);
     if (offset >= 0) {
         return IO_RESULT_OK(Int, offset);
@@ -204,9 +199,8 @@ PAW_IO_RESULT(Int) paw_io_File_tell(void *env, paw_io_File *self)
 }
 
 // pub fn read(self, data: SliceMut<char>) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_read(void *env, paw_io_File *self, paw_Slice data)
+PAW_IO_RESULT(Int) paw_io_File_read(paw_io_File *self, paw_Slice data)
 {
-    PAW_UNUSED(env);
     paw_Int const length = os_read(self, data.start, data.length);
     return length >= 0
         ? IO_RESULT_OK(Int, length)
@@ -214,9 +208,8 @@ PAW_IO_RESULT(Int) paw_io_File_read(void *env, paw_io_File *self, paw_Slice data
 }
 
 // pub fn write(self, data: Slice<char>) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File *self, paw_Slice data)
+PAW_IO_RESULT(Int) paw_io_File_write(paw_io_File *self, paw_Slice data)
 {
-    PAW_UNUSED(env);
     paw_Int const length = os_write(self, data.start, data.length);
     return length >= 0
         ? IO_RESULT_OK(Int, length)
@@ -224,9 +217,8 @@ PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File *self, paw_Slice dat
 }
 
 // pub fn flush(self) -> Result<()>
-PAW_IO_RESULT(Unit) paw_io_File_flush(void *env, paw_io_File *self)
+PAW_IO_RESULT(Unit) paw_io_File_flush(paw_io_File *self)
 {
-    PAW_UNUSED(env);
     if (os_flush(self) == 0) {
         return IO_RESULT_OK(Unit, PAW_UNIT());
     } else {

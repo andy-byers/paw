@@ -38,7 +38,6 @@ public:
             FnType *type);
 
     // Constructor for closures
-    explicit Fn(Context &X, llvm::Value *env, FnType *type);
 
     ~Fn() = default;
 
@@ -68,14 +67,13 @@ public:
         return get_type()->get_num_params();
     }
 
-    llvm::Value *get_env_ptr() const;
+    llvm::Value *get_env() const;
     llvm::Value *get_arg(unsigned index) const;
 
 private:
     Context *X;
     FnType *type_;
     llvm::Value *value_;
-    llvm::Value *env_;
 };
 
 
@@ -132,7 +130,7 @@ public:
     friend class State;
     using Type = FnType;
 
-    explicit Callable(State &state, llvm::Value *fn, llvm::Value *env, FnType *type);
+    explicit Callable(State &state, llvm::Value *fn, FnType *type);
     ~Callable() override = default;
 
     FnType *get_type() const override
@@ -150,9 +148,6 @@ public:
     llvm::Value *get_value() const override;
 
     unsigned get_num_args() const { return get_type()->get_num_params(); }
-
-private:
-    llvm::Value *env_;
 };
 
 

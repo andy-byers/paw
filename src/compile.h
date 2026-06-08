@@ -148,7 +148,7 @@ struct Compiler {
     struct Pool *mir_pool;
 
     struct SegmentTable *segtab;
-    struct CaptureFlags *capflags;
+    struct UpvalueTable *upvtab;
     struct BodyMap *bodies;
 
     struct StringMap *strings;
@@ -251,6 +251,8 @@ struct DynamicMem {
         size_t size;
     } source;
 };
+
+DeclId pawP_next_decl_id(struct Compiler *C, int modno);
 
 void pawP_lower_ast(struct Compiler *C);
 void pawP_collect_items(struct Compiler *C, struct Pool *pool);

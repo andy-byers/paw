@@ -67,15 +67,10 @@ enum class BuiltinFn {
     PAW_DEALLOC,
     PAW_ALIGNED_ALLOC,
 
-    // checked integer arithmetic
-    CKD_IMUL,
-    CKD_IADD,
-
     // miscellaneous helper functions
     PAW_BKPT,
     HASH_BYTES,
     CHECK_BOUNDS,
-    ABS_INDEX,
     RAWCMP,
 
     // frequently-called prelude functions
@@ -83,7 +78,7 @@ enum class BuiltinFn {
     PRINT,
     PRINTLN,
 
-    NUM_BUILTINS,
+    NUM_BUILTINS
 };
 
 char const *get_builtin_name(BuiltinFn kind);
@@ -205,7 +200,7 @@ public:
     void create_panic(llvm::Value *message) const
     {
         auto *fn = M->get_builtin(BuiltinFn::PANIC);
-        B->CreateCall(fn, {create_null_ptr(), message});
+        B->CreateCall(fn, {message});
     }
 
     llvm::Value *create_check_bounds(llvm::Value *index, llvm::Value *length) const
@@ -234,7 +229,7 @@ public:
     void create_print(llvm::Value *message) const
     {
         auto *fn = M->get_builtin(BuiltinFn::PRINT);
-        B->CreateCall(fn, {create_null_ptr(), message});
+        B->CreateCall(fn, {message});
     }
 
     void create_println(StringView message) const
@@ -245,19 +240,7 @@ public:
     void create_println(llvm::Value *message) const
     {
         auto *fn = M->get_builtin(BuiltinFn::PRINTLN);
-        B->CreateCall(fn, {create_null_ptr(), message});
-    }
-
-    llvm::Value *create_ckd_iadd(llvm::Value *a, llvm::Value *b) const
-    {
-        auto *fn = M->get_builtin(BuiltinFn::CKD_IADD);
-        return B->CreateCall(fn, {a, b});
-    }
-
-    llvm::Value *create_ckd_imul(llvm::Value *a, llvm::Value *b) const
-    {
-        auto *fn = M->get_builtin(BuiltinFn::CKD_IMUL);
-        return B->CreateCall(fn, {a, b});
+        B->CreateCall(fn, {message});
     }
 
     void create_memset(MaybeAlignedValue ptr, llvm::Value *value, paw_Int size, bool is_volatile = false)
@@ -321,21 +304,15 @@ public:
 
     llvm::FunctionCallee get_rawcmp_callee() const
     {
-        return M->get_module()->getOrInsertFunction("paw_builtin_rawcmp",
-            llvm::FunctionType::get(get_int_ty(), {
-                get_ptr_ty(), // ptr env
-                get_ptr_ty(), // ptr lhs
-                get_int_ty(), // i64 lhs_len
-                get_ptr_ty(), // ptr rhs
-                get_int_ty(), // i64 rhs_len
-            }, false));
+        return M->get_module()
+            ->getFunction(get_builtin_name(BuiltinFn::RAWCMP));
 
     }
 
     llvm::Value *create_alloc(llvm::Value *size)
     {
         auto *fn = M->get_builtin(BuiltinFn::PAW_ALLOC);
-        return B->CreateCall(fn, {create_null_ptr(), size});
+        return B->CreateCall(fn, {size});
     }
 
     llvm::Value *create_alloc(paw_Int size)
@@ -351,7 +328,7 @@ public:
     llvm::Value *create_dealloc(llvm::Value *ptr)
     {
         auto *fn = M->get_builtin(BuiltinFn::PAW_DEALLOC);
-        return B->CreateCall(fn, {create_null_ptr(), ptr});
+        return B->CreateCall(fn, {ptr});
     }
 
     llvm::Value *create_imin(llvm::Value *a, llvm::Value *b)
@@ -519,17 +496,6 @@ public:
     llvm::IntegerType *get_iptr_ty() const
     {
         return B->getIntPtrTy(M->get_data_layout());
-    }
-
-    llvm::StructType *get_env_ty(llvm::ArrayRef<llvm::Type *> upvalue_tys) const
-    {
-        auto const n = upvalue_tys.size();
-        std::vector<llvm::Type *> field_tys(n * 2);
-        for (auto i = 0U; i < n; ++i) {
-            field_tys[i] = get_ptr_ty();
-            field_tys[n + i] = upvalue_tys[i];
-        }
-        return llvm::StructType::get(*ctx_, field_tys, false);
     }
 
     llvm::ConstantInt *create_iptr(uint64_t iptr) const
@@ -742,8 +708,7 @@ public:
     FnType *get_fn_type(
             Type *return_type,
             llvm::ArrayRef<Type *> param_types,
-            FnKind fn_kind,
-            bool has_env,
+            Type *env_type,
             bool never_returns);
 
     PtrType *get_ptr_type(Type *pointee_type = nullptr);
