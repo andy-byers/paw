@@ -386,8 +386,8 @@ enum class ValueKind {
 
 struct PhiInput {
     llvm::PHINode *phi;
-    llvm::BasicBlock *b;
-    struct MirPlace r;
+    llvm::BasicBlock *from;
+    MirPlace r;
 };
 
 class PawState final: public State {
@@ -400,16 +400,6 @@ public:
     Closure *get_closure(unsigned index)
     {
         return &closures_.at(index);
-    }
-
-    ValueKind get_value_kind(MirRegister r) const
-    {
-        return value_kinds_.at(unsigned(r.value));
-    }
-
-    bool has_address(MirRegister r) const
-    {
-        return get_value_kind(r) == ValueKind::MEMORY;
     }
 
     void set_raw_value(MirRegister r, llvm::Value *value)
@@ -430,7 +420,7 @@ private:
     llvm::IRBuilder<> *B;
 
     Mir const *mir_;
-    MirBlockData const *current_;
+    MirBlock current_;
 
     llvm::BasicBlock *before_block_;
     PawState *outer_;
@@ -439,7 +429,6 @@ private:
 
     std::vector<llvm::BasicBlock *> blocks_;
     std::vector<llvm::Value *> values_;
-    std::vector<ValueKind> value_kinds_;
     std::vector<llvm::Value *> constants_;
     std::vector<llvm::Value *> captured_;
     std::vector<llvm::Value *> upvalues_;
@@ -833,6 +822,9 @@ public:
 
     void define_fn(Mir const *mir)
     {
+        if(pawS_eq(mir->name,SCAN_STR(C,"maybe_times_2"))){
+        puts("hiii");
+        }
         // TODO: should be able to just call get_fn since closures have unique types
         auto *fn = get_fn(mir->type);
         if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {
@@ -884,12 +876,15 @@ public:
         enter_fn(state);
 
         for (int b = 0; b < mir->blocks->count; ++b) {
-            state.current_ = state.mir_->blocks->data[b];
-            B->SetInsertPoint(state.blocks_[(size_t)b]);
+            auto *block = state.blocks_[(size_t)b];
+            state.current_.value = b;
+            B->SetInsertPoint(block);
 
             auto *bb = mir->blocks->data[b];
             for (int i = 0; i < bb->joins->count; ++i)
                 create_instruction(bb->joins->data[i]);
+            B->SetInsertPoint(block);
+
             for (int i = 0; i < bb->instructions->count; ++i)
                 create_instruction(bb->instructions->data[i]);
         }
@@ -1080,7 +1075,7 @@ public:
                 return X.create_float(kdata.data->value.value.f);
             default:
                 paw_assert(IrIsString(kdata.data->value.type));
-                return get_constant_str((::Str const *)kdata.data->value.value.i);
+                return get_constant_str((::Str const *)kdata.data->value.value.p);
         }
     }
 
@@ -1092,8 +1087,10 @@ private:
 
     void leave_fn()
     {
-        for (auto const &p: state_->phi_inputs_)
-            p.phi->addIncoming(operand(p.r), p.b);
+        for (auto const &p: state_->phi_inputs_) {
+            B->SetInsertPoint(p.from->getTerminator());
+            p.phi->addIncoming(operand(p.r), p.from);
+        }
 
         auto *before = state_->before_block_;
         state_ = state_->outer_;
@@ -1343,9 +1340,6 @@ private:
             case kMirGlobal:
                 create_global(instr->Global_);
                 break;
-            case kMirAllocLocal:
-                create_alloclocal(instr->AllocLocal_);
-                break;
             case kMirAggregate:
                 create_aggregate(instr->Aggregate_);
                 break;
@@ -1363,12 +1357,6 @@ private:
                 break;
             case kMirCast:
                 create_cast_instr(instr->Cast_);
-                break;
-            case kMirCapture:
-                create_capture(instr->Capture_);
-                break;
-            case kMirClose:
-                create_close(instr->Close_);
                 break;
             case kMirClosure:
                 create_closure(instr->Closure_);
@@ -1394,27 +1382,46 @@ private:
             case kMirGoto:
                 create_goto(instr->Goto_);
                 break;
+            case kMirAllocLocal:
+            case kMirCapture:
+            case kMirClose:
+                break;
             case kMirGetRange:
             case kMirSetRange:
                 PAW_UNREACHABLE();
         }
     }
 
-    llvm::BasicBlock *get_block(int b)
+    llvm::BasicBlock *get_block(int b) const
     {
         return state_->blocks_.at(unsigned(b));
     }
 
+    llvm::BasicBlock *get_current_block() const
+    {
+        return get_block(state_->current_.value);
+    }
+
+    MirBlock get_predecessor(int index)
+    {
+        auto const *bb = MirBlockDataList_get(state_->mir_->blocks, state_->current_.value);
+        return bb->predecessors->data[index];
+    }
+
+    MirBlock get_successor(int index)
+    {
+        auto const *bb = MirBlockDataList_get(state_->mir_->blocks, state_->current_.value);
+        return bb->successors->data[index];
+    }
+
     llvm::BasicBlock *get_predecessor_block(int index)
     {
-        paw_assert(state_->current_ != nullptr);
-        return get_block(state_->current_->predecessors->data[index].value);
+        return get_block(get_predecessor(index).value);
     }
 
     llvm::BasicBlock *get_successor_block(int index)
     {
-        paw_assert(state_->mir_ != nullptr);
-        return get_block(state_->current_->successors->data[index].value);
+        return get_block(get_successor(index).value);
     }
 
     llvm::Value *get_constant_str(::Str const *k)
@@ -1431,17 +1438,19 @@ private:
 
     void create_phi(MirPhi const &x)
     {
+        auto *block = get_current_block();
+        B->SetInsertPoint(block, block->begin());
+
         auto *phi = B->CreatePHI(*get_type(x.output.type),
                 unsigned(x.inputs->count));
-        for (auto i = 0; i < x.inputs->count; ++i) {
-            auto const r = x.inputs->data[i];
-            auto *b = get_predecessor_block(i);
+
+        B->SetInsertPoint(block);
+        for (auto i = 0; i < x.inputs->count; ++i)
             state_->phi_inputs_.push_back(PhiInput{
+                .r = MirPlaceList_get(x.inputs, i),
+                .from = get_predecessor_block(i),
                 .phi = phi,
-                .r = r,
-                .b = b,
             });
-        }
         set_result(x.output, phi);
     }
 
@@ -1473,7 +1482,6 @@ private:
     void create_addrof(MirAddrOf const &x)
     {
         paw_assert(x.input.kind == MIR_PLACE_REGISTER);
-        paw_assert(state_->has_address(x.input.r));
         set_result(x.output, state_->get_raw_value(x.input.r));
     }
 
@@ -1501,27 +1509,6 @@ private:
         set_result(x.output, fn);
     }
 
-    bool needs_upvalue_slot(MirRegister r)
-    {
-        return false;
-//TODO        auto *fn = state_->fn_;
-//TODO
-//TODO        // NOTE: the return value (%0) cannot be captured and slots for captured
-//TODO        //   arguments (%1..%N) are allocated and initialized at the start of the
-//TODO        //   function.
-//TODO        auto const data = *mir_reg_data((Mir *)state_->mir_, r);
-//TODO        return data.is_captured && unsigned(r.value) > fn->get_num_args();
-    }
-
-    void create_alloclocal(MirAllocLocal const &x)
-    {
-        if (needs_upvalue_slot(x.output.r)) {
-            paw_assert(state_->has_address(x.output.r));
-            auto *slot = X.create_alloc(*get_type(x.output.type));
-            state_->set_raw_value(x.output.r, slot);
-        }
-    }
-
     void create_aggregate(MirAggregate const &x)
     {
         auto *object_type = cast<ObjectType>(get_type(x.output.type));
@@ -1538,18 +1525,13 @@ private:
     {
         switch (place.kind) {
             case MIR_PLACE_REGISTER:
-                switch (state_->get_value_kind(place.r)) {
-                    case ValueKind::SSA:
-                        return state_->get_raw_value(place.r);
-                    case ValueKind::MEMORY:
-                        if (ir_is_capturing_closure(C, place.type)) {
-                            auto const *mir = *mirs_.lookup(place.type);
-                            llvm::Type *env_ty = *create_env_type(mir->upvalues);
-                            return B->CreateLoad(env_ty, state_->get_raw_value(place.r));
-                        }
-                        return B->CreateLoad(*get_type(place.type),
-                                state_->get_raw_value(place.r));
+                if (ir_is_capturing_closure(C, place.type)) {
+                    auto const *mir = *mirs_.lookup(place.type);
+                    llvm::Type *env_ty = *create_env_type(mir->upvalues);
+                    return B->CreateLoad(env_ty, state_->get_raw_value(place.r));
                 }
+                return B->CreateLoad(*get_type(place.type),
+                        state_->get_raw_value(place.r));
             case MIR_PLACE_UPVALUE:
                 return B->CreateLoad(*get_type(place.type),
                         state_->get_upvalue_ptr(unsigned(place.up)));
@@ -1687,14 +1669,6 @@ private:
         auto *target = operand(x.target);
         auto *result = create_cast(target, x.from, x.to);
         set_result(x.output, result);
-    }
-
-    void create_capture(MirCapture const &x)
-    {
-    }
-
-    void create_close(MirClose const &x)
-    {
     }
 
     Type *create_env_type(MirUpvalueList const *upvalues) const
@@ -1857,12 +1831,6 @@ private:
         B->CreateUnreachable();
     }
 
-//TODO    llvm::Value *load_result(llvm::Value *value)
-//TODO    {
-//TODO        auto *result_type = get_type(ir_fn_result(C, state_->mir_->type));
-//TODO        return B->CreateLoad(*result_type, value);
-//TODO    }
-
     void create_return(MirReturn const &)
     {
         auto const result = pawMir_get_register(state_->mir_, MirRegister{0});
@@ -1913,8 +1881,6 @@ private:
     void create_direct_switch(MirSwitch const &x)
     {
         auto *discr = operand(x.discr);
-//TODO        if (is_thin_ptr(x.discr.type)) // TODO: hack
-//TODO            discr = B->CreateLoad(get_type(ir_deref(x.discr.type))->get_ty(), discr);
         if (IrIsFloat(x.discr.type))
             discr = B->CreateBitCast(discr, X.get_int_ty());
         auto *node = B->CreateSwitch(discr, x.has_otherwise
@@ -1979,14 +1945,7 @@ private:
     void set_result(MirPlace place, llvm::Value *value)
     {
         paw_assert(place.kind == MIR_PLACE_REGISTER);
-        switch (state_->get_value_kind(place.r)) {
-            case ValueKind::SSA:
-                state_->values_.at(unsigned(place.r.value)) = value;
-                break;
-            case ValueKind::MEMORY:
-                B->CreateStore(value, state_->get_raw_value(place.r));
-                break;
-        }
+        B->CreateStore(value, state_->get_raw_value(place.r));
     }
 
 
@@ -2093,7 +2052,6 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
     , outer_(outer)
     , blocks_(unsigned(mir->blocks->count))
     , values_(unsigned(mir->registers->count))
-    , value_kinds_(unsigned(mir->registers->count))
     , constants_(unsigned(mir->kcache->data->count))
     , captured_(unsigned(mir->captured->count))
     , upvalues_(unsigned(mir->upvalues->count))
@@ -2130,10 +2088,8 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
     }
 
     paw_assert(!blocks_.empty());
-    if (values_.empty()) {
+    if (values_.empty())
         values_.resize(1 + fn->get_num_args());
-        value_kinds_.resize(1 + fn->get_num_args());
-    }
     B->SetInsertPointPastAllocas(*fn);
 
     {
@@ -2150,18 +2106,11 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
         auto const num_args = unsigned(fptr->params->count);
         for (auto i = 0U; i < num_args; ++i)
             values_[1 + i] = get_arg(i);
-        for (auto i = 0U; i <= num_args; ++i)
-            value_kinds_[i] = ValueKind::MEMORY;
         // allocate stack memory for the rest of the locals
         for (auto i = 1 + num_args; i < mir->registers->count; ++i) {
             auto const data = MirRegisterDataList_get(mir->registers, i);
-            if (data.is_nontrivial) {
-                auto *type = G.get_type(data.type);
-                values_[i] = B->CreateAlloca(*type);
-                value_kinds_[i] = ValueKind::MEMORY;
-            } else {
-                value_kinds_[i] = ValueKind::SSA;
-            }
+            auto *type = G.get_type(data.type);
+            values_[i] = B->CreateAlloca(*type);
         }
     }
 
@@ -2180,20 +2129,6 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
     // blocks not represented in the MIR.
     B->SetInsertPoint(get_entry());
 
-//TODO    for (auto i = 0U; i < captured_.size(); ++i) {
-//TODO        auto const r = unsigned(MirCaptureList_get(mir->captured, i).local.value);
-//TODO        auto *type = G.get_type(MirRegisterDataList_get(mir->registers, r).type);
-//TODO        paw_assert(r > 0);
-//TODO
-//TODO        if (r <= fn->get_num_args()) {
-//TODO            auto *capture_slot = X->create_alloc(*type);
-//TODO            // initialize with value of argument
-//TODO            auto *arg = X->load_value(*type, values_.at(r));
-//TODO            X->store_value(arg, capture_slot);
-//TODO            values_.at(r) = capture_slot;
-//TODO        }
-//TODO    }
-
     for (int i = 0; i < mir->blocks->count; ++i) {
         auto const name = "bb" + std::to_string(i);
         blocks_[i] = llvm::BasicBlock::Create(*c, name, *fn);
@@ -2201,11 +2136,6 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
 
     for (int i = 0; i < mir->kcache->data->count; ++i)
         constants_[i] = G.create_constant(mir->kcache->data->data[i]);
-
-//TODO    for (int i = 0; i < mir->captured->count; ++i) {
-//TODO        auto const capture = mir->captured->data[i];
-//TODO        captured_[i] = values_[capture.local.value];
-//TODO    }
 
     for (int i = 0; i < mir->children->count; ++i) {
         auto *child = mir->children->data[i];
