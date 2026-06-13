@@ -73,9 +73,11 @@ paw_Bool pawMir_is_main(struct Mir const *mir)
 
 struct MirPlace pawMir_get_register(struct Mir const *mir, MirRegister r)
 {
+    struct MirRegisterData const *rdata = mir_reg_data((struct Mir *)mir, r);
     return (struct MirPlace){
         .kind = MIR_PLACE_REGISTER,
-        .type = MirRegisterDataList_get(mir->registers, r.value).type,
+        .type = rdata->type,
+        .span = rdata->span,
         .r = r,
     };
 }

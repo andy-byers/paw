@@ -30,6 +30,11 @@ union InferenceVarData {
     IrConst *konst;
 };
 
+union InferenceVarSave {
+    IrType type;
+    IrConst konst;
+};
+
 typedef struct InferenceVar {
     struct SourceSpan span;
     union InferenceVarData data;
@@ -50,7 +55,7 @@ struct UndoEntry {
     enum Action action;
     int ivar_id;
     union {
-        union InferenceVarData old_data;
+        union InferenceVarSave old_data;
         int old_parent;
         int old_rank;
     };
@@ -104,11 +109,21 @@ static void record_set_rank(struct Unifier *U, struct UnificationTable *table, I
             });
 }
 
-static void record_set_data(struct Unifier *U, struct UnificationTable *table, InferenceVar *ivar)
+static void record_set_type(struct Unifier *U, struct UnificationTable *table, InferenceVar *ivar)
 {
     UndoLog_push(U->C, U->ctx->undo, (struct UndoEntry){
                 .action = ACTION_SET_DATA,
-                .old_data = ivar->data,
+                .old_data.type = *ivar->data.type,
+                .ivar_id = ivar->id,
+                .table = table,
+            });
+}
+
+static void record_set_const(struct Unifier *U, struct UnificationTable *table, InferenceVar *ivar)
+{
+    UndoLog_push(U->C, U->ctx->undo, (struct UndoEntry){
+                .action = ACTION_SET_DATA,
+                .old_data.konst = *ivar->data.konst,
                 .ivar_id = ivar->id,
                 .table = table,
             });
@@ -167,9 +182,9 @@ void pawU_undo_unifications(struct Unifier *U, int position)
             case ACTION_SET_DATA: {
                 struct InferenceVar const *ivar = get_ivar(entry.table, entry.ivar_id);
                 if (ivar->kind == IVAR_TYPE) {
-                    *ivar->data.type = *entry.old_data.type;
+                    *ivar->data.type = entry.old_data.type;
                 } else {
-                    *ivar->data.konst = *entry.old_data.konst;
+                    *ivar->data.konst = entry.old_data.konst;
                 }
                 break;
             }
@@ -251,7 +266,7 @@ static int unify_var_type(struct Unifier *U, InferenceVar *ivar, IrType *type)
     debug_log(U, "unify_var_type", ivar->data.type, type);
 
     check_type_occurs(U, ivar, type);
-    record_set_data(U, U->ctx->type_vars, ivar);
+    record_set_type(U, U->ctx->type_vars, ivar);
     *ivar->data.type = *type;
     return 0;
 }
@@ -259,7 +274,7 @@ static int unify_var_type(struct Unifier *U, InferenceVar *ivar, IrType *type)
 static int unify_var_const(struct Unifier *U, InferenceVar *ivar, IrConst *konst)
 {
     check_const_occurs(U, ivar, konst);
-    record_set_data(U, U->ctx->const_vars, ivar);
+    record_set_const(U, U->ctx->const_vars, ivar);
     *ivar->data.konst = *konst;
     return 0;
 }

@@ -447,7 +447,7 @@ static struct MirPlace new_const_str(struct FunctionState *fs, struct SourceSpan
     return new_const_value(fs, span, (union IrValue){.s = s}, pawIr_new_string(fs->C));
 }
 
-static struct MirPlace new_local(struct FunctionState *fs, Str const *name, IrType *type)
+static struct MirPlace new_local(struct FunctionState *fs, Str const *name, IrType *type, struct SourceSpan span)
 {
     paw_assert(type != NULL);
     int const id = fs->mir->registers->count;
@@ -457,10 +457,12 @@ static struct MirPlace new_local(struct FunctionState *fs, Str const *name, IrTy
             .is_captured = PAW_FALSE,
             .type = type,
             .name = name,
+            .span = span,
         });
     return (struct MirPlace){
         .kind = MIR_PLACE_REGISTER,
         .type = type,
+        .span = span,
         .r.value = id,
     };
 }
@@ -692,7 +694,7 @@ static struct LocalVar *set_local(struct FunctionState *fs, struct HirIdent iden
 // TODO: accept extra args for flags stored in MirPlace and return LocalVar by value
 static struct LocalVar *alloc_local(struct FunctionState *fs, struct HirIdent ident, NodeId id, IrType *type)
 {
-    struct MirPlace const output = new_local(fs, ident.name, type);
+    struct MirPlace const output = new_local(fs, ident.name, type, ident.span);
     return set_local(fs, ident, id, output);
 }
 
@@ -1134,6 +1136,7 @@ static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr 
                 .kind = MIR_PLACE_REGISTER,
                 .r = get_local(fs, last.target.id),
                 .type = get_type(L, last.target.id),
+                .span = e->span,
             };
         }
         case HIR_PATH_UPVALUE: {
@@ -1142,6 +1145,7 @@ static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr 
                 .kind = MIR_PLACE_UPVALUE,
                 .up = last.target.index,
                 .type = up.type,
+                .span = e->span,
             };
         }
         case HIR_PATH_ASSOC:

@@ -31,13 +31,9 @@ class Fn {
 public:
     using Type = FnType;
 
-    // Constructor for toplevel functions and functions generated
-    // by the compiler
     explicit Fn(Context &X, std::string name,
             llvm::Function::LinkageTypes linkage,
             FnType *type);
-
-    // Constructor for closures
 
     ~Fn() = default;
 
@@ -79,12 +75,6 @@ private:
 
 class Value {
 public:
-    enum Kind {
-        OBJECT,
-        STR,
-        FN,
-    };
-
     using Type = Type;
 
     struct CreationTag { };

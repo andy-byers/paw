@@ -967,8 +967,6 @@ static void test_definite_assignment(void)
 
 int main(void)
 {
-    test_closure_error();
-    return 42;
     test_syntax_error();
     test_underscore();
     test_annotations();

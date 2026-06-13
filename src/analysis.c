@@ -15,6 +15,7 @@
 #include "analysis.h"
 #include "ir_type.h"
 #include "mir.h"
+#include "solve.h"
 #include "unify.h"
 
 #define ANALYSIS_ERROR(V_, Kind_, ...) THROW_ERROR((V_)->C, Kind_, \
@@ -23,6 +24,7 @@
 
 struct Variable {
     IrType *type;
+    struct SourceSpan span;
     struct Variable *parent;
     struct VariableList *subvars;
     Str const *name;
@@ -96,7 +98,7 @@ static IrTypeList *get_subtypes(struct Mir *mir, IrType *type)
     }
 }
 
-static struct Variable *new_variable(struct VariableAnalyzer *V, Str const *name, IrType *type, struct Variable *parent)
+static struct Variable *new_variable(struct VariableAnalyzer *V, Str const *name, struct SourceSpan span, IrType *type, struct Variable *parent)
 {
     struct Variable *var = pawP_alloc(V->mir->pool, NULL, 0, sizeof *var);
     *var = (struct Variable){
@@ -104,6 +106,7 @@ static struct Variable *new_variable(struct VariableAnalyzer *V, Str const *name
         .parent = parent,
         .type = type,
         .name = name,
+        .span = span,
     };
     return var;
 }
@@ -223,18 +226,20 @@ void visualize_blocks(struct VariableAnalyzer const *V)
 
 #endif
 
-static void indicate_variable_use(struct VariableAnalyzer *V, struct Variable const *v)
+static void indicate_variable_use(struct VariableAnalyzer *V, struct Variable const *v, struct SourceSpan span)
 {
     if (states_get(V->current, v->id) != VAR_INIT) {
         enum VariableState const state = states_get(V->current, v->id);
         if (state == VAR_UNINIT) {
             ANALYSIS_ERROR(V, UseBeforeInitialization,
                     .name = v->name,
-                    .span = {0});
+                    .local_span = v->span,
+                    .use_span = span);
         } else {
             ANALYSIS_ERROR(V, UseAfterMove,
                     .name = v->name,
-                    .span = {0});
+                    .local_span = v->span,
+                    .use_span = span);
         }
     }
 }
@@ -253,7 +258,7 @@ static void indicate_variable_move(struct VariableAnalyzer *V, struct Variable c
 static void maybe_indicate_use(struct VariableAnalyzer *V, struct MirPlace p)
 {
     struct Variable *const *pvar = find_variable(V, p);
-    if (pvar != NULL) indicate_variable_use(V, *pvar);
+    if (pvar != NULL) indicate_variable_use(V, *pvar, p.span);
 }
 
 static void maybe_indicate_def(struct VariableAnalyzer *V, struct MirPlace p)
@@ -637,7 +642,7 @@ static void initialize_data_structures(struct VariableAnalyzer *V)
     int index;
     struct MirRegisterData const *pdata;
     K_LIST_ENUMERATE (V->mir->registers, index, pdata) {
-        struct Variable *local = new_variable(V, pdata->name, pdata->type, NULL);
+        struct Variable *local = new_variable(V, pdata->name, pdata->span, pdata->type, NULL);
         VariableList_push(V, V->locals, local);
     }
 
@@ -691,9 +696,6 @@ static void ensure_variable_initialization_before_use(struct Mir *mir)
         visit_block(V, w);
         remove_work_item(V, w);
     }
-if(pawS_eq(mir->name,SCAN_STR(C,"xinsert"))){
-extern volatile int *x;
-}
     determine_cmoves(V);
 
     for (int b = 0; b < mir->blocks->count; ++b)

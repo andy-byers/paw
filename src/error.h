@@ -685,12 +685,14 @@
     ) \
     X(UseBeforeInitialization, ERR_CATEGORY_MIDDLE, \
         Str const *modname; \
-        struct SourceSpan span; \
+        struct SourceSpan local_span; \
+        struct SourceSpan use_span; \
         Str const *name; \
     ) \
     X(UseAfterMove, ERR_CATEGORY_MIDDLE, \
         Str const *modname; \
-        struct SourceSpan span; \
+        struct SourceSpan local_span; \
+        struct SourceSpan use_span; \
         Str const *name; \
     ) \
     X(FalseConstObligation, ERR_CATEGORY_MIDDLE, \

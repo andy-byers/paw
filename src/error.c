@@ -1207,14 +1207,14 @@ static void FormatNonexhaustivePatternMatchError(paw_Env *P, struct Nonexhaustiv
 
 static void FormatUseBeforeInitializationError(paw_Env *P, struct UseBeforeInitializationError const *error, Buffer *buffer)
 {
-    add_error_header(P, error->modname, error->span, buffer);
+    add_error_header(P, error->modname, error->use_span, buffer);
     pawL_add_fstring(P, buffer, "use of variable `%s` before initialization",
             error->name->text);
 }
 
 static void FormatUseAfterMoveError(paw_Env *P, struct UseAfterMoveError const *error, Buffer *buffer)
 {
-    add_error_header(P, error->modname, error->span, buffer);
+    add_error_header(P, error->modname, error->use_span, buffer);
     pawL_add_fstring(P, buffer, "use of variable `%s` after it was moved",
             error->name->text);
 }

@@ -3,22 +3,23 @@
 #[test]
 pub fn test() {
     let counts = (0, 0, 0);
+    let pcounts = &counts;
     let check2 = |a: int, b: int| {
-        assert(counts.0 == a);
-        assert(counts.1 == b);
-        counts.0 = 0;
-        counts.1 = 0;
+        assert(pcounts.0 == a);
+        assert(pcounts.1 == b);
+        pcounts.0 = 0;
+        pcounts.1 = 0;
     };
     let A = |value: int| -> bool {
-        counts.0 = counts.0 + 1;
+        pcounts.0 = pcounts.0 + 1;
         return value as bool;
     };
     let B = |value: int| -> bool {
-        counts.1 = counts.1 + 1;
+        pcounts.1 = pcounts.1 + 1;
         return value as bool;
     };
     let C = |value: int| -> bool {
-        counts.2 = counts.2 + 1;
+        pcounts.2 = pcounts.2 + 1;
         return value as bool;
     };
 
@@ -48,8 +49,8 @@ pub fn test() {
 
     let check3 = |a: int, b: int, c: int| {
         check2(a, b);
-        assert(counts.2 == c);
-        counts.2 = 0;
+        assert(pcounts.2 == c);
+        pcounts.2 = 0;
     };
 
     let and_or = |a: int, b: int, c: int| -> bool {

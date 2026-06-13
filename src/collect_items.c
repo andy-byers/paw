@@ -180,7 +180,7 @@ static void set_def_type(struct ItemCollector *X, DeclId did, IrType *type)
 {
     DefTypeMap_insert(X->C, X->C->def_types, did, type);
 }
-
+#include"stdio.h"
 static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, struct HirDeclList *generics)
 {
     IrGenericDefs *result = IrGenericDefs_new(X->C);
@@ -418,6 +418,9 @@ static void collect_bound_traits(struct ItemCollector *X, struct HirGenericDecl 
                     });
         }
         pawIr_set_trait_bounds(X->C, d->did, bounds);
+
+        struct IrGenericDef *def = pawIr_get_generic_def(X->C, d->did);
+        if (def != NULL) def->type.bounds = bounds;
     }
 }
 
@@ -623,17 +626,6 @@ static void collect_nominal_types(struct ItemCollector *X, struct HirModule m)
             collect_adt(X, HirGetAdtDecl(*p));
         } else if (HirIsTraitDecl(*p)) {
             collect_trait(X, HirGetTraitDecl(*p));
-        }
-    }
-}
-
-static void collect_nominal_types2(struct ItemCollector *X, struct HirModule m)
-{
-    K_LIST_XFOREACH (m.items, struct HirDecl *const, p) {
-        if (HirIsAdtDecl(*p)) {
-            collect_adt_def(X, HirGetAdtDecl(*p));
-        } else if (HirIsTraitDecl(*p)) {
-            collect_trait_def(X, HirGetTraitDecl(*p));
         }
     }
 }

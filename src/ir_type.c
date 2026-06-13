@@ -1367,15 +1367,27 @@ paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type)
     }
 
     IrSolver *S = pawIr_push_solver(C);
+    if (IrIsGeneric(type)) {
+        // Add predicates on the generic (from the binder that declares this generic type arg).
+        // This is necessary because this function may be called from contexts that no longer
+        // have knowledge about the predicates involving this generic.
+        IrTraitList const *bounds = pawIr_get_trait_bounds(C, IR_TYPE_DID(type));
+        if (bounds != NULL) {
+            K_LIST_XFOREACH (bounds, IrTrait *const, t)
+                pawIr_solver_add_predicate(S, type, *t, (struct IrObligationCause){0});
+        }
+    }
     int const position = pawU_current_position(C->U);
     DeclId const copy_did = C->core_traits[CORE_TRAIT_COPY];
     IrGenericArgs *copy_args = IrGenericArgs_new(C);
     IrGenericArgs_push(C, copy_args, IrGenericArg_from_type(type));
     IrTrait *copy = pawIr_solver_instantiate_trait_with(S, copy_did, copy_args);
-    paw_Bool const result = pawIr_type_implements_trait(S, type, copy);
+    pawIr_solver_add_impl_trait_obligation(S, type, copy,
+            (struct IrObligationCause){0});
+    struct IrSolverResult const r = pawIr_solver_solve(S);
     pawU_undo_unifications(C->U, position);
     pawIr_pop_solver(C);
-    return result;
+    return r.status == IR_SOLVER_SOLVED;
 }
 
 IrType *pawIr_materialize_fn(struct Compiler *C, DeclId did, IrGenericArgs *type_args)

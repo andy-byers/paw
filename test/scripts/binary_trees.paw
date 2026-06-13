@@ -51,8 +51,12 @@ pub fn test() {
 }
 
 
-pub fn main(args: [str]) -> int {
-    let N = if #args > 1 {
+use io;
+use os;
+
+pub fn main() -> int {
+    let args = os::args();
+    let N = if args.len() > 1 {
         args[1].parse_int().unwrap()
     } else {
         0
@@ -66,7 +70,7 @@ pub fn main(args: [str]) -> int {
     {
         let stretchdepth = maxdepth + 1;
         let stretchtree = bottom_up_tree(stretchdepth);
-        println("stretch tree of depth \{stretchdepth}\tcheck: \{item_check(stretchtree)}");
+        io::println("stretch tree of depth \{stretchdepth}\tcheck: \{item_check(stretchtree)}");
     }
 
     let longlivedtree = bottom_up_tree(maxdepth);
@@ -78,10 +82,10 @@ pub fn main(args: [str]) -> int {
         for i in 0..iterations {
             check += item_check(bottom_up_tree(depth));
         }
-        println("\{iterations}\t trees of depth \{depth}\tcheck: \{check}");
+        io::println("\{iterations}\t trees of depth \{depth}\tcheck: \{check}");
         depth += 2;
     }
 
-    println("long lived tree of depth \{maxdepth}\tcheck: \{item_check(longlivedtree)}");
+    io::println("long lived tree of depth \{maxdepth}\tcheck: \{item_check(longlivedtree)}");
     0
 }

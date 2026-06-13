@@ -1,61 +1,75 @@
 // inherent_impl.paw
 
-inline struct Single<T> {
+use list::List;
+
+struct Single<T> {
     value: T,
 }
 
-impl<T> Single<T> {
+impl<T: Copy> Copy for Single<T> {}
+impl<T: Copy> Copy for (Single<T>, Single<T>) {}
+
+impl<T: Clone> Clone for Single<T> {
+    fn clone(*self) -> Self {
+        Self{value: self.value.clone()}
+    }
+}
+
+impl<T: Clone> Clone for (Single<T>, Single<T>) {
+    fn clone(*self) -> Self {
+        (self.0.clone(), self.1.clone())
+    }
+}
+
+impl<T: Clone> Single<T> {
     pub fn new(value: T) -> Self {
         Self{value}
     }
 
-    pub fn value(self) -> T {
-        self.value
+    pub fn value(*self) -> *T {
+        &self.value
     }
 }
 
 impl Single<int> {
-    pub fn merge(&self, rhs: Self) {
+    pub fn merge(*self, rhs: Self) {
         self.value += rhs.value;
     }
 }
 
-impl Single<str> {
-    pub fn merge(&self, rhs: Self) {
-        self.value ++= rhs.value;
+impl Single<float> {
+    pub fn merge(*self, rhs: Self) {
+        self.value += rhs.value;
     }
 }
 
-impl Single<[Single<int>]> {
-    pub fn sum(&self) -> int {
-        let total = 0;
-        for x in self.value() {
-            total += x.value();
-        }
-        total
+impl Single<(Single<int>, Single<int>)> {
+    pub fn sum(*self) -> int {
+        *self.value.0.clone().value()
+            + *self.value.1.clone().value()
     }
 }
 
 #[test]
 pub fn test_methods() {
     let t = Single::new(1);
-    assert(t.value() == 1);
+    assert(*t.value() == 1);
     t.merge(Single::new(2));
-    assert(t.value() == 3);
+    assert(*t.value() == 3);
 
-    let t = Single::new("abc");
-    assert(t.value() == "abc");
-    t.merge(Single::new("def"));
-    assert(t.value() == "abcdef");
+    let t = Single::new(1.0);
+    assert(*t.value() == 1.0);
+    t.merge(Single::new(2.0));
+    assert(*t.value() == 3.0);
 
-    let t = Single::new([Single::new(123)]);
+    let t = Single::new((Single::new(123), Single::new(0)));
     assert(t.sum() == 123);
-    t.value().push(Single::new(456));
+    t.value().1 = Single::new(456);
     assert(t.sum() == 579);
 }
 
-fn call_methods<T>(t: T) -> T {
-    Single::new(t).value()
+fn call_methods<T: Clone>(t: T) -> T {
+    Single::new(t).value().clone()
 }
 
 #[test]
@@ -64,41 +78,41 @@ pub fn test_nested_methods() {
     assert(call_methods("two") == "two");
 }
 
-inline struct Pair<X, Y> {
+struct Pair<X, Y> {
     first: X,
     second: Y,
 }
 
-impl<A, B> Pair<A, B> {
+impl<A: Copy, B: Copy> Pair<A, B> {
     pub fn new(first: A, second: B) -> Self {
         Self{first, second}
     }
 
-    pub fn first(self) -> A {
+    pub fn first(*self) -> A {
         self.first
     }
 
-    pub fn second(self) -> B {
+    pub fn second(*self) -> B {
         self.second
     }
 }
 
 // NOTE: order of type arguments is reversed
-impl<X, Y> Pair<Y, X> {
-    pub fn first2(&self) -> Y {
+impl<X: Copy, Y: Copy> Pair<Y, X> {
+    pub fn first2(*self) -> Y {
         self.first
     }
 
-    pub fn second2(&self) -> X {
+    pub fn second2(*self) -> X {
         self.second
     }
 }
 
-impl<T> Pair<T, T> {
-    pub fn swap_fields(&self) {
-        let Pair{first, second} = self;
-        self.first = second;
-        self.second = first;
+impl<T: Copy> Pair<T, T> {
+    pub fn swap_fields(*self) {
+        let temp = self.first;
+        self.first = self.second;
+        self.second = temp;
     }
 }
 
@@ -116,7 +130,7 @@ pub fn test_methods2() {
     assert(p.second() == 1);
 }
 
-fn call_methods2<X, Y>(x: X, y: Y) -> (X, Y) {
+fn call_methods2<X: Copy, Y: Copy>(x: X, y: Y) -> (X, Y) {
     let p = Pair::new(x, y);
     (p.first(), p.second())
 }

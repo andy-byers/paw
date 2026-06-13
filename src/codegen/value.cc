@@ -122,7 +122,13 @@ std::string Fn::get_name() const
 
 llvm::Value *Fn::get_env() const
 {
-    return get_fn()->getArg(env_pointer_offset(get_type()));
+    auto *B = X->get_builder();
+    auto *fn_type = get_type();
+    auto *arg_type = fn_type->get_env_type();
+    llvm::Value *arg = get_fn()->getArg(env_pointer_offset(fn_type));
+    return arg_type->get_abi_class() == ABIClass::LARGE_STRUCT
+        ? B->CreateLoad(*arg_type, arg)
+        : arg;
 }
 
 llvm::Value *Fn::get_arg(unsigned index) const
@@ -130,8 +136,7 @@ llvm::Value *Fn::get_arg(unsigned index) const
     auto *B = X->get_builder();
     auto *fn_type = get_type();
     auto *arg_type = fn_type->get_param_type(index);
-    auto const offset = user_args_offset(fn_type);
-    llvm::Value *arg = get_fn()->getArg(offset + index);
+    llvm::Value *arg = get_fn()->getArg(user_args_offset(fn_type) + index);
     return arg_type->get_abi_class() == ABIClass::LARGE_STRUCT
         ? B->CreateLoad(*arg_type, arg)
         : arg;

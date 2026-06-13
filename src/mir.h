@@ -768,6 +768,7 @@ struct MirConstantData {
 struct MirRegisterData {
     paw_Bool is_captured : 1;
     paw_Bool is_nontrivial : 1;
+    struct SourceSpan span;
     struct IrType *type;
     Str const *name;
 };

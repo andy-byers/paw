@@ -682,6 +682,17 @@ void pawIr_solver_add_predicates_from(IrSolver *S, DeclId did, IrGenericArgs *ar
     add_predicates(S, did, subst, cache, 0);
 }
 
+void pawIr_solver_add_predicates_from_type(IrSolver *S, IrType *type)
+{
+    if (IrIsAdt(type) || IrIsSignature(type))
+        pawIr_solver_add_predicates_from(S, IR_TYPE_DID(type), IR_GENERIC_ARGS(type));
+}
+
+void pawIr_solver_add_predicates_from_trait(IrSolver *S, IrTrait *trait)
+{
+    pawIr_solver_add_predicates_from(S, trait->did, trait->args);
+}
+
 Str const *pawIr_print_obligation_(struct Compiler *C, struct IrObligation obligation)
 {
     Buffer buf;

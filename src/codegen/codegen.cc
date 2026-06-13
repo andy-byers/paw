@@ -726,6 +726,8 @@ public:
         State state(X, fn);
         auto *irfn = IrGetFnPtr(IR_SIGNATURE_FN(C, mir->type));
         auto *irtype = ir_deref(IrTypeList_first(irfn->params));
+        // The type may not have an implementation of Drop since there is no `Drop` bound on
+        // type `T` in the Paw signature.
         if (pawIr_needs_drop(C, irtype)) {
             auto *irdrop = pawIr_get_custom_drop_type(C, irtype);
             B->CreateCall(get_fn(irdrop)->get_fn(), state.get_arg(0));
@@ -822,9 +824,6 @@ public:
 
     void define_fn(Mir const *mir)
     {
-        if(pawS_eq(mir->name,SCAN_STR(C,"maybe_times_2"))){
-        puts("hiii");
-        }
         // TODO: should be able to just call get_fn since closures have unique types
         auto *fn = get_fn(mir->type);
         if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {

@@ -239,6 +239,7 @@ static struct MirPlace add_local(struct Mir *mir, char const *name, IrType *type
             .is_captured = PAW_FALSE,
             .type = type,
             .name = SCAN_STR(mir->C, name),
+            .span = {0}, // TODO: span ref kind for "generated from drop"
             });
     return pawMir_get_register(mir, MIR_REG(num_locals));
 }

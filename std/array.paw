@@ -15,6 +15,12 @@ pub fn uninit<const N: int, T>() -> [N]T;
 pub fn zeros<const N: int, T>() -> [N]T;
 
 
+impl<const N: int, T> [N]T {
+    pub fn len(*self) -> int {
+        N
+    }
+}
+
 impl<const N: int, T> AsPtr<T> for [N]T {
     fn as_ptr(*self) -> *T {
         &self[0]

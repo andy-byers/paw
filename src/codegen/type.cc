@@ -184,13 +184,12 @@ bool PrimitiveType::equals(Type const *rhs) const
 }
 
 
-// WARNING: The ABIClass must be updated if the layout of this type changes.
-// Currently, "FnType" is a structure containing 2 pointer-sized members,
-// making it a ABIClass::BINARY_STRUCT.
 FnType::FnType(Context &X, Type *return_type,
         llvm::ArrayRef<Type *> param_types,
         Type *env_type, bool never_returns)
-    : Type(X, DEFERRED_INIT, Kind::FN, ABIClass::SCALAR)
+    : Type(X, DEFERRED_INIT, Kind::FN, env_type != nullptr
+            ? env_type->get_abi_class()
+            : ABIClass::SCALAR)
     , return_kind_(ReturnKind::NORMAL)
     , param_types_(param_types)
     , return_type_(return_type)
@@ -265,7 +264,8 @@ static llvm::Type *object_to_abi(Context &X, llvm::Type *ty, ABIClass abi_class)
 
 llvm::Type *FnType::get_abi_ty() const
 {
-    return X->get_ptr_ty();
+    return env_type_ != NULL
+        ? *env_type_ : X->get_ptr_ty();
 }
 
 unsigned long FnType::hash() const
