@@ -769,8 +769,8 @@ static struct AstPat *deref_pat(struct Lex *lex)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
     skip(lex); // "*" token
-    struct AstPat *pointee = pattern(lex);
-    return NEW_NODE(lex, ptr_pat, span_from(lex, start), next_id(lex), pointee);
+    struct AstPat *target = pattern(lex);
+    return NEW_NODE(lex, deref_pat, span_from(lex, start), next_id(lex), target);
 }
 
 static struct AstPat *tuple_pat(struct Lex *lex)

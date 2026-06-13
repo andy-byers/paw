@@ -321,8 +321,8 @@ static void print_col(struct Compiler*C,struct Column *col)
 static int auto_deref_pat(struct HirPat **ppat)
 {
     int deref = 0;
-    for (; HirIsPtrPat(*ppat); ++deref)
-        *ppat = HirGetPtrPat(*ppat)->pointee;
+    for (; HirIsDerefPat(*ppat); ++deref)
+        *ppat = HirGetDerefPat(*ppat)->pointee;
     return deref;
 }
 
@@ -332,14 +332,10 @@ static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
     struct ColumnList *columns = ColumnList_new(U);
     struct Column *pcol;
     K_LIST_FOREACH (row->columns, pcol) {
-        if (HirIsPtrPat(pcol->pat)) {
+        if (HirIsDerefPat(pcol->pat)) {
             struct HirPat *pointee = pcol->pat;
             pcol->var.deref = auto_deref_pat(&pointee);
             if (HirIsBindingPat(pointee)) {
-                IrType *pointee_type = GET_NODE_TYPE(U->C, pointee);
-                if (!pawIr_is_copyable(U->C, pointee_type))
-                    pawErr_generic_error(ENV(U), U->modname, pointee->hdr.span,
-                            "cannot move out of pointer");
                 struct HirBindingPat const *p = HirGetBindingPat(pointee);
                 BindingList_push(U->C, row->body.bindings, (struct Binding){
                     .name = p->ident.name,

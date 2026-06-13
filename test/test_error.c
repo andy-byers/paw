@@ -873,6 +873,27 @@ static void test_impl_error(void)
             "struct Struct<T>; pub trait Trait {} impl Trait for Struct {}", "");
 }
 
+static void test_deref_pat(void)
+{
+    test_compiler_status(kErrMoveOutOfPointer, "bind_noncopyable_type",
+            "struct Resource;",
+            "match &Resource {*binding => {}}");
+
+    test_compiler_status(kErrMoveOutOfPointer, "bind_noncopyable_type_in_struct",
+            "struct Resource; struct Container {pub r: Resource}",
+            "let c = Container{r: Resource}; match &c {*Container{r} => {}}");
+
+    // TODO: make Copy::copy call clone under-the-hood, add Self: Clone bound on Copy
+//    test_compiler_status(kErrNone, "deref_noncopyable_type",
+//            "struct Resource; struct Container {pub r: Resource}"
+//            "impl Copy for Resource {}"
+//            "impl Clone for Resource {"
+//            "    fn clone(*self) -> Self {Resource}"
+//            "}",
+//            "let c = Container{r: Resource};"
+//            "match &c {*Container{r} => {}}");
+}
+
 static void test_definite_assignment(void)
 {
 #define TESTCASE(Name_, Status_, Code_) \
@@ -979,6 +1000,7 @@ int main(void)
     test_tuple_error();
     test_struct_error();
     test_impl_error();
+    test_deref_pat();
 //    test_list_error();
 //    test_map_error();
     test_range_error();

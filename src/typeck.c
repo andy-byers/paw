@@ -53,7 +53,7 @@ struct ResultState {
 struct PatState {
     struct PatState *outer;
     StringMap *bound;
-    enum HirPatKind kind;
+    struct HirPat *pat;
 };
 
 struct MatchState {
@@ -65,6 +65,7 @@ struct MatchState {
 struct FnState {
     struct FnState *outer;
     struct UpvalueList *upvalues;
+    struct CopyablePats *copyable_pats;
 };
 
 struct Type3 {
@@ -126,10 +127,12 @@ static paw_Bool equals_core_trait(struct TypeChecker *T, IrTrait *trait, enum Co
     return trait->did.value == T->C->core_traits[kind].value;
 }
 
+DEFINE_MAP(struct TypeChecker, CopyablePats, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, void *)
 DEFINE_MAP(struct TypeChecker, FieldMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, int)
 DEFINE_MAP(struct TypeChecker, PatFieldMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, struct HirPat *)
-DEFINE_MAP_ITERATOR(FieldMap, struct HirIdent, int)
 DEFINE_MAP_ITERATOR(PatFieldMap, struct HirIdent, struct HirPat *)
+DEFINE_MAP_ITERATOR(FieldMap, struct HirIdent, int)
+DEFINE_MAP_ITERATOR(CopyablePats, NodeId, void *)
 
 static void check_stmt(struct TypeChecker *, struct HirStmt *);
 static void check_decl(struct TypeChecker *, struct HirDecl *);
@@ -434,6 +437,7 @@ static void enter_fn(struct TypeChecker *T, struct FnState *fs, DeclId did)
     UpvalueList *const *pupvalues = UpvalueTable_get(T->C, T->C->upvtab, did);
     *fs = (struct FnState){
         .upvalues = pupvalues != NULL ? *pupvalues : NULL,
+        .copyable_pats = CopyablePats_new(T),
         .outer = T->fs,
     };
     T->fs = fs;
@@ -441,6 +445,19 @@ static void enter_fn(struct TypeChecker *T, struct FnState *fs, DeclId did)
 
 static void leave_fn(struct TypeChecker *T)
 {
+    CopyablePatsIterator iter;
+    CopyablePatsIterator_init(T->fs->copyable_pats, &iter);
+    while (CopyablePatsIterator_is_valid(&iter)) {
+        NodeId const id = CopyablePatsIterator_key(&iter);
+        struct HirPat const *pat = pawHir_get_node(T->hir, id);
+        IrType *type = GET_TYPE(T, id);
+        if (!pawIr_is_copyable(T->C, type))
+            TYPECK_ERROR(T, MoveOutOfPointer,
+                    .type = pawIr_print_type_v2(T->C, type),
+                    .span = NODE_SPAN(pat));
+        CopyablePatsIterator_next(&iter);
+    }
+
     T->fs = T->fs->outer;
 }
 
@@ -495,12 +512,12 @@ static void leave_pat(struct TypeChecker *T)
     T->ms->ps = ps->outer;
 }
 
-static void enter_pat(struct TypeChecker *T, struct PatState *ps, enum HirPatKind kind)
+static void enter_pat(struct TypeChecker *T, struct PatState *ps, struct HirPat *pat)
 {
     *ps = (struct PatState){
         .bound = StringMap_new_from(T->C, T->pool),
         .outer = T->ms->ps,
-        .kind = kind,
+        .pat = pat,
     };
     T->ms->ps = ps;
 }
@@ -1858,7 +1875,7 @@ static void account_for_binding(struct TypeChecker *T, struct HirIdent ident)
 {
     struct PatState const *ps = T->ms->ps;
     while (ps->outer != NULL) {
-        if (ps->outer->kind == kHirOrPat)
+        if (HirIsOrPat(ps->outer->pat))
             break;
         ps = ps->outer;
     }
@@ -1946,14 +1963,12 @@ static IrType *CheckOrPat(struct TypeChecker *T, struct HirOrPat *p)
     return type;
 }
 
-static IrType *CheckRefPat(struct TypeChecker *T, struct HirRefPat *p)
+static IrType *CheckDerefPat(struct TypeChecker *T, struct HirDerefPat *p)
 {
-    return check_pat(T, p->referent);
-}
-
-static IrType *CheckPtrPat(struct TypeChecker *T, struct HirPtrPat *p)
-{
-    return new_ptr(T, check_pat(T, p->pointee));
+    // bindings inside `p->pointee` are not allowed unless the bound values are copyable
+    // (Paw does not allow moving a value out from behind a pointer)
+    IrType *pointee = check_pat(T, p->pointee);
+    return new_ptr(T, pointee);
 }
 
 static IrType *CheckFieldPat(struct TypeChecker *T, struct HirFieldPat *p)
@@ -2053,8 +2068,21 @@ static IrType *CheckTuplePat(struct TypeChecker *T, struct HirTuplePat *p)
     return pawIr_new_tuple(T->C, elems);
 }
 
+static NodeId get_deref_pat_target(struct TypeChecker *T)
+{
+    for (struct PatState *ps = T->ms->ps; ps != NULL; ps = ps->outer) {
+        if (HirIsDerefPat(ps->pat))
+            return ps->pat->hdr.id;
+    }
+    return INVALID_NODE_ID;
+}
+
 static IrType *CheckBindingPat(struct TypeChecker *T, struct HirBindingPat *p)
 {
+    NodeId const deref_target = get_deref_pat_target(T);
+    if (NODE_ID_EXISTS(deref_target))
+        NodeMap_insert(T->C, T->fs->copyable_pats, p->id, INVALID_NODE_ID);
+
     // binding type is determined using unification
     IrType *type = new_unknown(T, p->span);
 
@@ -2103,7 +2131,7 @@ static void check_decl(struct TypeChecker *T, struct HirDecl *decl)
 static IrType *check_pat(struct TypeChecker *T, struct HirPat *pat)
 {
     struct PatState ps;
-    enter_pat(T, &ps, pat->hdr.kind);
+    enter_pat(T, &ps, pat);
 
     IrType *type;
     switch (HIR_KINDOF(pat)) {

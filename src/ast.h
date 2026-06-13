@@ -74,7 +74,7 @@
 
 #define AST_PAT_LIST(X) \
     X(OrPat) \
-    X(PtrPat) \
+    X(DerefPat) \
     X(RefPat) \
     X(FieldPat) \
     X(StructPat) \
@@ -1445,7 +1445,7 @@ struct AstRefPat {
     struct AstPat *referent;
 };
 
-struct AstPtrPat {
+struct AstDerefPat {
     AST_PAT_HEADER;
     struct AstPat *pointee;
 };
@@ -1542,13 +1542,13 @@ inline static struct AstPat *pawAst_new_ref_pat(struct Ast *ast, struct SourceSp
     return p;
 }
 
-inline static struct AstPat *pawAst_new_ptr_pat(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPat *pointee)
+inline static struct AstPat *pawAst_new_deref_pat(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPat *pointee)
 {
     struct AstPat *p = pawAst_new_pat(ast);
-    p->PtrPat_ = (struct AstPtrPat){
+    p->DerefPat_ = (struct AstDerefPat){
         .id = id,
         .span = span,
-        .kind = kAstPtrPat,
+        .kind = kAstDerefPat,
         .pointee = pointee,
     };
     pawAst_set_node(ast, id, p);

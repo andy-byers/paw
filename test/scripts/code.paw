@@ -756,40 +756,18 @@
 //}
 
 use io;
-use fmt;
 
-pub fn bkpt(_: *(int, int, int)) {}
-
-#[test]
-pub fn env_with_small_field() {
-    let u = 'u';
-    let f = || u;
-    assert(f() == 'u');
+struct Resource;
+struct Container {
+    pub r: Resource,
+}
+struct CopyableContainer {
+    pub r: Resource,
 }
 
 #[test]
-pub fn env_with_single_field() {
-    let u = 10;
-    let f = || u;
-    assert(f() == 10);
-}
-
-#[test]
-pub fn env_with_two_fields() {
-    let u1 = 10;
-    let u2 = 20;
-    let f = || u1 + u2;
-    assert(f() == 30);
-}
-
-#[test]
-pub fn env_with_many_fields() {
-    let u1 = 1;
-    let u2 = 2;
-    let u3 = 3;
-    let u4 = 4;
-    let u5 = 5;
-
-    let f = || u1 + u2 + u3 + u4 + u5;
-    assert(f() == 15);
+pub fn test() {
+    let c = Container{r: Resource};
+    let *Container{r} = &c;
+    let rr = r;
 }

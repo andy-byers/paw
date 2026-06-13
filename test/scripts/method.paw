@@ -91,7 +91,7 @@ enum PolyEnum<A, B> {
     B(B),
 }
 
-impl<A, B> PolyEnum<A, B> {
+impl<A: Copy, B: Copy> PolyEnum<A, B> {
     pub fn new_a(value: A) -> Self {
         Self::A(value)
     }
@@ -128,7 +128,7 @@ pub fn test_poly_enum_methods() {
     assert(!x.get_a(false).unwrap_err());
 }
 
-fn call_poly_enum_methods<A, B>(a: A, b: B) -> A {
+fn call_poly_enum_methods<A: Copy, B: Copy>(a: A, b: B) -> A {
     let x = PolyEnum::new_a(a);
     x.get_a(b).unwrap()
 }

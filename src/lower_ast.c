@@ -1107,10 +1107,10 @@ static struct HirPat *LowerRefPat(struct LowerAst *L, struct AstRefPat *p)
     return referent;
 }
 
-static struct HirPat *LowerPtrPat(struct LowerAst *L, struct AstPtrPat *p)
+static struct HirPat *LowerDerefPat(struct LowerAst *L, struct AstDerefPat *p)
 {
     struct HirPat *pointee = lower_pat(L, p->pointee);
-    return NEW_NODE(L, ptr_pat, p->span, p->id, pointee);
+    return NEW_NODE(L, deref_pat, p->span, p->id, pointee);
 }
 
 static struct HirPat *LowerFieldPat(struct LowerAst *L, struct AstFieldPat *p)

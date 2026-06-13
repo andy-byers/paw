@@ -456,7 +456,7 @@ static void AcceptRefPat(struct AstVisitor *V, struct AstRefPat *e)
     AcceptPat(V, e->referent);
 }
 
-static void AcceptPtrPat(struct AstVisitor *V, struct AstPtrPat *e)
+static void AcceptDerefPat(struct AstVisitor *V, struct AstDerefPat *e)
 {
     AcceptPat(V, e->pointee);
 }

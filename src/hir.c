@@ -439,12 +439,7 @@ static void AcceptOrPat(struct HirVisitor *V, struct HirOrPat *e)
     accept_pat_list(V, e->pats);
 }
 
-static void AcceptRefPat(struct HirVisitor *V, struct HirRefPat *e)
-{
-    AcceptPat(V, e->referent);
-}
-
-static void AcceptPtrPat(struct HirVisitor *V, struct HirPtrPat *e)
+static void AcceptDerefPat(struct HirVisitor *V, struct HirDerefPat *e)
 {
     AcceptPat(V, e->pointee);
 }
@@ -1096,16 +1091,10 @@ static struct HirPat *FoldOrPat(struct HirFolder *F, struct HirOrPat *p)
     return pawHir_new_or_pat(F->hir, p->span, next_node_id(F), pats);
 }
 
-static struct HirPat *FoldRefPat(struct HirFolder *F, struct HirRefPat *p)
-{
-    struct HirPat *referent = F->FoldPat(F, p->referent);
-    return pawHir_new_ref_pat(F->hir, p->span, next_node_id(F), referent);
-}
-
-static struct HirPat *FoldPtrPat(struct HirFolder *F, struct HirPtrPat *p)
+static struct HirPat *FoldDerefPat(struct HirFolder *F, struct HirDerefPat *p)
 {
     struct HirPat *pointee = F->FoldPat(F, p->pointee);
-    return pawHir_new_ptr_pat(F->hir, p->span, next_node_id(F), pointee);
+    return pawHir_new_deref_pat(F->hir, p->span, next_node_id(F), pointee);
 }
 
 static struct HirPat *FoldFieldPat(struct HirFolder *F, struct HirFieldPat *p)
@@ -1512,14 +1501,8 @@ static void dump_pat(struct Printer *P, struct HirPat *pat)
             }
             break;
         }
-        case kHirRefPat: {
-            struct HirRefPat *p = HirGetRefPat(pat);
-            DUMP_CSTR(P, "&");
-            dump_pat(P, p->referent);
-            break;
-        }
-        case kHirPtrPat: {
-            struct HirPtrPat *p = HirGetPtrPat(pat);
+        case kHirDerefPat: {
+            struct HirDerefPat *p = HirGetDerefPat(pat);
             DUMP_CSTR(P, "*");
             dump_pat(P, p->pointee);
             break;

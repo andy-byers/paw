@@ -62,8 +62,7 @@
 
 #define HIR_PAT_LIST(X) \
     X(OrPat) \
-    X(RefPat) \
-    X(PtrPat) \
+    X(DerefPat) \
     X(FieldPat) \
     X(StructPat) \
     X(VariantPat) \
@@ -1426,12 +1425,7 @@ struct HirOrPat {
     struct HirPatList *pats;
 };
 
-struct HirRefPat {
-    HIR_PAT_HEADER;
-    struct HirPat *referent;
-};
-
-struct HirPtrPat {
+struct HirDerefPat {
     HIR_PAT_HEADER;
     struct HirPat *pointee;
 };
@@ -1514,26 +1508,13 @@ static struct HirPat *pawHir_new_or_pat(struct Hir *hir, struct SourceSpan span,
     return p;
 }
 
-static struct HirPat *pawHir_new_ref_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPat *referent)
+static struct HirPat *pawHir_new_deref_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPat *pointee)
 {
     struct HirPat *p = pawHir_new_pat(hir);
-    p->RefPat_ = (struct HirRefPat){
+    p->DerefPat_ = (struct HirDerefPat){
         .id = id,
         .span = span,
-        .kind = kHirRefPat,
-        .referent = referent,
-    };
-    pawHir_register_node(hir, id, p);
-    return p;
-}
-
-static struct HirPat *pawHir_new_ptr_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPat *pointee)
-{
-    struct HirPat *p = pawHir_new_pat(hir);
-    p->PtrPat_ = (struct HirPtrPat){
-        .id = id,
-        .span = span,
-        .kind = kHirPtrPat,
+        .kind = kHirDerefPat,
         .pointee = pointee,
     };
     pawHir_register_node(hir, id, p);
