@@ -241,6 +241,9 @@ void pawIr_solver_add_obligations_from_type(IrSolver *S, IrType *type)
     if (IrIsAdt(type)) {
         struct IrAdt const *adt = IrGetAdt(type);
         pawIr_solver_add_obligations_from(S, adt->did, adt->args);
+    } else if (IrIsSignature(type)) {
+        struct IrSignature const *fn = IrGetSignature(type);
+        pawIr_solver_add_obligations_from(S, fn->did, fn->args);
     }
 }
 

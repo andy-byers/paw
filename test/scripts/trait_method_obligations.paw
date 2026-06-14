@@ -1,0 +1,18 @@
+// trait_method_obligations.paw
+
+struct Struct<T>;
+
+pub trait Constraint {
+    type Output;
+    fn get(*self) -> Self::Output;
+}
+
+pub trait Trait {
+    type Target;
+    fn method<Y: Constraint<Output = Self::Target>>(*self, y: Y);
+}
+
+impl<X> Trait for Struct<X> {
+    type Target = int;
+    fn method<Y: Constraint<Output = int>>(*self, y: Y) {}
+}

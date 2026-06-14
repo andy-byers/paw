@@ -222,6 +222,7 @@ static IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
             ? lower_generic_args(L, segment.args) : NULL;
         return lower_type_alias(L, segment, base_decl, args);
     }
+
     IrType *type = pawIr_get_type(L->C, segment.target.id);
     if (type == NULL)
         LOWERING_ERROR(L, UnexpectedTrait,

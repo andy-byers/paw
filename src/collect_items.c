@@ -44,6 +44,7 @@ struct ItemCollector {
     struct HirModule const *pm;
     struct Compiler *C;
     struct Pool *pool;
+    struct GenericBinderMap *binders;
     TypeCollection *cache;
     IrGenericArgs *binder;
     IrType *ctx;
@@ -51,6 +52,8 @@ struct ItemCollector {
     paw_Env *P;
     paw_Bool in_trait_decl;
 };
+
+DEFINE_MAP(struct ItemCollector, GenericBinderMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrGenericDefs *)
 
 static enum BuiltinKind builtin_kind(struct ItemCollector *X, IrType *type)
 {
@@ -85,10 +88,10 @@ static Str const *print_trait(struct ItemCollector *X, IrTrait *trait)
     return pawIr_print_trait_v2(X->C, trait);
 }
 
-static void add_predicates_from(struct ItemCollector *X, DeclId did)
+static void add_predicates_from(struct ItemCollector *X, IrSolver *S, DeclId did)
 {
     IrGenericArgs *params = pawIr_get_generic_args(X->C, did);
-    pawIr_solver_add_predicates_from(X->C->S, did, params);
+    pawIr_solver_add_predicates_from(S, did, params);
 }
 
 static DeclId resolve_trait_segment(struct ItemCollector *X, struct HirSegment s)
@@ -180,8 +183,8 @@ static void set_def_type(struct ItemCollector *X, DeclId did, IrType *type)
 {
     DefTypeMap_insert(X->C, X->C->def_types, did, type);
 }
-#include"stdio.h"
-static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, struct HirDeclList *generics)
+
+static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, DeclId did, struct HirDeclList *generics)
 {
     IrGenericDefs *result = IrGenericDefs_new(X->C);
     if (generics != NULL) {
@@ -207,7 +210,13 @@ static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, struct HirDe
             SET_TYPE(X, d->id, type);
         }
     }
+    GenericBinderMap_insert_unique(X, X->binders, did, result);
     return result;
+}
+
+static IrGenericDefs *get_generic_defs(struct ItemCollector *X, DeclId did)
+{
+    return *GenericBinderMap_get(X, X->binders, did);
 }
 
 static struct IrFieldDefs *collect_field_defs(struct ItemCollector *X, struct HirDeclList *fields)
@@ -529,7 +538,7 @@ static void collect_adt_def(struct ItemCollector *X, struct HirAdtDecl const *d)
 {
     IrType *type = pawIr_get_def_type(X->C, d->did);
     if (IrIsAdt(type)) {
-        IrGenericDefs *generics = collect_generic_defs(X, d->generics);
+        IrGenericDefs *generics = collect_generic_defs(X, d->did, d->generics);
         struct IrAdtDef *r = pawIr_new_adt_def(X->C, d->did, d->ident.name,
                 generics, NULL, d->is_pub, d->is_struct);
         AdtDefMap_insert(X->C, X->C->adt_defs, d->did, r);
@@ -539,7 +548,7 @@ static void collect_adt_def(struct ItemCollector *X, struct HirAdtDecl const *d)
 static void collect_fn_def(struct ItemCollector *X, struct HirFnDecl const *d)
 {
     collect_generic_args(X, d->did, d->generics);
-    IrGenericDefs *generics = collect_generic_defs(X, d->generics);
+    IrGenericDefs *generics = get_generic_defs(X, d->did);
     struct IrFnDef *r = pawIr_new_fn_def(X->C, d->did, d->ident.name,
             generics, NULL, NULL, NULL, NO_DECL, d->is_pub);
     FnDefMap_insert(X->C, X->C->fn_defs, d->did, r);
@@ -558,10 +567,13 @@ static void collect_trait_def(struct ItemCollector *X, struct HirTraitDecl const
         IrAssocItems_push(X->C, items, item);
     }
 
-    K_LIST_XFOREACH (d->methods, struct HirDecl *const, p)
-        collect_fn_def(X, HirGetFnDecl(*p));
+    K_LIST_XFOREACH (d->methods, struct HirDecl *const, p) {
+        struct HirFnDecl *fn = HirGetFnDecl(*p);
+        collect_generic_defs(X, fn->did, fn->generics);
+        collect_fn_def(X, fn);
+    }
 
-    IrGenericDefs *generics = collect_generic_defs(X, d->generics);
+    IrGenericDefs *generics = collect_generic_defs(X, d->did, d->generics);
     struct IrTraitDef *r = pawIr_new_trait_def(X->C, d->did,
             d->ident.name, generics, NULL, items, d->is_pub);
     TraitDefMap_insert(X->C, X->C->trait_defs, d->did, r);
@@ -576,7 +588,7 @@ static void record_impl_block(struct ItemCollector *X, IrDefs *impls, DeclId did
 static void collect_impl_def(struct ItemCollector *X, struct HirImplDecl const *d)
 {
     collect_generic_args(X, d->did, d->generics);
-    IrGenericDefs *generics = collect_generic_defs(X, d->generics);
+    IrGenericDefs *generics = get_generic_defs(X, d->did);
 
     IrType *type = collect_type(X, d->type);
     SET_TYPE(X, d->id, type);
@@ -630,6 +642,16 @@ static void collect_nominal_types(struct ItemCollector *X, struct HirModule m)
     }
 }
 
+static void collect_type_defs(struct ItemCollector *X, struct HirDeclList *types)
+{
+    K_LIST_XFOREACH (types, struct HirDecl *const, decl_ptr) {
+        struct HirTypeDecl const *t = HirGetTypeDecl(*decl_ptr);
+        IrType *type = collect_type(X, t->rhs);
+        set_def_type(X, t->did, type);
+        SET_TYPE(X, t->id, type);
+    }
+}
+
 static void collect_generics(struct ItemCollector *X, struct HirModule m)
 {
     K_LIST_XFOREACH (m.items, struct HirDecl *const, p) {
@@ -639,16 +661,22 @@ static void collect_generics(struct ItemCollector *X, struct HirModule m)
             collect_trait_def(X, HirGetTraitDecl(*p));
         } else if (HirIsFnDecl(*p)) {
             struct HirFnDecl const *d = HirGetFnDecl(*p);
-            collect_generic_defs(X, d->generics);
+            collect_generic_defs(X, d->did, d->generics);
         } else if (HirIsTypeDecl(*p)) {
             struct HirTypeDecl const *d = HirGetTypeDecl(*p);
-            collect_generic_defs(X, d->generics);
+            collect_generic_defs(X, d->did, d->generics);
         } else if (HirIsImplDecl(*p)) {
             struct HirImplDecl const *d = HirGetImplDecl(*p);
-            collect_generic_defs(X, d->generics);
+            collect_generic_defs(X, d->did, d->generics);
+            {
+                IrType *type = collect_type(X, d->type);
+                set_def_type(X, d->did, type);
+                SET_TYPE(X, d->id, type);
+            }
+
             K_LIST_XFOREACH (d->methods, struct HirDecl *const, pmethod) {
                 struct HirFnDecl const *method = HirGetFnDecl(*pmethod);
-                collect_generic_defs(X, method->generics);
+                collect_generic_defs(X, method->did, method->generics);
             }
         }
     }
@@ -746,12 +774,6 @@ static void ensure_trait_is_well_formed(struct ItemCollector *X, struct SourceSp
             (struct IrObligationCause){.span = span});
 }
 
-static void add_predicates_and_obligations(struct ItemCollector *X, DeclId did) // struct HirDeclList *generics)
-{
-    IrGenericArgs *params = pawIr_get_generic_args(X->C, did);
-    pawIr_solver_add_predicates_from(X->C->S, did, params);
-}
-
 struct AssocItemInfo {
     DeclId did;
     paw_Bool found;
@@ -786,7 +808,7 @@ static AssocItemInfoMap *collect_assoc_fns_from_trait(struct ItemCollector *X, D
 
 static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
 {
-    add_predicates_and_obligations(X, d->did);
+    add_predicates_from(X, X->C->S, d->did);
 
     IrType *self = collect_type(X, d->type);
     ensure_type_is_well_formed(X, d->type->hdr.span, self);
@@ -861,32 +883,56 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
         paw_assert(!info->found);
         info->found = PAW_TRUE;
 
+        struct IrFnDef const *trait_fn_def = pawIr_get_fn_def(X->C, info->did);
+        if (trait_fn_def->generics->count != fn_def->generics->count)
+            COLLECTOR_ERROR(X, IncorrectTypeArity,
+                    .have = fn_def->generics->count,
+                    .want = trait_fn_def->generics->count,
+                    .span = method_decl->span);
+
+        // Determine generic args for instantiating the type of the trait method. The trait
+        // method requires a type for `Self`, as well as all generic parameters on the trait
+        // and method declarations.
         IrGenericArgs *args = IrGenericArgs_new(X->C);
         {
             IrGenericArgs *trait_args = impl_def->trait->args;
             IrGenericArgs_reserve(X->C, args, trait_args->count + fn_def->generics->count);
 
-            // add type arguments from instantiated trait (already has "Self")
+            // add type arguments from instantiated trait (including `Self`)
             K_LIST_XFOREACH (trait_args, IrGenericArg const, t)
                 IrGenericArgs_push(X->C, args, *t);
 
-            // add type parameters from impl block method
-            K_LIST_XFOREACH (fn_def->generics, struct IrGenericDef *const, p)
-                IrGenericArgs_push(X->C, args, pawIr_get_def_arg(X->C, (*p)->did));
+            // add inference variables for generics defined on trait method
+            K_LIST_XFOREACH (trait_fn_def->generics, struct IrGenericDef *const, pparam)
+                IrGenericArgs_push(X->C, args, pawIr_instantiate(X->C, (*pparam)->did));
         }
 
-        // instantiate the trait method with "Self" equal to the "Self" type
-        // of the impl block
-        add_predicates_from(X, info->did);
-        IrType *method = pawIr_new_signature(X->C, info->did, args);
-        pawIr_solver_add_obligations_from(X->C->S, info->did, args);
-        method = pawU_normalize_projections(X->C->U, method);
-        IrType *type_from_impl = pawIr_get_def_type(X->C, method_decl->did);
-        if (pawU_unify(X->C->U, method, type_from_impl) != 0)
-            COLLECTOR_ERROR(X, TraitImplAssocItemNotCompatible,
-                    .trait = print_trait(X, impl_def->trait),
-                    .item = fn_def->name,
-                    .span = method_decl->span);
+        // ensure that the trait method signature is compatible with the signature of the
+        // impl block method
+        {
+            IrSolver *S = pawIr_push_solver(X->C);
+            add_predicates_from(X, S, fn_def->did);
+            IrType *method = pawIr_new_signature(X->C, info->did, args);
+            pawIr_solver_add_obligations_from(S, info->did, args);
+            method = pawU_normalize_projections(X->C->U, method);
+            IrType *type_from_impl = pawIr_get_def_type(X->C, method_decl->did);
+            if (pawU_unify(X->C->U, method, type_from_impl) != 0)
+                COLLECTOR_ERROR(X, TraitImplAssocItemNotCompatible,
+                        .trait = print_trait(X, impl_def->trait),
+                        .item = fn_def->name,
+                        .span = method_decl->span);
+            solve_all_obligations(X);
+            pawIr_pop_solver(X->C);
+        }
+
+        {
+            IrSolver *S = pawIr_push_solver(X->C);
+            pawIr_solver_add_predicates_from(S, info->did, args);
+            IrType *method = pawIr_get_def_type(X->C, method_decl->did);
+            pawIr_solver_add_obligations_from_type(S, method);
+            solve_all_obligations(X);
+            pawIr_pop_solver(X->C);
+        }
     }
 
     K_LIST_XFOREACH (trait_def->methods, IrType *const, type_ptr) {
@@ -914,7 +960,7 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
             IrType *type = GET_NODE_TYPE(X->C, *p);
             if (IrIsAdt(type)) { // skip builtin types
                 struct HirAdtDecl const *d = HirGetAdtDecl(*p);
-                add_predicates_and_obligations(X, d->did);
+                add_predicates_from(X, X->C->S, d->did);
 
                 for (int discr = 0; discr < d->variants->count; ++discr) {
                     IrType *type = pawIr_get_def_type(X->C, d->did);
@@ -928,18 +974,18 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
             }
         } else if (HirIsTraitDecl(*p)) {
             struct HirTraitDecl const *d = HirGetTraitDecl(*p);
-            add_predicates_and_obligations(X, d->did);
+            add_predicates_from(X, X->C->S, d->did);
         } else if (HirIsImplDecl(*p)) {
             solve_impl_decl(X, HirGetImplDecl(*p));
         } else if (HirIsTypeDecl(*p)) {
             struct HirTypeDecl const *d = HirGetTypeDecl(*p);
-            add_predicates_and_obligations(X, d->did);
+            add_predicates_from(X, X->C->S, d->did);
 
             IrType *rhs = GET_NODE_TYPE(X->C, d->rhs);
             ensure_type_is_well_formed(X, d->span, rhs);
         } else if (HirIsFnDecl(*p)) {
             struct HirFnDecl const *d = HirGetFnDecl(*p);
-            add_predicates_and_obligations(X, d->did);
+            add_predicates_from(X, X->C->S, d->did);
         }
 
         solve_all_obligations(X);
@@ -953,7 +999,7 @@ static void collect_local_type_decl(struct HirVisitor *V, struct HirTypeDecl *d)
     IrConstraints *constraints = IrConstraints_new(X->C);
 
     collect_generic_args(X, d->did, d->generics);
-    collect_generic_defs(X, d->generics);
+    collect_generic_defs(X, d->did, d->generics);
     collect_generic_bounds(X, d->generics, constraints);
     IrType *rhs = collect_type_decl(X, d);
 
@@ -962,7 +1008,7 @@ static void collect_local_type_decl(struct HirVisitor *V, struct HirTypeDecl *d)
     IrConstraintsMap_insert(X->C, X->C->ir_constraints, d->did, constraints);
 
     pawIr_push_solver(X->C);
-    add_predicates_and_obligations(X, d->did);
+    add_predicates_from(X, X->C->S, d->did);
     ensure_type_is_well_formed(X, d->rhs->hdr.span, rhs);
     solve_all_obligations(X);
     pawIr_pop_solver(X->C);
@@ -1014,7 +1060,7 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 {
     struct IrFnDef *fn_def = pawIr_get_fn_def(X->C, d->did);
     IrGenericArgs *generics = pawIr_get_generic_args(X->C, d->did);
-    add_predicates_from(X, d->did);
+    add_predicates_from(X, X->C->S, d->did);
     if (d->body != NULL)
         collect_local_type_aliases(X, d->body);
     collect_param_types(X, d->params);
@@ -1101,7 +1147,7 @@ static void collect_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
 {
     struct IrImpl *impl = pawIr_get_impl_def(X->C, d->did);
     IrGenericArgs *binder = pawIr_get_generic_args(X->C, d->did);
-    add_predicates_from(X, d->did);
+    add_predicates_from(X, X->C->S, d->did);
 
     IrType *type = collect_type(X, d->type);
 
@@ -1133,7 +1179,7 @@ static void collect_trait_decl(struct ItemCollector *X, struct HirTraitDecl *d)
 {
     X->in_trait_decl = PAW_TRUE;
     struct IrTraitDef *trait_def = pawIr_get_trait_def(X->C, d->did);
-    add_predicates_from(X, d->did);
+    add_predicates_from(X, X->C->S, d->did);
 
     IrGenericArgs *params = pawIr_get_generic_args(X->C, d->did);
     IrType *self = IrGenericArg_get_type(IrGenericArgs_first(params));
@@ -1220,6 +1266,7 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool)
         .P = ENV(C),
         .C = C,
     };
+    X.binders = GenericBinderMap_new(&X);
 
     DLOG(&X, "collecting %d module(s)", C->modules->count);
 

@@ -809,9 +809,6 @@ static struct AstExpr *literal_expr(struct Lex *lex)
         case TK_STR:
             code = BUILTIN_STR;
             break;
-        case TK_STRING_TEXT:
-            code = BUILTIN_STR;
-            break;
         default:
             PARSE_ERROR(lex, NonliteralPattern,
                     .span = RANGE(start, lex->loc));

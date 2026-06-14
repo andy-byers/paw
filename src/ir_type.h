@@ -447,6 +447,7 @@ EXTERN_C IrType *pawIr_get_type(struct Compiler *C, NodeId id);
 void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type);
 EXTERN_C struct IrVariantDef *pawIr_get_variant_def(struct Compiler *C, DeclId did);
 EXTERN_C struct IrGenericDef *pawIr_get_generic_def(struct Compiler *C, DeclId did);
+EXTERN_C struct IrGenericDefs *pawIr_get_generic_binder(struct Compiler *C, DeclId did);
 EXTERN_C struct IrTraitDef *pawIr_get_trait_def(struct Compiler *C, DeclId did);
 EXTERN_C struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did);
 EXTERN_C struct IrFnDef *pawIr_get_fn_def(struct Compiler *C, DeclId did);

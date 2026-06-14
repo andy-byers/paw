@@ -821,13 +821,13 @@ try_again:
                 token = T(TK_HASH_BRACKET);
             }
             break;
-        case 's':
+        case 'f':
             next(X);
             if (test_next(X, '\"')) {
                 push_state(X, STATE_STRING);
                 token = consume_string_part(X, start);
             } else {
-                save(X, 's');
+                save(X, 'f');
                 token = consume_name(X, start);
             }
             break;

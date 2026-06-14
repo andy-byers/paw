@@ -871,6 +871,24 @@ static void test_impl_error(void)
 
     test_compiler_status(kErrExpectedTypeArguments, "missing_type_args",
             "struct Struct<T>; pub trait Trait {} impl Trait for Struct {}", "");
+
+#define TESTCASE(A_, B_) \
+    CODELINE("struct Struct;") \
+    CODELINE("pub trait Constraint {}") \
+    CODELINE("pub trait Trait {") \
+    CODELINE("    fn method<T"A_">(*self, y: T);") \
+    CODELINE("}") \
+    CODELINE("impl Trait for Struct {") \
+    CODELINE("    fn method<T"B_">(*self, y: T) {}") \
+    CODELINE("}")
+
+    test_compiler_status(kErrFalseObligation, "missing_constraint_on_method_arg",
+            TESTCASE(": Constraint", ""), "");
+    test_compiler_status(kErrFalseObligation, "extra_constraint_on_method_arg",
+            TESTCASE("", ": Constraint"), "");
+
+#undef TESTCASE
+
 }
 
 static void test_deref_pat(void)
@@ -988,6 +1006,21 @@ static void test_definite_assignment(void)
 
 int main(void)
 {
+#define TESTCASE(A_, B_) \
+    CODELINE("struct Struct;") \
+    CODELINE("pub trait Constraint {}") \
+    CODELINE("pub trait Trait {") \
+    CODELINE("    fn method<T"A_">(*self, y: T);") \
+    CODELINE("}") \
+    CODELINE("impl Trait for Struct {") \
+    CODELINE("    fn method<T"B_">(*self, y: T) {}") \
+    CODELINE("}")
+
+    test_compiler_status(kErrFalseObligation, "missing_constraint_on_method_arg",
+            TESTCASE(": Constraint", ""), "");
+    test_compiler_status(kErrFalseObligation, "extra_constraint_on_method_arg",
+            TESTCASE("", ": Constraint"), "");
+    return 42;
     test_syntax_error();
     test_underscore();
     test_annotations();

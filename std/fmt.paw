@@ -2,6 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+pub use io;
 pub use string::String;
 
 use array;
@@ -21,6 +22,7 @@ pub trait Display {
 pub enum Error {
     OutOfMemory,
     InvalidBase,
+    IoError(io::Error),
 }
 
 use Error::*;
@@ -28,6 +30,12 @@ use Error::*;
 impl From<mem::OutOfMemory> for Error {
     fn from(value: mem::OutOfMemory) -> Self {
         Error::OutOfMemory
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Error::IoError(value)
     }
 }
 

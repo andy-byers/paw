@@ -634,11 +634,6 @@ static struct HirExpr *LowerLiteralExpr(struct LowerAst *L, struct AstLiteralExp
     }
 }
 
-static struct HirExpr *empty_string(struct LowerAst *L, struct SourceSpan span)
-{
-    return NULL;
-}
-
 static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr *e)
 {
     struct AstStringPart const first_part = AstStringList_first(e->parts);
