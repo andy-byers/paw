@@ -39,8 +39,7 @@ static void VisitSignature(struct IrTypeVisitor *V, struct IrSignature *t)
 
 static void VisitProjection(struct IrTypeVisitor *V, struct IrProjection *t)
 {
-    VisitType(V, t->type);
-    V->VisitTrait(V, t->trait);
+    V->VisitGenericArgs(V, t->args);
 }
 
 static void VisitFnPtr(struct IrTypeVisitor *V, struct IrFnPtr *t)
@@ -243,9 +242,8 @@ static IrType *FoldSignature(struct IrTypeFolder *F, struct IrSignature *t)
 
 static IrType *FoldProjection(struct IrTypeFolder *F, struct IrProjection *t)
 {
-    IrType *type = FoldType(F, t->type);
-    IrTrait *trait = F->FoldTrait(F, t->trait);
-    return pawIr_new_projection(F->C, type, trait, t->assoc);
+    IrGenericArgs *args = F->FoldGenericArgs(F, t->args);
+    return pawIr_new_projection(F->C, t->did, args);
 }
 
 static IrType *FoldFnPtr(struct IrTypeFolder *F, struct IrFnPtr *t)

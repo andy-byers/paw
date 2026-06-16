@@ -91,6 +91,10 @@ void pawIr_pop_solver(struct Compiler *C)
 void pawIr_solver_add_norm_target(IrSolver *S, IrType *type, IrType *target, struct IrObligationCause cause)
 {
     TypeCollection_insert(S->C, S->norm_targets, type, target);
+
+    LOGLN("SOLVER:%p: add norm target `%s = %s`",
+            (void *)S, pawIr_print_type_v2(S->C, type)->text,
+            pawIr_print_type_v2(S->C, target)->text);
 }
 
 IrType *pawIr_solver_get_norm_target(IrSolver *S, IrType *type)
@@ -98,31 +102,13 @@ IrType *pawIr_solver_get_norm_target(IrSolver *S, IrType *type)
     paw_assert(IrIsProjection(type));
     type = pawU_normalize(S->U, type);
     if (!pawIr_type_contains_inference_var(S->C, type)) {
-        void **p = TypeCollection_get(S->C, S->norm_targets, type);
-        if (p != NULL) return *p;
+        do {
+            void **p = TypeCollection_get(S->C, S->norm_targets, type);
+            if (p != NULL) return *p;
+            S = S->outer;
+        } while (S != NULL);
     }
     return NULL;
-
-//    do {
-//        K_LIST_XFOREACH (S->norm_targets, struct IrType2 const, p) {
-//            struct IrProjection const *x = IrGetProjection(type);
-//            struct IrProjection const *y = IrGetProjection(
-//                    pawU_normalize(S->U, p->first));
-//            struct IrAssocItem const *xitem = pawIr_get_assoc_item(S->C, x->assoc);
-//            struct IrAssocItem const *yitem = pawIr_get_assoc_item(S->C, y->assoc);
-//            if (pawS_eq(xitem->name, yitem->name)) {
-//                int const position = pawU_current_position(S->U);
-//                IrType *x_type = pawU_normalize(S->U, x->type);
-//                IrType *y_type = pawU_normalize(S->U, y->type);
-//                if (pawU_unify(S->U, x_type, y_type) == 0
-//                        && pawIr_unify_traits(S->C, x->trait, y->trait) == 0)
-//                    return pawU_normalize(S->U, p->second);
-//                pawU_undo_unifications(S->U, position);
-//            }
-//        }
-//        S = S->outer;
-//    } while (S != NULL);
-//    return NULL;
 }
 
 DEFINE_MAP(struct Compiler, PredicateCache, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, void *)
@@ -145,6 +131,10 @@ void pawIr_solver_add_predicate(IrSolver *S, IrType *type, IrTrait *trait, struc
                 .impl.type = type,
                 .impl.trait = trait,
             });
+
+    LOGLN("SOLVER:%p: add predicate `%s: %s`",
+            (void *)S, pawIr_print_type_v2(S->C, type)->text,
+            pawIr_print_trait_v2(S->C, trait)->text);
 }
 
 static IrTrait *substitute_trait(struct Compiler *C, IrTrait *trait, struct Substitution subst)
@@ -306,27 +296,27 @@ static void add_trait_predicates(IrSolver *S, IrTrait *trait, PredicateCache *ca
 
 static void add_nested_predicates(IrSolver *S, struct IrProjection const *p)
 {
+    IrType *type = ir_projection_self(p);
+    IrTrait *trait = pawIr_get_projection_trait(S->C, p);
+
     // given `self = <Type as Trait>::Assoc`, it might be possible to prove this
     // obligation using bounds on the declaration of `Assoc` in `Trait`. These
     // bounds can be considered to hold if `Type` implements `Trait` (proving
     // so might involve proving nested obligations).
     IrSolver *child = pawIr_push_solver(S->C);
-    pawIr_solver_add_impl_trait_obligation(child, p->type, p->trait,
+    pawIr_solver_add_impl_trait_obligation(child, type, trait,
             (struct IrObligationCause){0});
     struct IrSolverResult const r = pawIr_solver_solve(child);
     pawIr_pop_solver(S->C);
 
     if (r.status == IR_SOLVER_SOLVED) {
         PredicateCache *cache = PredicateCache_new(S->C);
-        add_trait_predicates(S, p->trait, cache, 0);
+        add_trait_predicates(S, trait, cache, 0);
     }
 }
 
 static paw_Bool type_implements_trait(IrSolver *S, IrType *self, IrTrait *impl_trait)
 {
-    if (IrIsProjection(self))
-        add_nested_predicates(S, IrGetProjection(self));
-
     IrSolver *cursor = S;
     while (cursor != NULL) {
         if (matches_impl_predicate(cursor, self, impl_trait))
@@ -348,8 +338,8 @@ static paw_Bool type_implements_trait(IrSolver *S, IrType *self, IrTrait *impl_t
                     });
 
             LOGLN("SOLVER:%p: proved `%s: %s` using trait impl block DefId(%d)",
-                    (void *)S, pawIr_print_type(S->C, pawU_normalize_projections(S->U, inst.type)),
-                    pawIr_print_trait(S->C, pawIr_normalize_trait(S->C, inst.trait)),
+                    (void *)S, pawIr_print_type(S->C, pawU_normalize_projections(S->U, impl->type)),
+                    pawIr_print_trait(S->C, pawIr_normalize_trait(S->C, impl->trait)),
                     impl->did.value);
         }
     }
@@ -477,10 +467,6 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                 case IR_OBLIGATION_TYPE_EQUALS: {
                     IrType *lhs = o.eq.lhs;
                     IrType *rhs = o.eq.rhs;
-                    if (IrIsProjection(lhs))
-                        add_nested_predicates(S, IrGetProjection(lhs));
-                    if (IrIsProjection(rhs))
-                        add_nested_predicates(S, IrGetProjection(rhs));
                     // TODO: yes, this actually needs to be called twice, at least to make a specific case work...
                     lhs = pawU_normalize_projections(S->U, lhs);
                     lhs = pawU_normalize_projections(S->U, lhs);

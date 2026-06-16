@@ -77,44 +77,11 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
     IrGenericArgs_insert(L->C, args, 0, IrGenericArg_from_type(type));
     IrTrait *trait = pawIr_new_trait(L->C, trait_decl->hdr.did, args);
 
-    // prove that the trait is implemented by the type
-    IrSolver *child = pawIr_push_solver(L->C);
-    if (IrIsAdt(type))
-        pawIr_solver_add_well_formed_obligation(child, trait->did, args,
-                (struct IrObligationCause){.span = t->trait.span});
-    pawIr_solver_add_well_formed_obligation(child, trait->did, args,
-            (struct IrObligationCause){.span = t->trait.span});
-    pawIr_solver_add_impl_trait_obligation(child, type, trait,
-            (struct IrObligationCause){.span = t->span});
-    struct IrSolverResult const result = pawIr_solver_solve(child);
-
-    switch (result.status) {
-        case IR_SOLVER_SOLVED:
-            break;
-        case IR_SOLVER_AMBIGUOUS: {
-            struct IrObligation const example = pawIr_solver_first_obligation(L->C->S);
-            LOWERING_ERROR(L, UnsatisfiedObligation,
-                    .example = pawIr_print_obligation_(L->C, example),
-                    .num_unsolved = result.ambiguous.num_unsolved,
-                    .span = example.cause.span);
-            break;
-        }
-        case IR_SOLVER_ERROR:
-            LOWERING_ERROR(L, FalseObligation,
-                    .obligation = pawIr_print_obligation_(L->C, result.error.obligation),
-                    .span = result.error.obligation.cause.span);
-    }
-
-    pawIr_pop_solver(L->C);
-
-    // Search for the associated type. The type `type` is already known to implement
-    // the trait `trait`. The following lines just make sure an associated type named
-    // `t->name` is defined on the trait.
     IrType *assoc = NULL;
     if (IrIsGeneric(type) || IrIsProjection(type)) {
         DeclId const *pdid = locate_assoc_type(L, trait, t->name);
         if (pdid != NULL)
-            assoc = pawIr_new_projection(L->C, type, trait, *pdid);
+            assoc = pawIr_new_projection(L->C, *pdid, args);
     } else {
         struct Instantiation const *inst = pawIr_find_assoc_type_projection(
                 L->C, type, trait, t->name);
@@ -431,4 +398,59 @@ static IrTypeList *lower_type_list(struct LowerType *L, struct HirTypeList *type
         IrTypeList_push(L->C, result, type);
     }
     return result;
+}
+
+static void check_projection_type(struct HirVisitor *V, struct HirProjectionType *t)
+{
+    struct LowerType *L = V->ud;
+    IrType *maybe_projection = pawIr_get_type(L->C, t->id);
+    if (!IrIsProjection(maybe_projection)) return;
+    struct IrProjection *p = IrGetProjection(maybe_projection);
+    IrType *type = ir_projection_self(p);
+    IrTrait *trait = pawIr_get_projection_trait(L->C, p);
+
+    // prove that the trait is implemented by the type
+    IrSolver *child = pawIr_push_solver(L->C);
+    if (IrIsAdt(type))
+        pawIr_solver_add_well_formed_obligation(child, trait->did, p->args,
+                (struct IrObligationCause){.span = t->trait.span});
+    pawIr_solver_add_well_formed_obligation(child, trait->did, p->args,
+            (struct IrObligationCause){.span = t->trait.span});
+    pawIr_solver_add_impl_trait_obligation(child, type, trait,
+            (struct IrObligationCause){.span = t->span});
+    struct IrSolverResult const result = pawIr_solver_solve(child);
+
+    switch (result.status) {
+        case IR_SOLVER_SOLVED:
+            break;
+        case IR_SOLVER_AMBIGUOUS: {
+            struct IrObligation const example = pawIr_solver_first_obligation(L->C->S);
+            LOWERING_ERROR(L, UnsatisfiedObligation,
+                    .example = pawIr_print_obligation_(L->C, example),
+                    .num_unsolved = result.ambiguous.num_unsolved,
+                    .span = example.cause.span);
+            break;
+        }
+        case IR_SOLVER_ERROR:
+            LOWERING_ERROR(L, FalseObligation,
+                    .obligation = pawIr_print_obligation_(L->C, result.error.obligation),
+                    .span = result.error.obligation.cause.span);
+    }
+
+    pawIr_pop_solver(L->C);
+}
+
+void pawP_solve_type_obligations(struct Hir *hir, struct HirModule m, struct HirType *type)
+{
+    struct LowerType L = {
+        .hir = hir,
+        .C = hir->C,
+        .m = m,
+    };
+
+    struct HirVisitor V;
+    pawHir_visitor_init(&V, hir, &L);
+    V.PostVisitProjectionType = check_projection_type;
+    pawHir_visit_type(&V, type);
+
 }

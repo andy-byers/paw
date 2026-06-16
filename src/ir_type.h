@@ -133,12 +133,23 @@ struct IrGeneric {
     DeclId did;
 };
 
-// Represents the type of "<Type as Trait>::Assoc::<Args..>"
+// Represents an associated type
+//
+// The projection `<Type as Trait<T>>::Assoc` is represented by an IrProjection with the
+// following fields:
+//     {
+//         .did = Trait::Assoc,
+//         .args = [Type, T],
+//     }
+//
 struct IrProjection {
     IR_TYPE_HEADER;
-    DeclId assoc;
-    IrType *type;
-    IrTrait *trait;
+
+    // identifies the associated type declaration in the trait
+    DeclId did;
+
+    // generic args of the trait, including `Self`
+    struct IrGenericArgs *args;
 };
 
 static char const *kIrTypeNames[] = {
@@ -191,7 +202,7 @@ IrType *pawIr_new_array(struct Compiler *C, IrType *type, IrConst *length);
 IrType *pawIr_new_never(struct Compiler *C);
 IrType *pawIr_new_infer(struct Compiler *C, int depth, int index);
 IrType *pawIr_new_generic(struct Compiler *C, DeclId did);
-IrType *pawIr_new_projection(struct Compiler *C, IrType *type, IrTrait *trait, DeclId assoc);
+IrType *pawIr_new_projection(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
 
 
 struct IrTrait {
@@ -419,7 +430,7 @@ struct IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did);
 #define IR_TYPE_DID(type) (IrIsAdt(type) ? IrGetAdt(type)->did : \
         IrIsSignature(type) ? IrGetSignature(type)->did : \
         IrIsClosure(type) ? IrGetClosure(type)->did : \
-        IrIsProjection(type) ? IrGetProjection(type)->assoc : \
+        IrIsProjection(type) ? IrGetProjection(type)->did : \
         IrGetGeneric(type)->did)
 // TODO: not really correct since signatures (and closures esp.) can have args belonging to enclosing impl block
 #define IR_TYPE_IS_POLYMORPHIC(Type_) ((IrIsAdt(Type_) || IrIsSignature(Type_)) \
@@ -569,6 +580,13 @@ paw_Bool pawIr_trait_contains_inference_var(struct Compiler *C, IrTrait *trait);
 EXTERN_C paw_Bool pawIr_is_unsized_type(struct Compiler *C, IrType *type);
 EXTERN_C IrType *pawIr_remove_indirection(struct Compiler *C, IrType *type);
 EXTERN_C IrTypeList *pawIr_autoptr_chain(struct Compiler *C, IrType *type);
+
+static IrType *ir_projection_self(struct IrProjection const *t)
+{
+    return IrGenericArg_get_type(IrGenericArgs_first(t->args));
+}
+
+IrTrait *pawIr_get_projection_trait(struct Compiler *C, struct IrProjection const *t);
 
 
 static IrType *ir_fn_result(struct Compiler *C, IrType *type)

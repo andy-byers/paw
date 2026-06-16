@@ -747,76 +747,7 @@
 //    assert(output[4] == 10);
 //}
 
-//#[test]
-//pub fn test() {
-//    let list = List::new();
-//    let list2 = List::new();
-//    list2.extend(&list).unwrap();
-//    let a = list2[0];
-//}
-
-//use fmt;
-//use fmt::Display;
-//use io;
-//use io::Write;
-//
-//pub trait Interpolate {
-//    fn add_str(*self, s: str) -> fmt::Result<()>;
-//    fn add_expr<E: Display>(*self, e: E) -> fmt::Result<()>;
-//    fn interpolate<W: Write>(*self, w: W) -> fmt::Result<()>;
-//}
-//
-//pub struct StringInterpolator {
-//    f: fmt::Formatter,
-//}
-//
-//impl StringInterpolator {
-//    pub fn new() -> Self {
-//        Self{f: fmt::Formatter::new()}
-//    }
-//}
-//
-//impl Interpolate for StringInterpolator {
-//    fn add_str(*self, s: str) -> fmt::Result<()> {
-//        self.f.write(s)
-//    }
-//
-//    fn add_expr<E: Display>(*self, e: E) -> fmt::Result<()> {
-//        e.fmt(&self.f)
-//    }
-//
-//    fn interpolate<W: Write>(*self, w: W) -> fmt::Result<()> {
-//        let s = self.f.string();
-//        let r = w.write(s.to_slice())?;
-//        Ok(r)
-//    }
-//}
-//
-//#[test]
-//pub fn test() {
-//    let defg = 123;
-//    let parts = f"abc\{defg}hij"; // => [3]StringPart = [Str("abc"), Expr(&defg), Str("hij")]
-//    let s = parts.to_string().unwrap();
-//    io::println(s);
-//}
-
-//struct S;
-//pub trait Trait<T> {
-//    fn method<Y: Default>(*self, y: Y);
-//}
-//impl<TT> Trait<TT> for S {
-//    fn method<Y: Default>(*self, y: Y) {}
-//}
-
-struct S<T>;
-pub trait Trait {
-    fn method<Y: Default>(*self, y: Y);
+#[test]
+pub fn test() {
 }
-impl<X> Trait for S<X> {
-    fn method<YY: Default>(*self, y: YY) {}
-}
-//#[test]
-//pub fn test() {
-//    let s = S::<int>;
-//    s.method();
-//}
+

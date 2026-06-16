@@ -156,7 +156,9 @@ DEFINE_LIST_CHECKER(stmt, Stmt)
 
 static IrType *lower_type(struct TypeChecker *T, struct HirType *type)
 {
-    return pawP_lower_type(T->C, *T->pm, type);
+    IrType *ir_type = pawP_lower_type(T->C, *T->pm, type);
+    pawP_solve_type_obligations(T->hir, *T->pm, type);
+    return ir_type;
 }
 
 static IrGenericArg lower_generic_arg(struct TypeChecker *T, struct HirGenericArg arg)
@@ -2377,16 +2379,26 @@ static void use_module(struct TypeChecker *T, struct HirModule const *pm)
     T->pm = pm;
 }
 
+static void prove_type_obligations(struct HirVisitor *V, struct HirType *type)
+{
+    struct TypeChecker *T = V->ud;
+    pawP_solve_type_obligations(T->hir, *T->pm, type);
+}
+
 static void check_module_types(struct TypeChecker *T, struct HirModule m)
 {
     DLOG(T, "resolving '%s'", m->name->text);
 
     check_items(T, m.items);
 
+//    struct HirVisitor V;
+//    pawHir_visitor_init(&V, T->hir, T);
+//    V.PostVisitType = prove_type_obligations;
+//    pawHir_visit_decl_list(&V, m.items);
+
     struct HirTypeFolder F;
     pawHir_type_folder_init(&F, T->hir, T);
     F.F.FoldType = call_normalize_type;
-
     pawHir_fold_decl_types(&F, m.items);
 }
 

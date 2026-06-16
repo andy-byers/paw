@@ -312,14 +312,13 @@ IrType *pawIr_new_generic(struct Compiler *C, DeclId did)
     return t;
 }
 
-IrType *pawIr_new_projection(struct Compiler *C, IrType *type, IrTrait *trait, DeclId assoc)
+IrType *pawIr_new_projection(struct Compiler *C, DeclId did, struct IrGenericArgs *args)
 {
     IrType *t = NEW_NODE(C, IrType);
     t->Projection_ = (struct IrProjection){
         .kind = kIrProjection,
-        .type = type,
-        .trait = trait,
-        .assoc = assoc,
+        .did = did,
+        .args = args,
     };
     return t;
 }
@@ -1013,9 +1012,8 @@ static paw_Uint hash_type(IrType *type)
         }
         case kIrProjection: {
             struct IrProjection const *t = IrGetProjection(type);
-            hash = hash_combine(hash, hash_type(t->type));
-            hash = hash_combine(hash, hash_trait(t->trait));
-            hash = hash_combine(hash, t->assoc.value);
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_arg_list(t->args));
             break;
         }
         default:
@@ -1128,9 +1126,8 @@ static paw_Bool type_equals(struct Compiler *C, IrType *lhs, IrType *rhs)
         case kIrProjection: {
             struct IrProjection const *x = IrGetProjection(lhs);
             struct IrProjection const *y = IrGetProjection(rhs);
-            return type_equals(C, x->type, y->type)
-                && pawIr_trait_equals(C, x->trait, y->trait)
-                && P_ID_EQUALS(C, x->assoc, y->assoc);
+            return P_ID_EQUALS(C, x->did, y->did)
+                && arglist_equals(C, x->args, y->args);
         }
         case kIrClosure: {
             struct IrClosure const *x = IrGetClosure(lhs);
@@ -1423,6 +1420,12 @@ IrType *pawIr_materialize_fn(struct Compiler *C, DeclId did, IrGenericArgs *type
             pawIr_new_fn_ptr(C, params, result));
 }
 
+IrTrait *pawIr_get_projection_trait(struct Compiler *C, struct IrProjection const *t)
+{
+    struct IrAssocItem const *item = pawIr_get_assoc_item(C, t->did);
+    return pawIr_new_trait(C, item->parent, t->args);
+}
+
 
 struct Printer {
     struct Compiler *C;
@@ -1644,13 +1647,16 @@ static void print_type(struct Printer *P, IrType *type)
             break;
         }
         case kIrProjection: {
-            struct IrProjection *t = IrGetProjection(type);
-            struct IrAssocItem *item = pawIr_get_assoc_item(P->C, t->assoc);
+            struct IrProjection const *t = IrGetProjection(type);
+            struct IrAssocItem const *item = pawIr_get_assoc_item(P->C, t->did);
+            IrType *self = IrGenericArg_get_type(IrGenericArgs_first(t->args));
+            IrTrait *trait = pawIr_new_trait(P->C, item->parent, t->args);
             PRINT_CHAR(P, '<');
-            print_type(P, t->type);
+            print_type(P, self);
             PRINT_LITERAL(P, " as ");
-            print_trait(P, t->trait);
-            PRINT_FORMAT(P, ">::%s", item->name->text);
+            print_trait_omitting_self(P, trait);
+            PRINT_LITERAL(P, ">::");
+            PRINT_STRING(P, item->name);
             break;
         }
         case kIrInfer: {

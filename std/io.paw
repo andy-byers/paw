@@ -108,3 +108,29 @@ pub fn println<T: ToSlice<char>>(message: T) {
     b.append_char('\n').unwrap();
     print(b.string());
 }
+
+
+use ptr;
+use slice;
+
+fn skip_unchecked<T>(data: *[]T, amount: int) {
+    *data = slice::from_raw_parts(
+        ptr::add(data.as_ptr(), amount), 
+        data.len() - amount);
+}
+
+pub fn write_all<W: Write>(writer: *W, data: []char) -> Result<()> {
+    while data.len() > 0 {
+        let n = writer.write(data)?;
+        skip_unchecked(&data, n);
+    }
+    Ok(())
+}
+
+pub fn read_exact<R: Read>(reader: *R, data: []char) -> Result<()> {
+    while data.len() > 0 {
+        let n = reader.read(data)?;
+        skip_unchecked(&data, n);
+    }
+    Ok(())
+}

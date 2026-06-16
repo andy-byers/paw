@@ -415,7 +415,7 @@ struct Instantiation *pawIr_find_assoc_type_generic(struct Compiler *C, IrType *
             IrGenericArgs_first(trait->args));
     pawU_unify_unchecked(C->U, first, self);
     pawIr_unify_traits_unchecked(C, trait, trait2);
-    assoc = pawIr_new_projection(C, self, trait, p->assoc);
+    assoc = pawIr_new_projection(C, p->did, trait->args);
 
     struct Instantiation *out = P_ALLOC(C, NULL, 0, sizeof(*out));
     *out = (struct Instantiation){

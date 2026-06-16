@@ -409,9 +409,8 @@ IrType *pawU_normalize(struct Unifier *U, IrType *type)
         }
         case kIrProjection: {
             struct IrProjection const *t = IrGetProjection(type);
-            IrType *self = pawU_normalize(U, t->type);
-            IrTrait *trait = pawIr_normalize_trait(U->C, t->trait);
-            return pawIr_new_projection(U->C, self, trait, t->assoc);
+            IrGenericArgs *args = normalize_args(U, t->args);
+            return pawIr_new_projection(U->C, t->did, args);
         }
     }
 }
@@ -474,24 +473,28 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
         }
         case kIrProjection: {
             type = pawU_normalize(U, type);
+
+            struct IrProjection const *t = IrGetProjection(type);
+            IrGenericArgs *args = IrGenericArgs_new(U->C);
+            IrGenericArgs_reserve(U->C, args, t->args->count);
+            K_LIST_XFOREACH (t->args, IrGenericArg const, p) {
+                IrGenericArg const arg = pawIr_normalize_projections(U->C, *p);
+                IrGenericArgs_push(U->C, args, arg);
+            }
+            type = pawIr_new_projection(U->C, t->did, args);
+
             for (IrType *target; IrIsProjection(type); type = target) {
                 target = pawIr_solver_get_norm_target(U->C->S, type);
                 if (target == NULL) break;
             }
+
             if (IrIsProjection(type)) {
                 struct IrProjection const *t = IrGetProjection(type);
-                if (!IrIsInfer(t->type)) {
-                    Str const *name = pawIr_get_assoc_item(U->C, t->assoc)->name;
-                    struct Instantiation const *assoc = pawIr_find_assoc_type_projection(
-                            U->C, t->type, t->trait, name);
-                    if (assoc != NULL) type = assoc->inst;
-                }
-            }
-            if (IrIsProjection(type)) {
-                struct IrProjection const *t = IrGetProjection(type);
-                IrType *self = pawU_normalize_projections(U, t->type);
-                IrTrait *trait = pawIr_normalize_trait_projections(U->C, t->trait);
-                type = pawIr_new_projection(U->C, self, trait, t->assoc);
+                IrTrait *trait = pawIr_get_projection_trait(U->C, t);
+                Str const *name = pawIr_get_assoc_item(U->C, t->did)->name;
+                struct Instantiation const *assoc = pawIr_find_assoc_type_projection(
+                        U->C, ir_projection_self(t), trait, name);
+                if (assoc != NULL) type = assoc->inst;
             }
             return type;
         }
@@ -572,9 +575,16 @@ static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneri
 
 static int unify_projection(struct Unifier *U, struct IrProjection *a, struct IrProjection *b)
 {
-    if (pawU_unify(U, a->type, b->type) != 0) return -1;
-    if (pawIr_unify_traits(U->C, a->trait, b->trait) != 0) return -1;
-    return P_ID_EQUALS(U->C, a->assoc, b->assoc) ? 0 : -1;
+    if (!P_ID_EQUALS(U->C, a->did, b->did))
+        return -1;
+
+    IrGenericArg const *x, *y;
+    paw_assert(a->args->count == b->args->count);
+    K_LIST_ZIP(a->args, x, b->args, y) {
+        if (pawIr_unify(U->C, *x, *y) != 0)
+            return -1;
+    }
+    return 0;
 }
 
 static IrType *materialize_fn(struct Unifier *U, IrType *type)

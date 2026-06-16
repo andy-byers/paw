@@ -1,0 +1,23 @@
+// assoc_type_in_bound_2.paw
+
+trait A {
+    type At: C;
+}
+
+trait B<X: A> {
+    type Bt: A<At = X::At>;
+}
+
+trait C {}
+
+struct First<T>;
+struct Second;
+
+impl<T: C> A for First<T> {
+    type At = T;
+}
+
+impl<T: A> B<T> for Second {
+    type Bt = First<T::At>;
+}
+

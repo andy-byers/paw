@@ -75,6 +75,7 @@ struct HirSymtab;
 struct HirType;
 struct HirGenericArg;
 struct HirSegment;
+struct HirProjectionType;
 
 struct IrType;
 struct IrTypeList;
@@ -260,6 +261,8 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool);
 struct IrType *pawP_lower_type(struct Compiler *C, struct HirModule m, struct HirType *type);
 struct IrGenericArg pawP_lower_generic_arg(struct Compiler *C, struct HirModule m, struct HirGenericArg arg);
 struct IrType *pawP_lower_type_alias(struct Compiler *C, struct HirSegment segment, struct HirDecl *decl, struct IrGenericArgs *knowns);
+
+void pawP_solve_type_obligations(struct Hir *hir, struct HirModule m, struct HirType *type);
 
 struct RegisterInfo {
     int value;

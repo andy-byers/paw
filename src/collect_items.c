@@ -70,8 +70,7 @@ static IrTypeList *collect_types(struct ItemCollector *X, struct HirTypeList *ty
     if (types == NULL) return NULL;
     IrTypeList *result = IrTypeList_new(X->C);
 
-    struct HirType *const *ptype;
-    K_LIST_FOREACH (types, ptype) {
+    K_LIST_XFOREACH (types, struct HirType *const, ptype) {
         IrType *type = collect_type(X, *ptype);
         IrTypeList_push(X->C, result, type);
     }
@@ -140,15 +139,42 @@ static IrTrait *collect_trait_path(struct ItemCollector *X, struct HirPath path,
     return pawIr_new_trait(X->C, did, args);
 }
 
+struct AssocItemInfo {
+    DeclId did;
+    paw_Bool found;
+};
+
+DEFINE_MAP(struct ItemCollector, AssocItemInfoMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct AssocItemInfo)
+
+static AssocItemInfoMap *collect_assoc_types_from_trait(struct ItemCollector *X, DeclId did)
+{
+    struct IrTraitDef const *trait = pawIr_get_trait_def(X->C, did);
+    AssocItemInfoMap *items = AssocItemInfoMap_new(X);
+    K_LIST_XFOREACH (trait->items, struct IrAssocItem *const, p) {
+        AssocItemInfoMap_insert(X, items, (*p)->name, (struct AssocItemInfo){
+                    .did = (*p)->did,
+                });
+    }
+    return items;
+}
+
 // Collect the type equality constraints from obligations of form "T: Trait<Type = T2>"
 static void collect_equals_constraints(struct ItemCollector *X, struct HirGenericArgs *args, IrType *self, IrTrait *trait, IrConstraints *result)
 {
+    AssocItemInfoMap *items = collect_assoc_types_from_trait(X, trait->did);
     K_LIST_XFOREACH (args, struct HirGenericArg const, p) {
         if (p->item != NULL) {
             paw_assert(p->is_type);
             IrType *rhs = collect_type(X, p->t);
             struct HirGenericDecl const *d = pawHir_get_node(X->hir, p->target);
-            IrType *lhs = pawIr_new_projection(X->C, self, trait, d->did);
+            struct AssocItemInfo const *info = AssocItemInfoMap_get(X, items, d->t.ident.name);
+            if (info == NULL)
+                COLLECTOR_ERROR(X, UnknownAssociatedItem,
+                        .type = pawIr_print_type_v2(X->C, self),
+                        .item = d->t.ident.name,
+                        .span = d->span);
+
+            IrType *lhs = pawIr_new_projection(X->C, info->did, trait->args);
             IrConstraints_push(X->C, result, (struct IrConstraint){
                         .kind = IR_CONSTRAINT_TYPE_EQUALS,
                         .parent = d->did,
@@ -186,32 +212,42 @@ static void set_def_type(struct ItemCollector *X, DeclId did, IrType *type)
 
 static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, DeclId did, struct HirDeclList *generics)
 {
-    IrGenericDefs *result = IrGenericDefs_new(X->C);
+    IrGenericArgs *args = IrGenericArgs_new(X->C);
+    IrGenericDefs *defs = IrGenericDefs_new(X->C);
     if (generics != NULL) {
         K_LIST_XFOREACH (generics, struct HirDecl *const, p) {
             IrType *type;
-            struct IrGenericDef *r;
+            IrGenericArg arg;
+            struct IrGenericDef *def;
+
             struct HirGenericDecl const *d = HirGetGenericDecl(*p);
             if (d->is_type) {
                 type = pawIr_new_generic(X->C, d->did);
-                r = pawIr_new_generic_type_def(X->C, d->did, d->t.ident.name, NULL);
+                def = pawIr_new_generic_type_def(X->C, d->did, d->t.ident.name, NULL);
+                arg = IrGenericArg_from_type(type);
             } else {
                 type = collect_type(X, d->k.type);
                 if (!IrIsBool(type) && !IrIsChar(type)
                         && !IrIsInt(type) && !IrIsFloat(type))
                     pawErr_generic_error(ENV(X), X->pm->name, d->span,
                             "const generic must be scalar");
-                r = pawIr_new_generic_const_def(X->C, d->did, type, d->k.ident.name);
+                def = pawIr_new_generic_const_def(X->C, d->did, type, d->k.ident.name);
+                arg = IrGenericArg_from_const(pawIr_new_const_decl(X->C, d->did));
             }
-            GenericDefMap_insert(X->C, X->C->generic_defs, d->did, r);
-            IrGenericDefs_push(X->C, result, r);
+
+            GenericDefMap_insert(X->C, X->C->generic_defs, d->did, def);
+            IrGenericDefs_push(X->C, defs, def);
+
+            IrDeclArgs_insert(X->C, X->C->ir_decl_args, d->did, arg);
+            IrGenericArgs_push(X->C, args, arg);
 
             set_def_type(X, d->did, type);
             SET_TYPE(X, d->id, type);
         }
     }
-    GenericBinderMap_insert_unique(X, X->binders, did, result);
-    return result;
+    GenericBinderMap_insert_unique(X, X->binders, did, defs);
+    pawIr_set_generic_args(X->C, did, args);
+    return defs;
 }
 
 static IrGenericDefs *get_generic_defs(struct ItemCollector *X, DeclId did)
@@ -377,35 +413,6 @@ static void finish_module(struct ItemCollector *X)
     X->pm = NULL;
 }
 
-static IrGenericArgs *collect_generic_args(struct ItemCollector *X, DeclId parent_did, struct HirDeclList *generics)
-{
-    IrGenericArgs *types = IrGenericArgs_new(X->C);
-    if (generics != NULL) {
-        // Create a local symbol for each generic. Generic bounds are registered
-        // in a later pass, once all nominal types are known.
-        struct HirDecl *const *pdecl;
-        K_LIST_FOREACH (generics, pdecl) {
-            IrType *type;
-            IrGenericArg arg;
-            struct HirGenericDecl const *d = HirGetGenericDecl(*pdecl);
-            if (d->is_type) {
-                type = pawIr_new_generic(X->C, d->did);
-                arg = IrGenericArg_from_type(type);
-            } else {
-                type = collect_type(X, d->k.type);
-                IrConst *konst = pawIr_new_const_decl(X->C, d->did);
-                arg = IrGenericArg_from_const(konst);
-            }
-            IrDeclArgs_insert(X->C, X->C->ir_decl_args, d->did, arg);
-            IrGenericArgs_push(X->C, types, arg);
-            SET_NODE_TYPE(X->C, *pdecl, type);
-            set_def_type(X, d->did, type);
-        }
-    }
-    pawIr_set_generic_args(X->C, parent_did, types);
-    return types;
-}
-
 static void collect_bound_traits(struct ItemCollector *X, struct HirGenericDecl const *d, IrConstraints *result)
 {
     IrType *generic = pawIr_get_def_type(X->C, d->did);
@@ -511,7 +518,8 @@ static void collect_builtin_types(struct ItemCollector *X)
 static void collect_adt(struct ItemCollector *X, struct HirAdtDecl const *d)
 {
     if (!is_builtin(X, d->did)) {
-        IrGenericArgs *args = collect_generic_args(X, d->did, d->generics);
+        collect_generic_defs(X, d->did, d->generics);
+        IrGenericArgs *args = pawIr_get_generic_args(X->C, d->did);
         IrType *type = pawIr_new_adt(X->C, d->did, args);
 
         set_def_type(X, d->did, type);
@@ -521,16 +529,16 @@ static void collect_adt(struct ItemCollector *X, struct HirAdtDecl const *d)
 
 static void collect_trait(struct ItemCollector *X, struct HirTraitDecl const *d)
 {
-    IrGenericArgs *args = collect_generic_args(X, d->did, d->generics);
-    IrTrait *trait = pawIr_new_trait(X->C, d->did, args);
-    IrType *self = IrGenericArg_get_type(IrGenericArgs_first(args));
+    collect_generic_defs(X, d->did, d->generics);
+    IrGenericArgs *args = pawIr_get_generic_args(X->C, d->did);
 
     K_LIST_XFOREACH (d->types, struct HirDecl *const, p) {
         struct HirGenericDecl const *t = HirGetGenericDecl(*p);
         paw_assert(t->is_type);
-        IrType *item_type = pawIr_new_projection(X->C, self, trait, t->did);
-        set_def_type(X, t->did, item_type);
-        SET_TYPE(X, t->id, item_type);
+
+        IrType *type = pawIr_new_projection(X->C, t->did, args);
+        set_def_type(X, t->did, type);
+        SET_TYPE(X, t->id, type);
     }
 }
 
@@ -538,7 +546,7 @@ static void collect_adt_def(struct ItemCollector *X, struct HirAdtDecl const *d)
 {
     IrType *type = pawIr_get_def_type(X->C, d->did);
     if (IrIsAdt(type)) {
-        IrGenericDefs *generics = collect_generic_defs(X, d->did, d->generics);
+        IrGenericDefs *generics = get_generic_defs(X, d->did);
         struct IrAdtDef *r = pawIr_new_adt_def(X->C, d->did, d->ident.name,
                 generics, NULL, d->is_pub, d->is_struct);
         AdtDefMap_insert(X->C, X->C->adt_defs, d->did, r);
@@ -547,7 +555,6 @@ static void collect_adt_def(struct ItemCollector *X, struct HirAdtDecl const *d)
 
 static void collect_fn_def(struct ItemCollector *X, struct HirFnDecl const *d)
 {
-    collect_generic_args(X, d->did, d->generics);
     IrGenericDefs *generics = get_generic_defs(X, d->did);
     struct IrFnDef *r = pawIr_new_fn_def(X->C, d->did, d->ident.name,
             generics, NULL, NULL, NULL, NO_DECL, d->is_pub);
@@ -573,7 +580,7 @@ static void collect_trait_def(struct ItemCollector *X, struct HirTraitDecl const
         collect_fn_def(X, fn);
     }
 
-    IrGenericDefs *generics = collect_generic_defs(X, d->did, d->generics);
+    IrGenericDefs *generics = get_generic_defs(X, d->did);
     struct IrTraitDef *r = pawIr_new_trait_def(X->C, d->did,
             d->ident.name, generics, NULL, items, d->is_pub);
     TraitDefMap_insert(X->C, X->C->trait_defs, d->did, r);
@@ -587,7 +594,6 @@ static void record_impl_block(struct ItemCollector *X, IrDefs *impls, DeclId did
 
 static void collect_impl_def(struct ItemCollector *X, struct HirImplDecl const *d)
 {
-    collect_generic_args(X, d->did, d->generics);
     IrGenericDefs *generics = get_generic_defs(X, d->did);
 
     IrType *type = collect_type(X, d->type);
@@ -639,16 +645,6 @@ static void collect_nominal_types(struct ItemCollector *X, struct HirModule m)
         } else if (HirIsTraitDecl(*p)) {
             collect_trait(X, HirGetTraitDecl(*p));
         }
-    }
-}
-
-static void collect_type_defs(struct ItemCollector *X, struct HirDeclList *types)
-{
-    K_LIST_XFOREACH (types, struct HirDecl *const, decl_ptr) {
-        struct HirTypeDecl const *t = HirGetTypeDecl(*decl_ptr);
-        IrType *type = collect_type(X, t->rhs);
-        set_def_type(X, t->did, type);
-        SET_TYPE(X, t->id, type);
     }
 }
 
@@ -712,7 +708,6 @@ static void collect_constraints_from(struct ItemCollector *X, struct HirDecl *de
             collect_constraints_from(X, *p);
     } else if (HirIsTypeDecl(decl)) {
         struct HirTypeDecl const *d = HirGetTypeDecl(decl);
-        collect_generic_args(X, d->did, d->generics);
         collect_generic_bounds(X, d->generics, constraints);
         if (constraints->count > 0)
             COLLECTOR_ERROR(X, Unsupported, d->span);
@@ -774,25 +769,6 @@ static void ensure_trait_is_well_formed(struct ItemCollector *X, struct SourceSp
             (struct IrObligationCause){.span = span});
 }
 
-struct AssocItemInfo {
-    DeclId did;
-    paw_Bool found;
-};
-
-DEFINE_MAP(struct ItemCollector, AssocItemInfoMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct AssocItemInfo)
-
-static AssocItemInfoMap *collect_assoc_types_from_trait(struct ItemCollector *X, DeclId did)
-{
-    struct IrTraitDef const *trait = pawIr_get_trait_def(X->C, did);
-    AssocItemInfoMap *items = AssocItemInfoMap_new(X);
-    K_LIST_XFOREACH (trait->items, struct IrAssocItem *const, p) {
-        AssocItemInfoMap_insert(X, items, (*p)->name, (struct AssocItemInfo){
-                    .did = (*p)->did,
-                });
-    }
-    return items;
-}
-
 static AssocItemInfoMap *collect_assoc_fns_from_trait(struct ItemCollector *X, DeclId did)
 {
     struct IrTraitDef const *trait = pawIr_get_trait_def(X->C, did);
@@ -821,16 +797,6 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
     ensure_trait_is_well_formed(X, trait_path->span, trait);
 
     struct IrImpl const *impl_def = pawIr_get_impl_def(X->C, d->did);
-    K_LIST_XFOREACH (d->types, struct HirDecl *const, decl_ptr) {
-        struct HirTypeDecl const *t = HirGetTypeDecl(*decl_ptr);
-        IrType *lhs = pawIr_new_projection(X->C, self, trait, t->did);
-        IrType *rhs = pawIr_get_def_type(X->C, t->did);
-        pawIr_solver_add_norm_target(X->C->S, lhs, rhs,
-                (struct IrObligationCause){
-                    .span = t->span,
-                });
-    }
-
     AssocItemInfoMap *assoc_types = collect_assoc_types_from_trait(X, impl_def->trait->did);
     K_LIST_XFOREACH (d->types, struct HirDecl *const, item_ptr) {
         struct HirTypeDecl const *item = HirGetTypeDecl(*item_ptr);
@@ -849,6 +815,13 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
                     .span = item->span);
 
         info->found = PAW_TRUE;
+
+        IrType *lhs = pawIr_new_projection(X->C, info->did, trait->args);
+        IrType *rhs = pawIr_get_def_type(X->C, item->did);
+        pawIr_solver_add_norm_target(X->C->S, lhs, rhs,
+                (struct IrObligationCause){
+                    .span = item->span,
+                });
     }
 
     struct IrTraitDef const *trait_def = pawIr_get_trait_def(X->C, trait->did);
@@ -857,13 +830,13 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
         struct AssocItemInfo const *info = AssocItemInfoMap_get(X, assoc_types, item->name);
         if (!info->found) {
             struct IrAssocItem const *item_def = pawIr_get_assoc_item(X->C, info->did);
-            struct HirTypeDecl const *missing_type = HirGetTypeDecl(pawHir_get_decl(X->hir, item_def->did));
-            struct Module const missing_mod = ModuleInfo_get(X->C->modinfo, (int)missing_type->did.modno);
+            struct HirDecl const *missing_item = pawHir_get_decl(X->hir, item_def->did);
+            struct Module const missing_mod = ModuleInfo_get(X->C->modinfo, (int)missing_item->hdr.did.modno);
             COLLECTOR_ERROR(X, TraitImplMissingAssocItem,
                     .trait = print_trait(X, impl_def->trait),
                     .item = item_def->name,
                     .missing_modname = missing_mod.name,
-                    .missing_span = missing_type->span,
+                    .missing_span = missing_item->hdr.span,
                     .impl_span = d->span);
         }
     }
@@ -998,7 +971,6 @@ static void collect_local_type_decl(struct HirVisitor *V, struct HirTypeDecl *d)
     struct ItemCollector *X = V->ud;
     IrConstraints *constraints = IrConstraints_new(X->C);
 
-    collect_generic_args(X, d->did, d->generics);
     collect_generic_defs(X, d->did, d->generics);
     collect_generic_bounds(X, d->generics, constraints);
     IrType *rhs = collect_type_decl(X, d);
@@ -1269,10 +1241,6 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool)
     X.binders = GenericBinderMap_new(&X);
 
     DLOG(&X, "collecting %d module(s)", C->modules->count);
-
-//    pawIr_type_visitor_init(X.V, C, &X);
-//    V.VisitTrait = visit_trait;
-//    V.VisitType = visit_type;
 
     pawU_enter_binder(C->U, SCAN_STR(C, "<module>"));
 
