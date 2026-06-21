@@ -87,6 +87,36 @@ fn call_index_range<R: IndexRange<Idx>, Idx>(r: *R, index: Idx) -> []R::Output {
 }
 
 
+pub struct IntoIter<const N: int, T> {
+    inner: [N]T,
+    index: int,
+}
+
+use ptr;
+
+impl<const N: int, T> Iterator for IntoIter<{N}, T> {
+    type Item = T;
+
+    fn next(*self) -> Option<Self::Item> {
+        if self.index < N {
+            let value = ptr::read(&self.inner[self.index]);
+            self.index += 1;
+            Some(value)
+        } else {
+            None
+        }        
+    }
+}
+
+impl<const N: int, T> IntoIterator for [N]T {
+    type Item = T;
+    type IntoIter = IntoIter<{N}, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter{inner: self, index: 0}
+    }
+}
+
 impl<const N: int, T> IntoIterator for *[N]T {
     type Item = *T;
     type IntoIter = slice::Iter<T>;

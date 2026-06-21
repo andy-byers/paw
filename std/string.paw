@@ -110,19 +110,15 @@ impl Hash for String {
     }
 }
 
-impl Equals<Self> for String {
+impl Eq<Self> for String {
     fn eq(*self, rhs: *Self) -> bool {
         self.to_slice().eq(&rhs.to_slice())
     }
 }
 
-impl Compare<Self> for String {
-    fn lt(*self, rhs: *Self) -> bool {
-        self.to_slice().lt(&rhs.to_slice())
-    }
-
-    fn le(*self, rhs: *Self) -> bool {
-        self.to_slice().le(&rhs.to_slice())
+impl Ord<Self> for String {
+    fn cmp(*self, rhs: *Self) -> Ordering {
+        self.to_slice().cmp(&rhs.to_slice())
     }
 }
 
@@ -158,3 +154,12 @@ impl IntoIterator for *String {
 //    }
 //}
 
+
+use io;
+
+impl io::Write for String {
+    fn write(*self, data: []char) -> io::Result<int> {
+        self.extend(data)?;
+        Ok(data.len())
+    }
+}

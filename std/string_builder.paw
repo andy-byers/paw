@@ -15,6 +15,10 @@ impl Builder {
         Self{buffer: List::new()}
     }
 
+    pub fn len(*self) -> int {
+        self.buffer.len()
+    }
+
     pub fn append<I: IntoIterator<Item = *char>>(*self, iter: I) -> mem::Result<()> {
         self.buffer.extend(iter)?;
         Ok(())

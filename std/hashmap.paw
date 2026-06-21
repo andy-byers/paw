@@ -23,7 +23,7 @@ const LOAD_LENGTH: int = 7;
 const LOAD_CAPACITY: int = 8;
 
 
-pub struct HashMap<K: Hash + Equals<K>, V> {
+pub struct HashMap<K: Hash + Eq<K>, V> {
     buffer: *char,
     length: int,
     capacity: int,
@@ -106,7 +106,7 @@ impl Fingerprint {
     }
 }
 
-impl Equals<Self> for Fingerprint {
+impl Eq<Self> for Fingerprint {
     fn eq(*self, rhs: *Self) -> bool {
         self.as_int() == rhs.as_int()
     }
@@ -223,7 +223,7 @@ impl<K, V> Cursor<K, V> {
 }
 
 
-impl<K: Hash + Equals<K>, V> HashMap<K, V> {
+impl<K: Hash + Eq<K>, V> HashMap<K, V> {
     pub fn new() -> Self {
         Self{
             buffer: ptr::null::<char>(),
@@ -410,7 +410,7 @@ impl<K: Hash + Equals<K>, V> HashMap<K, V> {
     }
 }
 
-impl<K: Hash + Equals<K>, V> Index<*K> for HashMap<K, V> {
+impl<K: Hash + Eq<K>, V> Index<*K> for HashMap<K, V> {
     type Output = V;
 
     // Panics if key cannot be found in the hash map.
@@ -419,7 +419,7 @@ impl<K: Hash + Equals<K>, V> Index<*K> for HashMap<K, V> {
     }
 }
 
-impl<K: Hash + Equals<K>, V> Default for HashMap<K, V> {
+impl<K: Hash + Eq<K>, V> Default for HashMap<K, V> {
     fn default() -> Self {
         Self::new()
     }
@@ -437,17 +437,17 @@ fn align_up(x: int, a: int) -> int {
 
 
 
-pub struct Iter<K: Hash + Equals<K>, V> {
+pub struct Iter<K: Hash + Eq<K>, V> {
     cursor: Cursor<K, V>,
 }
 
-impl<K: Hash + Equals<K>, V> Iter<K, V> {
+impl<K: Hash + Eq<K>, V> Iter<K, V> {
     pub fn new(inner: *HashMap<K, V>) -> Self {
         Self{cursor: inner.cursor(0)}
     }
 }
 
-impl<K: Hash + Equals<K>, V> Iterator for Iter<K, V> {
+impl<K: Hash + Eq<K>, V> Iterator for Iter<K, V> {
     type Item = (*K, *V);
 
     fn next(*self) -> Option<Self::Item> {
@@ -463,26 +463,26 @@ impl<K: Hash + Equals<K>, V> Iterator for Iter<K, V> {
 }
 
 
-pub struct IntoIter<K: Hash + Equals<K>, V> {
+pub struct IntoIter<K: Hash + Eq<K>, V> {
     inner: HashMap<K, V>,
     cursor: Cursor<K, V>,
 }
 
-impl<K: Hash + Equals<K>, V> IntoIter<K, V> {
+impl<K: Hash + Eq<K>, V> IntoIter<K, V> {
     pub fn new(inner: HashMap<K, V>) -> Self {
         let cursor = inner.cursor(0);
         Self{inner, cursor}
     }
 }
 
-impl<K: Hash + Equals<K>, V> Drop for IntoIter<K, V> {
+impl<K: Hash + Eq<K>, V> Drop for IntoIter<K, V> {
     fn drop(*self) {
         // prevent Drop from being called on elements
         self.inner.length = 0;
     }
 }
 
-impl<K: Hash + Equals<K>, V> Iterator for IntoIter<K, V> {
+impl<K: Hash + Eq<K>, V> Iterator for IntoIter<K, V> {
     type Item = (K, V);
 
     fn next(*self) -> Option<Self::Item> {
@@ -500,7 +500,7 @@ impl<K: Hash + Equals<K>, V> Iterator for IntoIter<K, V> {
     }
 }
 
-impl<K: Hash + Equals<K>, V> IntoIterator for HashMap<K, V> {
+impl<K: Hash + Eq<K>, V> IntoIterator for HashMap<K, V> {
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
 
@@ -509,7 +509,7 @@ impl<K: Hash + Equals<K>, V> IntoIterator for HashMap<K, V> {
     }
 }
 
-impl<K: Hash + Equals<K>, V> IntoIterator for *HashMap<K, V> {
+impl<K: Hash + Eq<K>, V> IntoIterator for *HashMap<K, V> {
     type Item = (*K, *V);
     type IntoIter = Iter<K, V>;
 
@@ -518,7 +518,7 @@ impl<K: Hash + Equals<K>, V> IntoIterator for *HashMap<K, V> {
     }
 }
 
-//impl<K: Hash + Equals<K>, V> IntoIterator for *mut HashMap<K, V> {
+//impl<K: Hash + Eq<K>, V> IntoIterator for *mut HashMap<K, V> {
 //    type Item = (*K, *mut V);
 //    type IntoIter = IterMut<K, V>;
 //

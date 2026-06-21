@@ -341,7 +341,7 @@ impl<T> IntoIterator for *List<T> {
 //}
 
 
-impl<T: Equals<T>> Equals<Self> for List<T> {
+impl<T: Eq<T>> Eq<Self> for List<T> {
     fn eq(*self, rhs: *Self) -> bool {
         if self.len() != rhs.len() {
             return false;
@@ -430,5 +430,15 @@ impl<T> IndexRange<RangeFull> for List<T> {
 
 fn call_index_range<R: IndexRange<Idx>, Idx>(r: *R, index: Idx) -> []R::Output {
     r.index_range(index)
+}
+
+
+use io;
+
+impl io::Write for List<char> {
+    fn write(*self, data: []char) -> io::Result<int> {
+        self.extend_from_slice(data)?;
+        Ok(data.len())
+    }
 }
 
