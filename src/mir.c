@@ -31,7 +31,6 @@ struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, St
     mir->registers = MirRegisterDataList_new(mir);
     mir->blocks = MirBlockDataList_new(mir);
     mir->upvalues = MirUpvalueList_new(mir);
-    mir->children = MirBodyList_new(mir);
     return mir;
 }
 
@@ -42,7 +41,6 @@ void pawMir_free(struct Mir *mir)
     MirRegisterDataList_delete(mir, mir->registers);
     MirBlockDataList_delete(mir, mir->blocks);
     MirUpvalueList_delete(mir, mir->upvalues);
-    MirBodyList_delete(mir, mir->children);
     pawMir_kcache_delete(mir, mir->kcache);
     P_ALLOC(mir->C, mir, sizeof(*mir), 0);
 }
@@ -154,16 +152,6 @@ MirConstant pawMir_kcache_add_param(struct Mir *mir, struct MirConstantCache *kc
         });
     MirConstMap_insert(mir->C, mir->kcache->params, konst, id);
     return id;
-}
-
-struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions)
-{
-    struct MirLiveInterval *it = P_ALLOC(C, NULL, 0, sizeof(struct MirLiveInterval));
-    *it = (struct MirLiveInterval){
-        .ranges = pawP_bitset_new(C, npositions),
-        .r = r,
-    };
-    return it;
 }
 
 MirInstruction *pawMir_new_instruction(struct Mir *mir)
@@ -457,14 +445,6 @@ void pawMir_visit(struct MirVisitor *V)
         // callee will look up the block data struct using the provided block ID
         pawMir_visit_block(V, MIR_BB(i));
     }
-
-//    // TODO: closures should be unnested so children can be visited separately
-//    struct Mir *const *pchild;
-//    K_LIST_FOREACH (mir->children, pchild) {
-//        V->mir = *pchild;
-//        pawMir_visit(V);
-//    }
-//    V->mir = mir;
 }
 
 #define DEFINE_LIST_VISITOR(name, T) \
@@ -1707,17 +1687,6 @@ char const *pawMir_dump(struct Mir *mir)
              },
              mir);
 
-    for (int i = 0; i < mir->children->count; ++i) {
-        struct Mir *child = MirBodyList_get(mir->children, i);
-        dump_mir(&(struct Printer){
-                     .P = ENV(C),
-                     .mir = child,
-                     .buf = &buf,
-                     .C = C,
-                 },
-                 child);
-    }
-
     Str const *result = pawL_buffer_finish(P, &buf);
     return result->text;
 }
@@ -1768,17 +1737,6 @@ char const *pawMir_dump_graph(struct Mir *mir)
                    .C = C,
                },
                mir);
-
-    for (int i = 0; i < mir->children->count; ++i) {
-        struct Mir *child = MirBodyList_get(mir->children, i);
-        dump_graph(&(struct Printer){
-                       .P = ENV(C),
-                       .mir = mir,
-                       .buf = &buf,
-                       .C = C,
-                   },
-                   child);
-    }
 
     Str const *result = pawL_buffer_finish(P, &buf);
     return result->text;

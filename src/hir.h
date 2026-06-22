@@ -1799,7 +1799,7 @@ static inline struct HirSegment *pawHir_init_(struct Hir *hir, struct HirSegment
         .id = id,
         .span = span,
         .ident = ident,
-        .target = target,
+        .target.id = target,
         .args = args,
     });
     return &K_LIST_LAST(segments);

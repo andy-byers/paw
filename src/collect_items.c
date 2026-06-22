@@ -317,13 +317,13 @@ static struct IrVariantDefs *create_struct_variant(struct ItemCollector *X, stru
     paw_assert(decls->count == 1);
     struct HirVariantDecl const *v = HirGetVariantDecl(K_LIST_FIRST(decls));
     struct IrFieldDefs *fields = collect_field_defs(X, v->fields);
-    struct IrVariantDef *r = pawIr_new_variant_def(X->C, v->did, NO_DECL, v->base_did, 0, ident.name, fields);
+    struct IrVariantDef *r = pawIr_new_variant_def(X->C, v->did, INVALID_DECL_ID, v->base_did, 0, ident.name, fields);
     struct IrVariantDefs *variants = IrVariantDefs_new(X->C);
     VariantDefMap_insert(X->C, X->C->variant_defs, v->did, r);
     IrVariantDefs_push(X->C, variants, r);
 
     SET_TYPE(X, v->id, X->ctx);
-    r->cons_did = NO_DECL;
+    r->cons_did = INVALID_DECL_ID;
 
     return variants;
 }
@@ -337,7 +337,7 @@ static struct IrVariantDefs *collect_variant_defs(struct ItemCollector *X, struc
     K_LIST_FOREACH (adt->variants, pdecl) {
         struct HirVariantDecl *d = HirGetVariantDecl(*pdecl);
         struct IrFieldDefs *fields = collect_field_defs(X, d->fields);
-        struct IrVariantDef *r = pawIr_new_variant_def(X->C, d->did, NO_DECL, d->base_did, d->index, d->ident.name, fields);
+        struct IrVariantDef *r = pawIr_new_variant_def(X->C, d->did, INVALID_DECL_ID, d->base_did, d->index, d->ident.name, fields);
         VariantDefMap_insert(X->C, X->C->variant_defs, d->did, r);
         IrVariantDefs_push(X->C, variants, r);
 
@@ -382,7 +382,7 @@ static void collect_variant_type(struct ItemCollector *X, struct HirVariantDecl 
 
     if (is_struct) {
         SET_TYPE(X, d->id, X->ctx);
-        def->cons_did = NO_DECL;
+        def->cons_did = INVALID_DECL_ID;
     } else {
         IrType *type = pawIr_new_signature(X->C, d->did, X->binder);
         SET_TYPE(X, d->id, type);
@@ -557,7 +557,7 @@ static void collect_fn_def(struct ItemCollector *X, struct HirFnDecl const *d)
 {
     IrGenericDefs *generics = get_generic_defs(X, d->did);
     struct IrFnDef *r = pawIr_new_fn_def(X->C, d->did, d->ident.name,
-            generics, NULL, NULL, NULL, NO_DECL, d->is_pub);
+            generics, NULL, NULL, NULL, INVALID_DECL_ID, d->is_pub);
     FnDefMap_insert(X->C, X->C->fn_defs, d->did, r);
 }
 

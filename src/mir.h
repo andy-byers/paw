@@ -1,6 +1,9 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+//
+// TODO: Rename *GEP to *Gep (*GEP is not camel case)
+//       Remove `.type` field from `MirPlace` to make monomorphization easier
 
 #ifndef PAW_MIR_H
 #define PAW_MIR_H
@@ -10,7 +13,6 @@
 
 struct Mir;
 
-// TODO: Rename *GEP to *Gep (*GEP is not camel case)
 #define MIR_INSTRUCTION_LIST(X) \
     X(Noop)                     \
     X(Phi)                      \
@@ -805,8 +807,6 @@ void pawMir_kcache_delete(struct Mir *mir, struct MirConstantCache *kcache);
 MirConstant pawMir_kcache_add_value(struct Mir *mir, struct MirConstantCache *kcache, union IrValue value, IrType *type);
 MirConstant pawMir_kcache_add_param(struct Mir *mir, struct MirConstantCache *kcache, DeclId did);
 
-// TODO: nested closures should be hoisted out into separate Mir objects, but this is complicated
-//       for a few reasons, namely upvalues, generics, and naming.
 struct Mir {
     struct Pool *pool;
     struct Annotations *annotations;
@@ -814,7 +814,6 @@ struct Mir {
     struct MirBlockDataList *blocks;
     struct MirUpvalueList *upvalues;
     struct MirCaptureList *captured;
-    struct MirBodyList *children;
     struct MirConstantCache *kcache;
     struct MirScopeInfoList *scopes;
     struct SourceSpan span;
@@ -861,7 +860,6 @@ DEFINE_LIST(struct Mir, MirBodyList, struct Mir *)
 struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, Annotations *annotations, struct IrType *type, struct IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
 
-struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
 struct MirBlockData *pawMir_new_block(struct Mir *mir, MirScope scope);
 
 // Get a pointer to each variable read or written by a given instruction
@@ -998,18 +996,6 @@ void pawMir_generate_drops(struct Mir *mir);
 void pawMir_propagate_constants(struct Mir *mir);
 void pawMir_merge_redundant_blocks(struct Mir *mir);
 
-// Approximation of the live range of a variable
-// The variable corresponding to a given MirLiveInterval is live between instruction
-// numbers "first" and "last", inclusive. Additionally, there might be lifetime holes,
-// specified by regions of 0 bits in "ranges".
-struct MirLiveInterval {
-    struct MirInstruction *instr;
-    struct BitSet *ranges;
-    int first, last;
-    MirRegister r;
-};
-
-DEFINE_LIST(struct Mir, MirIntervalList, struct MirLiveInterval *)
 DEFINE_LIST(struct Mir, MirLocationList, int)
 
 struct MirLocationList *pawMir_compute_locations(struct Mir *mir);
@@ -1045,7 +1031,6 @@ static paw_Bool mir_place_equals(struct Mir *mir, struct MirPlace lhs, struct Mi
         && lhs.value == rhs.value;
 }
 
-DEFINE_MAP(struct Mir, MirIntervalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirLiveInterval *)
 DEFINE_MAP(struct Mir, AccessMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirAccessList *)
 DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)

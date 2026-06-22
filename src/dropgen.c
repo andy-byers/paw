@@ -177,21 +177,23 @@ static void generate_drops_for_fields(struct DropGenerator *G, BodyList *bodies)
 {
     DeclId const drop_did = G->C->core_traits[CORE_TRAIT_DROP];
     K_LIST_XFOREACH (bodies, struct Mir *, p) {
-        struct IrSignature const *t = IrGetSignature((*p)->type);
-        struct IrFnDef const *def = pawIr_get_fn_def(G->C, t->did);
-        if ((*p)->blocks->count > 0 && DECL_ID_EXISTS(def->parent)) {
-            struct IrImpl const *impl = pawIr_get_impl_def(G->C, def->parent);
-            if (impl->trait != NULL && MIR_ID_EQUALS(impl->trait->did, drop_did)) {
-                struct MirPlace const local = pawMir_get_register(*p, MIR_REG(1));
-                if (IrIsTuple((*p)->self)) {
-                    drop_tuple_fields(G, *p, local);
-                } else if (IrIsAdt((*p)->self)) {
-                    struct IrAdt const *t = IrGetAdt((*p)->self);
-                    struct IrAdtDef const *def = pawIr_get_adt_def(G->C, t->did);
-                    if (def->is_struct) {
-                        drop_struct_fields(G, *p, local);
-                    } else {
-                        drop_enum_variants(G, *p, local);
+        if (IrIsSignature((*p)->type)) {
+            struct IrSignature const *t = IrGetSignature((*p)->type);
+            struct IrFnDef const *def = pawIr_get_fn_def(G->C, t->did);
+            if ((*p)->blocks->count > 0 && DECL_ID_EXISTS(def->parent)) {
+                struct IrImpl const *impl = pawIr_get_impl_def(G->C, def->parent);
+                if (impl->trait != NULL && MIR_ID_EQUALS(impl->trait->did, drop_did)) {
+                    struct MirPlace const local = pawMir_get_register(*p, MIR_REG(1));
+                    if (IrIsTuple((*p)->self)) {
+                        drop_tuple_fields(G, *p, local);
+                    } else if (IrIsAdt((*p)->self)) {
+                        struct IrAdt const *t = IrGetAdt((*p)->self);
+                        struct IrAdtDef const *def = pawIr_get_adt_def(G->C, t->did);
+                        if (def->is_struct) {
+                            drop_struct_fields(G, *p, local);
+                        } else {
+                            drop_enum_variants(G, *p, local);
+                        }
                     }
                 }
             }

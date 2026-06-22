@@ -120,11 +120,12 @@ std::string Fn::get_name() const
     return get_fn()->getName().str();
 }
 
-llvm::Value *Fn::get_env() const
+llvm::Value *Fn::load_env() const
 {
     auto *B = X->get_builder();
     auto *fn_type = get_type();
     auto *arg_type = fn_type->get_env_type();
+    if (arg_type == nullptr) return nullptr;
     llvm::Value *arg = get_fn()->getArg(env_pointer_offset(fn_type));
     return arg_type->get_abi_class() == ABIClass::LARGE_STRUCT
         ? B->CreateLoad(*arg_type, arg)

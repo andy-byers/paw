@@ -1039,8 +1039,4 @@ static void propagate(struct Mir *mir)
 void pawMir_propagate_constants(struct Mir *mir)
 {
     propagate(mir);
-
-    struct Mir *const *pchild;
-    K_LIST_FOREACH (mir->children, pchild)
-        propagate(*pchild);
 }

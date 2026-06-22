@@ -432,8 +432,8 @@ struct IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did);
         IrIsClosure(type) ? IrGetClosure(type)->did : \
         IrIsProjection(type) ? IrGetProjection(type)->did : \
         IrGetGeneric(type)->did)
-// TODO: not really correct since signatures (and closures esp.) can have args belonging to enclosing impl block
-#define IR_TYPE_IS_POLYMORPHIC(Type_) ((IrIsAdt(Type_) || IrIsSignature(Type_)) \
+#define IR_TYPE_IS_POLYMORPHIC(Type_) \
+    ((IrIsAdt(Type_) || IrIsSignature(Type_) || IrIsClosure(Type_)) \
         && IR_GENERIC_ARGS(Type_)->count > 0)
 #define IR_FIRST_GENERIC_ARG(Type_) IrGenericArgs_first(IR_GENERIC_ARGS(Type_))
 #define IR_GENERIC_ARGS(Type_) (IrIsAdt(Type_) ? IrGetAdt(Type_)->args : \

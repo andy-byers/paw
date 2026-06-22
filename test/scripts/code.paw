@@ -747,7 +747,24 @@
 //    assert(output[4] == 10);
 //}
 
+struct Struct<T>;
+
+impl<X> Struct<X> {
+    pub fn assoc<Y>() -> fn(X, Y) -> (X, Y) {
+        |x, y| (x, y)
+    }
+}
+
 #[test]
 pub fn test() {
+    let s = Struct::<int>::assoc::<float>()(1, 2.0);
+    assert(s.0 == 1);
+    assert(s.1 == 2.0);
+    let s = Struct::<float>::assoc::<float>()(1.0, 2.0);
+    assert(s.0 == 1.0);
+    assert(s.1 == 2.0);
+    let s = Struct::<float>::assoc::<int>()(1.0, 2);
+    assert(s.0 == 1.0);
+    assert(s.1 == 2);
 }
 

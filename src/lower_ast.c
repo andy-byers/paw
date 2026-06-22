@@ -509,7 +509,7 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
     struct HirIdent const ident = lower_ident(d->ident);
     HirDeclList *generics = lower_decl_list(L, d->generics);
     HirDeclList *variants = lower_decl_list(L, d->variants);
-    L->adt_did = NO_DECL;
+    L->adt_did = INVALID_DECL_ID;
 
     return NEW_NODE(L, adt_decl, d->span, d->id, d->did, ident, generics,
             variants, d->is_pub, d->is_struct);

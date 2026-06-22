@@ -145,6 +145,8 @@ static void VisitType(struct Compiler *C, IrType *type)
         case kIrFnPtr:
             VisitFnPtr(C, IrGetFnPtr(type));
             break;
+        case kIrClosure:
+            break;
         case kIrSignature:
             VisitSignature(C, IrGetSignature(type));
             break;
@@ -179,10 +181,6 @@ static void collect_types(struct Mir *mir)
     struct MirUpvalueInfo const *pup;
     K_LIST_FOREACH (mir->upvalues, pup)
         collect_type(mir, pup->type);
-
-    struct Mir *const *pchild;
-    K_LIST_FOREACH (mir->children, pchild)
-        collect_types(*pchild);
 }
 
 static void code_items(struct Generator *G)

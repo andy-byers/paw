@@ -357,33 +357,6 @@ private:
 
 class CodeGenerator;
 
-struct Upvalue {
-    llvm::Value *ptr;
-    llvm::Value *val;
-};
-
-struct Closure {
-    explicit Closure() = default;
-    explicit Closure(std::unique_ptr<Fn> fn, size_t num_upvalues)
-        : upvalues(num_upvalues)
-        , fn(std::move(fn))
-    {
-    }
-
-    std::vector<Upvalue> upvalues;
-    std::unique_ptr<Fn> fn;
-};
-
-enum class ValueKind {
-    // Value is a static single assignment (SSA) variable, i.e. it is assigned exactly
-    // once and can be used 0 or more times. Used for scalar values that do not require
-    // an address.
-    SSA,
-
-    // Value is backed by either an "alloca" or a heap-allocated "upvalue" slot.
-    MEMORY,
-};
-
 struct PhiInput {
     llvm::PHINode *phi;
     llvm::BasicBlock *from;
@@ -397,11 +370,6 @@ public:
     explicit PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer);
     ~PawState();
 
-    Closure *get_closure(unsigned index)
-    {
-        return &closures_.at(index);
-    }
-
     void set_raw_value(MirRegister r, llvm::Value *value)
     {
         values_.at(unsigned(r.value)) = value;
@@ -412,7 +380,6 @@ public:
         return values_.at(unsigned(r.value));
     }
 
-    llvm::Value *get_local_ptr(unsigned index);
     llvm::Value *get_upvalue_ptr(unsigned index);
 
 private:
@@ -432,7 +399,6 @@ private:
     std::vector<llvm::Value *> constants_;
     std::vector<llvm::Value *> captured_;
     std::vector<llvm::Value *> upvalues_;
-    std::vector<Closure> closures_;
     llvm::Value *env_;
 };
 
@@ -824,7 +790,6 @@ public:
 
     void define_fn(Mir const *mir)
     {
-        // TODO: should be able to just call get_fn since closures have unique types
         auto *fn = get_fn(mir->type);
         if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {
             auto const *fptr = IrGetFnPtr(IR_GET_FN(C, mir->type));
@@ -1268,8 +1233,6 @@ private:
     void register_mir(Mir const *mir)
     {
         mirs_.insert(mir->type, mir);
-        K_LIST_XFOREACH (mir->children, Mir *const, child)
-            register_mir(*child);
     }
 
     llvm::Function::LinkageTypes get_linkage(Mir const *mir)
@@ -1681,16 +1644,11 @@ private:
 
     void create_closure(MirClosure const &x)
     {
-        auto *child = MirBodyList_get(state_->mir_->children, x.child_id);
-        auto *fn = declare_fn(child);
-
-        auto *block = B->GetInsertBlock(); // save position
-        define_fn(child); // generate code for closure
-        B->SetInsertPoint(block); // restore position
-
-        if (child->upvalues->count == 0) {
+        auto *fn = get_fn(x.output.type);
+        if (!fn->has_env()) {
             set_result(x.output, fn->get_value());
         } else {
+            auto *child = *mirs_.lookup(x.output.type); // must exist
             llvm::Type *env_ty = *create_env_type(child->upvalues);
             llvm::Value *env = llvm::UndefValue::get(env_ty);
 
@@ -2054,7 +2012,6 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
     , constants_(unsigned(mir->kcache->data->count))
     , captured_(unsigned(mir->captured->count))
     , upvalues_(unsigned(mir->upvalues->count))
-    , closures_(unsigned(mir->children->count))
 {
     auto *X = G.get_context();
     auto *B = X->get_builder();
@@ -2117,7 +2074,7 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
         llvm::Type *env_ty = *G.create_env_type(mir->upvalues);
         env_ = B->CreateAlloca(env_ty);
 
-        B->CreateStore(fn->get_env(), env_);
+        B->CreateStore(fn->load_env(), env_);
         for (auto i = 0U; i < upvalues_.size(); ++i)
             upvalues_[i] = B->CreateStructGEP(env_ty, env_, i);
     }
@@ -2136,12 +2093,6 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
     for (int i = 0; i < mir->kcache->data->count; ++i)
         constants_[i] = G.create_constant(mir->kcache->data->data[i]);
 
-    for (int i = 0; i < mir->children->count; ++i) {
-        auto *child = mir->children->data[i];
-        closures_[i] = Closure(nullptr,
-                (size_t)child->upvalues->count);
-    }
-
     B->CreateBr(blocks_.front());
     G.state_ = this;
 }
@@ -2155,11 +2106,6 @@ PawState::~PawState()
             << fn_->get_fn()->getName() << ":\n" << error << "\n";
 
     G->state_ = outer_;
-}
-
-llvm::Value *PawState::get_local_ptr(unsigned index)
-{
-    return values_.at(index);
 }
 
 llvm::Value *PawState::get_upvalue_ptr(unsigned index)

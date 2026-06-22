@@ -63,7 +63,12 @@ public:
         return get_type()->get_num_params();
     }
 
-    llvm::Value *get_env() const;
+    bool has_env() const
+    {
+        return get_type()->has_env();
+    }
+
+    llvm::Value *load_env() const;
     llvm::Value *get_arg(unsigned index) const;
 
 private:

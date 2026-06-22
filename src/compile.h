@@ -58,9 +58,6 @@
 #define TARGET_MODNO 0
 #define PRELUDE_MODNO 1
 
-#define NO_NODE ((NodeId){0})
-#define NO_DECL ((DeclId){0})
-
 struct Hir;
 struct HirModule;
 struct HirPath;
@@ -334,8 +331,8 @@ void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 struct AstDecl *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader input, void *ud);
 
 struct MonoResult {
-    struct IrTypeList *types;
     struct BodyList *bodies;
+    struct TypeCollection *bodies2;
 };
 
 struct MonoResult pawP_monomorphize(struct Compiler *C, struct BodyMap *bodies);

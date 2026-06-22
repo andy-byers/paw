@@ -215,7 +215,7 @@ static void register_builtin(struct Compiler *C, unsigned cstr, enum BuiltinKind
 {
     Str *s = CACHED_STRING(ENV(C), cstr);
     C->builtins[kind] = (struct Builtin){
-        .did = NO_DECL,
+        .did = INVALID_DECL_ID,
         .name = s,
     };
     BuiltinMap_insert(C, C->builtin_lookup, s, &C->builtins[kind]);

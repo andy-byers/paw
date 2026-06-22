@@ -515,7 +515,7 @@ static struct MirPlace addr_of(struct FunctionState *fs, struct MirPlace place)
             .name = SCAN_STR(fs->C, "(temporary)"),
             .span = place.span,
         };
-        struct LocalVar const local = *alloc_local(fs, ident, NO_NODE, place.type);
+        struct LocalVar const local = *alloc_local(fs, ident, INVALID_NODE_ID, place.type);
         move_to(fs, place.span, place, local.r);
         place = local.r;
     }
@@ -773,7 +773,7 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
         .name = SCAN_STR(L->C, PRIVATE("return")),
         .span = mir->span,
     };
-    fs->ret = alloc_local(fs, ident, NO_NODE, fn->result)->r;
+    fs->ret = alloc_local(fs, ident, INVALID_NODE_ID, fn->result)->r;
     paw_assert(fs->ret.r.value == 0);
     fs->exit = new_bb(fs);
     return entry;
@@ -1553,8 +1553,9 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
 
     struct Mir *result = pawMir_new(L->C, L->pm->modno, e->span,
             SCAN_STR(L->C, PRIVATE("closure")), NULL, type, NULL,
-            outer->mir->children->count, NO_DECL, FUNC_CLOSURE,
+            -1, INVALID_DECL_ID, FUNC_CLOSURE,
             PAW_FALSE, PAW_FALSE);
+    BodyMap_insert(L->C, L->C->bodies, e->did, result);
 
     {
         UpvalueList *const *pupvalues = UpvalueTable_get(L->C, L->C->upvtab, e->did);
@@ -1594,32 +1595,7 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
         struct FunctionState fs;
         MirBlock const entry = enter_function(L, &fs, &bs, result);
         MirBlock const first = new_bb(&fs);
-
         fs.upvalues = result->upvalues;
-//TODO        UpvalueList *const *pupvalues = UpvalueTable_get(L->C, L->C->upvtab, e->did);
-//TODO        if (pupvalues != NULL) {
-//TODO            fs.upvalues = *pupvalues;
-//TODO            IrTypeList *env_fields = IrTypeList_new(L->C);
-//TODO            IrTypeList_reserve(L->C, env_fields, fs.upvalues->count);
-//TODO            K_LIST_XFOREACH (fs.upvalues, struct UpvalueInfo const, up) {
-//TODO                IrType *type = get_type(L, up->id);
-//TODO                int index = up->index;
-//TODO                if (up->is_local) {
-//TODO                    MirRegister const r = get_local(fs.outer, up->id);
-//TODO                    mir_reg_data(fs.outer->mir, r)->is_captured = PAW_TRUE;
-//TODO                    mir_reg_data(fs.outer->mir, r)->is_nontrivial = PAW_TRUE;
-//TODO                    index = r.value;
-//TODO                }
-//TODO                MirUpvalueList_push(result, result->upvalues,
-//TODO                        (struct MirUpvalueInfo){
-//TODO                            .is_local = up->is_local,
-//TODO                            .index = index,
-//TODO                            .type = type,
-//TODO                        });
-//TODO                IrTypeList_push(L->C, env_fields, type);
-//TODO            }
-//TODO            result->env_type = pawIr_new_tuple(L->C, env_fields);
-//TODO        }
 
         visit_params(L->V, e->params);
         terminate_goto(&fs, e->span);
@@ -1639,8 +1615,7 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
     }
 
     struct MirPlace const output = new_register(L->fs, type);
-    NEW_INSTR(outer, closure, e->span, outer->mir->children->count, output);
-    MirBodyList_push(outer->mir, outer->mir->children, result);
+    NEW_INSTR(outer, closure, e->span, -1/*TODO:remove_field*/, output);
     return output;
 }
 
@@ -2492,7 +2467,7 @@ static struct MirConstantData lower_constant_expression(struct LowerHir *L, stru
     IrType *artificial_result = get_type(L, expr->hdr.id);
     IrType *artificial_type = pawIr_new_fn_ptr(L->C, artificial_params, artificial_result);
     struct Mir *artificial = pawMir_new(L->C, L->pm->modno, expr->hdr.span, SCAN_STR(L->C, PRIVATE("toplevel")),
-            NULL, artificial_type, NULL, -1, NO_DECL, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
+            NULL, artificial_type, NULL, -1, INVALID_DECL_ID, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
 
     struct BlockState bs;
     struct FunctionState fs;
@@ -2590,7 +2565,7 @@ static paw_Bool is_entrypoint(struct Compiler *C, DeclId did)
 
 void pawP_lower_hir(struct Compiler *C)
 {
-    BodyMap *result = BodyMap_new(C);
+    C->bodies = BodyMap_new(C);
 
     struct LowerHir L = {
         .V = &(struct HirVisitor){0},
@@ -2621,7 +2596,7 @@ void pawP_lower_hir(struct Compiler *C)
             struct HirFnDecl *d = HirGetFnDecl(decl);
             L.pm = &K_LIST_AT(L.hir->modules, d->did.modno);
             struct Mir *r = lower_hir_body(&L, d);
-            BodyMap_insert(C, result, d->did, r);
+            BodyMap_insert(C, C->bodies, d->did, r);
         }
         HirDeclMapIterator_next(&iter);
     }
@@ -2630,6 +2605,5 @@ void pawP_lower_hir(struct Compiler *C)
 
     pawU_leave_binder(C->U);
     pawP_pool_free(C, L.pool);
-    C->bodies = result;
 }
 

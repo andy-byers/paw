@@ -32,6 +32,11 @@ static void VisitAdt(struct IrTypeVisitor *V, struct IrAdt *t)
     V->VisitGenericArgs(V, t->args);
 }
 
+static void VisitClosure(struct IrTypeVisitor *V, struct IrClosure *t)
+{
+    V->VisitGenericArgs(V, t->args);
+}
+
 static void VisitSignature(struct IrTypeVisitor *V, struct IrSignature *t)
 {
     V->VisitGenericArgs(V, t->args);
@@ -135,6 +140,7 @@ void pawIr_type_visitor_init(struct IrTypeVisitor *V, struct Compiler *C, void *
         .VisitAdt = VisitAdt,
         .VisitProjection = VisitProjection,
         .VisitSignature = VisitSignature,
+        .VisitClosure = VisitClosure,
         .VisitFnPtr = VisitFnPtr,
         .VisitSlice = VisitSlice,
         .VisitTuple = VisitTuple,
@@ -234,6 +240,12 @@ static IrType *FoldAdt(struct IrTypeFolder *F, struct IrAdt *t)
     return pawIr_new_adt(F->C, t->did, types);
 }
 
+static IrType *FoldClosure(struct IrTypeFolder *F, struct IrClosure *t)
+{
+    IrGenericArgs *types = F->FoldGenericArgs(F, t->args);
+    return pawIr_new_closure(F->C, t->did, types);
+}
+
 static IrType *FoldSignature(struct IrTypeFolder *F, struct IrSignature *t)
 {
     IrGenericArgs *types = F->FoldGenericArgs(F, t->args);
@@ -317,6 +329,7 @@ void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud
         .FoldPtr = FoldPtr,
         .FoldAdt = FoldAdt,
         .FoldSignature = FoldSignature,
+        .FoldClosure = FoldClosure,
         .FoldProjection = FoldProjection,
         .FoldFnPtr = FoldFnPtr,
         .FoldSlice = FoldSlice,
@@ -455,11 +468,4 @@ void pawMir_fold(struct MirTypeFolder *F, struct Mir *mir)
     for (int i = 0; i < mir->blocks->count; ++i) {
         mir_fold_block(F, MIR_BB(i));
     }
-    struct Mir *outer = mir;
-    struct Mir *const *pchild;
-    K_LIST_FOREACH (mir->children, pchild) {
-        F->V.mir = *pchild;
-        pawMir_fold(F, F->V.mir);
-    }
-    F->V.mir = outer;
 }

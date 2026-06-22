@@ -1169,7 +1169,7 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
         }
 
         struct IrFnDef *r = pawIr_new_fn_def(T->C, e->did, SCAN_STR(T->C, "(closure)"),
-                IrGenericDefs_new(T->C), ret, ir_params, NULL, NO_DECL, PAW_FALSE);
+                IrGenericDefs_new(T->C), ret, ir_params, NULL, INVALID_DECL_ID, PAW_FALSE);
         FnDefMap_insert(T->C, T->C->fn_defs, e->did, r);
 
         UpvalueList *const *pupvalues = UpvalueTable_get(T->C, T->C->upvtab, e->did);
@@ -2083,7 +2083,7 @@ static IrType *CheckBindingPat(struct TypeChecker *T, struct HirBindingPat *p)
 {
     NodeId const deref_target = get_deref_pat_target(T);
     if (NODE_ID_EXISTS(deref_target))
-        NodeMap_insert(T->C, T->fs->copyable_pats, p->id, INVALID_NODE_ID);
+        CopyablePats_insert(T, T->fs->copyable_pats, p->id, NULL);
 
     // binding type is determined using unification
     IrType *type = new_unknown(T, p->span);
