@@ -127,8 +127,12 @@ static void AcceptIfExpr(struct AstVisitor *V, struct AstIfExpr *e)
 
 static void AcceptForExpr(struct AstVisitor *V, struct AstForExpr *e)
 {
-    AcceptPat(V, e->pat);
+    // The ForExpr target, i.e. the `y` in `for x in y {...}` must be visited before the
+    // pattern (the `x`) because the pattern might introduce new local variables. There
+    // will be problems if one of these variables has the same name as a variable in the
+    // target.
     AcceptExpr(V, e->target);
+    AcceptPat(V, e->pat);
     AcceptExpr(V, e->block);
 }
 

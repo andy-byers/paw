@@ -101,7 +101,6 @@ struct Statistic {
 ```
 
 ### Sum types
-> TODO: the example below is wrong. Expr has infinite size, need indirection
 Sum types in Paw consist of tagged unions created by an `enum` definition.
 Conceptually, an enum is an object that takes the value of one of its variants depending on the value of the discriminant field.
 In the example below, an instance of `Expr` must contain space for an integer large enough to distinguish 3 variants, as well as space for the largest of the possible variants (`Expr::Add` here).
@@ -268,6 +267,7 @@ A panic can also be caused by calling the `panic` builtin function.
 
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
++ In some cases, the compiler can't determine the type of a method without knowing the type of some arguments (happens with `IndexRange` trait)
 + The compiler has trouble resolving `Self::AssocType` paths when they appear in trait bound generic args or type equality obligations, i.e. `fn method<T: Type<Self::AssocType>>(...)` or `fn method<T: Type<Output = Self::AssocType>>(...)` inside an impl block
     + Happens (during constraint collection in `collect_items.c`) because the compiler doesn't determine the type of an impl block assoc type until after constraints are collected
     + The reason for this is that the code that lowers types (in `lower_type.c`) tries to prove that `Type` implements `Trait` when lowering a projection `<Type as Trait>::AssocType`, which depends on obligations being collected

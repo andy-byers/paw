@@ -391,3 +391,11 @@ pub fn test_and_or_chain_3() {
     and_or_chain_3(true, true, false);
     and_or_chain_3(true, true, true);
 }
+
+#[test]
+pub fn shadow_with_induction_var() {
+    let i = 0;
+    let x = [1, 2, 3];
+    for x in x { i += 1; assert(x == i) }
+    assert(x == 3);
+}

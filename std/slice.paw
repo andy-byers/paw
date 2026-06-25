@@ -13,6 +13,10 @@ pub fn from_raw_parts<T>(ptr: *T, len: int) -> []T;
 impl<T> []T {
     #[extern = "paw_slice_Slice_len"]
     pub fn len(self) -> int;
+
+    pub fn is_empty(self) -> bool {
+        self.len() == 0
+    }
 } 
 
 

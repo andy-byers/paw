@@ -747,24 +747,75 @@
 //    assert(output[4] == 10);
 //}
 
-struct Struct<T>;
 
-impl<X> Struct<X> {
-    pub fn assoc<Y>() -> fn(X, Y) -> (X, Y) {
-        |x, y| (x, y)
-    }
-}
+//use iter;
+//use ptr;
+//use slice;
+//
+//pub struct Split<T> {
+//    delimiter: []T,
+//    values: []T,
+//}
+//
+//fn contract<T>(s: *[]T, n: int) {
+//    assert(n <= s.len());
+//    *s = slice::from_raw_parts(
+//        s.as_ptr(), n);
+//}
+//
+//fn advance<T>(s: *[]T, n: int) {
+//    assert(n <= s.len());
+//    *s = slice::from_raw_parts(
+//        ptr::add(s.as_ptr(), n), 
+//        s.len() - n);
+//}
+//
+//fn starts_with<T: Eq<T>>(sequence: []T, prefix: []T) -> bool {
+//    for (a, b) in iter::zip(sequence, prefix) {
+//        if !a.eq(b) { return false; }
+//    }
+//    true
+//}
+//
+//impl<T: Eq<T>> Iterator for Split<T> {
+//    type Item = []T;
+//
+//    fn next(*self) -> Option<[]T> {
+//        if self.values.is_empty() {
+//            return None;
+//        }
+//
+//        let start = self.values;
+//        let delim = self.delimiter;
+//        loop {
+//            if starts_with(self.values, delim) {
+//                contract(&start, start.len() - self.values.len());
+//                advance(&self.values, delim.len());
+//                return Some(start);
+//            } else if self.values.len() == 1 {
+//                return Some(start);
+//            }
+//            advance(&self.values, 1);
+//        }
+//        Some(start)
+//    }
+//}
+//
+//pub fn split<Seq: ToSlice<Elem>, Elem>(sequence: Seq, delimiter: []Elem) -> Split<Elem> {
+//    Split{delimiter, values: sequence.to_slice()}
+//}
+//
+//
+//use io;
+//
+//#[test]
+//pub fn test() {
+//    let message = "Hello, world!";
+//    for chunk in split(message, ", ") {
+//        io::println(chunk);
+//    }
+//}
 
 #[test]
 pub fn test() {
-    let s = Struct::<int>::assoc::<float>()(1, 2.0);
-    assert(s.0 == 1);
-    assert(s.1 == 2.0);
-    let s = Struct::<float>::assoc::<float>()(1.0, 2.0);
-    assert(s.0 == 1.0);
-    assert(s.1 == 2.0);
-    let s = Struct::<float>::assoc::<int>()(1.0, 2);
-    assert(s.0 == 1.0);
-    assert(s.1 == 2);
 }
-
