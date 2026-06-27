@@ -163,3 +163,11 @@ impl io::Write for String {
         Ok(data.len())
     }
 }
+
+use fmt;
+
+impl fmt::Display for String {
+    fn fmt(*self, f: *fmt::Formatter) -> fmt::Result<()> {
+        f.write_slice(self.to_slice())
+    }
+} 

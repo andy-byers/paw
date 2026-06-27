@@ -23,7 +23,7 @@ impl<const N: int, T> [N]T {
 
 impl<const N: int, T> AsPtr<T> for [N]T {
     fn as_ptr(*self) -> *T {
-        &self[0]
+        self as *char as *T
     }
 }
 

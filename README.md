@@ -257,6 +257,7 @@ A panic can also be caused by calling the `panic` builtin function.
 + [x] associated types (needed especially for iterator ergonomics)
 + [x] minimal const generics (no type expressions involving const generics)
 + [x] reimplement capturing closures
++ [ ] Implement higher RAII (Vale lang concept) to have compiler-enforced resource "closing" (may require per-field drop flags) using `SuppressDrop` trait or similar. May require supporting negative trait bounds and having `T: !SuppressDrop` be the default for generics.
 + [ ] `#[must_use]` or similar annotation on type declarations
 + [ ] allow linking in a custom "panic handler" for platforms where the default panic handler doesn't make sense (no OS to return back to, nowhere for error messages to go, etc.)
 + [ ] prevent duplicate methods across compatible inherent impl blocks

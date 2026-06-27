@@ -175,3 +175,42 @@ impl<T> IndexRange<RangeFull> for []T {
         *self
     }
 }
+
+// TODO: remove Clone bound. requires a way to prevent a stack variable from being dropped (pivot is read out of slice b/c otherwise it is hard to keep track of the pivot element once elements have been swapped in partition())
+impl<T: Clone + Ord<T>> []T {
+    pub fn sort_unstable(self) {
+        self.quicksort(0, self.len() - 1);
+    }
+
+    fn quicksort(self, lo: int, hi: int) {
+        if lo >= 0 && lo < hi {
+            let (lt, gt) = self.partition(lo, hi);
+            self.quicksort(lo, lt - 1);
+            self.quicksort(gt + 1, hi);
+        }
+    }
+
+    fn partition(self, lo: int, hi: int) -> (int, int) {
+        let pivot = self[lo + (hi - lo) / 2].clone();
+        let (lt, eq, gt) = (lo, lo, hi);
+
+        while eq <= gt {
+            match self[eq].cmp(&pivot) {
+                Ordering::Less => {
+                    ptr::swap(&self[eq], &self[lt]);
+                    lt += 1;
+                    eq += 1;
+                },
+                Ordering::Greater => {
+                    ptr::swap(&self[eq], &self[gt]);
+                    gt -= 1;
+                },
+                Ordering::Equal => {
+                    eq += 1;
+                },
+            }
+        }
+        (lt, gt)
+    }
+} 
+

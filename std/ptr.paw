@@ -26,6 +26,10 @@ pub fn replace<T>(pointer: *T, value: T) -> T {
     result
 }
 
+pub fn swap<T>(first: *T, second: *T) {
+    write(second, replace(first, read(second)));
+}
+
 use mem::sizeof;
 
 pub fn copy<T>(src: *T, dest: *T, count: int) -> *T {

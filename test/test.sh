@@ -109,6 +109,7 @@ TESTS=(
 #    "recursive_impl"
 ##TODO    "ambiguous_method_call"
 #    "impl_selection"
+    "sort"
     "bubble"
     "nqueen"
     "matmul"

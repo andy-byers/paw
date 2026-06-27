@@ -745,7 +745,7 @@ static struct AstPat *compound_pat(struct Lex *lex)
                     .span = segment.ident.span,
                     .name = segment.ident.name);
         if (segment.args == NULL)
-            return NEW_NODE(lex, ident_pat, segment.span, next_id(lex), segment.ident);
+            return NEW_NODE(lex, ident_pat, segment.span, segment.id, segment.ident);
     }
     return NEW_NODE(lex, path_pat, path.span, next_id(lex), path);
 }

@@ -397,5 +397,5 @@ pub fn shadow_with_induction_var() {
     let i = 0;
     let x = [1, 2, 3];
     for x in x { i += 1; assert(x == i) }
-    assert(x == 3);
+    assert(i == 3);
 }

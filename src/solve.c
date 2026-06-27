@@ -261,8 +261,7 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, IrTrait *tr
 
 static paw_Bool matches_impl_predicate(IrSolver *S, IrType *type, IrTrait *trait)
 {
-    paw_assert(!pawIr_type_contains_inference_var(S->C, type));
-    paw_assert(!pawIr_trait_contains_inference_var(S->C, trait));
+    paw_assert(!IrIsInfer(type));
     K_LIST_XFOREACH (S->predicates, struct IrObligation const, p) {
         switch (p->kind) {
             case IR_OBLIGATION_IMPL_TRAIT:
@@ -448,7 +447,7 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
 
                     if (pawIr_type_contains_inference_var(S->C, type)
                             || pawIr_trait_contains_inference_var(S->C, trait))
-                        break; // not enough information
+                        break;
 
                     if (type_implements_trait(S, type, trait)) {
                         LOGLN("SOLVER:%p: proved impl trait obligation `%s`",
