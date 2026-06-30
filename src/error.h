@@ -327,6 +327,10 @@
         Str const *modname; \
         struct SourceSpan span; \
     ) \
+    X(ExpectedType, ERR_CATEGORY_SYNTAX, \
+        Str const *modname; \
+        struct SourceSpan span; \
+    ) \
     X(ExtraSegment, ERR_CATEGORY_NAME, \
         Str const *modname; \
         struct SourceSpan span; \

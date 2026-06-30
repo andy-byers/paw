@@ -31,7 +31,6 @@ static struct QueryState start_query(struct Compiler *C)
 void finish_query(struct Compiler *C, struct QueryState q)
 {
     pawU_undo_unifications(C->U, q.save_point);
-    pawIr_solver_rollback(q.S);
     pawIr_pop_solver(C);
 }
 
@@ -126,7 +125,6 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, struct IrIm
 
     // undo all changes to the environment made in this function
     pawU_undo_unifications(C->U, save);
-    pawIr_solver_rollback(S);
     pawIr_pop_solver(C);
     return matches;
 }
@@ -249,7 +247,6 @@ static paw_Bool impls_are_compatible(struct Compiler *C, IrType *self, IrTrait *
         struct IrSolverResult const result = pawIr_solver_solve(C->S);
         matches = result.status == IR_SOLVER_SOLVED;
     }
-    pawIr_solver_rollback(C->S);
 
     return matches;
 }

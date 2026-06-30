@@ -4,7 +4,6 @@
 
 pub use mem;
 
-use io;
 use ptr;
 use slice;
 

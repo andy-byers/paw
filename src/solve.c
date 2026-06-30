@@ -31,7 +31,7 @@ struct IrSolver {
     IrSolver *outer;
     IrObligations *obligations;
     IrObligations *predicates;
-    TypeCollection *norm_targets;
+    IrObligations *norm_targets;
     struct Compiler *C;
     struct Unifier *U;
 };
@@ -74,7 +74,7 @@ IrSolver *pawIr_push_solver(struct Compiler *C)
     *S = (IrSolver){
         .obligations = IrObligations_new(C),
         .predicates = IrObligations_new(C),
-        .norm_targets = TypeCollection_new(C),
+        .norm_targets = IrObligations_new(C),
         .outer = C->S,
         .U = C->U,
         .C = C,
@@ -88,9 +88,24 @@ void pawIr_pop_solver(struct Compiler *C)
     C->S = C->S->outer;
 }
 
+static IrType *find_norm_target(IrSolver *S, IrType *type)
+{
+    K_LIST_XFOREACH (S->norm_targets, struct IrObligation const, p) {
+        int const position = pawU_current_position(S->U);
+        if (pawU_unify(S->U, type, p->eq.lhs) == 0) return p->eq.rhs;
+        pawU_undo_unifications(S->U, position);
+    }
+    return NULL;
+}
+
 void pawIr_solver_add_norm_target(IrSolver *S, IrType *type, IrType *target, struct IrObligationCause cause)
 {
-    TypeCollection_insert(S->C, S->norm_targets, type, target);
+    IrObligations_push(S->C, S->norm_targets, (struct IrObligation){
+                .kind = IR_OBLIGATION_TYPE_EQUALS,
+                .eq.lhs = type,
+                .eq.rhs = target,
+                .cause = cause,
+            });
 
     LOGLN("SOLVER:%p: add norm target `%s = %s`",
             (void *)S, pawIr_print_type_v2(S->C, type)->text,
@@ -103,8 +118,8 @@ IrType *pawIr_solver_get_norm_target(IrSolver *S, IrType *type)
     type = pawU_normalize(S->U, type);
     if (!pawIr_type_contains_inference_var(S->C, type)) {
         do {
-            void **p = TypeCollection_get(S->C, S->norm_targets, type);
-            if (p != NULL) return *p;
+            IrType *target = find_norm_target(S, type);
+            if (target != NULL) return target;
             S = S->outer;
         } while (S != NULL);
     }
@@ -115,8 +130,6 @@ DEFINE_MAP(struct Compiler, PredicateCache, pawP_alloc, P_ID_HASH, P_ID_EQUALS, 
 
 void pawIr_solver_add_predicate(IrSolver *S, IrType *type, IrTrait *trait, struct IrObligationCause cause)
 {
-    paw_assert(!pawIr_type_contains_inference_var(S->C, type));
-    paw_assert(!pawIr_trait_contains_inference_var(S->C, trait));
     K_LIST_XFOREACH (S->predicates, struct IrObligation const, p) {
         int const position = pawU_current_position(S->U);
         paw_Bool const matches = pawU_unify(S->U, type, p->impl.type) == 0
@@ -253,7 +266,6 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, IrTrait *tr
             struct IrSolverResult const result = pawIr_solver_solve(child);
             matches = result.status == IR_SOLVER_SOLVED;
         }
-        pawIr_solver_rollback(child);
     });
 
     return matches;
@@ -264,17 +276,18 @@ static paw_Bool matches_impl_predicate(IrSolver *S, IrType *type, IrTrait *trait
     paw_assert(!IrIsInfer(type));
     K_LIST_XFOREACH (S->predicates, struct IrObligation const, p) {
         switch (p->kind) {
-            case IR_OBLIGATION_IMPL_TRAIT:
-                // there are no inference variables in `type` or `trait` so unifying is the
-                // same as equating
-                if (pawU_unify(S->U, type, p->impl.type) == 0
-                        && pawIr_unify_traits(S->C, trait, p->impl.trait) == 0) {
-                    LOGLN("SOLVER:%p: proved `%s: %s` using predicate",
-                            (void *)S, pawIr_print_type(S->C, type),
-                            pawIr_print_trait(S->C, trait));
-                    return PAW_TRUE;
-                }
-                break;
+            case IR_OBLIGATION_IMPL_TRAIT: {
+                    int const position = pawU_current_position(S->U);
+                    if (pawU_unify(S->U, type, p->impl.type) == 0
+                            && pawIr_unify_traits(S->C, trait, p->impl.trait) == 0) {
+                        LOGLN("SOLVER:%p: proved `%s: %s` using predicate",
+                                (void *)S, pawIr_print_type(S->C, type),
+                                pawIr_print_trait(S->C, trait));
+                        return PAW_TRUE;
+                    }
+                    pawU_undo_unifications(S->U, position);
+                    break;
+            }
             case IR_OBLIGATION_TYPE_EQUALS:
             case IR_OBLIGATION_WELL_FORMED:
                 break;
@@ -389,14 +402,29 @@ paw_Bool pawIr_type_implements_trait(IrSolver *S, IrType *type, IrTrait *trait)
     return type_implements_trait(S, type, trait);
 }
 
-static int solve_type_equals_obligation(IrSolver *S, IrType *lhs, IrType *rhs)
+static enum IrSolverStatus solve_normalizes_to_obligation(IrSolver *S, IrType *projection, IrType *target)
 {
-    int const position = pawU_current_position(S->U);
-    if (pawU_unify(S->U, lhs, rhs) != 0) {
-        pawU_undo_unifications(S->U, position);
-        return -1;
+    {
+        struct IrProjection const *p = IrGetProjection(projection);
+        if (IrIsInfer(ir_projection_self(p)))
+            return IR_SOLVER_AMBIGUOUS;
     }
-    return 0;
+
+    IrType *type = pawU_normalize_projections(S->U, projection);
+    target = pawU_normalize_projections(S->U, target);
+
+    if (IrIsProjection(type)) {
+        struct IrProjection const *p = IrGetProjection(type);
+        if (IrIsInfer(ir_projection_self(p)))
+            return IR_SOLVER_AMBIGUOUS;
+    }
+
+    int const position = pawU_current_position(S->U);
+    if (pawU_unify(S->U, type, target) != 0) {
+        pawU_undo_unifications(S->U, position);
+        return IR_SOLVER_ERROR;
+    }
+    return IR_SOLVER_SOLVED;
 }
 
 #define RESULT_SOLVED() ((struct IrSolverResult){ \
@@ -413,6 +441,11 @@ static int solve_type_equals_obligation(IrSolver *S, IrType *lhs, IrType *rhs)
 
 struct IrSolverResult pawIr_solver_solve(IrSolver *S)
 {
+    if (S->obligations->count == 0) {
+        LOGLN("SOLVER:%p: nothing to solve", (void *)S);
+        return RESULT_SOLVED();
+    }
+
     LOGLN("SOLVER:%p: starting solver invocation", (void *)S);
 
     paw_Bool solved_any;
@@ -431,6 +464,13 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     // can be proved true
                     IrSolver *child = pawIr_push_solver(S->C);
                     pawIr_solver_add_obligations_from(child, o.wf.did, o.wf.args);
+                    K_LIST_XFOREACH (o.wf.args, IrGenericArg const, arg) {
+                        if (IrGenericArg_is_type(*arg)) {
+                            IrType *arg_type = IrGenericArg_get_type(*arg);
+                            if (IrIsAdt(arg_type))
+                                pawIr_solver_add_well_formed_obligation(child, IR_TYPE_DID(arg_type), IR_GENERIC_ARGS(arg_type), o.cause);
+                        }
+                    }
                     struct IrSolverResult const r = pawIr_solver_solve(child);
                     pawIr_pop_solver(S->C);
 
@@ -445,16 +485,25 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     LOGLN("SOLVER:%p: encountered impl trait obligation `%s`",
                             (void *)S, pawIr_print_impl_trait_obligation(S->C, type, trait));
 
-                    if (pawIr_type_contains_inference_var(S->C, type)
-                            || pawIr_trait_contains_inference_var(S->C, trait))
+                    if (IrIsInfer(type))
                         break;
 
-                    if (type_implements_trait(S, type, trait)) {
+                    IrSolver *child = pawIr_push_solver(S->C);
+                    if (IrIsProjection(type)) {
+                        struct IrProjection const *p = IrGetProjection(type);
+                        IrTrait *trait = pawIr_get_projection_trait(S->C, p);
+                        pawIr_solver_add_predicates_from_trait(child, trait);
+                    }
+                    paw_Bool const success = type_implements_trait(child, type, trait);
+                    pawIr_pop_solver(S->C);
+
+                    if (success) {
                         LOGLN("SOLVER:%p: proved impl trait obligation `%s`",
                                 (void *)S, pawIr_print_impl_trait_obligation(S->C, type, trait));
 
                         solved = PAW_TRUE;
-                    } else {
+                    } else if (!pawIr_type_contains_inference_var(S->C, type)
+                            && !pawIr_trait_contains_inference_var(S->C, trait)) {
                         // solver was not blocked by the unifier, indicating an
                         // unprovable obligation
                         LOGLN("SOLVER:%p: unprovable impl trait obligation \"%s\"",
@@ -464,24 +513,26 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     break;
                 }
                 case IR_OBLIGATION_TYPE_EQUALS: {
-                    IrType *lhs = o.eq.lhs;
-                    IrType *rhs = o.eq.rhs;
-                    // TODO: yes, this actually needs to be called twice, at least to make a specific case work...
-                    lhs = pawU_normalize_projections(S->U, lhs);
-                    lhs = pawU_normalize_projections(S->U, lhs);
-                    rhs = pawU_normalize_projections(S->U, rhs);
-                    if (solve_type_equals_obligation(S, lhs, rhs) == 0) {
-                        LOGLN("SOLVER:%p: proved type equals obligation `%s = %s`",
-                                (void *)S, pawIr_print_type(S->C, lhs),
-                                pawIr_print_type(S->C, rhs));
+                    IrType *lhs = pawU_normalize(S->U, o.eq.lhs);
+                    IrType *rhs = pawU_normalize(S->U, o.eq.rhs);
 
-                        solved = PAW_TRUE;
-                    } else if (!pawIr_type_contains_inference_var(S->C, lhs)
-                            && !pawIr_type_contains_inference_var(S->C, rhs)) {
-                        LOGLN("SOLVER:%p: unable to solve type equals obligation `%s = %s`",
-                                (void *)S, pawIr_print_type(S->C, lhs),
-                                pawIr_print_type(S->C, rhs));
-                        return RESULT_ERROR(o);
+                    switch (solve_normalizes_to_obligation(S, lhs, rhs)) {
+                        case IR_SOLVER_SOLVED: {
+                            LOGLN("SOLVER:%p: proved type equals obligation `%s = %s`",
+                                    (void *)S, pawIr_print_type(S->C, lhs),
+                                    pawIr_print_type(S->C, rhs));
+
+                            solved = PAW_TRUE;
+                            break;
+                        }
+                        case IR_SOLVER_AMBIGUOUS:
+                            break;
+                        case IR_SOLVER_ERROR: {
+                            LOGLN("SOLVER:%p: unable to solve type equals obligation `%s = %s`",
+                                    (void *)S, pawIr_print_type(S->C, lhs),
+                                    pawIr_print_type(S->C, rhs));
+                            return RESULT_ERROR(o);
+                        }
                     }
                     break;
                 }
@@ -511,18 +562,6 @@ int pawIr_solver_num_obligations(IrSolver const *S)
 struct IrObligation pawIr_solver_first_obligation(IrSolver const *S)
 {
     return IrObligations_first(S->obligations);
-}
-
-void pawIr_solver_rollback(IrSolver *S)
-{
-    S->obligations->count = 0;
-    S->predicates->count = 0;
-    S->norm_targets->count = 0;
-}
-
-void pawIr_solver_commit(IrSolver *S)
-{
-    S->obligations->count = 0;
 }
 
 IrType *pawIr_solver_instantiate_type(IrSolver *S, DeclId did)
@@ -612,23 +651,79 @@ static paw_Bool instance_equals(struct Compiler *C, struct Instance lhs, struct 
 static void add_type_predicates(IrSolver *S, IrType *type, PredicateCache *cache, int depth);
 static void add_trait_predicates(IrSolver *S, IrTrait *trait, PredicateCache *cache, int depth);
 
+static IrGenericArgs *replace_self_in_trait_args(struct Compiler *C, IrGenericArgs *args, IrType *target)
+{
+    IrGenericArgs *result = IrGenericArgs_new(C);
+    IrGenericArgs_reserve(C, result, args->count);
+    K_LIST_XFOREACH (args, IrGenericArg const, arg)
+        IrGenericArgs_push(C, result, *arg);
+
+    IrGenericArgs_set(result, 0, IrGenericArg_from_type(target));
+    return result;
+}
+
+static paw_Bool target_is_self(IrSolver *S, IrType *target, struct IrGeneric const *self)
+{
+    if (IrIsProjection(target)) {
+        struct IrProjection const *t = IrGetProjection(target);
+        return target_is_self(S, ir_projection_self(t), self);
+    } else if (IrIsGeneric(target)) {
+        return P_ID_EQUALS(S->C, IR_TYPE_DID(target), self->did);
+    } else {
+        return PAW_FALSE;
+    }
+}
+
+static IrConstraints *add_supertrait_constraints(IrSolver *S, IrTrait *trait)
+{
+    IrGenericArgs *params = pawIr_get_generic_args(S->C, trait->did);
+    struct Substitution const subst = {params, trait->args};
+    struct IrGeneric const *self_param = IrGetGeneric(
+            IrGenericArg_get_type(IrGenericArgs_first(params)));
+    IrConstraints const *constraints = pawIr_get_constraints(S->C, trait->did);
+    IrConstraints *result = IrConstraints_new(S->C);
+    K_LIST_XFOREACH (constraints, struct IrConstraint const, p) {
+        switch (p->kind) {
+            case IR_CONSTRAINT_IMPL_TRAIT:
+                if (target_is_self(S, p->impl.type, self_param)) {
+                    IrType *impl_type = pawP_substitute(S->C, p->impl.type, subst);
+                    IrTrait *impl_trait = pawP_substitute_trait(S->C, p->impl.trait, subst);
+                    pawIr_solver_add_predicate(S, impl_type, impl_trait,
+                            (struct IrObligationCause){0});
+                }
+                break;
+            case IR_CONSTRAINT_TYPE_EQUALS:
+                if (target_is_self(S, p->eq.lhs, self_param)) {
+                    IrType *eq_lhs = pawP_substitute(S->C, p->eq.lhs, subst);
+                    IrType *eq_rhs = pawP_substitute(S->C, p->eq.rhs, subst);
+                    pawIr_solver_add_norm_target(S, eq_lhs, eq_rhs,
+                            (struct IrObligationCause){0});
+                }
+                break;
+        }
+    }
+    return result;
+}
+
 static void add_predicates(IrSolver *S, DeclId did, struct Substitution subst, PredicateCache *cache, int depth)
 {
     if (PredicateCache_insert(S->C, cache, did, NULL))
         return;
 
     IrConstraints const *bounds = pawIr_get_constraints(S->C, did);
-    K_LIST_XFOREACH (bounds, struct IrConstraint, p) {
+    if (bounds == NULL) return;
+
+    K_LIST_XFOREACH (bounds, struct IrConstraint const, p) {
         switch (p->kind) {
             case IR_CONSTRAINT_IMPL_TRAIT: {
                 IrType *type = pawP_substitute(S->C, p->impl.type, subst);
                 IrTrait *trait = pawP_substitute_trait(S->C, p->impl.trait, subst);
                 type = pawU_normalize(S->U, type);
                 trait = pawIr_normalize_trait(S->C, trait);
-                add_type_predicates(S, type, cache, depth + 1);
-                add_trait_predicates(S, trait, cache, depth + 1);
                 pawIr_solver_add_predicate(S, type, trait,
                         (struct IrObligationCause){0});
+
+                add_supertrait_constraints(S, trait);
                 break;
             }
             case IR_CONSTRAINT_TYPE_EQUALS: {
@@ -636,8 +731,6 @@ static void add_predicates(IrSolver *S, DeclId did, struct Substitution subst, P
                 IrType *rhs = pawP_substitute(S->C, p->eq.rhs, subst);
                 lhs = pawU_normalize(S->U, lhs);
                 rhs = pawU_normalize(S->U, rhs);
-                add_type_predicates(S, lhs, cache, depth + 1);
-                add_type_predicates(S, rhs, cache, depth + 1);
                 pawIr_solver_add_norm_target(S, lhs, rhs,
                         (struct IrObligationCause){0});
                 break;
@@ -691,28 +784,30 @@ Str const *pawIr_print_obligation_(struct Compiler *C, struct IrObligation oblig
         case IR_OBLIGATION_WELL_FORMED: {
             enum IrDefKind const def_kind = pawIr_get_kind(C, obligation.wf.did);
             if (def_kind == IR_TRAIT_DEF) {
-                IrTrait *trait = pawIr_new_trait(C, obligation.wf.did, obligation.wf.args);
+                IrTrait *trait = (
+                        pawIr_new_trait(C, obligation.wf.did, obligation.wf.args));
                 pawL_add_fstring(P, &buf, "WellFormed(%s)",
                         pawIr_print_trait(C, trait));
             } else {
                 paw_assert(def_kind == IR_ADT_DEF);
-                IrType *type = pawIr_new_adt(C, obligation.wf.did, obligation.wf.args);
+                IrType *type = (
+                        pawIr_new_adt(C, obligation.wf.did, obligation.wf.args));
                 pawL_add_fstring(P, &buf, "WellFormed(%s)",
                         pawIr_print_type(C, type));
             }
             break;
         }
         case IR_OBLIGATION_IMPL_TRAIT: {
-            IrType *type = pawU_normalize_projections(C->U, obligation.impl.type);
-            IrTrait *trait = pawIr_normalize_trait_projections(C, obligation.impl.trait);
+            IrType *type = (obligation.impl.type);
+            IrTrait *trait = (obligation.impl.trait);
             pawL_add_fstring(P, &buf, "%s: %s",
                     pawIr_print_type_v2(C, type)->text,
                     pawIr_print_trait_v2(C, trait)->text);
             break;
         }
         case IR_OBLIGATION_TYPE_EQUALS: {
-            IrType *lhs = pawU_normalize_projections(C->U, obligation.eq.lhs);
-            IrType *rhs = pawU_normalize_projections(C->U, obligation.eq.rhs);
+            IrType *lhs = (obligation.eq.lhs);
+            IrType *rhs = (obligation.eq.rhs);
             pawL_add_fstring(P, &buf, "%s = %s",
                     pawIr_print_type_v2(C, lhs)->text,
                     pawIr_print_type_v2(C, rhs)->text);
@@ -774,15 +869,10 @@ char const *debug_solver(IrSolver* S)
         print_obligation(S, &buf, *p);
     }
     L_ADD_LITERAL(P, &buf, "type eq predicates:\n");
-    TypeCollectionIterator iter;
-    TypeCollectionIterator_init(S->norm_targets, &iter);
-    while (TypeCollectionIterator_is_valid(&iter)) {
-        IrType *first = TypeCollectionIterator_key(&iter);
-        IrType *second = *TypeCollectionIterator_valuep(&iter);
+    K_LIST_XFOREACH (S->norm_targets, struct IrObligation const, p) {
         pawL_add_fstring(P, &buf, "  %s = %s\n",
-                pawIr_print_type_v2(S->C, first)->text,
-                pawIr_print_type_v2(S->C, second)->text);
-        TypeCollectionIterator_next(&iter);
+                pawIr_print_type_v2(S->C, p->eq.lhs)->text,
+                pawIr_print_type_v2(S->C, p->eq.rhs)->text);
     }
     return pawL_buffer_finish(P, &buf)->text;
 }

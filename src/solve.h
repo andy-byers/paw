@@ -102,10 +102,6 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S);
 int pawIr_solver_num_obligations(IrSolver const *S);
 struct IrObligation pawIr_solver_first_obligation(IrSolver const *S);
 
-void pawIr_solver_rollback(IrSolver *S);
-
-void pawIr_solver_commit(IrSolver *S);
-
 paw_Bool pawIr_type_implements_trait(IrSolver *S, struct IrType *type, struct IrTrait *trait);
 
 EXTERN_C Str const *pawIr_print_obligation_(struct Compiler *C, struct IrObligation obligation);

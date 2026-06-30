@@ -522,6 +522,20 @@ static struct HirDecl *lower_self_decl(struct LowerAst *L, NodeId parent_id)
     return lower_decl(L, self_decl);
 }
 
+static struct HirBoundList *lower_bounds(struct LowerAst *L, struct AstBoundList *bounds)
+{
+    if (bounds == NULL) return NULL;
+    struct HirBoundList *result = HirBoundList_new(L->hir);
+
+    struct AstGenericBound *pbound;
+    K_LIST_FOREACH (bounds, pbound) {
+        struct HirGenericBound r;
+        r.path = lower_path(L, pbound->path);
+        HirBoundList_push(L->hir, result, r);
+    }
+    return result;
+}
+
 static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)
 {
     HirDeclList *generics = lower_decl_list(L, d->generics);
@@ -998,20 +1012,6 @@ static struct HirStmt *LowerDeclStmt(struct LowerAst *L, struct AstDeclStmt *s)
 {
     struct HirDecl *decl = lower_decl(L, s->decl);
     return NEW_NODE(L, decl_stmt, s->span, s->id, decl);
-}
-
-static struct HirBoundList *lower_bounds(struct LowerAst *L, struct AstBoundList *bounds)
-{
-    if (bounds == NULL) return NULL;
-    struct HirBoundList *result = HirBoundList_new(L->hir);
-
-    struct AstGenericBound *pbound;
-    K_LIST_FOREACH (bounds, pbound) {
-        struct HirGenericBound r;
-        r.path = lower_path(L, pbound->path);
-        HirBoundList_push(L->hir, result, r);
-    }
-    return result;
 }
 
 static struct HirDecl *LowerGenericDecl(struct LowerAst *L, struct AstGenericDecl *d)

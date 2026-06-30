@@ -1,5 +1,6 @@
 // sort.paw
 
+use array;
 use iter;
 
 fn check_sort_unstable<A: ToSlice<int>>(unsorted: A, sorted: A) {

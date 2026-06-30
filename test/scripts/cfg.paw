@@ -392,6 +392,9 @@ pub fn test_and_or_chain_3() {
     and_or_chain_3(true, true, true);
 }
 
+// needed for iterating over arrays
+use array;
+
 #[test]
 pub fn shadow_with_induction_var() {
     let i = 0;

@@ -415,6 +415,15 @@ IrType *pawU_normalize(struct Unifier *U, IrType *type)
     }
 }
 
+static IrType *normalize_projections_aux(struct Unifier *U, IrType *type)
+{
+    for (IrType *target; IrIsProjection(type); type = target) {
+        target = pawIr_solver_get_norm_target(U->C->S, type);
+        if (target == NULL) break;
+    }
+    return type;
+}
+
 IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
 {
     switch (IR_KINDOF(type)) {
@@ -474,27 +483,41 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
         case kIrProjection: {
             type = pawU_normalize(U, type);
 
-            struct IrProjection const *t = IrGetProjection(type);
-            IrGenericArgs *args = IrGenericArgs_new(U->C);
-            IrGenericArgs_reserve(U->C, args, t->args->count);
-            K_LIST_XFOREACH (t->args, IrGenericArg const, p) {
-                IrGenericArg const arg = pawIr_normalize_projections(U->C, *p);
-                IrGenericArgs_push(U->C, args, arg);
+            {
+                struct IrProjection const *t = IrGetProjection(type);
+                IrGenericArgs *args = IrGenericArgs_new(U->C);
+                IrGenericArgs_reserve(U->C, args, t->args->count);
+                K_LIST_XFOREACH (t->args, IrGenericArg const, p) {
+                    IrGenericArg const arg = pawIr_normalize_projections(U->C, *p);
+                    IrGenericArgs_push(U->C, args, arg);
+                }
+                type = pawIr_new_projection(U->C, t->did, args);
             }
-            type = pawIr_new_projection(U->C, t->did, args);
 
-            for (IrType *target; IrIsProjection(type); type = target) {
-                target = pawIr_solver_get_norm_target(U->C->S, type);
-                if (target == NULL) break;
+            {
+                // attempt to normalize the projection using information from the surrounding
+                // environment, i.e. predicates from the enclosing item
+                IrSolver *child = pawIr_push_solver(U->C);
+                IrType *self = ir_projection_self(IrGetProjection(type));
+                if (IrIsProjection(self)) {
+                    struct IrProjection const *nested = IrGetProjection(self);
+                    IrTrait *nested_trait = pawIr_get_projection_trait(U->C, nested);
+                    pawIr_solver_add_predicates_from_trait(child, nested_trait);
+                }
+                type = normalize_projections_aux(U, type);
+                pawIr_pop_solver(U->C);
             }
 
             if (IrIsProjection(type)) {
                 struct IrProjection const *t = IrGetProjection(type);
+                IrType *self = ir_projection_self(t);
+                if (IrIsInfer(self)) return type;
+
                 IrTrait *trait = pawIr_get_projection_trait(U->C, t);
                 Str const *name = pawIr_get_assoc_item(U->C, t->did)->name;
                 struct Instantiation const *assoc = pawIr_find_assoc_type_projection(
-                        U->C, ir_projection_self(t), trait, name);
-                if (assoc != NULL) type = assoc->inst;
+                        U->C, self, trait, name);
+                if (assoc != NULL) return assoc->inst;
             }
             return type;
         }

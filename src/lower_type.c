@@ -262,7 +262,6 @@ static IrType *lower_type(struct LowerType *L, struct HirType *type)
             break;
     }
 
-    result = pawU_normalize_projections(L->C->U, result);
     pawIr_set_type(L->C, type->hdr.id, result);
     return result;
 }
@@ -452,5 +451,5 @@ void pawP_solve_type_obligations(struct Hir *hir, struct HirModule m, struct Hir
     pawHir_visitor_init(&V, hir, &L);
     V.PostVisitProjectionType = check_projection_type;
     pawHir_visit_type(&V, type);
-
 }
+

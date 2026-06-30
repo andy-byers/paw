@@ -14,6 +14,7 @@ TESTS=(
 #TODO    "recursive_assoc_item_constraints"
     "recursive_assoc_item_constraints_2"
     "recursive_assoc_item_constraints_3"
+    "normalize_projections"
     "recursive_supertraits"
     "impl_special_case"
     "impl_special_case_2"

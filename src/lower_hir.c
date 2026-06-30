@@ -116,20 +116,6 @@ struct LowerHir {
     } globals;
 };
 
-// Throw an ICE if the types cannot be unified
-static void expect_type_eq(struct FunctionState *fs, struct SourceSpan span, IrType *lhs, IrType *rhs)
-{
-    if (pawU_unify(fs->C->U, lhs, rhs) != 0) {
-        Str const *left = pawIr_print_type_v2(fs->C, lhs);
-        Str const *right = pawIr_print_type_v2(fs->C, rhs);
-        LOWERING_ERROR(fs->L, Internal,
-                .message = pawP_format_string(fs->C,
-                    "expected types `%s` and `%s` to be equal",
-                    left->text, right->text),
-                .span = span);
-    }
-}
-
 static paw_Uint var_hash(struct LowerHir *L, struct MatchVar v)
 {
     PAW_UNUSED(L);
@@ -333,15 +319,12 @@ static struct MirPlace load_from(struct FunctionState *fs, struct SourceSpan spa
 static void store_to(struct FunctionState *fs, struct SourceSpan span, struct MirPlace value, struct MirPlace pointer)
 {
     paw_assert(IrIsPtr(pointer.type));
-    expect_type_eq(fs, span, ir_deref(pointer.type), value.type);
 
     NEW_INSTR(fs, store, span, value, pointer);
 }
 
 static void move_to(struct FunctionState *fs, struct SourceSpan span, struct MirPlace from, struct MirPlace to)
 {
-    expect_type_eq(fs, span, to.type, from.type);
-
     NEW_INSTR(fs, move, span, to, from);
 }
 
@@ -2047,7 +2030,7 @@ static void map_var_to_reg(struct FunctionState *fs, struct MatchVar var, struct
             });
 }
 
-static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object, struct MatchCase mc, paw_Bool is_enum, int discr, paw_Bool outer_deref)
+static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object, struct MatchCase mc, paw_Bool is_enum, int discr)
 {
     if (mc.vars->count == 0)
         return;
@@ -2055,15 +2038,6 @@ static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object
     int index;
     struct MatchVar const *pv;
     K_LIST_ENUMERATE (mc.vars, index, pv) {
-//        struct MirPlace const pointer = select_field(fs, object, is_enum + index, discr, pv->type);
-//        struct MirPlace value = pointer; // TODO
-////        struct MirPlace value = !pv->deref ? load_from(fs, pointer.span, pointer) : pointer;
-////TODO if (pv->deref) value = load_from(fs, value.span, value);
-//        struct LocalVar const local = *set_anon_local(fs, pointer.span, value);
-//                //TODO pv->type);
-////        move_to(fs, value.span, value, local.r);
-//        map_var_to_reg(fs, *pv, local.r, pv->deref);
-
         struct MirPlace const field_ptr = select_field(fs, object, is_enum + index, discr, pv->type);
         struct LocalVar const local = *set_anon_local(fs, object.span, field_ptr);
         map_var_to_reg(fs, *pv, local.r, pv->deref);
@@ -2161,7 +2135,7 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, struct
         enter_block(fs, &bs, fs->mir->span, PAW_FALSE);
 
         allocate_match_vars(fs, variant, *pmc, PAW_TRUE,
-                pmc->cons.variant.index, d->multi.test.deref);
+                pmc->cons.variant.index);
         visit_decision(V, pmc->dec, result);
 
         leave_block(fs);
@@ -2186,7 +2160,7 @@ static void visit_tuple_case(struct HirVisitor *V, struct Decision *d, struct Mi
     struct BlockState bs;
     enter_block(fs, &bs, fs->mir->span, PAW_FALSE);
 
-    allocate_match_vars(fs, discr, mc, PAW_FALSE, 0, d->multi.test.deref);
+    allocate_match_vars(fs, discr, mc, PAW_FALSE, 0);
     visit_decision(V, mc.dec, result);
 
     leave_block(fs);
@@ -2205,7 +2179,7 @@ static void visit_struct_case(struct HirVisitor *V, struct Decision *d, struct M
     struct BlockState bs;
     enter_block(fs, &bs, fs->mir->span, PAW_FALSE);
 
-    allocate_match_vars(fs, discr, mc, PAW_FALSE, 0, d->multi.test.deref);
+    allocate_match_vars(fs, discr, mc, PAW_FALSE, 0);
     visit_decision(V, mc.dec, result);
 
     leave_block(fs);

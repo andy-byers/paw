@@ -269,10 +269,6 @@ A panic can also be caused by calling the `panic` builtin function.
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
 + In some cases, the compiler can't determine the type of a method without knowing the type of some arguments (happens with `IndexRange` trait)
-+ The compiler has trouble resolving `Self::AssocType` paths when they appear in trait bound generic args or type equality obligations, i.e. `fn method<T: Type<Self::AssocType>>(...)` or `fn method<T: Type<Output = Self::AssocType>>(...)` inside an impl block
-    + Happens (during constraint collection in `collect_items.c`) because the compiler doesn't determine the type of an impl block assoc type until after constraints are collected
-    + The reason for this is that the code that lowers types (in `lower_type.c`) tries to prove that `Type` implements `Trait` when lowering a projection `<Type as Trait>::AssocType`, which depends on obligations being collected
-    + Some other places where `Self::AssocType` can appear are not "collected" until after constraint collection, i.e. function parameters or return value
 + Need to add a check to make sure there are not extraneous trait bounds on trait methods (only checking for unsatisfied trait obligations, i.e. the check needs to be performed the "other way" as well)
 + Generic type parameters on type aliases can't be constrained with trait bounds
 + Type aliases need check for cycles. Also, compiler crashes when it encounters type alias in RHS that hasn't been defined yet.

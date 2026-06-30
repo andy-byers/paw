@@ -61,7 +61,7 @@ impl<T: Copy> Key<T> for (bool, T, T) {
     }
 }
 
-fn call_key<K: Key<T>, T>(k: K) -> T {
+fn call_key<K: Key<T>, T: Copy>(k: K) -> T {
     k.key()
 }
 

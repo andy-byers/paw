@@ -1,0 +1,50 @@
+// normalize_projections.paw
+
+trait Trait {
+    type First: A<Ty = <Self::Second as B>::Ty>;
+    type Second: B<Ty = <Self::First as A>::Ty>;
+}
+
+trait A {
+    type Ty;
+}
+
+trait B {
+    type Ty;
+}
+
+struct Struct1;
+struct Ta1;
+struct Tb1;
+
+impl Trait for Struct1 {
+    type First = Ta1;
+    type Second = Tb1;
+}
+
+impl A for Ta1 {
+    type Ty = int;
+}
+
+impl B for Tb1 {
+    type Ty = int;
+}
+
+
+struct Struct2<T>;
+struct Ta2<T>;
+struct Tb2<T>;
+
+impl<T> Trait for Struct2<T> {
+    type First = Ta2<T>;
+    type Second = Tb2<T>;
+}
+
+impl<T> A for Ta2<T> {
+    type Ty = T;
+}
+
+impl<T> B for Tb2<T> {
+    type Ty = T;
+}
+

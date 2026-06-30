@@ -959,6 +959,19 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
         } else if (HirIsFnDecl(*p)) {
             struct HirFnDecl const *d = HirGetFnDecl(*p);
             add_predicates_from(X, X->C->S, d->did);
+
+            IrConstraints const *constraints = pawIr_get_constraints(X->C, d->did);
+            K_LIST_XFOREACH (constraints, struct IrConstraint const, c) {
+                switch (c->kind) {
+                    case IR_CONSTRAINT_IMPL_TRAIT:
+                        ensure_type_is_well_formed(X, (struct SourceSpan){0}, c->impl.type);
+                        ensure_trait_is_well_formed(X, (struct SourceSpan){0}, c->impl.trait);
+                        break;
+                    case IR_CONSTRAINT_TYPE_EQUALS:
+                        ensure_type_is_well_formed(X, (struct SourceSpan){0}, c->eq.rhs);
+                        break;
+                }
+            }
         }
 
         solve_all_obligations(X);
@@ -1032,7 +1045,6 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 {
     struct IrFnDef *fn_def = pawIr_get_fn_def(X->C, d->did);
     IrGenericArgs *generics = pawIr_get_generic_args(X->C, d->did);
-    add_predicates_from(X, X->C->S, d->did);
     if (d->body != NULL)
         collect_local_type_aliases(X, d->body);
     collect_param_types(X, d->params);
@@ -1119,8 +1131,6 @@ static void collect_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
 {
     struct IrImpl *impl = pawIr_get_impl_def(X->C, d->did);
     IrGenericArgs *binder = pawIr_get_generic_args(X->C, d->did);
-    add_predicates_from(X, X->C->S, d->did);
-
     IrType *type = collect_type(X, d->type);
 
     paw_Bool force_pub = PAW_FALSE;
@@ -1151,7 +1161,6 @@ static void collect_trait_decl(struct ItemCollector *X, struct HirTraitDecl *d)
 {
     X->in_trait_decl = PAW_TRUE;
     struct IrTraitDef *trait_def = pawIr_get_trait_def(X->C, d->did);
-    add_predicates_from(X, X->C->S, d->did);
 
     IrGenericArgs *params = pawIr_get_generic_args(X->C, d->did);
     IrType *self = IrGenericArg_get_type(IrGenericArgs_first(params));

@@ -158,7 +158,7 @@ static IrType *lower_type(struct TypeChecker *T, struct HirType *type)
 {
     IrType *ir_type = pawP_lower_type(T->C, *T->pm, type);
     pawP_solve_type_obligations(T->hir, *T->pm, type);
-    return ir_type;
+    return pawU_normalize_projections(T->U, ir_type);
 }
 
 static IrGenericArg lower_generic_arg(struct TypeChecker *T, struct HirGenericArg arg)
@@ -1392,7 +1392,7 @@ static void ensure_accessible_field(struct TypeChecker *T, struct HirDecl *field
         : HirGetFnDecl(field)->is_pub;
     if (!is_pub && !is_self(T, type)) {
         int modno = PRELUDE_MODNO;
-        if (IrIsAdt(type) || IrIsGeneric(type))
+        if (IrIsAdt(type) || IrIsGeneric(type) || IrIsProjection(type))
             modno = (int)IR_TYPE_DID(type).modno;
         if (T->pm->modno != modno) {
             struct HirIdent const ident = HirIsFieldDecl(field)

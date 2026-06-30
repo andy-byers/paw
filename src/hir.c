@@ -887,18 +887,21 @@ static struct HirDecl *FoldTypeDecl(struct HirFolder *F, struct HirTypeDecl *d)
     return pawHir_new_type_decl(F->hir, d->span, next_node_id(F), d->did, d->ident, generics, rhs, d->is_pub);
 }
 
+static struct HirBoundList *fold_bounds(struct HirFolder *F, struct HirBoundList *bounds)
+{
+    HirBoundList *result = HirBoundList_new(F->hir);
+    HirBoundList_reserve(F->hir, result, bounds->count);
+    K_LIST_XFOREACH (bounds, struct HirGenericBound const, p) {
+        struct HirPath const path = F->FoldPath(F, p->path);
+        HirBoundList_push(F->hir, result, (struct HirGenericBound){path});
+    }
+    return result;
+}
+
 static struct HirDecl *FoldGenericDecl(struct HirFolder *F, struct HirGenericDecl *d)
 {
     if (d->is_type) {
-        HirBoundList *bounds = NULL;
-        if (d->t.bounds != NULL) {
-            bounds = HirBoundList_new(F->hir);
-            HirBoundList_reserve(F->hir, bounds, d->t.bounds->count);
-            K_LIST_XFOREACH (d->t.bounds, struct HirGenericBound const, p) {
-                struct HirPath const path = F->FoldPath(F, p->path);
-                HirBoundList_push(F->hir, bounds, (struct HirGenericBound){path});
-            }
-        }
+        HirBoundList *bounds = d->t.bounds != NULL ? fold_bounds(F, d->t.bounds) : NULL;
         return pawHir_new_generic_type_decl(F->hir, d->span, next_node_id(F), d->did, d->t.ident, bounds);
     } else {
         struct HirType *type = F->FoldType(F, d->k.type);

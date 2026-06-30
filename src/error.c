@@ -816,6 +816,12 @@ static void FormatExpectedTraitPathError(paw_Env *P, struct ExpectedTraitPathErr
     pawL_add_fstring(P, buffer, "expected trait path");
 }
 
+static void FormatExpectedTypeError(paw_Env *P, struct ExpectedTypeError const *error, Buffer *buffer)
+{
+    add_error_header(P, error->modname, error->span, buffer);
+    pawL_add_fstring(P, buffer, "expected type");
+}
+
 static void FormatExtraSegmentError(paw_Env *P, struct ExtraSegmentError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);

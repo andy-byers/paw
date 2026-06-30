@@ -499,8 +499,17 @@ static struct AstExpr *emit_bool(struct Lex *lex, struct SourceSpan span, paw_Bo
     return new_basic_lit(lex, span, (Value){.i = b}, BUILTIN_BOOL);
 }
 
-static struct AstType *parse_type(struct Lex *lex);
+static struct AstType *try_parse_type(struct Lex *lex);
 static struct AstGenericArg generic_arg(struct Lex *lex);
+
+static struct AstType *parse_type(struct Lex *lex)
+{
+    struct AstType *type = try_parse_type(lex);
+    if (type == NULL)
+        PARSE_ERROR(lex, ExpectedType,
+                .span = lex->t.span);
+    return type;
+}
 
 static struct AstGenericArg generic_arg_bound(struct Lex *lex)
 {
@@ -962,7 +971,7 @@ static struct AstExpr *block(struct Lex *lex);
 
 static struct AstGenericArg generic_arg(struct Lex *lex)
 {
-    struct AstType *type = parse_type(lex);
+    struct AstType *type = try_parse_type(lex);
     if (type != NULL)
         return (struct AstGenericArg){
             .id = next_id(lex),
@@ -1013,7 +1022,7 @@ static struct AstGenericArg generic_arg(struct Lex *lex)
 
 static struct AstType *parse_signature(struct Lex *, struct SourceLoc);
 
-static struct AstType *parse_type(struct Lex *lex)
+static struct AstType *try_parse_type(struct Lex *lex)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
     if (test_next(lex, '(')) {
@@ -1038,6 +1047,9 @@ static struct AstType *parse_type(struct Lex *lex)
             struct AstExpr *length = expect_expr0(lex);
             struct SourceLoc const rbracket = delim_next(lex, ']', '[', start);
             struct AstType *elem = parse_type(lex);
+            if (elem == NULL)
+                PARSE_ERROR(lex, ExpectedType,
+                        .span = span_from(lex, rbracket));
             return NEW_NODE(lex, array_type,
                     RANGE(start, rbracket),
                     next_id(lex), elem, length);

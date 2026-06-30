@@ -44,19 +44,11 @@ impl IntoCursor for Container {
     }
 }
 
-
-// <<Self as IntoCursor<Self>>::IntoCurs as Cursor<<Self as IntoCursor<Self>>::IntoCurs>>::Item = <Self as IntoCursor<Self>>::Item
-// <<I as IntoCursor<I>>::IntoCurs as Cursor<<I as IntoCursor<I>>::IntoCurs>>::Item = <I as IntoCursor<I>>::Item
-// <<I as IntoCursor<I>>::IntoCurs as Cursor<<I as IntoCursor<I>>::IntoCurs>>::Item
-
-// <<I as IntoCursor<I>>::IntoCurs as Cursor<<I as IntoCursor<I>>::IntoCurs>>::Item
-// <I as IntoCursor<I>>::Item
-
 pub fn function<I: IntoCursor<Item = int>>(curs: I) -> I::Item {
     // constraints from function:
-    //   I: IntoCursor<I> (IMPL_TRAIT)
-    //   <I as IntoCursor<I>>::Item = int (TYPE_EQUALS)
-    // preconditions from IntoCursor
+    //   I: IntoCursor<I>
+    //   <I as IntoCursor<I>>::Item = int
+    // predicates from IntoCursor:
     //   <I as IntoCursor<I>>::IntoCurs: Cursor
     //   <<I as IntoCursor<I>>::IntoCurs as Cursor>::Item = <I as IntoCursor<I>>::Item
     curs.into_cursor().next().unwrap()
@@ -66,12 +58,5 @@ pub fn function<I: IntoCursor<Item = int>>(curs: I) -> I::Item {
 pub fn test() {
     let container = Container{length: 3};
     function(container);
-
-// obligations:
-//   Container: IntoCursor
-//   <Container as IntoCursor>::Item = int
-
-//    let container = Container{length: 3};
-//    let cursor = container.into_cursor();
 }
 
