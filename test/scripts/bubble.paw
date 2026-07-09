@@ -2,7 +2,7 @@
 
 use list::List;
 
-fn random(n: int) -> List<int> {
+fn random(n: usize) -> List<usize> {
     let a = List::new();
     let x = n;
     while a.len() < n {
@@ -12,7 +12,7 @@ fn random(n: int) -> List<int> {
     a
 }
 
-fn bubble(n: int) -> List<int> {
+fn bubble(n: usize) -> List<usize> {
     let a = random(n);
     while true {
         let swapped = false;
@@ -45,7 +45,7 @@ pub fn test() {
 
 use io;
 
-pub fn main() -> int {
+pub fn main() {
 //    let n = if #args > 1 {
 //        args[1].parse_int().unwrap()
 //    } else {
@@ -57,5 +57,4 @@ pub fn main() -> int {
     bubble(n);
 
     io::println("finished");
-    0
 }

@@ -34,7 +34,7 @@ pub fn test_inclusive_loop() {
 
 #[test]
 pub fn test_numeric_for_loop() {
-    let test = |start: int, end: int| -> int {
+    let test = |start: int64, end: int64| -> int64 {
         let n = 0;
         for i in start..end {
             n = n + 1;
@@ -114,7 +114,7 @@ pub fn test_capture_loop_var_1() {
         for i in 0..100 {
             if i == n {
                 let a = [i];
-                return || -> int {
+                return || -> int64 {
                     // Capture "a" as an upvalue.
                     let m = a[0];
                     a[0] = a[0] + 1;
@@ -134,7 +134,7 @@ pub fn test_capture_loop_var_1() {
     assert(t() == 32);
 }
 
-fn check_capture_loop_var_2(b: bool) -> int {
+fn check_capture_loop_var_2(b: bool) -> int64 {
     let f = || -1;
     let n = 0;
     for i in 0..8 {
@@ -256,7 +256,7 @@ pub fn test_break_continue_2() {
         for i in 0..100 {
             if i == n {
                 let u = i;
-                f = || -> int {
+                f = || -> int64 {
                     return n + i + u;
                 };
                 break;
@@ -347,7 +347,7 @@ pub fn test_break_continue_3() {
     }
     assert(n == 1);
 
-    let test = |n: int| -> int {
+    let test = |n: int64| -> int64 {
         let count = 0;
         for i in 0..100 {
             if i == n {
@@ -411,7 +411,7 @@ pub fn test_map() {
 }
 
 pub inline struct CustomRangeElement {
-    pub value: int,
+    pub value: int64,
 }
 
 impl Compare for CustomRangeElement {
@@ -445,11 +445,11 @@ pub fn test_custom_range() {
 
 pub struct CustomIterator<T> {
     pub self: CustomIterable<T>,
-    pub iter: int,
+    pub iter: int64,
 }
 
-impl<T> Advance<(int, T)> for CustomIterator<T> {
-    fn next(&self) -> Option<(int, T)> {
+impl<T> Advance<(int64, T)> for CustomIterator<T> {
+    fn next(&self) -> Option<(int64, T)> {
         let iter = self.iter;
         if iter < #self.self.elems {
             self.iter = self.iter + 1;
@@ -464,7 +464,7 @@ pub struct CustomIterable<T> {
     pub elems: [T],
 }
 
-impl<T> Iterate<CustomIterator<T>, (int, T)> for CustomIterable<T> {
+impl<T> Iterate<CustomIterator<T>, (int64, T)> for CustomIterable<T> {
     fn iterator(self) -> CustomIterator<T> {
         CustomIterator{self, iter: 0}
     }
@@ -485,13 +485,13 @@ fn bare_loop_with_break() {
     }
 }
 
-fn bare_loop_with_return(v: int) -> int {
+fn bare_loop_with_return(v: int64) -> int64 {
     loop {
         return v;
     }
 }
 
-fn bare_loop_with_conditional_break(v: int) {
+fn bare_loop_with_conditional_break(v: int64) {
     loop {
         if v != 0 {
             break;
@@ -499,7 +499,7 @@ fn bare_loop_with_conditional_break(v: int) {
     }
 }
 
-fn bare_loop_with_conditional_return(v: int) -> int {
+fn bare_loop_with_conditional_return(v: int64) -> int64 {
     loop {
         if v != 0 {
             return v;
@@ -507,7 +507,7 @@ fn bare_loop_with_conditional_return(v: int) -> int {
     }
 }
 
-fn bare_loop_with_conditional_return_or_break(v: int) -> int {
+fn bare_loop_with_conditional_return_or_break(v: int64) -> int64 {
     loop {
         if v != 0 {
             return v;

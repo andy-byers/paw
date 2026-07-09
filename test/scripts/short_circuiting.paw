@@ -4,26 +4,26 @@
 pub fn test() {
     let counts = (0, 0, 0);
     let pcounts = &counts;
-    let check2 = |a: int, b: int| {
+    let check2 = |a: int64, b: int64| {
         assert(pcounts.0 == a);
         assert(pcounts.1 == b);
         pcounts.0 = 0;
         pcounts.1 = 0;
     };
-    let A = |value: int| -> bool {
+    let A = |value: int64| -> bool {
         pcounts.0 = pcounts.0 + 1;
         return value as bool;
     };
-    let B = |value: int| -> bool {
+    let B = |value: int64| -> bool {
         pcounts.1 = pcounts.1 + 1;
         return value as bool;
     };
-    let C = |value: int| -> bool {
+    let C = |value: int64| -> bool {
         pcounts.2 = pcounts.2 + 1;
         return value as bool;
     };
 
-    let or = |a: int, b: int| -> bool {
+    let or = |a: int64, b: int64| -> bool {
         return A(a) || B(b);
     };
     assert(!or(0, 0));
@@ -35,7 +35,7 @@ pub fn test() {
     assert(or(1, 1));
     check2(1, 0);
 
-    let and = |a: int, b: int| -> bool {
+    let and = |a: int64, b: int64| -> bool {
         return A(a) && B(b);
     };
     assert(!and(0, 0));
@@ -47,13 +47,13 @@ pub fn test() {
     assert(and(1, 1));
     check2(1, 1);
 
-    let check3 = |a: int, b: int, c: int| {
+    let check3 = |a: int64, b: int64, c: int64| {
         check2(a, b);
         assert(pcounts.2 == c);
         pcounts.2 = 0;
     };
 
-    let and_or = |a: int, b: int, c: int| -> bool {
+    let and_or = |a: int64, b: int64, c: int64| -> bool {
         return A(a) && B(b) || C(c);
     };
     assert(!and_or(0, 0, 0));

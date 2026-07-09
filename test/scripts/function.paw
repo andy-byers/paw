@@ -3,7 +3,7 @@
 fn f() {
     // implicit "return"
 }
-fn fi(a: int) {
+fn fi(a: int64) {
     return;
 }
 
@@ -13,13 +13,13 @@ pub fn test_empty_return() {
     fi(1);
 }
 
-fn f_i() -> int {
+fn f_i() -> int64 {
     return 1;
 }
-fn fi_i(a: int) -> int {
+fn fi_i(a: int64) -> int64 {
     return a + 2;
 }
-fn fii_i(a: int, b: int) -> int {
+fn fii_i(a: int64, b: int64) -> int64 {
     return a + b + 3;
 }
 
@@ -32,7 +32,7 @@ pub fn test_return() {
 
 #[test]
 pub fn test_function_value() {
-    let f: fn(int, int) -> int = fii_i;
+    let f: fn(int64, int64) -> int64 = fii_i;
     f(1, 2);
 
     let f = fii_i;
@@ -44,7 +44,7 @@ pub fn test_global_visibility() {
     assert(42 == global_function(42));
 }
 
-fn counter(n: int) -> int {
+fn counter(n: int64) -> int64 {
     if n > 0 {
         return 1 + counter(n - 1);
     }
@@ -60,11 +60,11 @@ pub fn test_recursion() {
     let r = counter;
     assert(20 == r(20));
 
-    let r: fn(int) -> int = counter;
+    let r: fn(int64) -> int64 = counter;
     assert(30 == r(30));
 }
 
-fn is_even(n: int) -> bool {
+fn is_even(n: int64) -> bool {
     assert(n >= 0);
     if n == 0 {
         return true;
@@ -72,7 +72,7 @@ fn is_even(n: int) -> bool {
     return is_odd(n - 1);
 }
 
-fn is_odd(n: int) -> bool {
+fn is_odd(n: int64) -> bool {
     assert(n >= 0);
     if n == 0 {
         return false;
@@ -97,11 +97,11 @@ pub fn test_mutual_recursion() {
     assert(!is_odd(12));
 }
 
-fn global_function(n: int) -> int {
+fn global_function(n: int64) -> int64 {
     return n;
 }
 
-fn sum_args(a: int, b: int, c: int, d: int, e: int, f: int) -> int {
+fn sum_args(a: int64, b: int64, c: int64, d: int64, e: int64, f: int64) -> int64 {
     return a + b + c + d + e + f;
 }
 

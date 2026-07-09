@@ -126,20 +126,22 @@ IrType *pawIr_new_char(struct Compiler *C)
     return t;
 }
 
-IrType *pawIr_new_int(struct Compiler *C)
+IrType *pawIr_new_int(struct Compiler *C, enum IrIntKind ikind)
 {
     IrType *t = NEW_NODE(C, IrType);
     t->Int_ = (struct IrInt){
         .kind = kIrInt,
+        .ikind = ikind,
     };
     return t;
 }
 
-IrType *pawIr_new_float(struct Compiler *C)
+IrType *pawIr_new_float(struct Compiler *C, enum IrFloatKind fkind)
 {
     IrType *t = NEW_NODE(C, IrType);
     t->Float_ = (struct IrFloat){
         .kind = kIrFloat,
+        .fkind = fkind,
     };
     return t;
 }
@@ -291,11 +293,12 @@ IrType *pawIr_new_never(struct Compiler *C)
     return t;
 }
 
-IrType *pawIr_new_infer(struct Compiler *C, int depth, int index)
+IrType *pawIr_new_infer(struct Compiler *C, enum IrInferKind ikind, int depth, int index)
 {
     IrType *t = NEW_NODE(C, IrType);
     t->Infer_ = (struct IrInfer){
         .kind = kIrInfer,
+        .ikind = ikind,
         .depth = depth,
         .index = index,
     };
@@ -366,7 +369,7 @@ IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did)
     K_LIST_XFOREACH (args, IrGenericArg const, p) {
         IrGenericArg r;
         if (IrGenericArg_is_type(*p)) {
-            IrType *t = pawU_new_unknown(C->U, TODO);
+            IrType *t = pawU_new_type_var(C->U, IR_INFER_TYPE, TODO);
             r = IrGenericArg_from_type(t);
         } else {
             IrConst *k = pawU_new_const_var(C->U, TODO);
@@ -383,7 +386,7 @@ IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did)
 
     IrGenericArg r;
     if (IrGenericArg_is_type(arg)) {
-        IrType *t = pawU_new_unknown(C->U, TODO);
+        IrType *t = pawU_new_type_var(C->U, IR_INFER_TYPE, TODO);
         r = IrGenericArg_from_type(t);
     } else {
         IrConst *k = pawU_new_const_var(C->U, TODO);
@@ -813,6 +816,7 @@ static paw_Bool const_equals(union IrValue x, union IrValue y, IrType *type)
         case kIrChar:
             return x.c == y.c;
         case kIrInt:
+            // TODO: either use exact width integer variants corresponding to .ikind or make sure all IrValues are zero'd before writing the value
             return x.i == y.i;
         default:
             paw_assert(IrIsFloat(type));
@@ -829,14 +833,6 @@ static enum ObligationResult {
     if (pawU_unify_const(C->U, lhs, rhs) == 0)
         return OR_SOLVED;
     return OR_UNKNOWN;
-//    if (lhs->kind == IR_CONST_VALUE
-//            && rhs->kind == IR_CONST_VALUE) {
-//        struct IrConstValue const x = lhs->value;
-//        struct IrConstValue const y = rhs->value;
-//        paw_assert(pawIr_type_equals(C, x.type, y.type));
-//        return const_equals(x.value, y.value, x.type);
-//    }
-//    return OR_UNKNOWN;
 }
 
 int pawIr_solve_const_obligations(struct Compiler *C)
@@ -956,10 +952,18 @@ static paw_Uint hash_type(IrType *type)
         case kIrUnit:
         case kIrBool:
         case kIrChar:
-        case kIrInt:
-        case kIrFloat:
         case kIrString:
             break;
+        case kIrInt: {
+            struct IrInt const *t = IrGetInt(type);
+            hash = hash_combine(hash, t->ikind);
+            break;
+        }
+        case kIrFloat: {
+            struct IrFloat const *t = IrGetFloat(type);
+            hash = hash_combine(hash, t->fkind);
+            break;
+        }
         case kIrPtr: {
             struct IrPtr const *t = IrGetPtr(type);
             hash = hash_combine(hash, hash_type(t->pointee));
@@ -1082,6 +1086,10 @@ static paw_Bool type_equals(struct Compiler *C, IrType *lhs, IrType *rhs)
         return PAW_FALSE;
 
     switch (IR_KINDOF(lhs)) {
+        case kIrInt:
+            return IR_INT_KIND(lhs) == IR_INT_KIND(rhs);
+        case kIrFloat:
+            return IR_FLOAT_KIND(lhs) == IR_FLOAT_KIND(rhs);
         case kIrPtr:
             return type_equals(C, ir_deref(lhs), ir_deref(rhs));
         case kIrAdt: {
@@ -1136,7 +1144,6 @@ static paw_Bool type_equals(struct Compiler *C, IrType *lhs, IrType *rhs)
                 && arglist_equals(C, x->args, y->args) ;
         }
         default:
-            paw_assert(IR_KINDOF(lhs) == IR_KINDOF(rhs));
             return PAW_TRUE;
     }
 }
@@ -1554,10 +1561,48 @@ static void print_type(struct Printer *P, IrType *type)
             PRINT_LITERAL(P, "char");
             break;
         case kIrInt:
-            PRINT_LITERAL(P, "int");
+            switch (IR_INT_KIND(type)) {
+                case IR_INT8:
+                    PRINT_LITERAL(P, "int8");
+                    break;
+                case IR_INT16:
+                    PRINT_LITERAL(P, "int16");
+                    break;
+                case IR_INT32:
+                    PRINT_LITERAL(P, "int32");
+                    break;
+                case IR_INT64:
+                    PRINT_LITERAL(P, "int64");
+                    break;
+                case IR_ISIZE:
+                    PRINT_LITERAL(P, "isize");
+                    break;
+                case IR_UINT8:
+                    PRINT_LITERAL(P, "uint8");
+                    break;
+                case IR_UINT16:
+                    PRINT_LITERAL(P, "uint16");
+                    break;
+                case IR_UINT32:
+                    PRINT_LITERAL(P, "uint32");
+                    break;
+                case IR_UINT64:
+                    PRINT_LITERAL(P, "uint64");
+                    break;
+                case IR_USIZE:
+                    PRINT_LITERAL(P, "usize");
+                    break;
+            }
             break;
         case kIrFloat:
-            PRINT_LITERAL(P, "float");
+            switch (IR_FLOAT_KIND(type)) {
+                case IR_FLOAT32:
+                    PRINT_LITERAL(P, "float32");
+                    break;
+                case IR_FLOAT64:
+                    PRINT_LITERAL(P, "float64");
+                    break;
+            }
             break;
         case kIrString:
             PRINT_LITERAL(P, "str");
@@ -1694,9 +1739,16 @@ static void print_const(struct Printer *P, IrConst *konst)
                 pawL_add_int(ENV(P), P->buf, konst->value.value.i);
             } else if (IrIsFloat(konst->value.type)) {
                 pawL_add_float(ENV(P), P->buf, konst->value.value.f);
-            } else {
-                paw_assert(IrIsString(konst->value.type));
+            } else if (IrIsString(konst->value.type)) {
                 L_ADD_STRING(ENV(P), P->buf, konst->value.value.s);
+            } else {
+                paw_assert(IrIsInfer(konst->value.type));
+                if (IrGetInfer(konst->value.type)->ikind == IR_INFER_INTEGER) {
+                    pawL_add_int(ENV(P), P->buf, konst->value.value.i);
+                } else {
+                    paw_assert(IrGetInfer(konst->value.type)->ikind == IR_INFER_FLOAT);
+                    pawL_add_float(ENV(P), P->buf, konst->value.value.f);
+                }
             }
             break;
         case IR_CONST_PENDING:

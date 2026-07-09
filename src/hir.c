@@ -189,17 +189,17 @@ static void AcceptPath(struct HirVisitor *V, struct HirPath *path)
 static void AcceptLiteralExpr(struct HirVisitor *V, struct HirLiteralExpr *e)
 {
     switch (e->lit_kind) {
-        case kHirLitComposite:
-            AcceptPath(V, &e->comp.path);
-            accept_expr_list(V, e->comp.items);
+        case HIR_LIT_COMPOSITE:
+            AcceptPath(V, &e->composite.path);
+            accept_expr_list(V, e->composite.items);
             break;
-        case kHirLitArray:
+        case HIR_LIT_ARRAY:
             accept_expr_list(V, e->array.elems);
             break;
-        case kHirLitTuple:
+        case HIR_LIT_TUPLE:
             accept_expr_list(V, e->tuple.elems);
             break;
-        case kHirLitBasic:
+        default:
             break;
     }
 }
@@ -809,18 +809,26 @@ static struct HirPath FoldPath(struct HirFolder *F, struct HirPath path)
 static struct HirExpr *FoldLiteralExpr(struct HirFolder *F, struct HirLiteralExpr *e)
 {
     switch (e->lit_kind) {
-        case kHirLitComposite: {
-            struct HirPath const path = F->FoldPath(F, e->comp.path);
-            HirExprList *items = pawHir_fold_expr_list(F, e->comp.items);
+        case HIR_LIT_BOOL:
+            return pawHir_new_bool_lit(F->hir, e->span, next_node_id(F), e->b);
+        case HIR_LIT_CHAR:
+            return pawHir_new_char_lit(F->hir, e->span, next_node_id(F), e->c);
+        case HIR_LIT_INT:
+            return pawHir_new_int_lit(F->hir, e->span, next_node_id(F), e->i.value, e->i.suffix);
+        case HIR_LIT_FLOAT:
+            return pawHir_new_float_lit(F->hir, e->span, next_node_id(F), e->f.value, e->f.suffix);
+        case HIR_LIT_STR:
+            return pawHir_new_str_lit(F->hir, e->span, next_node_id(F), e->s);
+        case HIR_LIT_COMPOSITE: {
+            struct HirPath const path = F->FoldPath(F, e->composite.path);
+            HirExprList *items = pawHir_fold_expr_list(F, e->composite.items);
             return pawHir_new_composite_lit(F->hir, e->span, next_node_id(F), path, items);
         }
-        case kHirLitTuple: {
+        case HIR_LIT_TUPLE: {
             HirExprList *fields = pawHir_fold_expr_list(F, e->tuple.elems);
             return pawHir_new_tuple_lit(F->hir, e->span, next_node_id(F), fields);
         }
-        case kHirLitBasic:
-            return pawHir_new_basic_lit(F->hir, e->span, next_node_id(F), e->basic.value, e->basic.code);
-        case kHirLitArray: {
+        case HIR_LIT_ARRAY: {
             HirExprList *elems = pawHir_fold_expr_list(F, e->array.elems);
             return pawHir_new_array_lit(F->hir, e->span, next_node_id(F), elems);
         }
@@ -1281,7 +1289,8 @@ static paw_Bool is_unit_type(struct HirType *type)
 static paw_Bool is_unit_lit(struct HirExpr *expr)
 {
     return HirIsLiteralExpr(expr)
-        && HirGetLiteralExpr(expr)->basic.code == BUILTIN_UNIT;
+        && HirGetLiteralExpr(expr)->lit_kind == HIR_LIT_TUPLE
+        && HirGetLiteralExpr(expr)->tuple.elems->count == 0;
 }
 
 static void add_newline(struct Printer *P)
@@ -1906,47 +1915,38 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
         case kHirLiteralExpr: {
             struct HirLiteralExpr *e = HirGetLiteralExpr(expr);
             switch (e->lit_kind) {
-                case kHirLitBasic:
-                    switch (e->basic.code) {
-                        case BUILTIN_UNIT:
-                            DUMP_CSTR(P, "()");
-                            break;
-                        case BUILTIN_BOOL:
-                            DUMP_FMT(P, "%s", V_TRUE(e->basic.value) ? "true" : "false");
-                            break;
-                        case BUILTIN_CHAR:
-                            DUMP_FMT(P, "%c", V_CHAR(e->basic.value));
-                            break;
-                        case BUILTIN_INT:
-                            DUMP_FMT(P, "%I", V_INT(e->basic.value));
-                            break;
-                        case BUILTIN_FLOAT:
-                            DUMP_FMT(P, "%f", V_FLOAT(e->basic.value));
-                            break;
-                        case BUILTIN_STR:
-                            DUMP_FMT(P, "\"%s\"", V_STR(e->basic.value)->text);
-                            break;
-                        default:
-                            PAW_UNREACHABLE();
-                    }
+                case HIR_LIT_BOOL:
+                    DUMP_FMT(P, "%s", e->b ? "true" : "false");
                     break;
-                case kHirLitTuple:
+                case HIR_LIT_CHAR:
+                    DUMP_FMT(P, "%c", e->c);
+                    break;
+                case HIR_LIT_INT:
+                    DUMP_FMT(P, "%I", e->i);
+                    break;
+                case HIR_LIT_FLOAT:
+                    DUMP_FMT(P, "%f", e->f);
+                    break;
+                case HIR_LIT_STR:
+                    DUMP_FMT(P, "\"%s\"", e->s->text);
+                    break;
+                case HIR_LIT_TUPLE:
                     DUMP_CHAR(P, '(');
                     dump_args(P, e->tuple.elems);
                     if (e->tuple.elems->count == 1)
                         DUMP_CHAR(P, ',');
                     DUMP_CHAR(P, ')');
                     break;
-                case kHirLitArray:
+                case HIR_LIT_ARRAY:
                     DUMP_CHAR(P, '[');
                     dump_literal_fields(P, e->array.elems);
                     DUMP_CHAR(P, ']');
                     break;
-                case kHirLitComposite:
-                    dump_path(P, &e->comp.path, PAW_FALSE);
+                case HIR_LIT_COMPOSITE:
+                    dump_path(P, &e->composite.path, PAW_FALSE);
                     DUMP_CHAR(P, '{');
-                    if (e->comp.items->count > 0) {
-                        dump_literal_fields(P, e->comp.items);
+                    if (e->composite.items->count > 0) {
+                        dump_literal_fields(P, e->composite.items);
                     }
                     DUMP_CHAR(P, '}');
                     break;

@@ -1,13 +1,13 @@
 // blanket_impl.paw
 
 pub trait Trait {
-    fn f(self) -> int;
+    fn f(self) -> int64;
 }
 
 struct Struct;
 
 impl<T> Trait for T {
-    fn f(self) -> int { 
+    fn f(self) -> int64 { 
         42 
     }
 }

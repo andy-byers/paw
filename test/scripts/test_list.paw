@@ -26,13 +26,13 @@ fn list_from_iterator<I: IntoIterator>(iter: I) -> List<I::Item> {
     list
 }
 
-fn test_list(n: int) -> List<int> {
+fn test_list(n: int64) -> List<int64> {
     list_from_iterator(1..=n)
 }
 
 #[test]
 pub fn iterate_over_empty_list() {
-    let list = List::<int>::new();
+    let list = List::<int64>::new();
     let iter = list.into_iter();
     assert(iter.next().is_none());
     assert(iter.next().is_none());
@@ -80,7 +80,7 @@ pub fn list_from_array() {
     assert(list[1] == "def");
 }
 
-//fn are_lists_eq(a: [int], b: [int]) -> bool {
+//fn are_lists_eq(a: [int64], b: [int64]) -> bool {
 //    if #a != #b { return false; }
 //    for i in 0..#a {
 //        if a[i] != b[i] {
@@ -90,26 +90,26 @@ pub fn list_from_array() {
 //    return true;
 //}
 //
-//fn check_eq(a: [int], b: [int]) {
+//fn check_eq(a: [int64], b: [int64]) {
 //    assert(are_lists_eq(a, b));
 //}
 //
-//fn check_ne(a: [int], b: [int]) {
+//fn check_ne(a: [int64], b: [int64]) {
 //    assert(!are_lists_eq(a, b));
 //}
 //
 //#[test]
 //pub fn test_initialization() {
-//    let list: [int] = List::new();
+//    let list: [int64] = List::new();
 //    assert(0 == #list);
 //
-//    let list: [int] = [1];
+//    let list: [int64] = [1];
 //    assert(1 == #list);
 //
-//    let list: [int] = [1, 2];
+//    let list: [int64] = [1, 2];
 //    assert(2 == #list);
 //
-//    let list: [int] = [1, 2, 3];
+//    let list: [int64] = [1, 2, 3];
 //    assert(3 == #list);
 //}
 //
@@ -171,21 +171,21 @@ pub fn list_from_array() {
 //        [[7, 8, 9], [2]],
 //    ];
 //
-//    let list: [int] = List::new();
+//    let list: [int64] = List::new();
 //
-//    let list: [[int]] = [List::new()];
-//    let list: [[int]] = [List::new(), List::new()];
-//    let list: [[int]] = [List::new(), List::new(), List::new()];
+//    let list: [[int64]] = [List::new()];
+//    let list: [[int64]] = [List::new(), List::new()];
+//    let list: [[int64]] = [List::new(), List::new(), List::new()];
 //
-//    let list: [[[int]]] = List::new();
-//    let list: [[[int]]] = [List::new()];
-//    let list: [[[int]]] = [List::new(), List::new()];
-//    let list: [[[int]]] = [List::new(), List::new(), List::new()];
-//    let list: [[[int]]] = [[List::new()]];
-//    let list: [[[int]]] = [[List::new()], [List::new()]];
-//    let list: [[[int]]] = [[List::new()], [List::new()], [List::new()]];
+//    let list: [[[int64]]] = List::new();
+//    let list: [[[int64]]] = [List::new()];
+//    let list: [[[int64]]] = [List::new(), List::new()];
+//    let list: [[[int64]]] = [List::new(), List::new(), List::new()];
+//    let list: [[[int64]]] = [[List::new()]];
+//    let list: [[[int64]]] = [[List::new()], [List::new()]];
+//    let list: [[[int64]]] = [[List::new()], [List::new()], [List::new()]];
 //
-//    let check = |list: [[int]]| {
+//    let check = |list: [[int64]]| {
 //        assert(1 == list[0][0]);
 //        assert(4 == list[1][0]);
 //        assert(6 == list[2][0]);
@@ -214,7 +214,7 @@ pub fn list_from_array() {
 //    ]);
 //}
 //
-//fn check<T>(list: [[T]], counts: (int, int, int)) {
+//fn check<T>(list: [[T]], counts: (int64, int64, int64)) {
 //    assert(counts.0 == #list[0]);
 //    assert(counts.1 == #list[1]);
 //    assert(counts.2 == #list[2]);
@@ -272,11 +272,11 @@ pub fn list_from_array() {
 //    list = List::new();
 //    list = [0];
 //
-//    let test = |list: [int]| {};
+//    let test = |list: [int64]| {};
 //    let a = List::new();
 //    test(a);
 //
-//    let test = |list: [[int]]| {};
+//    let test = |list: [[int64]]| {};
 //    let a = List::new();
 //    test(a);
 //    let a = [List::new()];
@@ -336,7 +336,7 @@ pub fn list_from_array() {
 //
 //#[test]
 //pub fn test_push() {
-//    let list: [int] = List::new();
+//    let list: [int64] = List::new();
 //    list.push(1);
 //    list.push(2);
 //    list.push(3);
@@ -362,13 +362,13 @@ pub fn list_from_array() {
 //
 //#[test]
 //pub fn test_insert() {
-//    let list: [int] = List::new();
+//    let list: [int64] = List::new();
 //    list.insert(0, 3);
 //    list.insert(0, 2);
 //    list.insert(0, 1);
 //    check_eq(list, [1, 2, 3]);
 //
-//    let list: [int] = [1, 2, 3];
+//    let list: [int64] = [1, 2, 3];
 //    list.insert(1, 4);
 //    list.insert(3, 5);
 //    list.insert(5, 6);
@@ -383,7 +383,7 @@ pub fn list_from_array() {
 //
 //#[test]
 //pub fn test_infer_poly_function() {
-//    let times2 = |i: int| -> int {
+//    let times2 = |i: int64| -> int64 {
 //        return i * 2;
 //    };
 //    let v = [1, 2, 3];
@@ -395,7 +395,7 @@ pub fn list_from_array() {
 //
 //#[test]
 //pub fn test_misc() {
-//    let list: [int] = List::new();
+//    let list: [int64] = List::new();
 //    for i in 0..100 {
 //        list.push(i);
 //    }
@@ -432,7 +432,7 @@ pub fn list_from_array() {
 //
 //#[test]
 //pub fn test_infer_closure() {
-//    let test = |list: [int]| {
+//    let test = |list: [int64]| {
 //        assert(#list == 0);
 //    };
 //    test(List::new());
@@ -536,11 +536,11 @@ pub fn list_from_array() {
 //
 //#[test]
 //pub fn test_infer_i() {
-//    let a = Vec::<int>{list: [1]};
+//    let a = Vec::<int64>{list: [1]};
 //    assert(1 == infer_fn_2(List::new(), a)[-1]);
-//    let b = Vec::<int>{list: [2, 3]};
+//    let b = Vec::<int64>{list: [2, 3]};
 //    assert(3 == infer_fn_2(infer_fn_2(List::new(), a), b)[-1]);
-//    let c = Vec::<int>{list: [4, 5, 6]};
+//    let c = Vec::<int64>{list: [4, 5, 6]};
 //    assert(6 == infer_fn_2(infer_fn_2(infer_fn_2(List::new(), a), b), c)[-1]);
 //}
 //
@@ -554,7 +554,7 @@ pub fn list_from_array() {
 //    infer_fn_3(List::new(), [[[1], [2, 2], [3, 3, 3]]]);
 //}
 //
-//fn infer_fn_4<T>(list: [T], val: T) -> int {
+//fn infer_fn_4<T>(list: [T], val: T) -> int64 {
 //    list.push(val);
 //    return #list;
 //}
@@ -680,11 +680,11 @@ pub fn list_from_array() {
 //    for i in 0..1000 {
 //        if i < 500 {
 //            list.push(ComplexStruct{
-//                value: ComplexEnum::<int>::JustT(i),
+//                value: ComplexEnum::<int64>::JustT(i),
 //            });
 //        } else {
 //            list.push(ComplexStruct{
-//                value: ComplexEnum::<int>::WithStr(i, "str-" ++ i.to_str()),
+//                value: ComplexEnum::<int64>::WithStr(i, "str-" ++ i.to_str()),
 //            });
 //        }
 //    }
@@ -734,7 +734,7 @@ pub fn list_from_array() {
 ////    assert_eq(list[3..], List::new());
 ////    assert_eq(list[0..0], List::new());
 ////
-////    let list: [int] = List::new();
+////    let list: [int64] = List::new();
 ////    assert_eq(list[..], List::new());
 ////    assert_eq(list[0..0], List::new());
 ////    assert_eq(list[0..], List::new());
@@ -837,12 +837,12 @@ pub fn list_from_array() {
 //}
 //
 //pub fn test_list_equality() {
-//    let empty: [int] = List::new();
+//    let empty: [int64] = List::new();
 //    assert(empty.eq(empty));
 //    assert([1].eq([1]));
 //    assert([2, 3].eq([2, 3]));
 //
-//// TODO: doesn't work b/c "_: Equals" (i.e. "int: Equals") cannot be proven until the argument is unified (see "ambiguous_method_call.paw" test)
+//// TODO: doesn't work b/c "_: Equals" (i.e. "int64: Equals") cannot be proven until the argument is unified (see "ambiguous_method_call.paw" test)
 ////    assert(!List::new().eq([0]));
 //    assert(![1].eq([2]));
 //    assert(![3, 4].eq([5]));

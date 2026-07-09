@@ -32,8 +32,8 @@ typedef struct IrGenericArg IrGenericArg;
     X(Tuple) \
     X(Never) \
     X(Infer) \
-    X(Generic) \
-    X(Projection)
+    X(Projection) \
+    X(Generic)
 
 enum IrTypeKind {
 #define DEFINE_ENUM(X) kIr##X,
@@ -60,13 +60,39 @@ struct IrChar {
     IR_TYPE_HEADER;
 };
 
+enum IrIntKind {
+    IR_INT8,
+    IR_INT16,
+    IR_INT32,
+    IR_INT64,
+    IR_ISIZE,
+    IR_UINT8,
+    IR_UINT16,
+    IR_UINT32,
+    IR_UINT64,
+    IR_USIZE,
+};
+
 struct IrInt {
     IR_TYPE_HEADER;
+    enum IrIntKind ikind;
+};
+
+#define IR_INT_KIND(Type_) (IrGetInt(Type_)->ikind)
+#define IR_NUM_INT_KINDS ((size_t)IR_USIZE + 1)
+
+enum IrFloatKind {
+    IR_FLOAT32,
+    IR_FLOAT64,
 };
 
 struct IrFloat {
     IR_TYPE_HEADER;
+    enum IrFloatKind fkind;
 };
+
+#define IR_FLOAT_KIND(Type_) (IrGetFloat(Type_)->fkind)
+#define IR_NUM_FLOAT_KINDS ((size_t)IR_FLOAT64 + 1)
 
 struct IrString {
     IR_TYPE_HEADER;
@@ -121,8 +147,16 @@ struct IrNever {
     IR_TYPE_HEADER;
 };
 
+enum IrInferKind {
+    IR_INFER_TYPE,
+    IR_INFER_INTEGER,
+    IR_INFER_FLOAT,
+};
+
+// TODO: we don't allow creating nested inference contexts so get rid of depth field
 struct IrInfer {
     IR_TYPE_HEADER;
+    enum IrInferKind ikind;
     int depth;
     int index;
 };
@@ -188,8 +222,8 @@ IR_TYPE_LIST(DEFINE_ACCESS)
 IrType *pawIr_new_unit(struct Compiler *C);
 IrType *pawIr_new_bool(struct Compiler *C);
 IrType *pawIr_new_char(struct Compiler *C);
-IrType *pawIr_new_int(struct Compiler *C);
-IrType *pawIr_new_float(struct Compiler *C);
+IrType *pawIr_new_int(struct Compiler *C, enum IrIntKind ikind);
+IrType *pawIr_new_float(struct Compiler *C, enum IrFloatKind fkind);
 IrType *pawIr_new_string(struct Compiler *C);
 IrType *pawIr_new_ptr(struct Compiler *C, IrType *pointee);
 IrType *pawIr_new_adt(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
@@ -200,7 +234,7 @@ IrType *pawIr_new_slice(struct Compiler *C, IrType *type);
 IrType *pawIr_new_tuple(struct Compiler *C, struct IrTypeList *elems);
 IrType *pawIr_new_array(struct Compiler *C, IrType *type, IrConst *length);
 IrType *pawIr_new_never(struct Compiler *C);
-IrType *pawIr_new_infer(struct Compiler *C, int depth, int index);
+IrType *pawIr_new_infer(struct Compiler *C, enum IrInferKind ikind, int depth, int index);
 IrType *pawIr_new_generic(struct Compiler *C, DeclId did);
 IrType *pawIr_new_projection(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
 
@@ -214,13 +248,26 @@ IrTrait *pawIr_new_trait(struct Compiler *C, DeclId did, struct IrGenericArgs *a
 
 
 union IrValue {
-    paw_Bool b;
+    paw_Uint8 b;
     paw_Char c;
+    paw_Int8 i8;
+    paw_Int16 i16;
+    paw_Int32 i32;
+    paw_Int64 i64;
+    paw_Isize isize;
+    paw_Uint8 u8;
+    paw_Uint16 u16;
+    paw_Uint32 u32;
+    paw_Uint64 u64;
+    paw_Usize usize;
+    paw_Float32 f32;
+    paw_Float64 f64;
+    Str const *s;
+    void *p;
+    // TODO: remove these and use fixed-width types
     paw_Int i;
     paw_Uint u;
     paw_Float f;
-    Str const *s;
-    void *p;
 };
 
 enum IrConstKind {

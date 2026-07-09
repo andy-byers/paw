@@ -6,7 +6,7 @@ enum WithoutFields {
     Third,
 }
 
-fn check_match_variant_without_fields(target: WithoutFields) -> int {
+fn check_match_variant_without_fields(target: WithoutFields) -> int64 {
     match target {
         WithoutFields::First => {return 1;},
         WithoutFields::Second => {return 2;},
@@ -24,11 +24,11 @@ pub fn test_variant_without_fields() {
 
 enum WithFields {
     First(bool),
-    Second(int, float),
-    Third((WithoutFields, int, int)),
+    Second(int64, float64),
+    Third((WithoutFields, int64, int64)),
 }
 
-fn check_match_variant_with_fields(target: WithFields) -> int {
+fn check_match_variant_with_fields(target: WithFields) -> int64 {
     match target {
         WithFields::First(false) => {return 1;},
         WithFields::First(true) => {return 2;},
@@ -57,12 +57,12 @@ enum Nested {
     Second(WithFields),
 }
 
-fn check_match_nested_fields(target: Nested) -> int {
+fn check_match_nested_fields(target: Nested) -> int64 {
     match target {
         Nested::First(WithoutFields::First) => {return -1;},
         Nested::First(WithoutFields::Second) => {return -2;},
         Nested::First(WithoutFields::Third) => {return -3;},
-        Nested::Second(WithFields::First(a)) => {return a as int + 1;},
+        Nested::Second(WithFields::First(a)) => {return a as int64 + 1;},
         Nested::Second(WithFields::Second(a, 0.0)) => {return a + 2;},
         Nested::Second(WithFields::Second(a, 1.0)) => {return a + 3;},
         Nested::Second(WithFields::Third((WithoutFields::First, b, c))) => {return b + c + 4;},
@@ -87,11 +87,11 @@ pub fn test_nested_fields() {
 }
 
 enum Choice {
-    First(int),
-    Second(int),
+    First(int64),
+    Second(int64),
 }
 
-fn check_match_nested_matches(a: Choice, b: Choice) -> int {
+fn check_match_nested_matches(a: Choice, b: Choice) -> int64 {
     match a {
         Choice::First(x) => {
             match b {

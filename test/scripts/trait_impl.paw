@@ -20,7 +20,7 @@ pub trait Add {
     fn add(self, rhs: Self) -> Self; 
 }
 
-impl Add for int {
+impl Add for int64 {
     fn add(self, rhs: Self) -> Self {
         self + rhs
     }

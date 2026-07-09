@@ -1,6 +1,6 @@
 // match_indirect.paw
 
-fn modify_scalar(i: *int) {
+fn modify_scalar(i: *int64) {
     match i {
         *-1 => (),
         *&p => *p = 123,
@@ -18,7 +18,7 @@ pub fn test_modify_scalar() {
     assert(i == -1);
 }
 
-fn modify_tuple(t: *(int, int)) {
+fn modify_tuple(t: *(int64, int64)) {
     match t {
         *(10, &b) => *b = 20,
         *(&a, &b) => {*a = 100; *b = 200},
@@ -43,7 +43,7 @@ struct Struct<A, B> {
     b: B,
 }
 
-fn modify_struct(s: *Struct<int, float>) {
+fn modify_struct(s: *Struct<int64, float64>) {
     match s {
         *Struct{a: 1, b: &b} => {*b = 2.3},
         *Struct{a: &a, b: &b} => {*a = -1; *b = -2.3},
@@ -63,7 +63,7 @@ pub fn test_modify_struct() {
     assert(s.b == -2.3);
 }
 
-fn modify_variant(o: *Option<int>) {
+fn modify_variant(o: *Option<int64>) {
     match o {
         *Some(&p) => *p = 42,
         *None => (),
@@ -82,7 +82,7 @@ pub fn test_modify_variant() {
     assert(o.unwrap() == 42);
 }
 
-fn modify_nested(t: *(int, *Struct<int, *Option<int>>)) {
+fn modify_nested(t: *(int64, *Struct<int64, *Option<int64>>)) {
     match t {
         *(1, *Struct{a: &b, b: *Some(&c)}) if *b == 2 && *c == 3 
             => {*b = 23; *c = 123},

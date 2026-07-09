@@ -9,15 +9,15 @@ pub fn read<T>(ptr: *T) -> T;
 pub fn write<T>(ptr: *T, value: T);
 
 #[extern]
-pub fn add<T>(ptr: *T, offset: int) -> *T;
+pub fn add<T>(ptr: *T, offset: isize) -> *T;
 
 pub fn null<T>() -> *T {
     0 as *T
 }
 
 
-pub fn difference<T>(lhs: *T, rhs: *T) -> int {
-    rhs as int - lhs as int
+pub fn difference<T>(lhs: *T, rhs: *T) -> isize {
+    rhs as isize - lhs as isize
 }
 
 pub fn replace<T>(pointer: *T, value: T) -> T {
@@ -32,36 +32,37 @@ pub fn swap<T>(first: *T, second: *T) {
 
 use mem::sizeof;
 
-pub fn copy<T>(src: *T, dest: *T, count: int) -> *T {
-    assert(count <= INT_MAX / sizeof::<T>());
+pub fn copy<T>(src: *T, dest: *T, count: usize) -> *T {
+    assert(count <= USIZE_MAX / sizeof::<T>());
     memmove(dest as *char, src as *char, 
         count * sizeof::<T>()) as *T
 }
 
-pub fn copy_nonoverlapping<T>(src: *T, dest: *T, count: int) -> *T {
-    assert(count <= INT_MAX / sizeof::<T>());
+pub fn copy_nonoverlapping<T>(src: *T, dest: *T, count: usize) -> *T {
+    assert(count <= USIZE_MAX / sizeof::<T>());
     memcpy(dest as *char, src as *char, 
         count * sizeof::<T>()) as *T
 }
 
-pub fn write_bytes<T>(ptr: *T, value: char, count: int) -> *T {
-    assert(count <= INT_MAX / sizeof::<T>());
+pub fn write_bytes<T>(ptr: *T, value: char, count: usize) -> *T {
+    assert(count <= USIZE_MAX / sizeof::<T>());
     memset(ptr as *char, value, 
         count * sizeof::<T>()) as *T
 }
 
 
 #[extern = "paw_ptr_memcpy"] 
-pub fn memcpy(dest: *char, src: *char, size: int) -> *char;
+pub fn memcpy(dest: *char, src: *char, size: usize) -> *char;
 
 #[extern = "paw_ptr_memmove"] 
-pub fn memmove(dest: *char, src: *char, size: int) -> *char;
+pub fn memmove(dest: *char, src: *char, size: usize) -> *char;
 
 #[extern = "paw_ptr_memset"] 
-pub fn memset(ptr: *char, value: char, size: int) -> *char;
+pub fn memset(ptr: *char, value: char, size: usize) -> *char;
 
 #[extern = "paw_ptr_memcmp"] 
-pub fn memcmp(lhs: *char, rhs: *char, size: int) -> int;
+pub fn memcmp(lhs: *char, rhs: *char, size: usize) -> usize;
 
 #[extern] 
-pub fn strlen(string: *char) -> int;
+pub fn strlen(string: *char) -> usize;
+

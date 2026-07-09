@@ -198,17 +198,17 @@ static void AcceptPath(struct AstVisitor *V, struct AstPath *path)
 static void AcceptLiteralExpr(struct AstVisitor *V, struct AstLiteralExpr *e)
 {
     switch (e->lit_kind) {
-        case kAstCompositeLit:
-            AcceptPath(V, &e->comp.path);
-            accept_expr_list(V, e->comp.items);
+        case AST_LIT_COMPOSITE:
+            AcceptPath(V, &e->composite.path);
+            accept_expr_list(V, e->composite.items);
             break;
-        case kAstTupleLit:
+        case AST_LIT_TUPLE:
             accept_expr_list(V, e->tuple.elems);
             break;
-        case kAstArrayLit:
+        case AST_LIT_ARRAY:
             accept_expr_list(V, e->array.elems);
             break;
-        case kAstBasicLit:
+        default:
             break;
     }
 }
@@ -1131,48 +1131,41 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
         case kAstLiteralExpr: {
             struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
             switch (e->lit_kind) {
-                case kAstBasicLit:
-                    DUMP_CSTR(P, "lit_kind: BASIC\n");
-                    switch (e->basic.code) {
-                        case BUILTIN_UNIT:
-                            DUMP_CSTR(P, "type: ()\n");
-                            break;
-                        case BUILTIN_BOOL:
-                            DUMP_CSTR(P, "type: bool\n");
-                            DUMP_FMT(P, "value: %s\n", V_TRUE(e->basic.value) ? "true" : "false");
-                            break;
-                        case BUILTIN_CHAR:
-                            DUMP_CSTR(P, "type: char\n");
-                            DUMP_FMT(P, "value: %c\n", V_CHAR(e->basic.value));
-                            break;
-                        case BUILTIN_INT:
-                            DUMP_CSTR(P, "type: int\n");
-                            DUMP_FMT(P, "value: %I\n", V_INT(e->basic.value));
-                            break;
-                        case BUILTIN_FLOAT:
-                            DUMP_CSTR(P, "type: float\n");
-                            DUMP_FMT(P, "value: %f\n", V_FLOAT(e->basic.value));
-                            break;
-                        default:
-                            paw_assert(e->basic.code == BUILTIN_STR);
-                            DUMP_CSTR(P, "type: string\n");
-                            DUMP_FMT(P, "value: %s\n", V_STR(e->basic.value)->text);
-                            break;
-                    }
+                case AST_LIT_BOOL:
+                    DUMP_CSTR(P, "lit_kind: BOOL\n");
+                    DUMP_FMT(P, "value: %s\n", e->b ? "true" : "false");
                     break;
-                case kAstArrayLit:
+                case AST_LIT_CHAR:
+                    DUMP_CSTR(P, "lit_kind: CHAR\n");
+                    DUMP_FMT(P, "value: '%c'\n", e->c);
+                    break;
+                case AST_LIT_INT:
+                    DUMP_CSTR(P, "lit_kind: INT\n");
+                    DUMP_FMT(P, "value: %I\n", e->i.value);
+                    DUMP_FMT(P, "suffix: %s\n", e->i.suffix);
+                    break;
+                case AST_LIT_FLOAT:
+                    DUMP_CSTR(P, "lit_kind: FLOAT\n");
+                    DUMP_FMT(P, "value: %f\n", e->f.value);
+                    DUMP_FMT(P, "suffix: %s\n", e->f.suffix);
+                    break;
+                case AST_LIT_STR:
+                    DUMP_CSTR(P, "lit_kind: STR\n");
+                    DUMP_FMT(P, "value: \"%s\"\n", e->s->text);
+                    break;
+                case AST_LIT_ARRAY:
                     DUMP_CSTR(P, "lit_kind: ARRAY\n");
                     dump_expr_list(P, e->array.elems, "elems");
                     break;
-                case kAstTupleLit:
+                case AST_LIT_TUPLE:
                     DUMP_CSTR(P, "lit_kind: TUPLE\n");
                     dump_expr_list(P, e->tuple.elems, "fields");
                     break;
-                case kAstCompositeLit:
+                case AST_LIT_COMPOSITE:
                     DUMP_CSTR(P, "lit_kind: COMPOSITE\n");
                     DUMP_CSTR(P, "target: ");
-                    dump_path(P, &e->comp.path);
-                    dump_expr_list(P, e->comp.items, "items");
+                    dump_path(P, &e->composite.path);
+                    dump_expr_list(P, e->composite.items, "items");
                     break;
             }
             break;

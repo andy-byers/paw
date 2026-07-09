@@ -33,17 +33,17 @@ pub fn test_get_tiny3() {
 
 pub inline struct Small2 {
     pub x: char,
-    pub y: int,
+    pub y: int64,
 }
 
 pub inline struct Small3 {
     pub x: bool,
     pub y: char,
-    pub z: float,
+    pub z: float64,
 }
 
-#[extern = "C"] pub fn get_small2(x: char, y: int) -> Small2;
-#[extern = "C"] pub fn get_small3(x: bool, y: char, z: float) -> Small3;
+#[extern = "C"] pub fn get_small2(x: char, y: int64) -> Small2;
+#[extern = "C"] pub fn get_small3(x: bool, y: char, z: float64) -> Small3;
 
 #[test]
 pub fn test_get_small2() {
@@ -61,19 +61,19 @@ pub fn test_get_small3() {
 }
 
 pub inline struct Large3 {
-    pub x: float,
-    pub y: float,
+    pub x: float64,
+    pub y: float64,
     pub z: bool,
 }
 
 pub inline struct Large5 {
-    pub x: int,
-    pub y: int,
+    pub x: int64,
+    pub y: int64,
     pub z: Large3,
 }
 
-#[extern = "C"] pub fn get_large3(x: float, y: float, z: bool) -> Large3;
-#[extern = "C"] pub fn get_large5(x: int, y: int, z: Large3) -> Large5;
+#[extern = "C"] pub fn get_large3(x: float64, y: float64, z: bool) -> Large3;
+#[extern = "C"] pub fn get_large5(x: int64, y: int64, z: Large3) -> Large5;
 
 #[test]
 pub fn test_get_large3() {
@@ -95,18 +95,18 @@ pub fn test_get_large5() {
 }
 
 pub inline struct HFA2 {
-    pub x: float,
-    pub y: float,
+    pub x: float64,
+    pub y: float64,
 }
 
 pub inline struct HFA4 {
-    pub x: float,
+    pub x: float64,
     pub y: HFA2,
-    pub z: float,
+    pub z: float64,
 }
 
-#[extern = "C"] pub fn get_hfa2(x: float, y: float) -> HFA2;
-#[extern = "C"] pub fn get_hfa4(x: float, y: HFA2, z: float) -> HFA4;
+#[extern = "C"] pub fn get_hfa2(x: float64, y: float64) -> HFA2;
+#[extern = "C"] pub fn get_hfa4(x: float64, y: HFA2, z: float64) -> HFA4;
 
 #[test]
 pub fn test_get_hfa2() {

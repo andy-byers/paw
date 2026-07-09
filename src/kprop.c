@@ -102,24 +102,24 @@ void dump_lattice(struct KProp *K)
             char const *type = pawIr_print_type(K->C, pcell->type);
             printf("k%d (%s): ", pcell->info.k, type);
             enum BuiltinKind b_kind = pawP_type2code(K->C, pcell->type);
-            switch (b_kind) {
-                case BUILTIN_UNIT:
+            switch (IR_KINDOF(pcell->type)) {
+                case kIrUnit:
                     printf("()");
                     break;
-                case BUILTIN_BOOL:
+                case kIrBool:
                     printf("%s", V_TRUE(pcell->info.v) ? "true" : "false");
                     break;
-                case BUILTIN_CHAR:
+                case kIrChar:
                     printf("%c", V_CHAR(pcell->info.v));
                     break;
-                case BUILTIN_INT:
+                case kIrInt:
                     printf("%lld", V_INT(pcell->info.v));
                     break;
-                case BUILTIN_FLOAT:
+                case kIrFloat:
                     printf("%f", V_FLOAT(pcell->info.v));
                     break;
                 default:
-                    paw_assert(b_kind == BUILTIN_STR);
+                    paw_assert(IrIsStr(pcell->type));
                     printf("\"%s\"", V_TEXT(pcell->info.v));
                     break;
             }
@@ -235,19 +235,18 @@ static void visit_phi(struct KProp *K, struct MirPhi *phi, MirBlock to)
         add_use_edges(K, presult->r);
 }
 
-static int add_constant(struct KProp *K, union IrValue v, enum BuiltinKind kind)
+static int add_constant(struct KProp *K, union IrValue v, IrType *type)
 {
-    return pawMir_kcache_add_value(K->mir, K->kcache, v, pawP_builtin_type(K->C, kind)).value;
+    return pawMir_kcache_add_value(K->mir, K->kcache, v, type).value;
 }
 
 static struct CellInfo constant_unary_op(struct KProp *K, struct Cell *val, struct Cell *output, enum MirUnaryOpKind op)
 {
     union IrValue const v = val->info.v;
-    union IrValue r;
 
-    if (pawP_fold_unary_op(K->C, op, v, &r)) {
-        enum BuiltinKind const kind = pawP_type2code(K->C, output->type);
-        int const k = add_constant(K, r, kind);
+    union IrValue r;
+    if (pawMir_fold_unary_op(op, val->type, v, &r) == 0) {
+        int const k = add_constant(K, r, output->type);
         return CONST_INFO(k, r);
     }
     return BOTTOM_INFO();
@@ -257,11 +256,10 @@ static struct CellInfo constant_binary_op(struct KProp *K, struct SourceSpan spa
 {
     union IrValue const x = lhs->info.v;
     union IrValue const y = rhs->info.v;
-    union IrValue r;
 
-    if (pawP_fold_binary_op(K->C, GET_MODNAME(K->mir), span, op, x, y, &r)) {
-        enum BuiltinKind const kind = pawP_type2code(K->C, output->type);
-        int const k = add_constant(K, r, kind);
+    union IrValue r;
+    if (pawMir_fold_binary_op(op, lhs->type, x, y, &r) == 0) {
+        int const k = add_constant(K, r, output->type);
         return CONST_INFO(k, r);
     }
     return BOTTOM_INFO();
@@ -277,22 +275,25 @@ static struct CellInfo binop_to_move(struct MirBinaryOp *binop, struct MirPlace 
     return TOP_INFO();
 }
 
-static struct CellInfo const_value(struct KProp *K, union IrValue r, enum BuiltinKind kind)
+#define VALUE(Field_, Value_) ((union IrValue){.Field_ = (Value_)})
+
+static struct CellInfo const_value(struct KProp *K, union IrValue r, IrType *type)
 {
-    int const k = add_constant(K, r, kind);
+    int const k = add_constant(K, r, type);
     return CONST_INFO(k, r);
 }
 
-static struct CellInfo const_zero(struct KProp *K, enum BuiltinKind kind)
+static struct CellInfo const_zero(struct KProp *K, IrType *type)
 {
-    return const_value(K, I2V(0), kind);
+    return const_value(K, VALUE(u64, 0), type);
 }
 
-static struct CellInfo const_nan(struct KProp *K)
+static struct CellInfo const_nan(struct KProp *K, IrType *type)
 {
     union IrValue r;
     V_SET_FLOAT(&r, NAN);
-    int const k = add_constant(K, r, BUILTIN_FLOAT);
+    paw_assert(IrIsFloat(type));
+    int const k = add_constant(K, r, type);
     return CONST_INFO(k, r);
 }
 
@@ -304,101 +305,86 @@ static struct CellInfo const_nan(struct KProp *K)
 #define IS_NAN(Cell_) ((Cell_)->info.kind == CELL_CONSTANT && isnan(V_FLOAT((Cell_)->info.v)))
 #define IS_INFINITY(Cell_) ((Cell_)->info.kind == CELL_CONSTANT && !isfinite(V_FLOAT((Cell_)->info.v)))
 
-// Fold binary operations where one of the operands is a compile-time constant
-static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, struct Cell *rhs, struct MirBinaryOp *binop)
+#define INT_EQUALS(Lhs_, Rhs_, Kind_) ( \
+        (Kind_) == IR_INT8 ? (Lhs_).i8 == (Rhs_) : \
+        (Kind_) == IR_INT16 ? (Lhs_).i16 == (Rhs_) : \
+        (Kind_) == IR_INT32 ? (Lhs_).i32 == (Rhs_) : \
+        (Kind_) == IR_INT64 ? (Lhs_).i64 == (Rhs_) : \
+        (Kind_) == IR_ISIZE ? (Lhs_).isize == (Rhs_) : \
+        (Kind_) == IR_UINT8 ? (Lhs_).i8 == (Rhs_) : \
+        (Kind_) == IR_UINT16 ? (Lhs_).u16 == (Rhs_) : \
+        (Kind_) == IR_UINT32 ? (Lhs_).u32 == (Rhs_) : \
+        (Kind_) == IR_UINT64 ? (Lhs_).u64 == (Rhs_) : \
+        (Lhs_).usize == (Rhs_))
+
+#define FLOAT_EQUALS(Lhs_, Rhs_, Kind_) ((Kind_) == IR_FLOAT32 \
+        ? (Lhs_).f32 == (Rhs_) \
+        : (Lhs_).f64 == (Rhs_))
+
+#define CONST_INT_EQUALS(Cell_, Value_) ((Cell_)->info.kind == CELL_CONSTANT \
+        && INT_EQUALS((Cell_)->info.v, Value_, IR_INT_KIND((Cell_)->type)))
+
+#define CONST_FLOAT_EQUALS(Cell_, Value_) ((Cell_)->info.kind == CELL_CONSTANT \
+        && FLOAT_EQUALS((Cell_)->info.v, Value_, IR_FLOAT_KIND((Cell_)->type)))
+
+static struct CellInfo special_int_binary_op(struct KProp *K, struct Cell *lhs, struct Cell *rhs, struct MirBinaryOp *binop)
 {
-    enum BuiltinKind kind = pawP_type2code(K->C, lhs->type);
-
-    // handle NaN propagation
-    if (kind == BUILTIN_FLOAT && (IS_NAN(lhs) || IS_NAN(rhs)))
-        return const_nan(K);
-
     switch (binop->op) {
-        case MIR_BINARY_IADD:
-            if (EQUALS_CONST_INT(lhs, 0)) {
+        case MIR_BINARY_ADD:
+            if (CONST_INT_EQUALS(lhs, 0)) {
                 return rhs->info;
-            } else if (EQUALS_CONST_INT(rhs, 0)) {
+            } else if (CONST_INT_EQUALS(rhs, 0)) {
                 return lhs->info;
             }
             break;
-        case MIR_BINARY_FADD:
-            if (EQUALS_CONST_FLOAT(lhs, 0.0)) {
+        case MIR_BINARY_SUB:
+            if (CONST_INT_EQUALS(rhs, 0))
+                return lhs->info;
+            break;
+        case MIR_BINARY_MUL:
+            if (CONST_INT_EQUALS(lhs, 0) || CONST_INT_EQUALS(rhs, 0)) {
+                return const_zero(K, lhs->type);
+            } else if (CONST_INT_EQUALS(lhs, 1)) {
                 return rhs->info;
-            } else if (EQUALS_CONST_FLOAT(rhs, 0.0)) {
+            } else if (CONST_INT_EQUALS(rhs, 1)) {
                 return lhs->info;
             }
             break;
-        case MIR_BINARY_ISUB:
-            if (EQUALS_CONST_INT(rhs, 0)) {
+        case MIR_BINARY_DIV:
+            if (CONST_INT_EQUALS(rhs, 0)) {
+                DIVIDE_BY_0(K, binop->span);
+            } else if (CONST_INT_EQUALS(lhs, 0)) {
+                return const_zero(K, lhs->type);
+            } else if (CONST_INT_EQUALS(rhs, 1)) {
                 return lhs->info;
             }
             break;
-        case MIR_BINARY_FSUB:
-            if (EQUALS_CONST_FLOAT(rhs, 0.0)) {
-                return lhs->info;
+        case MIR_BINARY_MOD:
+            if (CONST_INT_EQUALS(rhs, 0)) {
+                DIVIDE_BY_0(K, binop->span);
+            } else if (CONST_INT_EQUALS(lhs, 0) || CONST_INT_EQUALS(rhs, 1)) {
+                return const_zero(K, lhs->type);
             }
             break;
-        case MIR_BINARY_IMUL:
-            if (EQUALS_CONST_INT(lhs, 0) || EQUALS_CONST_INT(rhs, 0)) {
-                return const_zero(K, BUILTIN_INT);
-            } else if (EQUALS_CONST_INT(lhs, 1)) {
+        case MIR_BINARY_BITAND:
+            if (CONST_INT_EQUALS(lhs, 0) || CONST_INT_EQUALS(rhs, 0))
+                return const_zero(K, lhs->type);
+            break;
+        case MIR_BINARY_BITOR:
+        case MIR_BINARY_BITXOR:
+            if (CONST_INT_EQUALS(lhs, 0)) {
                 return rhs->info;
-            } else if (EQUALS_CONST_INT(rhs, 1)) {
+            } else if (CONST_INT_EQUALS(rhs, 0)) {
                 return lhs->info;
             }
             break;
-        case MIR_BINARY_FMUL:
-            // NOTE: not possible to constant fold float multiplication due to -0.0
-            break;
-        case MIR_BINARY_IDIV:
-            if (EQUALS_CONST_INT(rhs, 0)) {
-                DIVIDE_BY_0(K, binop->span);
-            } else if (EQUALS_CONST_INT(lhs, 0)) {
-                return const_zero(K, BUILTIN_INT);
-            } else if (EQUALS_CONST_INT(rhs, 1)) {
-                return lhs->info;
-            }
-            break;
-        case MIR_BINARY_FDIV:
-            // NOTE: the result of "0.0 / f" cannot be folded, since it depends on the
-            //       sign of "f"
-            if (EQUALS_CONST_FLOAT(rhs, 0.0)) {
-                DIVIDE_BY_0(K, binop->span);
-            } else if (EQUALS_CONST_FLOAT(rhs, 1.0)) {
-                return lhs->info;
-            }
-            break;
-        case MIR_BINARY_IMOD:
-            if (EQUALS_CONST_INT(rhs, 0)) {
-                DIVIDE_BY_0(K, binop->span);
-            } else if (EQUALS_CONST_INT(lhs, 0) || EQUALS_CONST_INT(rhs, 1)) {
-                return const_zero(K, BUILTIN_INT);
-            }
-            break;
-        case MIR_BINARY_FMOD:
-            if (EQUALS_CONST_FLOAT(rhs, 0.0)) {
-                DIVIDE_BY_0(K, binop->span);
-            }
-            break;
-        case MIR_BINARY_IBITAND:
-            if (EQUALS_CONST_INT(lhs, 0) || EQUALS_CONST_INT(rhs, 0))
-                return const_zero(K, BUILTIN_INT);
-            break;
-        case MIR_BINARY_IBITOR:
-        case MIR_BINARY_IBITXOR:
-            if (EQUALS_CONST_INT(lhs, 0)) {
-                return rhs->info;
-            } else if (EQUALS_CONST_INT(rhs, 0)) {
-                return lhs->info;
-            }
-            break;
-        case MIR_BINARY_ISHL:
-        case MIR_BINARY_ISHR:
+        case MIR_BINARY_SHL:
+        case MIR_BINARY_SHR:
             if (rhs->info.kind == CELL_CONSTANT && V_INT(rhs->info.v) < 0) {
                 SHIFT_BY_NEGATIVE(K, binop->span);
-            } else if (EQUALS_CONST_INT(lhs, 0)) { // 0 shift n == 0
-                return const_zero(K, BUILTIN_INT);
-            } else if (EQUALS_CONST_INT(rhs, 0)) { // n shift 0 == n
+            } else if (CONST_INT_EQUALS(lhs, 0)) { // 0 shift n == 0
+                return const_zero(K, lhs->type);
+            } else if (CONST_INT_EQUALS(rhs, 0)) { // n shift 0 == n
                 return lhs->info;
             }
             break;
@@ -408,21 +394,75 @@ static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, stru
     return BOTTOM_INFO();
 }
 
+static struct CellInfo special_float_binary_op(struct KProp *K, struct Cell *lhs, struct Cell *rhs, struct MirBinaryOp *binop)
+{
+    // handle NaN propagation
+    if (IS_NAN(lhs) || IS_NAN(rhs))
+        return const_nan(K, lhs->type);
+
+    switch (binop->op) {
+        case MIR_BINARY_ADD:
+            if (CONST_FLOAT_EQUALS(lhs, 0.0)) {
+                return rhs->info;
+            } else if (CONST_FLOAT_EQUALS(rhs, 0.0)) {
+                return lhs->info;
+            }
+            break;
+        case MIR_BINARY_SUB:
+            if (CONST_FLOAT_EQUALS(rhs, 0.0)) {
+                return lhs->info;
+            }
+            break;
+        case MIR_BINARY_MUL:
+            // NOTE: not possible to constant fold float multiplication due to -0.0
+            break;
+        case MIR_BINARY_DIV:
+            // NOTE: the result of "0.0 / f" cannot be folded, since it depends on the
+            //       sign of "f"
+            if (CONST_FLOAT_EQUALS(rhs, 0.0)) {
+                DIVIDE_BY_0(K, binop->span);
+            } else if (CONST_FLOAT_EQUALS(rhs, 1.0)) {
+                return lhs->info;
+            }
+            break;
+        case MIR_BINARY_MOD:
+            if (CONST_FLOAT_EQUALS(rhs, 0.0))
+                DIVIDE_BY_0(K, binop->span);
+            break;
+        default:
+            break;
+    }
+    return BOTTOM_INFO();
+}
+
+// Fold binary operations where one of the operands is a compile-time constant
+static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, struct Cell *rhs, struct MirBinaryOp *binop)
+{
+    switch (IR_KINDOF(lhs->type)) {
+        case kIrInt:
+            return special_int_binary_op(K, lhs, rhs, binop);
+        case kIrFloat:
+            return special_float_binary_op(K, lhs, rhs, binop);
+        default:
+            return BOTTOM_INFO();
+    }
+}
+
 // Fold binary operations where the operands are equal
 static struct CellInfo self_binary_op(struct KProp *K, struct MirBinaryOp *binop)
 {
+    IrType *type = binop->lhs.type;
     switch (binop->op) {
-        case MIR_BINARY_ISUB:
-        case MIR_BINARY_IMOD:
-        case MIR_BINARY_IBITXOR:
-            return const_zero(K, BUILTIN_INT);
-        case MIR_BINARY_FSUB:
-        case MIR_BINARY_FMOD:
-            return const_zero(K, BUILTIN_FLOAT);
-        case MIR_BINARY_IDIV:
-            return const_value(K, I2V(1), BUILTIN_INT);
-        case MIR_BINARY_FDIV:
-            return const_value(K, F2V(1.0), BUILTIN_FLOAT);
+        case MIR_BINARY_SUB:
+        case MIR_BINARY_MOD:
+        case MIR_BINARY_BITXOR:
+            return const_zero(K, binop->lhs.type);
+        case MIR_BINARY_DIV:
+            return IrIsInt(type)
+                ? const_value(K, VALUE(u64, 1U), binop->lhs.type)
+                : IR_FLOAT_KIND(type) == IR_FLOAT32
+                    ? const_value(K, VALUE(f32, 1.0f), binop->lhs.type)
+                    : const_value(K, VALUE(f64, 1.0), binop->lhs.type);
         default:
             return BOTTOM_INFO();
     }
@@ -448,7 +488,6 @@ static MirBlock single_branch_target(struct Cell *pcell, struct MirBlockData con
 static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struct Cell *pcell, struct MirBlockData const *bb)
 {
     paw_assert(pcell->info.kind == CELL_CONSTANT);
-    enum BuiltinKind const kind = pawP_type2code(K->C, pcell->type);
     union IrValue const target = pcell->info.v;
 
     MirBlock const *pb;
@@ -457,8 +496,8 @@ static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struc
         IrConst const *k = mir_const_data(K->mir, parm->k)->data;
         paw_assert(k->kind == IR_CONST_VALUE);
         union IrValue const value = k->value.value;
-        if ((kind != BUILTIN_FLOAT && V_UINT(value) == V_UINT(target))
-                || (kind == BUILTIN_FLOAT && V_FLOAT(value) == V_FLOAT(target)))
+        if ((!IrIsFloat(k->value.type) && V_UINT(value) == V_UINT(target))
+                || (IrIsFloat(k->value.type) && V_FLOAT(value) == V_FLOAT(target)))
             return *pb;
     }
 
@@ -498,6 +537,17 @@ static void into_constant(struct KProp *K, struct MirPlace *place, struct Cell c
     K->altered = PAW_TRUE;
 }
 
+static struct CellInfo try_fold_cast(struct KProp *K, struct Cell const *from, IrType *to_type)
+{
+    if (IrIsPtr(from->type) || IrIsPtr(to_type))
+        return BOTTOM_INFO();
+
+    union IrValue r;
+    pawMir_fold_cast(from->info.v, from->type, to_type, &r);
+    int const k = add_constant(K, r, to_type);
+    return CONST_INFO(k, r);
+}
+
 static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b)
 {
     struct MirBlockData const *bb = mir_bb_data(K->mir, b);
@@ -517,6 +567,18 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             }
             if (old != output->info.kind)
                 add_use_edges(K, output->r);
+            break;
+        }
+
+        case kMirCast: {
+            struct MirCast const *x = MirGetCast(instr);
+            struct Cell *target = get_cell(K, x->target);
+            struct Cell *output = get_cell(K, x->output);
+            if (target->info.kind == CELL_CONSTANT) {
+                output->info = try_fold_cast(K, target, output->type);
+            } else {
+                output->info = BOTTOM_INFO();
+            }
             break;
         }
         case kMirUnaryOp: {
@@ -1040,3 +1102,4 @@ void pawMir_propagate_constants(struct Mir *mir)
 {
     propagate(mir);
 }
+

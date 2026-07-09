@@ -1,6 +1,6 @@
 // match_guard.paw
 
-fn sign(value: int) -> int {
+fn sign(value: int64) -> int64 {
     match value {
         x if x < 0 => {return -1;},
         0 => {return 0;},
@@ -17,7 +17,7 @@ pub fn test_sign() {
     assert(sign(1000) == 1);
 }
 
-fn check_guard(i: int, b: bool) -> int {
+fn check_guard(i: int64, b: bool) -> int64 {
     match i {
         1 => 10,
         x if b => x,
@@ -39,7 +39,7 @@ fn test_guard() {
     assert(check_guard(4, true) == 4);
 }
 
-fn check_guard_2(value: Option<int>) -> int {
+fn check_guard_2(value: Option<int64>) -> int64 {
     match value {
         Some(x) if x == 100 => {return 1;},
         Some(x) if x < -10 => {return 2;},
@@ -59,7 +59,7 @@ pub fn test_guard_2() {
     assert(check(None) == 5);
 }
 
-fn check_guard_3(value: (int, int)) -> int {
+fn check_guard_3(value: (int64, int64)) -> int64 {
     match value {
         (x, y) if x == y => {return x + y + 1;},
         (x, y) => {return x + y + 2;},
@@ -75,7 +75,7 @@ pub fn test_guard_3() {
     assert(check((2, 2)) == 5);
 }
 
-fn check_special_case_1(i: int) -> int {
+fn check_special_case_1(i: int64) -> int64 {
     match i {
         1 => 1,
         x if false => x,

@@ -2,24 +2,24 @@
 
 #[test]
 pub fn addrof_operator() {
-    let _: *int = &123;
-    let _: **int = &&123;
-    let _: ***int = &&&123;
+    let _: *int64 = &123;
+    let _: **int64 = &&123;
+    let _: ***int64 = &&&123;
 }
 
 pub trait Trait {
-    fn method(*self) -> int;
+    fn method(*self) -> int64;
 }
 
 struct Type;
 
 impl Trait for Type {
-    fn method(*self) -> int {
+    fn method(*self) -> int64 {
         123
     }
 }
 
-fn dispatch_method<T: Trait>(p: *T) -> int {
+fn dispatch_method<T: Trait>(p: *T) -> int64 {
     p.method()
 }
 
@@ -88,7 +88,7 @@ pub fn access_constant_data() {
 }
 
 struct Int {
-    pub value: int,
+    pub value: int64,
 }
 
 #[test]

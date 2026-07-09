@@ -7,31 +7,42 @@ pub use option::*;
 pub use result::*;
 
 
-pub const CHAR_MAX: char = '\xFF';
-pub const CHAR_MIN: char = '\x00';
+pub const INT8_MIN: int8 = -INT8_MAX - 1;
+pub const INT16_MIN: int16 = -INT16_MAX - 1;
+pub const INT32_MIN: int32 = -INT32_MAX - 1;
+pub const INT64_MIN: int64 = -INT64_MAX - 1;
+pub const ISIZE_MIN: isize = -ISIZE_MAX - 1;
 
+pub const INT8_MAX: int8 =  0x7F;
+pub const INT16_MAX: int16 = 0x7FFF;
+pub const INT32_MAX: int32 = 0x7FFFFFFF;
+pub const INT64_MAX: int64 = 0x7FFFFFFFFFFFFFFF;
+pub const ISIZE_MAX: isize = 0x7FFFFFFFFFFFFFFF;
 
-pub const INT_MAX: int = 0x7FFFFFFFFFFFFFFF;
-pub const INT_MIN: int = -INT_MAX - 1;
+pub const UINT8_MAX: uint8 =  0xFF;
+pub const UINT16_MAX: uint16 = 0xFFFF;
+pub const UINT32_MAX: uint32 = 0xFFFFFFFF;
+pub const UINT64_MAX: uint64 = 0xFFFFFFFFFFFFFFFF;
+pub const USIZE_MAX: usize = 0xFFFFFFFFFFFFFFFF;
 
 impl str {
     #[extern = "paw_str_from_raw_parts"] 
-    pub fn from_raw_parts(ptr: *char, len: int) -> Self;
+    pub fn from_raw_parts(ptr: *char, len: usize) -> Self;
 
     #[extern = "paw_str_len"] 
-    pub fn len(self) -> int;
+    pub fn len(self) -> usize;
 
     #[extern = "paw_str_parse_int"] 
-    pub fn parse_int(self) -> Option<int>;
+    pub fn parse_int(self) -> Option<int64>;
 
     #[extern = "paw_str_parse_int_radix"] 
-    pub fn parse_int_radix(self, base: int) -> Option<int>;
+    pub fn parse_int_radix(self, base: int64) -> Option<int64>;
 
     #[extern = "paw_str_parse_float"] 
-    pub fn parse_float(self) -> Option<float>;
+    pub fn parse_float(self) -> Option<float64>;
 
     #[extern = "paw_str_find"] 
-    pub fn find(self, target: Self) -> Option<int>;
+    pub fn find(self, target: Self) -> Option<usize>;
 
     #[extern = "paw_str_starts_with"] 
     pub fn starts_with(self, prefix: Self) -> bool;

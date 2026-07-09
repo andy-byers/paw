@@ -16,16 +16,16 @@ pub trait IntoCursor {
 }
 
 pub struct IntoCurs {
-    pub length: int,
-    pub index: int,
+    pub length: int64,
+    pub index: int64,
 }
 
 pub struct Container {
-    pub length: int,
+    pub length: int64,
 }
 
 impl Cursor for IntoCurs {
-    type Item = int;
+    type Item = int64;
     fn next(*self) -> Option<Self::Item> {
         if self.index < self.length {
             self.index += 1;
@@ -37,17 +37,17 @@ impl Cursor for IntoCurs {
 }
 
 impl IntoCursor for Container {
-    type Item = int;
+    type Item = int64;
     type IntoCurs = IntoCurs;
     fn into_cursor(self) -> Self::IntoCurs {
         IntoCurs{index: 0, length: self.length}
     }
 }
 
-pub fn function<I: IntoCursor<Item = int>>(curs: I) -> I::Item {
+pub fn function<I: IntoCursor<Item = int64>>(curs: I) -> I::Item {
     // constraints from function:
     //   I: IntoCursor<I>
-    //   <I as IntoCursor<I>>::Item = int
+    //   <I as IntoCursor<I>>::Item = int64
     // predicates from IntoCursor:
     //   <I as IntoCursor<I>>::IntoCurs: Cursor
     //   <<I as IntoCursor<I>>::IntoCurs as Cursor>::Item = <I as IntoCursor<I>>::Item

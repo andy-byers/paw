@@ -11,8 +11,8 @@ fn map<A, B>(f: fn(A) -> B, a: List<A>) -> List<B> {
     b
 }
 
-fn f2i(f: float) -> int {
-    f as int
+fn f2i(f: float64) -> int64 {
+    f as int64
 }
 
 #[test]
@@ -24,7 +24,7 @@ pub fn test_explicit_instantiation() {
     source.push(3.8).unwrap();
     source.push(4.9).unwrap();
 
-    let target = map::<float, int>(f2i, source);
+    let target = map::<float64, int64>(f2i, source);
     assert(target.len() == 5);
     assert(target[0] == 0);
     assert(target[1] == 1);
@@ -33,7 +33,7 @@ pub fn test_explicit_instantiation() {
     assert(target[4] == 4);
 }
 
-fn self_recursive<T>(t: T, i: int) {
+fn self_recursive<T>(t: T, i: int64) {
     if i > 0 {
         self_recursive(t, i - 1);
     }
@@ -43,7 +43,7 @@ fn self_recursive<T>(t: T, i: int) {
 pub fn test_self_recursion() {
     self_recursive(true, 10);
     self_recursive(2, 11);
-    let f = self_recursive::<float>;
+    let f = self_recursive::<float64>;
     self_recursive(f, 12);
 }
 
@@ -61,5 +61,5 @@ fn second_recursive<X, Y, Z>(x: X, y: Y, z: Z) {
 pub fn test_recursive_instantiation() {
     first_recursive(1, 2.0, "three");
     second_recursive("four", 5.0, 6);
-    second_recursive(|| 42, [f2i], map::<int, bool>);
+    second_recursive(|| 42, [f2i], map::<int64, bool>);
 }

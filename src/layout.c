@@ -97,7 +97,7 @@ static struct IrLayout fatptr_layout(struct LayoutState *L, IrType *pointee)
 {
     IrTypeList *fields = IrTypeList_new(L->C);
     IrTypeList_push(L->C, fields, pawIr_new_ptr(L->C, pointee));
-    IrTypeList_push(L->C, fields, pawIr_new_int(L->C));
+    IrTypeList_push(L->C, fields, pawIr_new_int(L->C, IR_USIZE));
     return compute_typelist_layout(L, fields);
 }
 
@@ -122,7 +122,7 @@ static struct IrLayout compute_enum_layout(struct LayoutState *L, struct IrAdt *
     struct IrVariantDef *const *pvariant;
     K_LIST_ENUMERATE (def->variants, index, pvariant) {
         IrTypeList *fields = pawP_instantiate_variant_fields(L->C, t, index);
-        IrTypeList_insert(L->C, fields, 0, pawIr_new_int(L->C));
+        IrTypeList_insert(L->C, fields, 0, pawIr_new_int(L->C, IR_INT64));
         struct IrLayout const variant_lo = compute_typelist_layout(L, fields);
 
         IrLayoutFields_push(L->C, enum_lo.fields,

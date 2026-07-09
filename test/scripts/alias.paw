@@ -2,7 +2,7 @@
 
 #[test]
 pub fn test_primitive() {
-    type I = int;
+    type I = int64;
     let i: I = 123;
     assert(i == 123);
 
@@ -16,7 +16,7 @@ pub fn test_tuple() {
     type U = ();
     let u: U = ();
 
-    type T = (int, str);
+    type T = (int64, str);
     let t: T = (123, "abc");
     assert(t.0 == 123);
     assert(t.1 == "abc");
@@ -28,7 +28,7 @@ use hashmap;
 #[test]
 pub fn test_container() {
     type L<T> = list::List<T>;
-    let l: L<int> = L::new();
+    let l: L<int64> = L::new();
     list_function(l);
 }
 
@@ -36,10 +36,10 @@ fn list_function<T>(list: list::List<T>) {}
 
 
 struct Mono {
-    pub value: int,
+    pub value: int64,
 }
 
-fn check_mono(m: Mono, n: int) {
+fn check_mono(m: Mono, n: int64) {
     assert(m.value == n);
 }
 
@@ -68,7 +68,7 @@ fn check_poly<T2>(p: Poly<T2>) {
 pub fn test_poly() {
     type P<X> = Poly<X>;
 
-    let p: P<int> = P{value: 123};
+    let p: P<int64> = P{value: 123};
     check_poly(p);
 
     let p = P{value: 456};
@@ -90,7 +90,7 @@ fn check_poly2<S2, T2>(p: Poly2<S2, T2>) {
 pub fn test_poly2() {
     type P<X, Y> = Poly2<X, Y>;
 
-    let p: P<int, str> = P{
+    let p: P<int64, str> = P{
         first: 123,
         second: "abc",
     };
@@ -107,7 +107,7 @@ pub fn test_poly2() {
 pub fn test_poly2_partial() {
     type P1<X> = Poly2<X, str>;
 
-    let p: P1<int> = P1{
+    let p: P1<int64> = P1{
         first: 123,
         second: "abc",
     };
@@ -119,7 +119,7 @@ pub fn test_poly2_partial() {
     };
     check_poly2(p);
 
-    type P2<Y> = Poly2<int, Y>;
+    type P2<Y> = Poly2<int64, Y>;
 
     let p: P2<str> = P2{
         first: 123,
@@ -176,8 +176,8 @@ pub fn test_nested_poly() {
 pub fn test_dependent() {
     type P<X> = Poly<X>;
     type L<Y> = list::List<P<Y>>;
-    type M<Z> = hashmap::HashMap<int, L<Z>>;
-    let m: M<int> = M::new();
+    type M<Z> = hashmap::HashMap<int64, L<Z>>;
+    let m: M<int64> = M::new();
     m.insert(123, L::new()).unwrap();
 }
 
@@ -200,8 +200,8 @@ pub fn test_global() {
     assert(gp2.second == gf);
 }
 
-type GI = int;
-type GF = float;
+type GI = int64;
+type GF = float64;
 type GP = Poly<GF>;
 type GP2<X> = Poly2<Poly<X>, X>;
 
@@ -233,7 +233,7 @@ pub fn test_types_are_hoisted() {
     let s: S = "abc";
     assert(s == "abc");
 
-    type I = int;
+    type I = int64;
 //    let _ = || {
         type S = str;
 //    };

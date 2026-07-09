@@ -18,7 +18,7 @@ fn empty_tree() -> Option<Tree> {
         Option::None);
 }
 
-fn bottom_up_tree(depth: int) -> Option<Tree> {
+fn bottom_up_tree(depth: int64) -> Option<Tree> {
     if depth > 0 {
         depth = depth - 1;
         return new_tree(
@@ -28,7 +28,7 @@ fn bottom_up_tree(depth: int) -> Option<Tree> {
     return empty_tree();
 }
 
-fn item_check_aux(tree: Tree) -> int {
+fn item_check_aux(tree: Tree) -> int64 {
     let Tree{left, right} = tree;
     if left.is_some() {
         return 1
@@ -38,7 +38,7 @@ fn item_check_aux(tree: Tree) -> int {
     return 1;
 }
 
-fn item_check(tree: Option<Tree>) -> int {
+fn item_check(tree: Option<Tree>) -> int64 {
     return item_check_aux(tree.unwrap());
 }
 
@@ -54,7 +54,7 @@ pub fn test() {
 use io;
 use os;
 
-pub fn main() -> int {
+pub fn main() -> int64 {
     let args = os::args();
     let N = if args.len() > 1 {
         args[1].parse_int().unwrap()

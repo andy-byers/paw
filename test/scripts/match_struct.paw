@@ -6,7 +6,7 @@ struct Object<Ty> {
     pub value: Ty,
 }
 
-fn check_match(target: Object<int>) -> int {
+fn check_match(target: Object<int64>) -> int64 {
     match target {
         Object{value: 1} => {return 1;},
         Object{value: 2} => {return 2;},
@@ -22,7 +22,7 @@ pub fn test_match() {
     assert(check_match(Object{value: 3}) == 6);
 }
 
-fn check_nested_match(target: Option<Object<int>>) -> int {
+fn check_nested_match(target: Option<Object<int64>>) -> int64 {
     match target {
         Option::None => {return 1;},
         Option::Some(Object{value: 1}) => {return 2;},
@@ -42,14 +42,14 @@ pub fn test_nested_match() {
 }
 
 struct ManyFields {
-    pub a: int,
-    pub b: int,
-    pub c: int,
-    pub d: int,
-    pub e: int,
+    pub a: int64,
+    pub b: int64,
+    pub c: int64,
+    pub d: int64,
+    pub e: int64,
 }
 
-fn check_many_fields(target: ManyFields) -> int {
+fn check_many_fields(target: ManyFields) -> int64 {
     match target {
         ManyFields{a: 1, b: 2, c: 3, d: 4, e: 5} => {return 1;},
         ManyFields{b: 1, c: 2, d: 3, e: 4, a: 5} => {return 2;},

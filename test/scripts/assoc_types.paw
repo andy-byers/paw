@@ -6,26 +6,26 @@ pub trait TestAdd<Rhs> {
 }
 
 struct Integer {
-    pub v: int,
+    pub v: int64,
 }
 
 impl Copy for Integer {}
 
 impl TestAdd<Integer> for Integer {
-    type Output = int;
+    type Output = int64;
     fn add(self, rhs: Integer) -> Self::Output {
         self.v + rhs.v
     }
 }
 
 struct Float {
-    pub v: float,
+    pub v: float64,
 }
 
 impl Copy for Float {}
 
 impl TestAdd<Float> for Float {
-    type Output = float;
+    type Output = float64;
     fn add(self, rhs: Float) -> Self::Output {
         self.v + rhs.v
     }

@@ -38,7 +38,6 @@ public:
         BOOL,
         CHAR,
         INT,
-        INT32,
         FLOAT,
         STR,
         SLICE,
@@ -64,7 +63,6 @@ public:
     bool is_bool_type() const { return kind_ == Kind::BOOL; }
     bool is_char_type() const { return kind_ == Kind::CHAR; }
     bool is_int_type() const { return kind_ == Kind::INT; }
-    bool is_int32_type() const { return kind_ == Kind::INT32; }
     bool is_float_type() const { return kind_ == Kind::FLOAT; }
     bool is_str_type() const { return kind_ == Kind::STR; }
     bool is_object_type() const { return kind_ == Kind::OBJECT; }
@@ -72,6 +70,8 @@ public:
     bool is_array_type() const { return kind_ == Kind::ARRAY; }
     bool is_fn_type() const { return kind_ == Kind::FN; }
     bool is_ptr_type() const { return kind_ == Kind::PTR; }
+
+    bool is_signed_int() const;
 
     bool is_abi_struct_type() const
     {
@@ -192,43 +192,120 @@ public:
 };
 
 
-class Int32Type: public PrimitiveType {
-public:
-    explicit Int32Type(Context &X);
-    ~Int32Type() override = default;
-
-    std::string to_string() const override
-    {
-        return "i32";
-    }
+enum class IntKind {
+    INT8,
+    INT16,
+    INT32,
+    INT64,
+    ISIZE,
+    UINT8,
+    UINT16,
+    UINT32,
+    UINT64,
+    USIZE,
 };
 
+static constexpr size_t NUM_INT_KINDS = size_t(IntKind::USIZE) + 1;
+
+
+enum class Signedness {
+    SIGNED,
+    UNSIGNED,
+};
 
 class IntType: public PrimitiveType {
 public:
     friend class Int;
 
-    explicit IntType(Context &X);
+    explicit IntType(Context &X, IntKind kind);
     ~IntType() override = default;
+
+    unsigned long hash() const override;
+    bool equals(Type const *rhs) const override;
+
+    bool is_signed() const
+    {
+        return get_signedness() == Signedness::SIGNED;
+    }
+
+    Signedness get_signedness() const
+    {
+        switch (ikind_) {
+            case IntKind::INT8:
+            case IntKind::INT16:
+            case IntKind::INT32:
+            case IntKind::INT64:
+            case IntKind::ISIZE:
+                return Signedness::SIGNED;
+            case IntKind::UINT8:
+            case IntKind::UINT16:
+            case IntKind::UINT32:
+            case IntKind::UINT64:
+            case IntKind::USIZE:
+                return Signedness::UNSIGNED;
+        }
+    }
 
     std::string to_string() const override
     {
-        return "int";
+        switch (ikind_) {
+            case IntKind::INT8:
+                return "int8";
+            case IntKind::INT16:
+                return "int16";
+            case IntKind::INT32:
+                return "int32";
+            case IntKind::INT64:
+                return "int64";
+            case IntKind::ISIZE:
+                return "isize";
+            case IntKind::UINT8:
+                return "uint8";
+            case IntKind::UINT16:
+                return "uint16";
+            case IntKind::UINT32:
+                return "uint32";
+            case IntKind::UINT64:
+                return "uint64";
+            case IntKind::USIZE:
+                return "usize";
+        }
     }
+
+private:
+    IntKind ikind_;
 };
 
+
+enum class FloatKind {
+    FLOAT32,
+    FLOAT64,
+};
+
+static constexpr size_t NUM_FLOAT_KINDS = size_t(FloatKind::FLOAT64) + 1;
 
 class FloatType: public PrimitiveType {
 public:
     friend class Float;
 
-    explicit FloatType(Context &X);
+    explicit FloatType(Context &X, FloatKind kind);
     ~FloatType() override = default;
+
+    unsigned long hash() const override;
+    bool equals(Type const *rhs) const override;
 
     std::string to_string() const override
     {
-        return "float";
+        switch (fkind_) {
+            case FloatKind::FLOAT32:
+                return "float";
+            case FloatKind::FLOAT64:
+                return "double";
+        }
     }
+
+private:
+    FloatKind fkind_;
 };
 
 
@@ -363,7 +440,7 @@ public:
 
     std::string to_string() const override
     {
-        return "*str";
+        return "str";
     }
 
     unsigned long hash() const override;

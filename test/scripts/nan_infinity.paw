@@ -20,7 +20,7 @@ pub fn test_infinity() {
     assert(!is_nan(-INFINITY));
 }
 
-pub fn nan_propagation(f: float) {
+pub fn nan_propagation(f: float64) {
     assert(is_nan(f + NAN));
     assert(is_nan(NAN + f));
     assert(is_nan(f - NAN));

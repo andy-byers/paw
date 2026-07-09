@@ -1,15 +1,15 @@
 // method.paw
 
 struct Struct {
-    value: int,
+    value: int64,
 }
 
 impl Struct {
-    pub fn new(value: int) -> Self {
+    pub fn new(value: int64) -> Self {
         Self{value}
     }
 
-    pub fn get(*self) -> int {
+    pub fn get(*self) -> int64 {
         self.value
     }
 
@@ -56,12 +56,12 @@ pub fn test_poly_struct_methods_indirect() {
 }
 
 enum Enum {
-    A(int),
+    A(int64),
     B(str),
 }
 
 impl Enum {
-    pub fn new_a(value: int) -> Self {
+    pub fn new_a(value: int64) -> Self {
         Self::A(value)
     }
 
@@ -71,7 +71,7 @@ impl Enum {
 
     pub fn debug(*self) -> str {
         match self {
-            *Self::A(a) => "(int)",
+            *Self::A(a) => "(int64)",
             *Self::B(b) => b,
         }
     }
@@ -80,7 +80,7 @@ impl Enum {
 #[test]
 pub fn test_enum_methods() {
     let x = Enum::new_a(123);
-    assert(x.debug() == "(int)");
+    assert(x.debug() == "(int64)");
 
     let x = Enum::new_b("abc");
     assert(x.debug() == "abc");
@@ -141,21 +141,21 @@ pub fn test_poly_enum_methods_indirect() {
 //struct TestA<T, T2>;
 //
 //impl<T, T2> TestA<T, T2> {
-//    pub fn f() -> int { 1 }
+//    pub fn f() -> int64 { 1 }
 //}
 //
 //struct TestB<T, T2>;
 //
 //impl<T, T2> TestB<T, T2>{
-//    pub fn f() -> int { 2 }
+//    pub fn f() -> int64 { 2 }
 //}
 //
 //#[test]
 //pub fn test_ab() {
-//    let a = TestA::<int, float>::f();
-//    let b = TestB::<float, int>::f();
-//    let c = TestA::<int, int>::f();
-//    let d = TestB::<float, float>::f();
+//    let a = TestA::<int64, float64>::f();
+//    let b = TestB::<float64, int64>::f();
+//    let c = TestA::<int64, int64>::f();
+//    let d = TestB::<float64, float64>::f();
 //    assert(a == b - 1);
 //    assert(c == d - 1);
 //}
@@ -184,7 +184,7 @@ pub fn test_poly_enum_methods_indirect() {
 ////}
 ////
 ////struct Val {
-////    pub value: int,
+////    pub value: int64,
 ////}
 ////
 ////impl Copy for Val {}

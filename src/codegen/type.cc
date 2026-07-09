@@ -81,6 +81,12 @@ ABIClass abi_class_for_object(Context &X, llvm::Type *ty)
 } // (anonymous namespace)
 
 
+bool Type::is_signed_int() const
+{
+    return is_int_type() && ((IntType *)this)->is_signed();
+}
+
+
 UnitType::UnitType(Context &X)
     : PrimitiveType(X, X.get_unit_ty(), Kind::UNIT, ABIClass::EMPTY)
 {
@@ -99,22 +105,77 @@ CharType::CharType(Context &X)
 }
 
 
-Int32Type::Int32Type(Context &X)
-    : PrimitiveType(X, X.get_i32_ty(), Kind::INT32, ABIClass::SCALAR)
+namespace {
+
+llvm::Type *int_kind_to_llvm_type(Context &X, IntKind kind)
+{
+    switch (kind) {
+        case IntKind::INT8:
+        case IntKind::UINT8:
+            return X.get_i8_ty();
+        case IntKind::INT16:
+        case IntKind::UINT16:
+            return X.get_i16_ty();
+        case IntKind::INT32:
+        case IntKind::UINT32:
+            return X.get_i32_ty();
+        case IntKind::INT64:
+        case IntKind::UINT64:
+            return X.get_i64_ty();
+        case IntKind::ISIZE:
+        case IntKind::USIZE:
+            return X.get_isize_ty();
+    }
+}
+
+llvm::Type *float_kind_to_llvm_type(Context &X, FloatKind kind)
+{
+    switch (kind) {
+        case FloatKind::FLOAT32:
+            return X.get_f32_ty();
+        case FloatKind::FLOAT64:
+            return X.get_f64_ty();
+    }
+}
+
+} // namespace
+
+
+IntType::IntType(Context &X, IntKind kind)
+    : PrimitiveType(X, int_kind_to_llvm_type(X, kind), Kind::INT, ABIClass::SCALAR)
+    , ikind_(kind)
 {
 }
 
-
-IntType::IntType(Context &X)
-    : PrimitiveType(X, X.get_i64_ty(), Kind::INT, ABIClass::SCALAR)
+unsigned long IntType::hash() const
 {
+    return hash_combine((unsigned long)ikind_,
+            hash_combine((unsigned long)get_kind(), HASH_SEED));
+}
+
+bool IntType::equals(Type const *rhs) const
+{
+    return rhs->is_int_type() && ikind_ == static_cast<IntType const *>(rhs)->ikind_;
 }
 
 
-FloatType::FloatType(Context &X)
-    : PrimitiveType(X, X.get_float_ty(), Kind::FLOAT, ABIClass::SCALAR)
+FloatType::FloatType(Context &X, FloatKind kind)
+    : PrimitiveType(X, float_kind_to_llvm_type(X, kind), Kind::FLOAT, ABIClass::SCALAR)
+    , fkind_(kind)
 {
 }
+
+unsigned long FloatType::hash() const
+{
+    return hash_combine((unsigned long)fkind_,
+            hash_combine((unsigned long)get_kind(), HASH_SEED));
+}
+
+bool FloatType::equals(Type const *rhs) const
+{
+    return rhs->is_float_type() && fkind_ == static_cast<FloatType const *>(rhs)->fkind_;
+}
+
 
 
 SliceType::SliceType(Context &X, Type *element_type)
@@ -130,7 +191,7 @@ llvm::StructType *SliceType::get_struct_ty() const
 
 llvm::Type *SliceType::get_abi_ty() const
 {
-    return X->get_array_ty(X->get_int_ty(), 2);
+    return X->get_array_ty(X->get_isize_ty(), 2);
 }
 
 unsigned long SliceType::hash() const
@@ -159,7 +220,7 @@ llvm::StructType *StrType::get_struct_ty() const
 
 llvm::Type *StrType::get_abi_ty() const
 {
-    return X->get_array_ty(X->get_int_ty(), 2);
+    return X->get_array_ty(X->get_isize_ty(), 2);
 }
 
 unsigned long StrType::hash() const

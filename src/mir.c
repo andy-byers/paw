@@ -118,7 +118,7 @@ void pawMir_kcache_delete(struct Mir *mir, struct MirConstantCache *kcache)
 MirConstant pawMir_kcache_add_value(struct Mir *mir, struct MirConstantCache *kcache, union IrValue value, IrType *type)
 {
     if (IrIsUnit(type)) return kcache->unitk;
-    if (IrIsBool(type)) return kcache->boolk[V_TRUE(value)];
+    if (IrIsBool(type)) return kcache->boolk[value.b];
     MirConstMap *map = IrIsChar(type) ? kcache->chars :
         IrIsFloat(type) ? kcache->floats :
         IrIsString(type) ? kcache->strs :
@@ -1229,82 +1229,46 @@ static void indentation(struct Printer *P)
 static char const *unop_name(enum MirUnaryOpKind op)
 {
     switch (op) {
-        case MIR_UNARY_INEG:
-            return "INEG";
-        case MIR_UNARY_FNEG:
-            return "FNEG";
+        case MIR_UNARY_NEG:
+            return "NEG";
         case MIR_UNARY_NOT:
             return "NOT";
-        case MIR_UNARY_IBITNOT:
-            return "IBITNOT";
+        case MIR_UNARY_BITNOT:
+            return "BITNOT";
     }
 }
 
 static char const *binop_name(enum MirBinaryOpKind op)
 {
     switch (op) {
-        case MIR_BINARY_CEQ:
-            return "CEQ";
-        case MIR_BINARY_CNE:
-            return "CNE";
-        case MIR_BINARY_CLT:
-            return "CLT";
-        case MIR_BINARY_CLE:
-            return "CLE";
-        case MIR_BINARY_IEQ:
-            return "IEQ";
-        case MIR_BINARY_INE:
-            return "INE";
-        case MIR_BINARY_ILT:
-            return "ILT";
-        case MIR_BINARY_ILE:
-            return "ILE";
-        case MIR_BINARY_FEQ:
-            return "FEQ";
-        case MIR_BINARY_FNE:
-            return "FNE";
-        case MIR_BINARY_FLT:
-            return "FLT";
-        case MIR_BINARY_FLE:
-            return "FLE";
-        case MIR_BINARY_STREQ:
-            return "STREQ";
-        case MIR_BINARY_STRNE:
-            return "STRNE";
-        case MIR_BINARY_STRLT:
-            return "STRLT";
-        case MIR_BINARY_STRLE:
-            return "STRLE";
-        case MIR_BINARY_IADD:
-            return "IADD";
-        case MIR_BINARY_ISUB:
-            return "ISUB";
-        case MIR_BINARY_IMUL:
-            return "IMUL";
-        case MIR_BINARY_IDIV:
-            return "IDIV";
-        case MIR_BINARY_IMOD:
-            return "IMOD";
-        case MIR_BINARY_FADD:
-            return "FADD";
-        case MIR_BINARY_FSUB:
-            return "FSUB";
-        case MIR_BINARY_FMUL:
-            return "FMUL";
-        case MIR_BINARY_FDIV:
-            return "FDIV";
-        case MIR_BINARY_FMOD:
-            return "FMOD";
-        case MIR_BINARY_IBITAND:
-            return "IBITAND";
-        case MIR_BINARY_IBITOR:
-            return "IBITOR";
-        case MIR_BINARY_IBITXOR:
-            return "IBITXOR";
-        case MIR_BINARY_ISHL:
-            return "ISHL";
-        case MIR_BINARY_ISHR:
-            return "ISHR";
+        case MIR_BINARY_EQ:
+            return "EQ";
+        case MIR_BINARY_NE:
+            return "NE";
+        case MIR_BINARY_LT:
+            return "LT";
+        case MIR_BINARY_LE:
+            return "LE";
+        case MIR_BINARY_ADD:
+            return "ADD";
+        case MIR_BINARY_SUB:
+            return "SUB";
+        case MIR_BINARY_MUL:
+            return "MUL";
+        case MIR_BINARY_DIV:
+            return "DIV";
+        case MIR_BINARY_MOD:
+            return "MOD";
+        case MIR_BINARY_BITAND:
+            return "BITAND";
+        case MIR_BINARY_BITOR:
+            return "BITOR";
+        case MIR_BINARY_BITXOR:
+            return "BITXOR";
+        case MIR_BINARY_SHL:
+            return "SHL";
+        case MIR_BINARY_SHR:
+            return "SHR";
     }
 }
 
@@ -1462,26 +1426,9 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         case kMirCast: {
             struct MirCast *t = MirGetCast(instr);
             print_place(P, t->output);
-            PRINT_LITERAL(P, " = ");
-            switch (t->to) {
-                case BUILTIN_BOOL:
-                    PRINT_LITERAL(P, "(bool)");
-                    break;
-                case BUILTIN_CHAR:
-                    PRINT_LITERAL(P, "(char)");
-                    break;
-                case BUILTIN_INT:
-                    PRINT_LITERAL(P, "(int)");
-                    break;
-                case BUILTIN_FLOAT:
-                    PRINT_LITERAL(P, "(float)");
-                    break;
-                case BUILTIN_STR:
-                    PRINT_LITERAL(P, "(str)");
-                    break;
-                default:
-                    PRINT_LITERAL(P, "(?)");
-            }
+            PRINT_LITERAL(P, " = (");
+            PRINT_STRING(P, pawIr_print_type_v2(P->C, t->output.type));
+            PRINT_CHAR(P, ')');
             print_place(P, t->target);
             break;
         }

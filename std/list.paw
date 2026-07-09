@@ -2,18 +2,20 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-const DEFAULT_CAPACITY: int = 4;
+const DEFAULT_CAPACITY: usize = 4;
 
 pub struct List<T> {
     start: *T,
-    length: int,
-    capacity: int,
+    length: usize,
+    capacity: usize,
 }
 
 use array;
 use mem;
 use ptr;
 use slice;
+
+const MAX_ELEMENTS: usize = ISIZE_MAX as usize;
 
 impl<T> List<T> {
     pub fn new() -> Self {
@@ -24,20 +26,20 @@ impl<T> List<T> {
         }
     }
 
-    pub fn len(*self) -> int {
+    pub fn len(*self) -> usize {
         self.length
     }
 
-    pub fn capacity(*self) -> int {
+    pub fn capacity(*self) -> usize {
         self.capacity
     }
 
-    pub fn get(*self, index: int) -> Option<*T> {
+    pub fn get(*self, index: usize) -> Option<*T> {
         self.check_bounds(index)?;
         Some(self.get_element_ptr(index))
     }
 
-    pub fn set(*self, index: int, value: T) -> Option<T> {
+    pub fn set(*self, index: usize, value: T) -> Option<T> {
         self.check_bounds(index)?;
         Some(ptr::replace(&self[index], value))
     }
@@ -49,7 +51,7 @@ impl<T> List<T> {
         }
     }
 
-    pub fn insert(*self, index: int, value: T) -> Result<(), InsertError> {
+    pub fn insert(*self, index: usize, value: T) -> Result<(), InsertError> {
         match self.try_insert(index, value) {
             Ok(()) => Ok(()),
             Err((v, e)) => Err(e),
@@ -61,18 +63,18 @@ impl<T> List<T> {
             return Err(value);
         }
 
-        let element_ptr = ptr::add(self.start, self.length);
+        let element_ptr = ptr::add(self.start, self.length as isize);
         ptr::write(element_ptr, value);
         self.length += 1;
         Ok(())
     }
 
-    pub fn try_insert(*self, index: int, value: T) -> Result<(), (T, InsertError)> {
+    pub fn try_insert(*self, index: usize, value: T) -> Result<(), (T, InsertError)> {
         if self.ensure_many(1).is_err() {
             return Err((value, InsertError::OutOfMemory));
         }
 
-        if index < 0 || index > self.length {
+        if index > self.length {
             return Err((value, InsertError::OutOfBounds));
         }
 
@@ -84,7 +86,7 @@ impl<T> List<T> {
         Ok(())
     }
 
-    pub fn remove(*self, index: int) -> T {
+    pub fn remove(*self, index: usize) -> T {
         self.ensure_bounds(index);
         let value = ptr::read(&self[index]);
         ptr::copy(&self[index + 1], 
@@ -102,26 +104,23 @@ impl<T> List<T> {
         ptr::read(self.get_element_ptr(self.length))
     }
 
-    pub fn reserve(*self, length: int) -> mem::Result<()> {
-        if (length < 0) { 
-            panic("list length must be nonnegative"); 
-        }
+    pub fn reserve(*self, length: usize) -> mem::Result<()> {
         if length > self.capacity {
             self.grow_copy(length)?;
         }
         Ok(())
     }
 
-    pub fn from_raw_parts(start: *T, length: int, capacity: int) -> Self {
+    pub fn from_raw_parts(start: *T, length: usize, capacity: usize) -> Self {
         Self{start, length, capacity}
     }
 
-    pub fn into_raw_parts(self) -> (*T, int, int) {
+    pub fn into_raw_parts(self) -> (*T, usize, usize) {
         let Self{start, length, capacity} = self;
         (start, length, capacity)
     }
 
-    fn check_bounds(*self, index: int) -> Option<()> {
+    fn check_bounds(*self, index: usize) -> Option<()> {
         if 0 <= index && index < self.length {
             Some(())
         } else {
@@ -129,23 +128,23 @@ impl<T> List<T> {
         }
     }
 
-    fn ensure_bounds(*self, index: int) {
+    fn ensure_bounds(*self, index: usize) {
         match self.check_bounds(index) {
             None => panic("index out of bounds"),
             _ => (),
         }
     }
 
-    fn next_capacity(minimum: int) -> int {
+    fn next_capacity(minimum: usize) -> usize {
         let grow = minimum / 2 + 1;
-        if minimum <= INT_MAX - grow {
+        if minimum <= MAX_ELEMENTS - grow {
             minimum + grow
         } else {
-            INT_MAX
+            MAX_ELEMENTS
         }
     }
 
-    fn grow_copy(*self, capacity: int) -> mem::Result<()> {
+    fn grow_copy(*self, capacity: usize) -> mem::Result<()> {
         let n = Self::next_capacity(capacity);
         let p = mem::alloc::<T>(n)?;
         ptr::copy(self.start, p, self.length);
@@ -154,7 +153,7 @@ impl<T> List<T> {
         Ok(())
     }
 
-    fn grow_resize(*self, capacity: int) -> mem::Result<()> {
+    fn grow_resize(*self, capacity: usize) -> mem::Result<()> {
         let n = Self::next_capacity(capacity);
         self.start = mem::realloc::<T>(self.start, n)?;
         self.capacity = n;
@@ -169,9 +168,9 @@ impl<T> List<T> {
         Ok(())
     }
 
-    fn ensure_many(*self, count: int) -> mem::Result<()> {
-        if self.length > self.capacity - count {
-            if self.length > INT_MAX - count {
+    fn ensure_many(*self, count: usize) -> mem::Result<()> {
+        if self.capacity < count || self.length > self.capacity - count {
+            if self.length > MAX_ELEMENTS - count {
                 return Err(mem::OutOfMemory);
             }
             self.grow_copy(self.length + count)?;
@@ -179,13 +178,13 @@ impl<T> List<T> {
         Ok(())
     }
 
-    fn get_element_ptr(*self, index: int) -> *T {
-        ptr::add(self.as_ptr(), index)
+    fn get_element_ptr(*self, index: usize) -> *T {
+        ptr::add(self.as_ptr(), index as isize)
     }
 }
 
 impl<T: Clone> List<T> {
-    pub fn from_array<const LENGTH: int>(arr: [LENGTH]T) -> mem::Result<Self> {
+    pub fn from_array<const LENGTH: usize>(arr: [LENGTH]T) -> mem::Result<Self> {
         let result = Self::new();
         result.reserve(LENGTH)?;
         for value in &arr {
@@ -214,9 +213,9 @@ impl<T> Drop for List<T> {
     }
 }
 
-impl<T> Index<int> for List<T> {
+impl<T> Index<usize> for List<T> {
     type Output = T;
-    fn index(*self, index: int) -> *T {
+    fn index(*self, index: usize) -> *T {
         match self.get(index) {
             Some(value) => value,
             None => panic("index out of bounds for list"),
@@ -237,10 +236,7 @@ impl<T> AsPtr<T> for List<T> {
 }
 
 impl<T: Default> List<T> {
-    pub fn with_length(length: int) -> mem::Result<Self> {
-        if length < 0 {
-            panic("list length must be nonnegative");
-        }
+    pub fn with_length(length: usize) -> mem::Result<Self> {
         let result = List::new();
         result.reserve(length)?;
         for i in 0..length {
@@ -249,10 +245,7 @@ impl<T: Default> List<T> {
         Ok(result)
     }
 
-    pub fn set_length(*self, length: int) -> mem::Result<()> {
-        if length < 0 {
-            panic("list length must be nonnegative");
-        }
+    pub fn set_length(*self, length: usize) -> mem::Result<()> {
         if length < self.len() {
             for ri in length..self.len() {
                 let index = self.len() - ri - 1;
@@ -261,7 +254,7 @@ impl<T: Default> List<T> {
         } else {
             self.reserve(length)?;
             for i in self.len()..length {
-                let elem = ptr::add(self.as_ptr(), i);
+                let elem = ptr::add(self.as_ptr(), i as isize);
                 ptr::write(elem, T::default());
             }
         }
@@ -282,7 +275,7 @@ pub use slice::Iter;
 
 pub struct IntoIter<T> {
     inner: List<T>,
-    index: int,
+    index: usize,
 }
 
 impl<T> IntoIter<T> {
@@ -378,7 +371,7 @@ impl<T: Copy> List<T> {
         self.ensure_many(slice.len())?;
 
         ptr::copy(slice.as_ptr(), 
-            ptr::add(self.start, self.length), 
+            ptr::add(self.start, self.length as isize),
             slice.len());
         self.length += slice.len();
         Ok(())
@@ -386,37 +379,37 @@ impl<T: Copy> List<T> {
 }
 
 
-impl<T> IndexRange<Range<int>> for List<T> {
+impl<T> IndexRange<Range<usize>> for List<T> {
     type Output = T;
-    fn index_range(*self, idx: Range<int>) -> []T {
+    fn index_range(*self, idx: Range<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<T> IndexRange<RangeInclusive<int>> for List<T> {
+impl<T> IndexRange<RangeInclusive<usize>> for List<T> {
     type Output = T;
-    fn index_range(*self, idx: RangeInclusive<int>) -> []T {
+    fn index_range(*self, idx: RangeInclusive<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<T> IndexRange<RangeFrom<int>> for List<T> {
+impl<T> IndexRange<RangeFrom<usize>> for List<T> {
     type Output = T;
-    fn index_range(*self, idx: RangeFrom<int>) -> []T {
+    fn index_range(*self, idx: RangeFrom<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<T> IndexRange<RangeTo<int>> for List<T> {
+impl<T> IndexRange<RangeTo<usize>> for List<T> {
     type Output = T;
-    fn index_range(*self, idx: RangeTo<int>) -> []T {
+    fn index_range(*self, idx: RangeTo<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<T> IndexRange<RangeToInclusive<int>> for List<T> {
+impl<T> IndexRange<RangeToInclusive<usize>> for List<T> {
     type Output = T;
-    fn index_range(*self, idx: RangeToInclusive<int>) -> []T {
+    fn index_range(*self, idx: RangeToInclusive<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
@@ -436,7 +429,7 @@ fn call_index_range<R: IndexRange<Idx>, Idx>(r: *R, index: Idx) -> []R::Output {
 use io;
 
 impl io::Write for List<char> {
-    fn write(*self, data: []char) -> io::Result<int> {
+    fn write(*self, data: []char) -> io::Result<usize> {
         self.extend_from_slice(data)?;
         Ok(data.len())
     }

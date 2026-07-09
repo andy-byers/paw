@@ -3,12 +3,12 @@
 use array;
 use ptr;
 
-pub struct StaticVec<const CAPACITY: int, T> {
+pub struct StaticVec<const CAPACITY: usize, T> {
     data: [CAPACITY]T,
-    len: int,
+    len: usize,
 }
 
-impl<const CAPACITY: int, T> StaticVec<{CAPACITY}, T> {
+impl<const CAPACITY: usize, T> StaticVec<{CAPACITY}, T> {
     pub fn new() -> Self {
         Self{
             data: array::uninit(),
@@ -16,7 +16,7 @@ impl<const CAPACITY: int, T> StaticVec<{CAPACITY}, T> {
         }
     }
 
-    pub fn len(*self) -> int {
+    pub fn len(*self) -> usize {
         self.len
     }
 
@@ -58,7 +58,7 @@ pub fn test() {
 }
 
 
-pub struct ConstantInt<const N: int>;
+pub struct ConstantInt<const N: usize>;
 
 impl ConstantInt<3> {
     pub fn three(*self) {}

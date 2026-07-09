@@ -20,7 +20,7 @@ pub fn test_unit_enum() {
 
 enum Data {
     X,
-    Y(int),
+    Y(int64),
 }
 
 fn move_data_enum(e: Data) -> Data {

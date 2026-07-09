@@ -1,15 +1,15 @@
 // stack.paw
 
-fn get() -> ((int, int), (int, int)) {
+fn get() -> ((int64, int64), (int64, int64)) {
     ((1, 2), (3, 4))
 }
 
-fn check12(ab: (int, int)) {
+fn check12(ab: (int64, int64)) {
     assert(ab.0 == 1);
     assert(ab.1 == 2);
 }
 
-fn check34(ab: (int, int)) {
+fn check34(ab: (int64, int64)) {
     assert(ab.0 == 3);
     assert(ab.1 == 4);
 }

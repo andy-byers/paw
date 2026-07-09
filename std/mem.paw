@@ -11,33 +11,33 @@ impl Copy for OutOfMemory {}
 
 
 #[extern]
-pub fn sizeof<T>() -> int;
+pub fn sizeof<T>() -> usize;
 
 #[extern]
-pub fn alignof<T>() -> int;
+pub fn alignof<T>() -> usize;
 
 
-pub fn strideof<T>() -> int {
+pub fn strideof<T>() -> usize {
     let size = sizeof::<T>();
     let alignment = alignof::<T>();
     (size + (alignment - 1)) & ~(alignment - 1)
 }
 
-fn compute_array_size<T>(count: int) -> Result<int> {
+fn compute_array_size<T>(count: usize) -> Result<usize> {
     let stride = strideof::<T>();
-    if count <= INT_MAX / stride {
+    if count <= USIZE_MAX / stride {
         Ok(count * stride)
     } else {
         Err(OutOfMemory)
     }
 }
 
-pub fn alloc<T>(count: int) -> Result<*T> {
+pub fn alloc<T>(count: usize) -> Result<*T> {
     let size = compute_array_size::<T>(count)?;
     Ok(raw_alloc(size)? as *T)
 }
 
-pub fn realloc<T>(ptr: *T, count: int) -> Result<*T> {
+pub fn realloc<T>(ptr: *T, count: usize) -> Result<*T> {
     let size = compute_array_size::<T>(count)?;
     Ok(raw_realloc(ptr as *char, size)? as *T)
 }
@@ -53,14 +53,14 @@ pub fn drop_in_place<T>(ptr: *T) {}
 
 
 #[extern = "paw_mem_raw_alloc"] 
-pub fn raw_alloc(size: int) -> Result<*char>;
+pub fn raw_alloc(size: usize) -> Result<*char>;
 
 #[extern = "paw_mem_raw_realloc"] 
-pub fn raw_realloc(ptr: *char, size: int) -> Result<*char>;
+pub fn raw_realloc(ptr: *char, size: usize) -> Result<*char>;
 
 #[extern = "paw_mem_raw_dealloc"] 
 pub fn raw_dealloc(ptr: *char);
 
 #[extern = "paw_mem_raw_aligned_alloc"] 
-pub fn raw_aligned_alloc(alignment: int, size: int) -> Result<*char>;
+pub fn raw_aligned_alloc(alignment: usize, size: usize) -> Result<*char>;
 

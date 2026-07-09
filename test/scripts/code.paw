@@ -1,39 +1,39 @@
 //// code.paw
 //
-//pub fn unification_special_case() -> int {
+//pub fn unification_special_case() -> int64 {
 //    match None {
 //        Some(v) => v,
 //        None => return -1,
 //    }
 //}
 //
-//pub fn try_operator_special_case() -> Option<int> {
+//pub fn try_operator_special_case() -> Option<int64> {
 //    Some(Some(None?)?)
 //}
 //  
 //struct Flat1 {
-//    pub v: int,
+//    pub v: int64,
 //}
 //
-//pub fn create_flat1(v: int) -> Flat1 {
+//pub fn create_flat1(v: int64) -> Flat1 {
 //    Flat1{v}
 //}
 //
-//pub fn check_flat1(s: Flat1, v: int) {
+//pub fn check_flat1(s: Flat1, v: int64) {
 //    assert(s.v == v);
 //}
 //
 //struct FlatN {
-//    pub a: int,
+//    pub a: int64,
 //    pub b: char,
 //    pub c: bool,
 //}
 //
-//pub fn create_flatn(a: int, b: char, c: bool) -> FlatN {
+//pub fn create_flatn(a: int64, b: char, c: bool) -> FlatN {
 //    FlatN{a, b, c}
 //}
 //
-//pub fn check_flatn(s: FlatN, a: int, b: char, c: bool) {
+//pub fn check_flatn(s: FlatN, a: int64, b: char, c: bool) {
 //    assert(s.a == a);
 //    assert(s.b == b);
 //    assert(s.c == c);
@@ -43,11 +43,11 @@
 //    pub v: Flat1,
 //}
 //
-//pub fn create_nested1(v: int) -> Nested1 {
+//pub fn create_nested1(v: int64) -> Nested1 {
 //    Nested1{v: Flat1{v}}
 //}
 //
-//pub fn check_nested1(s: Nested1, v: int) {
+//pub fn check_nested1(s: Nested1, v: int64) {
 //    assert(s.v.v == v);
 //}
 //
@@ -57,11 +57,11 @@
 //    pub c: FlatN,
 //}
 //
-//pub fn create_nestedn(v: int, vv: int, a: int, b: char, c: bool) -> NestedN {
+//pub fn create_nestedn(v: int64, vv: int64, a: int64, b: char, c: bool) -> NestedN {
 //    NestedN{a: Flat1{v}, b: Nested1{v: Flat1{v: vv}}, c: FlatN{a, b, c}}
 //}
 //
-//pub fn check_nestedn(s: NestedN, v: int, vv: int, a: int, b: char, c: bool) {
+//pub fn check_nestedn(s: NestedN, v: int64, vv: int64, a: int64, b: char, c: bool) {
 //    assert(s.a.v == v);
 //    assert(s.b.v.v == vv);
 //    assert(s.c.a == a);
@@ -240,7 +240,7 @@
 //    pub second: T,
 //}
 //
-//pub fn map_test(map: [int: str], n: int, filter: int) {
+//pub fn map_test(map: [int64: str], n: int64, filter: int64) {
 //    let i = 0;
 //    while i < n {
 //        if i % filter == 0 {
@@ -265,7 +265,7 @@
 //    map_getset_no_collisions(100);
 //}
 //
-//pub fn map_getset_no_collisions(n: int) {
+//pub fn map_getset_no_collisions(n: int64) {
 //    let map = [:];
 //
 //    let i = 1;
@@ -281,7 +281,7 @@
 //    }
 //}
 //
-//pub fn map_getset(n: int) {
+//pub fn map_getset(n: int64) {
 //    let map = [:];
 //
 //    let i = n;
@@ -297,7 +297,7 @@
 //    }
 //}
 //
-//pub fn map_ops(n: int) {
+//pub fn map_ops(n: int64) {
 //    let map = [:];
 //
 //    let i = n;
@@ -324,12 +324,12 @@
 //    }
 //}
 //
-//pub fn fib(n: int) -> int {
+//pub fn fib(n: int64) -> int64 {
 //    if n < 2 { return n }
 //    fib(n - 2) + fib(n - 1)
 //}
 //
-//pub fn limited_fib(n: int) -> Option<int> {
+//pub fn limited_fib(n: int64) -> Option<int64> {
 //    let LIMIT = 35;
 //    if n < 2 { 
 //        Some(n)
@@ -342,11 +342,11 @@
 //}
 //
 //struct Abc {
-//    pub value: int,
+//    pub value: int64,
 //}
 //
 //impl Abc {
-//    pub fn alter(*self, value: int) -> Self {
+//    pub fn alter(*self, value: int64) -> Self {
 //        self.value = value + 1;
 //        self
 //    }
@@ -427,7 +427,7 @@
 //    assert(f()()() == 1 + 2 + 3);
 //}
 //
-//fn random(n: int) -> [int] {
+//fn random(n: int64) -> [int64] {
 //    let a = [];
 //    let x = n;
 //    while #a < n {
@@ -437,7 +437,7 @@
 //    return a;
 //}
 //
-//fn bubble(n: int) -> [int] {
+//fn bubble(n: int64) -> [int64] {
 //    let a = random(n);
 //    while true {
 //        let swapped = false;
@@ -480,11 +480,11 @@
 //    assert(list[-1] == 3);
 //}
 //
-//pub fn get_fn(v: int) -> (fn() -> int) {
+//pub fn get_fn(v: int64) -> (fn() -> int64) {
 //    || v
 //}
 //
-//pub fn get_fn2(v: int) -> (fn() -> fn() -> int) {
+//pub fn get_fn2(v: int64) -> (fn() -> fn() -> int64) {
 //    || || v
 //}
 //
@@ -497,15 +497,15 @@
 //    assert(f()() == 2);
 //}
 //
-//fn not_closure(i: int) -> int { i }
+//fn not_closure(i: int64) -> int64 { i }
 //
 //#[test]
 //pub fn test_fn_argument() {
-//    let call_fn = |f: fn(int) -> int| {
+//    let call_fn = |f: fn(int64) -> int64| {
 //        assert(f(1) == 1);
 //    };
 //    let closure = |i| i + 1;
-//    let call_fns = |f: fn(int) -> int, g: fn(int) -> int| {
+//    let call_fns = |f: fn(int64) -> int64, g: fn(int64) -> int64| {
 //        assert(f(2) == g(1));
 //    };
 //    call_fns(not_closure, closure);
@@ -513,8 +513,8 @@
 //
 //struct Functions {
 //    pub callees: (
-//        fn(int) -> int,
-//        fn(int) -> int)
+//        fn(int64) -> int64,
+//        fn(int64) -> int64)
 //}
 //
 //#[test]
@@ -739,7 +739,7 @@
 //    ]).unwrap();
 //
 //    let output = map(
-//        |x: *int| *x * 2 , 
+//        |x: *int64| *x * 2 , 
 //        &input).unwrap();
 //    assert(input[0] == 1);
 //    assert(input[4] == 5);
@@ -757,13 +757,13 @@
 //    values: []T,
 //}
 //
-//fn contract<T>(s: *[]T, n: int) {
+//fn contract<T>(s: *[]T, n: int64) {
 //    assert(n <= s.len());
 //    *s = slice::from_raw_parts(
 //        s.as_ptr(), n);
 //}
 //
-//fn advance<T>(s: *[]T, n: int) {
+//fn advance<T>(s: *[]T, n: int64) {
 //    assert(n <= s.len());
 //    *s = slice::from_raw_parts(
 //        ptr::add(s.as_ptr(), n), 

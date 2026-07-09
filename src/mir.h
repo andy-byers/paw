@@ -251,9 +251,8 @@ struct MirSetRange {
 };
 
 enum MirUnaryOpKind {
-    MIR_UNARY_INEG,
-    MIR_UNARY_IBITNOT,
-    MIR_UNARY_FNEG,
+    MIR_UNARY_NEG,
+    MIR_UNARY_BITNOT,
     MIR_UNARY_NOT,
 };
 
@@ -265,37 +264,20 @@ struct MirUnaryOp {
 };
 
 enum MirBinaryOpKind {
-    MIR_BINARY_CEQ,
-    MIR_BINARY_CNE,
-    MIR_BINARY_CLT,
-    MIR_BINARY_CLE,
-    MIR_BINARY_IEQ,
-    MIR_BINARY_INE,
-    MIR_BINARY_ILT,
-    MIR_BINARY_ILE,
-    MIR_BINARY_FEQ,
-    MIR_BINARY_FNE,
-    MIR_BINARY_FLT,
-    MIR_BINARY_FLE,
-    MIR_BINARY_STREQ,
-    MIR_BINARY_STRNE,
-    MIR_BINARY_STRLT,
-    MIR_BINARY_STRLE,
-    MIR_BINARY_IADD,
-    MIR_BINARY_ISUB,
-    MIR_BINARY_IMUL,
-    MIR_BINARY_IDIV,
-    MIR_BINARY_IMOD,
-    MIR_BINARY_FADD,
-    MIR_BINARY_FSUB,
-    MIR_BINARY_FMUL,
-    MIR_BINARY_FDIV,
-    MIR_BINARY_FMOD,
-    MIR_BINARY_IBITAND,
-    MIR_BINARY_IBITOR,
-    MIR_BINARY_IBITXOR,
-    MIR_BINARY_ISHL,
-    MIR_BINARY_ISHR,
+    MIR_BINARY_EQ,
+    MIR_BINARY_NE,
+    MIR_BINARY_LT,
+    MIR_BINARY_LE,
+    MIR_BINARY_ADD,
+    MIR_BINARY_SUB,
+    MIR_BINARY_MUL,
+    MIR_BINARY_DIV,
+    MIR_BINARY_MOD,
+    MIR_BINARY_BITAND,
+    MIR_BINARY_BITOR,
+    MIR_BINARY_BITXOR,
+    MIR_BINARY_SHL,
+    MIR_BINARY_SHR,
 };
 
 struct MirBinaryOp {
@@ -310,8 +292,6 @@ struct MirCast {
     MIR_INSTRUCTION_HEADER;
     struct MirPlace target;
     struct MirPlace output;
-    enum BuiltinKind from;
-    enum BuiltinKind to;
 };
 
 // Special instruction that ends the lifetime of the "target" place
@@ -650,7 +630,7 @@ inline static struct MirInstruction *pawMir_new_binary_op(struct Mir *mir, struc
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_cast(struct Mir *mir, struct SourceSpan span, struct MirPlace target, struct MirPlace output, enum BuiltinKind from, enum BuiltinKind to)
+inline static struct MirInstruction *pawMir_new_cast(struct Mir *mir, struct SourceSpan span, struct MirPlace target, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Cast_ = (struct MirCast){
@@ -659,8 +639,6 @@ inline static struct MirInstruction *pawMir_new_cast(struct Mir *mir, struct Sou
         .span = span,
         .target = target,
         .output = output,
-        .from = from,
-        .to = to,
     };
     return instr;
 }
@@ -1036,8 +1014,10 @@ DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegiste
 DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(BodyMap, DeclId, struct Mir *)
 
-paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, union IrValue v, union IrValue *pr);
-paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceSpan span, enum MirBinaryOpKind op, union IrValue x, union IrValue y, union IrValue *pr);
+int pawMir_fold_unary_op(enum MirUnaryOpKind op, IrType *type, union IrValue v, union IrValue *pr);
+int pawMir_fold_binary_op(enum MirBinaryOpKind op, IrType *type, union IrValue x, union IrValue y, union IrValue *pr);
+
+void pawMir_fold_cast(union IrValue from, IrType *from_type, IrType *to_type, union IrValue *to);
 
 // Push a human-readable representation of the MIR on to the stack
 // Returns a pointer to the buffer containing null-terminated text.

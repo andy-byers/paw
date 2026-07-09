@@ -8,20 +8,20 @@ impl Eq<Struct> for Struct {
     }
 }
 
-impl Eq<int> for Struct {
-    fn eq(*self, rhs: *int) -> bool {
+impl Eq<int64> for Struct {
+    fn eq(*self, rhs: *int64) -> bool {
         false
     }
 }
 
-fn eq<T: Eq<int> + Eq<T>>(lhs: T, rhs: T) {
+fn eq<T: Eq<int64> + Eq<T>>(lhs: T, rhs: T) {
     assert(<T as Eq<T>>::eq(&lhs, &rhs));
-    assert(!<T as Eq<int>>::eq(&lhs, &123));
+    assert(!<T as Eq<int64>>::eq(&lhs, &123));
 }
 
 #[test]
 pub fn test() {
     eq(Struct, Struct);
     assert(<Struct as Eq<Struct>>::eq(&Struct, &Struct));
-    assert(!<Struct as Eq<int>>::eq(&Struct, &123));
+    assert(!<Struct as Eq<int64>>::eq(&Struct, &123));
 }

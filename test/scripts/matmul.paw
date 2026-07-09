@@ -2,17 +2,17 @@
 
 use list::List;
 
-fn matgen(n: int) -> List<List<float>> {
+fn matgen(n: usize) -> List<List<float64>> {
     let tmp = 1.0 /
-              n as float /
-              n as float;
+              n as float64 /
+              n as float64;
     let a = List::new();
     for i in 0..n {
         let b = List::new();
         for j in 0..n {
             let x = tmp
-                  * (i - j) as float
-                  * (i + j) as float;
+                  * (i - j) as float64
+                  * (i + j) as float64;
             b.push(x);
         }
         a.push(b);
@@ -20,7 +20,7 @@ fn matgen(n: int) -> List<List<float>> {
     a
 }
 
-fn matmul(n: int, a: List<List<float>>, b: List<List<float>>) -> List<List<float>> {
+fn matmul(n: usize, a: List<List<float64>>, b: List<List<float64>>) -> List<List<float64>> {
     let c = List::new();
     let i = 0;
     while i < n {

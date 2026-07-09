@@ -53,6 +53,9 @@ public:
     explicit State(Context &X, Fn *fn);
     void load_args();
 
+    State(State const &) = delete;
+    State &operator=(State const &) = delete;
+
     Module *get_module() const;
     llvm::IRBuilder<> *get_builder() const;
     Context *get_context() const { return X; }

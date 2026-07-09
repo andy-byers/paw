@@ -21,7 +21,7 @@ pub trait Clone {
 
 
 pub trait Hash {
-    fn hash(*self) -> int;
+    fn hash(*self) -> uint64;
 }
 
 
@@ -164,7 +164,7 @@ pub trait Fn<Args> {
 }
 
 impl Hash for unit {
-    fn hash(*self) -> int { 
+    fn hash(*self) -> uint64 { 
         0 
     }
 }
@@ -183,8 +183,8 @@ impl Default for unit {
 
 
 impl Hash for bool {
-    fn hash(*self) -> int { 
-        *self as int 
+    fn hash(*self) -> uint64 { 
+        *self as uint64 
     }
 }
 
@@ -202,8 +202,8 @@ impl Default for bool {
 
 
 impl Hash for char { 
-    fn hash(*self) -> int { 
-        *self as int 
+    fn hash(*self) -> uint64 { 
+        *self as uint64 
     }
 }
 
@@ -227,193 +227,13 @@ impl Ord<Self> for char {
 
 impl Increment for char {
     fn increment(*self) { 
-        *self = (*self as int + 1) as char; 
+        *self = (*self as int8 + 1) as char; 
     }
 }
 
 impl Default for char {
     fn default() -> Self {
         '\0'
-    }
-}
-
-
-impl Add<Self> for int {
-    type Output = Self;
-
-    fn add(*self, rhs: *Self) -> Self {
-        *self + *rhs
-    }
-}
-
-impl Sub<Self> for int {
-    type Output = Self;
-
-    fn sub(*self, rhs: *Self) -> Self {
-        *self - *rhs
-    }
-}
-
-impl Mul<Self> for int {
-    type Output = Self;
-
-    fn mul(*self, rhs: *Self) -> Self {
-        *self * *rhs
-    }
-}
-
-impl Div<Self> for int {
-    type Output = Self;
-
-    fn div(*self, rhs: *Self) -> Self {
-        *self / *rhs
-    }
-}
-
-impl Rem<Self> for int {
-    type Output = Self;
-
-    fn rem(*self, rhs: *Self) -> Self {
-        *self % *rhs
-    }
-}
-
-impl BitAnd<Self> for int {
-    type Output = Self;
-
-    fn bit_and(*self, rhs: *Self) -> Self {
-        *self & *rhs
-    }
-}
-
-impl BitOr<Self> for int {
-    type Output = Self;
-
-    fn bit_or(*self, rhs: *Self) -> Self {
-        *self | *rhs
-    }
-}
-
-impl BitXor<Self> for int {
-    type Output = Self;
-
-    fn bit_xor(*self, rhs: *Self) -> Self {
-        *self ^ *rhs
-    }
-}
-
-impl Shl<Self> for int {
-    type Output = Self;
-
-    fn shl(*self, rhs: *Self) -> Self {
-        *self << *rhs
-    }
-}
-
-impl Shr<Self> for int {
-    type Output = Self;
-
-    fn shr(*self, rhs: *Self) -> Self {
-        *self >> *rhs
-    }
-}
-
-// TODO: constants overflow int64
-impl Hash for int { 
-    fn hash(*self) -> int { 
-        // SplitMix64 step from https://en.wikipedia.org/wiki/Xorshift 
-        let x = *self + -7046029254386353131; // 0x9E3779B97F4A7C15
-        x = (x ^ (x >> 30)) * -4658895280553007687; // 0xBF58476D1CE4E5B9
-        x = (x ^ (x >> 27)) * -7723592293110705685; // 0x94D049BB133111EB
-        x ^ (x >> 31)
-    }
-}
-
-impl Eq<Self> for int { 
-    fn eq(*self, rhs: *Self) -> bool { 
-        *self == *rhs 
-    }
-}
-
-impl Ord<Self> for int {
-    fn cmp(*self, rhs: *Self) -> Ordering { 
-        if *self < *rhs {
-            Ordering::Less
-        } else if *self > *rhs {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    }
-}
-
-impl Increment for int {
-    fn increment(*self) { 
-        *self += 1; 
-    }
-}
-
-impl Default for int {
-    fn default() -> Self {
-        0
-    }
-}
-
-
-impl Add<Self> for float {
-    type Output = Self;
-
-    fn add(*self, rhs: *Self) -> Self {
-        *self + *rhs
-    }
-}
-
-impl Sub<Self> for float {
-    type Output = Self;
-
-    fn sub(*self, rhs: *Self) -> Self {
-        *self - *rhs
-    }
-}
-
-impl Mul<Self> for float {
-    type Output = Self;
-
-    fn mul(*self, rhs: *Self) -> Self {
-        *self * *rhs
-    }
-}
-
-impl Div<Self> for float {
-    type Output = Self;
-
-    fn div(*self, rhs: *Self) -> Self {
-        *self / *rhs
-    }
-}
-
-// TODO: consider using something like "PartialEq" here b/c of NaNs
-impl Eq<Self> for float { 
-    fn eq(*self, rhs: *Self) -> bool { 
-        *self == *rhs 
-    }
-}
-
-impl Ord<Self> for float {
-    fn cmp(*self, rhs: *Self) -> Ordering { 
-        if *self < *rhs {
-            Ordering::Less
-        } else if *self > *rhs {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    }
-}
-
-impl Default for float {
-    fn default() -> Self {
-        0.0
     }
 }
 
@@ -449,16 +269,19 @@ impl Ord<Self> for str {
     }
 }
 
-impl Index<int> for str {
+impl Index<usize> for str {
     type Output = char;
-    fn index(*self, index: int) -> *char {
-        check_bounds(index, self.len(), false);
-        ptr::add(self.as_ptr(), index)
+    fn index(*self, index: usize) -> *char {
+        if index > self.len() {
+            panic("index out of bounds");
+        }
+        assert(index <= ISIZE_MAX as usize);
+        ptr::add(self.as_ptr(), index as isize)
     }
 }
 
 impl Hash for str { 
-    fn hash(*self) -> int {
+    fn hash(*self) -> uint64 {
         self.to_slice().hash()
     }
 }
@@ -491,11 +314,14 @@ impl<T> AsPtr<T> for []T {
     fn as_ptr(*self) -> *T;
 }
 
-impl<T> Index<int> for []T {
+impl<T> Index<usize> for []T {
     type Output = T;
-    fn index(*self, index: int) -> *T {
-        check_bounds(index, self.len(), false);
-        ptr::add(self.as_ptr(), index)
+    fn index(*self, index: usize) -> *T {
+        if index > self.len() {
+            panic("index out of bounds");
+        }
+        assert(index < ISIZE_MAX as usize);
+        ptr::add(self.as_ptr(), index as isize)
     }
 }
 
@@ -506,7 +332,7 @@ impl<T> ToSlice<T> for []T {
 }
 
 impl Hash for []char {
-    fn hash(*self) -> int {
+    fn hash(*self) -> uint64 {
         builtin_hash_bytes(self.as_ptr(), self.len(), 0)
     }
 }
@@ -542,8 +368,6 @@ impl<T: Eq<T>> Eq<Self> for []T {
 impl Copy for () {}
 impl Copy for bool {}
 impl Copy for char {}
-impl Copy for int {}
-impl Copy for float {}
 impl<T> Copy for *T {}
 
 
@@ -564,19 +388,6 @@ impl Clone for char {
         *self 
     }
 }
-
-impl Clone for int {
-    fn clone(*self) -> Self { 
-        *self 
-    }
-}
-
-impl Clone for float {
-    fn clone(*self) -> Self { 
-        *self 
-    }
-}
-
 
 
 pub struct Range<T> {
@@ -705,22 +516,14 @@ impl<T: Clone + Ord<T> + Increment> Iterator for RangeFromIter<T> {
 }
 
 
-
-fn check_bounds(index: int, length: int, allow_end: bool) {
-    if index < 0 || index > length - allow_end as int {
-        panic("index out of bounds");
-    }
-}
-
-
 #[extern = "paw_builtin_hash_bytes"]
-fn builtin_hash_bytes(bytes: *char, length: int, seed: int) -> int;
+fn builtin_hash_bytes(bytes: *char, length: usize, seed: uint64) -> uint64;
 
 // Allows "*hs" to be equal to "0 as *char" if "*hs_len" is equal to 0.
 #[extern = "paw_builtin_rawcmp"]
 fn builtin_rawcmp(
-    lhs: *char, lhs_len: int, 
-    rhs: *char, rhs_len: int) -> int;
+    lhs: *char, lhs_len: usize, 
+    rhs: *char, rhs_len: usize) -> int64;
 
 
 impl<T> From<T> for T {
@@ -750,3 +553,393 @@ pub trait IndexRange<Idx> {
     type Output;
     fn index_range(*self, index: Idx) -> []Self::Output;
 }
+
+// NOTE: below this line are the many impls of various core traits for integer/float64 types
+
+impl Copy for int8 {}
+impl Clone for int8 { fn clone(*self) -> Self { *self } }
+impl Add<Self> for int8 { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for int8 { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for int8 { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for int8 { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for int8 { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for int8 { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for int8 { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for int8 { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for int8 { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for int8 { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for int8 { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for int8 { fn increment(*self) { *self += 1; } }
+impl Default for int8 { fn default() -> Self { 0 } }
+
+impl Copy for int16 {}
+impl Clone for int16 { fn clone(*self) -> Self { *self } }
+impl Add<Self> for int16 { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for int16 { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for int16 { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for int16 { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for int16 { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for int16 { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for int16 { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for int16 { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for int16 { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for int16 { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for int16 { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for int16 { fn increment(*self) { *self += 1; } }
+impl Default for int16 { fn default() -> Self { 0 } }
+
+impl Copy for int32 {}
+impl Clone for int32 { fn clone(*self) -> Self { *self } }
+impl Add<Self> for int32 { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for int32 { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for int32 { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for int32 { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for int32 { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for int32 { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for int32 { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for int32 { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for int32 { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for int32 { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for int32 { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for int32 { fn increment(*self) { *self += 1; } }
+impl Default for int32 { fn default() -> Self { 0 } }
+
+impl Copy for int64 {}
+impl Clone for int64 { fn clone(*self) -> Self { *self } }
+impl Add<Self> for int64 { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for int64 { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for int64 { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for int64 { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for int64 { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for int64 { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for int64 { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for int64 { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for int64 { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for int64 { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for int64 { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for int64 { fn increment(*self) { *self += 1; } }
+impl Default for int64 { fn default() -> Self { 0 } }
+
+impl Copy for isize {}
+impl Clone for isize { fn clone(*self) -> Self { *self } }
+impl Add<Self> for isize { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for isize { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for isize { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for isize { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for isize { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for isize { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for isize { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for isize { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for isize { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for isize { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for isize { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for isize { fn increment(*self) { *self += 1; } }
+impl Default for isize { fn default() -> Self { 0 } }
+
+impl Copy for uint8 {}
+impl Clone for uint8 { fn clone(*self) -> Self { *self } }
+impl Add<Self> for uint8 { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for uint8 { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for uint8 { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for uint8 { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for uint8 { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for uint8 { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for uint8 { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for uint8 { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for uint8 { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for uint8 { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for uint8 { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for uint8 { fn increment(*self) { *self += 1; } }
+impl Default for uint8 { fn default() -> Self { 0 } }
+
+impl Copy for uint16 {}
+impl Clone for uint16 { fn clone(*self) -> Self { *self } }
+impl Add<Self> for uint16 { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for uint16 { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for uint16 { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for uint16 { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for uint16 { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for uint16 { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for uint16 { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for uint16 { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for uint16 { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for uint16 { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for uint16 { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for uint16 { fn increment(*self) { *self += 1; } }
+impl Default for uint16 { fn default() -> Self { 0 } }
+
+impl Copy for uint32 {}
+impl Clone for uint32 { fn clone(*self) -> Self { *self } }
+impl Add<Self> for uint32 { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for uint32 { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for uint32 { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for uint32 { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for uint32 { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for uint32 { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for uint32 { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for uint32 { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for uint32 { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for uint32 { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for uint32 { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for uint32 { fn increment(*self) { *self += 1; } }
+impl Default for uint32 { fn default() -> Self { 0 } }
+
+impl Copy for uint64 {}
+impl Clone for uint64 { fn clone(*self) -> Self { *self } }
+impl Add<Self> for uint64 { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for uint64 { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for uint64 { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for uint64 { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for uint64 { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for uint64 { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for uint64 { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for uint64 { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for uint64 { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for uint64 { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for uint64 { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for uint64 { fn increment(*self) { *self += 1; } }
+impl Default for uint64 { fn default() -> Self { 0 } }
+
+impl Copy for usize {}
+impl Clone for usize { fn clone(*self) -> Self { *self } }
+impl Add<Self> for usize { type Output = Self; fn add(*self, rhs: *Self) -> Self { *self + *rhs } }
+impl Sub<Self> for usize { type Output = Self; fn sub(*self, rhs: *Self) -> Self { *self - *rhs } }
+impl Mul<Self> for usize { type Output = Self; fn mul(*self, rhs: *Self) -> Self { *self * *rhs } }
+impl Div<Self> for usize { type Output = Self; fn div(*self, rhs: *Self) -> Self { *self / *rhs } }
+impl Rem<Self> for usize { type Output = Self; fn rem(*self, rhs: *Self) -> Self { *self % *rhs } }
+impl BitAnd<Self> for usize { type Output = Self; fn bit_and(*self, rhs: *Self) -> Self { *self & *rhs } }
+impl BitOr<Self> for usize { type Output = Self; fn bit_or(*self, rhs: *Self) -> Self { *self | *rhs } }
+impl BitXor<Self> for usize { type Output = Self; fn bit_xor(*self, rhs: *Self) -> Self { *self ^ *rhs } }
+impl Shl<Self> for usize { type Output = Self; fn shl(*self, rhs: *Self) -> Self { *self << *rhs } }
+impl Shr<Self> for usize { type Output = Self; fn shr(*self, rhs: *Self) -> Self { *self >> *rhs } }
+impl Eq<Self> for usize { fn eq(*self, rhs: *Self) -> bool { *self == *rhs } }
+impl Increment for usize { fn increment(*self) { *self += 1; } }
+impl Default for usize { fn default() -> Self { 0 } }
+
+
+// TODO: constants overflow int64
+
+impl Hash for int8 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+impl Hash for int16 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+impl Hash for int32 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+impl Hash for int64 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+impl Hash for isize { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+
+impl Hash for uint8 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+impl Hash for uint16 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+impl Hash for uint32 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+impl Hash for usize { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
+
+impl Hash for uint64 { 
+    fn hash(*self) -> uint64 { 
+        // SplitMix64 step from https://en.wikipedia.org/wiki/Xorshift 
+        let x = *self + 0x9E3779B97F4A7C15;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EB;
+        x ^ (x >> 31)
+    }
+}
+
+
+impl Ord<Self> for int8 { fn cmp(*self, rhs: *Self) -> Ordering { int64::cmp(&(*self as int64), &(*rhs as int64)) } }
+impl Ord<Self> for int16 { fn cmp(*self, rhs: *Self) -> Ordering { int64::cmp(&(*self as int64), &(*rhs as int64)) } }
+impl Ord<Self> for int32 { fn cmp(*self, rhs: *Self) -> Ordering { int64::cmp(&(*self as int64), &(*rhs as int64)) } }
+impl Ord<Self> for isize { fn cmp(*self, rhs: *Self) -> Ordering { int64::cmp(&(*self as int64), &(*rhs as int64)) } }
+
+impl Ord<Self> for int64 {
+    fn cmp(*self, rhs: *Self) -> Ordering { 
+        if *self < *rhs {
+            Ordering::Less
+        } else if *self > *rhs {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl Ord<Self> for uint8 { fn cmp(*self, rhs: *Self) -> Ordering { uint64::cmp(&(*self as uint64), &(*rhs as uint64)) } }
+impl Ord<Self> for uint16 { fn cmp(*self, rhs: *Self) -> Ordering { uint64::cmp(&(*self as uint64), &(*rhs as uint64)) } }
+impl Ord<Self> for uint32 { fn cmp(*self, rhs: *Self) -> Ordering { uint64::cmp(&(*self as uint64), &(*rhs as uint64)) } }
+impl Ord<Self> for usize { fn cmp(*self, rhs: *Self) -> Ordering { uint64::cmp(&(*self as uint64), &(*rhs as uint64)) } }
+
+impl Ord<Self> for uint64 {
+    fn cmp(*self, rhs: *Self) -> Ordering { 
+        if *self < *rhs {
+            Ordering::Less
+        } else if *self > *rhs {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl Copy for float32 {}
+impl Clone for float32 { fn clone(*self) -> Self { *self } }
+impl Copy for float64 {}
+impl Clone for float64 { fn clone(*self) -> Self { *self } }
+
+impl Ord<Self> for float32 {
+    fn cmp(*self, rhs: *Self) -> Ordering { 
+        if *self < *rhs {
+            Ordering::Less
+        } else if *self > *rhs {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl Ord<Self> for float64 {
+    fn cmp(*self, rhs: *Self) -> Ordering { 
+        if *self < *rhs {
+            Ordering::Less
+        } else if *self > *rhs {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl Add<Self> for float32 {
+    type Output = Self;
+
+    fn add(*self, rhs: *Self) -> Self {
+        *self + *rhs
+    }
+}
+
+impl Sub<Self> for float32 {
+    type Output = Self;
+
+    fn sub(*self, rhs: *Self) -> Self {
+        *self - *rhs
+    }
+}
+
+impl Mul<Self> for float32 {
+    type Output = Self;
+
+    fn mul(*self, rhs: *Self) -> Self {
+        *self * *rhs
+    }
+}
+
+impl Div<Self> for float32 {
+    type Output = Self;
+
+    fn div(*self, rhs: *Self) -> Self {
+        *self / *rhs
+    }
+}
+
+// TODO: consider using something like "PartialEq" here b/c of NaNs
+impl Eq<Self> for float32 { 
+    fn eq(*self, rhs: *Self) -> bool { 
+        *self == *rhs 
+    }
+}
+
+impl Ord<Self> for float32 {
+    fn cmp(*self, rhs: *Self) -> Ordering { 
+        if *self < *rhs {
+            Ordering::Less
+        } else if *self > *rhs {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl Default for float32 {
+    fn default() -> Self {
+        0.0
+    }
+}
+
+
+impl Ord<Self> for float64 {
+    fn cmp(*self, rhs: *Self) -> Ordering { 
+        if *self < *rhs {
+            Ordering::Less
+        } else if *self > *rhs {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl Ord<Self> for float64 {
+    fn cmp(*self, rhs: *Self) -> Ordering { 
+        if *self < *rhs {
+            Ordering::Less
+        } else if *self > *rhs {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl Add<Self> for float64 {
+    type Output = Self;
+
+    fn add(*self, rhs: *Self) -> Self {
+        *self + *rhs
+    }
+}
+
+impl Sub<Self> for float64 {
+    type Output = Self;
+
+    fn sub(*self, rhs: *Self) -> Self {
+        *self - *rhs
+    }
+}
+
+impl Mul<Self> for float64 {
+    type Output = Self;
+
+    fn mul(*self, rhs: *Self) -> Self {
+        *self * *rhs
+    }
+}
+
+impl Div<Self> for float64 {
+    type Output = Self;
+
+    fn div(*self, rhs: *Self) -> Self {
+        *self / *rhs
+    }
+}
+
+// TODO: consider using something like "PartialEq" here b/c of NaNs
+impl Eq<Self> for float64 { 
+    fn eq(*self, rhs: *Self) -> bool { 
+        *self == *rhs 
+    }
+}
+
+impl Ord<Self> for float64 {
+    fn cmp(*self, rhs: *Self) -> Ordering { 
+        if *self < *rhs {
+            Ordering::Less
+        } else if *self > *rhs {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl Default for float64 {
+    fn default() -> Self {
+        0.0
+    }
+}
+

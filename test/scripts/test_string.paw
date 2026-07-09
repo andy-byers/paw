@@ -63,10 +63,10 @@ pub fn test_ends_with() {
 }
 
 
-fn check_find(s: str, sub: str, n: int) {
+fn check_find(s: str, sub: str, n: usize) {
     match s.find(sub) {
         Some(i) => assert(i == n),
-        None => assert(n == -1),
+        None => assert(n == USIZE_MAX),
     }
 }
 
@@ -75,7 +75,7 @@ pub fn test_find() {
     check_find("abc", "a", 0);
     check_find("abc", "b", 1);
     check_find("abc", "c", 2);
-    check_find("abc", "d", -1);
+    check_find("abc", "d", USIZE_MAX);
 }
 
 #[test]
@@ -122,7 +122,7 @@ pub fn test_get() {
 ////    assert(s == "cccbcccbadddddd");
 ////}
 ////
-////fn concat_with_self(v: str, n: int) -> str {
+////fn concat_with_self(v: str, n: int64) -> str {
 ////    for i in 0..n { v ++= v; }
 ////    return v;
 ////}
@@ -133,28 +133,19 @@ pub fn test_get() {
 ////    assert(s[..] == "abc");
 ////    assert(s[0..#s] == "abc");
 ////
-////    assert(s[..-1] == "ab");
-////    assert(s[..#s-1] == "ab");
-////    assert(s[..-2] == "a");
-////    assert(s[..#s-2] == "a");
-////    assert(s[..-3] == "");
-////    assert(s[..#s-3] == "");
-////
 ////    assert(s[1..] == "bc");
-////    assert(s[-2..] == "bc");
 ////    assert(s[2..] == "c");
-////    assert(s[-1..] == "c");
 ////    assert(s[3..] == "");
 ////    assert(s[0..0] == "") ;
 ////}
 ////
 ////#[test]
 ////pub fn test_getn() {
-////    assert("abcdefg"[1..-1] == "bcdef"); 
-////    assert("abcdefg"[1..-1][..-2] == "bcd");
+////    assert("abcdefg"[1..6] == "bcdef"); 
+////    assert("abcdefg"[1..6][..3] == "bcd");
 ////
 ////    let s = concat_with_self("abcdefg", 8);
-////    while #s > 1 { s = s[1..-1]; }
+////    while !s.is_empty() { s = s[1..s.len()-1]; }
 ////}
 ////
 ////#[test]

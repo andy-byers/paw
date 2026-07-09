@@ -4,15 +4,15 @@
 
 
 #[extern = "paw_slice_from_raw_parts"]
-pub fn from_raw_parts<T>(ptr: *T, len: int) -> []T;
+pub fn from_raw_parts<T>(ptr: *T, len: usize) -> []T;
 
 //#[extern = "paw_slice_from_raw_parts"]
-//pub fn from_raw_parts_mut<T>(ptr: *mut T, len: int) -> []mut T;
+//pub fn from_raw_parts_mut<T>(ptr: *mut T, len: usize) -> []mut T;
 
 
 impl<T> []T {
     #[extern = "paw_slice_Slice_len"]
-    pub fn len(self) -> int;
+    pub fn len(self) -> usize;
 
     pub fn is_empty(self) -> bool {
         self.len() == 0
@@ -22,7 +22,7 @@ impl<T> []T {
 
 pub struct Iter<T> {
     ptr: *T,
-    len: int,
+    len: usize,
 }
 
 impl<T> Copy for Iter<T> {}
@@ -65,7 +65,7 @@ impl<T> IntoIterator for []T {
 
 //pub struct IterMut<T> {
 //    ptr: *mut T,
-//    len: int,
+//    len: usize,
 //}
 //
 //impl<T> Copy for IterMut<T> {}
@@ -105,50 +105,51 @@ impl<T> IntoIterator for []T {
 //    }
 //}
 
-impl<T> IndexRange<Range<int>> for []T {
+impl<T> IndexRange<Range<usize>> for []T {
     type Output = T;
-    fn index_range(*self, idx: Range<int>) -> []T {
-        if idx.start < 0 || idx.start > self.len() 
-                || idx.end < 0 || idx.end <= idx.start{
+    fn index_range(*self, idx: Range<usize>) -> []T {
+        if idx.start > self.len() || idx.end <= idx.start {
             panic("range index out of bounds");
         }
+        assert(idx.start <= ISIZE_MAX as usize);
         from_raw_parts(
-            ptr::add(self.as_ptr(), idx.start), 
+            ptr::add(self.as_ptr(), idx.start as isize), 
             idx.end - idx.start)
     }
 }
 
-impl<T> IndexRange<RangeInclusive<int>> for []T {
+impl<T> IndexRange<RangeInclusive<usize>> for []T {
     type Output = T;
-    fn index_range(*self, idx: RangeInclusive<int>) -> []T {
-        if idx.start < 0 || idx.start > self.len() 
-                || idx.end < 0 || idx.end < idx.start{
+    fn index_range(*self, idx: RangeInclusive<usize>) -> []T {
+        if idx.start > self.len() || idx.end < idx.start {
             panic("range index out of bounds");
         }
         // NOTE: the `+ 1` below cannot overflow unless `idx` spans the entire
         //   address space, which is not possible 
+        assert(idx.start <= ISIZE_MAX as usize);
         from_raw_parts(
-            ptr::add(self.as_ptr(), idx.start), 
+            ptr::add(self.as_ptr(), idx.start as isize),
             idx.end - idx.start + 1)
     }
 }
 
-impl<T> IndexRange<RangeFrom<int>> for []T {
+impl<T> IndexRange<RangeFrom<usize>> for []T {
     type Output = T;
-    fn index_range(*self, idx: RangeFrom<int>) -> []T {
-        if idx.start < 0 || idx.start > self.len() {
+    fn index_range(*self, idx: RangeFrom<usize>) -> []T {
+        if idx.start > self.len() {
             panic("range index out of bounds");
         }
+        assert(idx.start <= ISIZE_MAX as usize);
         from_raw_parts(
-            ptr::add(self.as_ptr(), idx.start), 
+            ptr::add(self.as_ptr(), idx.start as isize), 
             self.len() - idx.start)
     }
 }
 
-impl<T> IndexRange<RangeTo<int>> for []T {
+impl<T> IndexRange<RangeTo<usize>> for []T {
     type Output = T;
-    fn index_range(*self, idx: RangeTo<int>) -> []T {
-        if idx.end < 0 || idx.end > self.len() {
+    fn index_range(*self, idx: RangeTo<usize>) -> []T {
+        if idx.end > self.len() {
             panic("range index out of bounds");
         }
         from_raw_parts(
@@ -157,10 +158,10 @@ impl<T> IndexRange<RangeTo<int>> for []T {
     }
 }
 
-impl<T> IndexRange<RangeToInclusive<int>> for []T {
+impl<T> IndexRange<RangeToInclusive<usize>> for []T {
     type Output = T;
-    fn index_range(*self, idx: RangeToInclusive<int>) -> []T {
-        if idx.end < 0 || idx.end >= self.len() {
+    fn index_range(*self, idx: RangeToInclusive<usize>) -> []T {
+        if idx.end >= self.len() {
             panic("range index out of bounds");
         }
         from_raw_parts(
@@ -179,18 +180,20 @@ impl<T> IndexRange<RangeFull> for []T {
 // TODO: remove Clone bound. requires a way to prevent a stack variable from being dropped (pivot is read out of slice b/c otherwise it is hard to keep track of the pivot element once elements have been swapped in partition())
 impl<T: Clone + Ord<T>> []T {
     pub fn sort_unstable(self) {
-        self.quicksort(0, self.len() - 1);
+        if !self.is_empty() {
+            self.quicksort(0, self.len() - 1);
+        }
     }
 
-    fn quicksort(self, lo: int, hi: int) {
-        if lo >= 0 && lo < hi {
+    fn quicksort(self, lo: usize, hi: usize) {
+        if lo < hi {
             let (lt, gt) = self.partition(lo, hi);
             self.quicksort(lo, lt - 1);
             self.quicksort(gt + 1, hi);
         }
     }
 
-    fn partition(self, lo: int, hi: int) -> (int, int) {
+    fn partition(self, lo: usize, hi: usize) -> (usize, usize) {
         let pivot = self[lo + (hi - lo) / 2].clone();
         let (lt, eq, gt) = (lo, lo, hi);
 

@@ -415,14 +415,14 @@ static struct MirPlace new_const_char(struct FunctionState *fs, struct SourceSpa
     return new_const_value(fs, span, (union IrValue){.c = c}, pawIr_new_char(fs->C));
 }
 
-static struct MirPlace new_const_int(struct FunctionState *fs, struct SourceSpan span, paw_Int i)
+static struct MirPlace new_const_int(struct FunctionState *fs, struct SourceSpan span, paw_Int i, enum IrIntKind kind)
 {
-    return new_const_value(fs, span, (union IrValue){.i = i}, pawIr_new_int(fs->C));
+    return new_const_value(fs, span, (union IrValue){.i = i}, pawIr_new_int(fs->C, kind));
 }
 
-static struct MirPlace new_const_float(struct FunctionState *fs, struct SourceSpan span, paw_Float f)
+static struct MirPlace new_const_float(struct FunctionState *fs, struct SourceSpan span, paw_Float f, enum IrFloatKind kind)
 {
-    return new_const_value(fs, span, (union IrValue){.f = f}, pawIr_new_float(fs->C));
+    return new_const_value(fs, span, (union IrValue){.f = f}, pawIr_new_float(fs->C, kind));
 }
 
 static struct MirPlace new_const_str(struct FunctionState *fs, struct SourceSpan span, Str const *s)
@@ -905,15 +905,6 @@ static paw_Bool visit_let_stmt(struct HirVisitor *V, struct HirLetStmt *s)
     return PAW_FALSE;
 }
 
-static struct MirPlace lower_basic_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
-{
-    struct LowerHir *L = V->ud;
-    struct FunctionState *fs = L->fs;
-
-    union IrValue const value = {.p = e->basic.value.p};
-    return new_const_value(fs, e->span, value, get_builtin_type(L, e->basic.code));
-}
-
 static struct MirPlace lower_tuple_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
 {
     struct LowerHir *L = V->ud;
@@ -941,10 +932,10 @@ static struct MirPlace lower_composite_lit(struct HirVisitor *V, struct HirLiter
     struct FunctionState *fs = L->fs;
 
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    MirPlaceList_reserve(fs->mir, fields, e->comp.items->count);
+    MirPlaceList_reserve(fs->mir, fields, e->composite.items->count);
     {
         struct HirExpr *const *pexpr;
-        K_LIST_FOREACH (e->comp.items, pexpr) {
+        K_LIST_FOREACH (e->composite.items, pexpr) {
             struct HirFieldExpr const *e = HirGetFieldExpr(*pexpr);
             struct MirPlace const expr = lower_rvalue(V, e->value);
             struct MirPlace const field = new_register(fs, expr.type);
@@ -980,14 +971,29 @@ static struct MirPlace lower_array_lit(struct HirVisitor *V, struct HirLiteralEx
 
 static struct MirPlace lower_literal_expr(struct HirVisitor *V, struct HirLiteralExpr *e)
 {
+    struct LowerHir *L = V->ud;
+    struct FunctionState *fs = L->fs;
+
     switch (e->lit_kind) {
-        case kHirLitBasic:
-            return lower_basic_lit(V, e);
-        case kHirLitTuple:
+        case HIR_LIT_BOOL:
+            return new_const_bool(fs, e->span, e->b);
+        case HIR_LIT_CHAR:
+            return new_const_char(fs, e->span, e->c);
+        case HIR_LIT_INT: {
+            IrType *i = pawIr_get_type(L->C, e->id);
+            return new_const_int(fs, e->span, e->i.value, IR_INT_KIND(i));
+        }
+        case HIR_LIT_FLOAT: {
+            IrType *f = pawIr_get_type(L->C, e->id);
+            return new_const_float(fs, e->span, e->f.value, IR_FLOAT_KIND(f));
+        }
+        case HIR_LIT_STR:
+            return new_const_str(fs, e->span, e->s);
+        case HIR_LIT_TUPLE:
             return lower_tuple_lit(V, e);
-        case kHirLitComposite:
+        case HIR_LIT_COMPOSITE:
             return lower_composite_lit(V, e);
-        case kHirLitArray:
+        case HIR_LIT_ARRAY:
             return lower_array_lit(V, e);
     }
 }
@@ -1043,7 +1049,7 @@ static struct MirPlace lower_unit_variant(struct HirVisitor *V, struct HirPathEx
     struct FunctionState *fs = L->fs;
 
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const discr = new_const_int(fs, e->span, index);
+    struct MirPlace const discr = new_const_int(fs, e->span, index, IR_INT64);
     MirPlaceList_push(fs->mir, fields, discr);
 
     struct MirPlace const output = new_register(fs, get_type(L, e->id));
@@ -1178,7 +1184,7 @@ static struct MirSwitchArmList *allocate_switch_arms(struct FunctionState *fs, M
 static struct MirPlace option_try_error(struct FunctionState *fs, struct SourceSpan span)
 {
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const discr = new_const_int(fs, span, PAW_OPTION_NONE);
+    struct MirPlace const discr = new_const_int(fs, span, PAW_OPTION_NONE, IR_INT64);
     MirPlaceList_push(fs->mir, fields, discr);
 
     struct MirPlace const output = new_register(fs, fs->result);
@@ -1227,7 +1233,7 @@ static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceS
     NEW_INSTR(fs, call, span, into_fn, into_args, into_error);
 
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const error_discr = new_const_int(fs, span, PAW_RESULT_ERR);
+    struct MirPlace const error_discr = new_const_int(fs, span, PAW_RESULT_ERR, IR_INT64);
     MirPlaceList_push(fs->mir, fields, error_discr);
     MirPlaceList_push(fs->mir, fields, into_error);
 
@@ -1259,7 +1265,7 @@ static struct MirPlace lower_try_expr(struct HirVisitor *V, struct HirTryExpr *e
 
     struct MirPlace const object = lower_rvalue(V, e->target);
     struct MirPlace const discr = emit_get_field(fs, expr_span,
-            object, 0, MISSING, get_builtin_type(L, BUILTIN_INT));
+            object, 0, MISSING, get_builtin_type(L, BUILTIN_INT64));
 
     MirBlock const input_bb = current_bb(fs);
     MirBlock const none_bb = new_bb(fs);
@@ -1268,7 +1274,7 @@ static struct MirPlace lower_try_expr(struct HirVisitor *V, struct HirTryExpr *e
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, input_bb, 1);
     terminate_switch(fs, expr_span, discr, arms, PAW_TRUE);
     struct MirSwitchArm *arm = &K_LIST_FIRST(arms);
-    arm->k = new_const_int(fs, TODO, EXISTS).k;
+    arm->k = new_const_int(fs, TODO, EXISTS, IR_INT64).k;
 
     set_current_bb(fs, get_last_successor(fs));
     struct MirPlace const value = emit_get_field(fs, expr_span,
@@ -1286,139 +1292,51 @@ static struct MirPlace lower_try_expr(struct HirVisitor *V, struct HirTryExpr *e
     return value;
 }
 
-static enum MirUnaryOpKind unop2op_bool(enum UnaryOp unop)
+static enum MirUnaryOpKind as_mir_unop(enum UnaryOp unop)
 {
     switch (unop) {
+        case UNARY_NEG:
+            return MIR_UNARY_NEG;
         case UNARY_NOT:
             return MIR_UNARY_NOT;
-        default:
-            PAW_UNREACHABLE();
-    }
-}
-
-static enum MirUnaryOpKind unop2op_int(enum UnaryOp unop)
-{
-    switch (unop) {
-        case UNARY_NEG:
-            return MIR_UNARY_INEG;
         case UNARY_BNOT:
-            return MIR_UNARY_IBITNOT;
+            return MIR_UNARY_BITNOT;
         default:
             PAW_UNREACHABLE();
     }
 }
 
-static enum MirBinaryOpKind binop2op_bool(enum BinaryOp binop)
+static enum MirBinaryOpKind as_mir_binop(enum BinaryOp binop)
 {
     switch (binop) {
         case BINARY_EQ:
-            return MIR_BINARY_IEQ;
+            return MIR_BINARY_EQ;
         case BINARY_NE:
-            return MIR_BINARY_INE;
-        default:
-            PAW_UNREACHABLE();
-    }
-}
-
-static enum MirBinaryOpKind binop2op_char(enum BinaryOp binop)
-{
-    switch (binop) {
-        case BINARY_EQ:
-            return MIR_BINARY_CEQ;
-        case BINARY_NE:
-            return MIR_BINARY_CNE;
+            return MIR_BINARY_NE;
         case BINARY_LT:
-            return MIR_BINARY_CLT;
+            return MIR_BINARY_LT;
         case BINARY_LE:
-            return MIR_BINARY_CLE;
-        default:
-            PAW_UNREACHABLE();
-    }
-}
-
-static enum MirBinaryOpKind binop2op_int(enum BinaryOp binop)
-{
-    switch (binop) {
-        case BINARY_EQ:
-            return MIR_BINARY_IEQ;
-        case BINARY_NE:
-            return MIR_BINARY_INE;
-        case BINARY_LT:
-            return MIR_BINARY_ILT;
-        case BINARY_LE:
-            return MIR_BINARY_ILE;
+            return MIR_BINARY_LE;
         case BINARY_ADD:
-            return MIR_BINARY_IADD;
+            return MIR_BINARY_ADD;
         case BINARY_SUB:
-            return MIR_BINARY_ISUB;
+            return MIR_BINARY_SUB;
         case BINARY_MUL:
-            return MIR_BINARY_IMUL;
+            return MIR_BINARY_MUL;
         case BINARY_DIV:
-            return MIR_BINARY_IDIV;
+            return MIR_BINARY_DIV;
         case BINARY_MOD:
-            return MIR_BINARY_IMOD;
+            return MIR_BINARY_MOD;
         case BINARY_BAND:
-            return MIR_BINARY_IBITAND;
+            return MIR_BINARY_BITAND;
         case BINARY_BOR:
-            return MIR_BINARY_IBITOR;
+            return MIR_BINARY_BITOR;
         case BINARY_BXOR:
-            return MIR_BINARY_IBITXOR;
+            return MIR_BINARY_BITXOR;
         case BINARY_SHL:
-            return MIR_BINARY_ISHL;
+            return MIR_BINARY_SHL;
         case BINARY_SHR:
-            return MIR_BINARY_ISHR;
-        default:
-            PAW_UNREACHABLE();
-    }
-}
-
-static enum MirUnaryOpKind unop2op_float(enum UnaryOp unop)
-{
-    switch (unop) {
-        case UNARY_NEG:
-            return MIR_UNARY_FNEG;
-        default:
-            PAW_UNREACHABLE();
-    }
-}
-
-static enum MirBinaryOpKind binop2op_float(enum BinaryOp binop)
-{
-    switch (binop) {
-        case BINARY_EQ:
-            return MIR_BINARY_FEQ;
-        case BINARY_NE:
-            return MIR_BINARY_FNE;
-        case BINARY_LT:
-            return MIR_BINARY_FLT;
-        case BINARY_LE:
-            return MIR_BINARY_FLE;
-        case BINARY_ADD:
-            return MIR_BINARY_FADD;
-        case BINARY_SUB:
-            return MIR_BINARY_FSUB;
-        case BINARY_MUL:
-            return MIR_BINARY_FMUL;
-        case BINARY_DIV:
-            return MIR_BINARY_FDIV;
-        case BINARY_MOD:
-            return MIR_BINARY_FMOD;
-        default:
-            PAW_UNREACHABLE();
-    }
-}
-
-static enum MirBinaryOpKind binop2op_str(enum BinaryOp binop)
-{
-    switch (binop) {
-        case BINARY_EQ:
-            return MIR_BINARY_STREQ;
-        case BINARY_NE:
-            return MIR_BINARY_STRNE;
-        case BINARY_LT:
-            return MIR_BINARY_STRLT;
-        case BINARY_LE:
-            return MIR_BINARY_STRLE;
+            return MIR_BINARY_SHR;
         default:
             PAW_UNREACHABLE();
     }
@@ -1445,44 +1363,28 @@ static struct MirPlace lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr 
     if (e->op == UNARY_ADDROF)
         return lower_addrof(V, e->target);
 
-    enum BuiltinKind const kind = kind_of_builtin(L, e->target);
     struct MirPlace const value = lower_rvalue(V, e->target);
-
     if (e->op == UNARY_DEREF)
         return load_from(fs, value.span, value);
 
     struct MirPlace const output = new_register(fs, get_type(L, e->id));
-    if (!IS_BUILTIN_TYPE(kind)) return output; // must have type "!"
+    if (IrIsNever(value.type)) return output;
 
-    enum MirUnaryOpKind const op =
-        kind == BUILTIN_BOOL ? unop2op_bool(e->op) :
-        kind == BUILTIN_INT ? unop2op_int(e->op) :
-        unop2op_float(e->op);
-    NEW_INSTR(fs, unary_op, e->span, op, value, output);
+    NEW_INSTR(fs, unary_op, e->span, as_mir_unop(e->op), value, output);
     return output;
 }
 
-static void new_binary_op(struct HirVisitor *V, struct SourceSpan span, enum BinaryOp op, enum BuiltinKind kind, struct MirPlace lhs, struct MirPlace rhs, struct MirPlace output)
+static void new_binary_op(struct FunctionState *fs, struct SourceSpan span, enum BinaryOp op, struct MirPlace lhs, struct MirPlace rhs, struct MirPlace output)
 {
-    struct LowerHir *L = V->ud;
-    struct FunctionState *fs = L->fs;
-
     if (op == BINARY_GT || op == BINARY_GE) {
-        // only use relational comparisons "LT" and "LE"
+        // convert to smaller set of relational comparisons
         op = op == BINARY_GT ? BINARY_LT : BINARY_LE;
         struct MirPlace const temp = lhs;
         lhs = rhs;
         rhs = temp;
     }
 
-    enum MirBinaryOpKind const binop =
-        kind == BUILTIN_CHAR ? binop2op_char(op) : //
-        kind == BUILTIN_INT ? binop2op_int(op) : //
-        kind == BUILTIN_BOOL ? binop2op_bool(op) : //
-        kind == BUILTIN_FLOAT ? binop2op_float(op) : //
-        binop2op_str(op);
-
-    NEW_INSTR(fs, binary_op, span, binop, lhs, rhs, output);
+    NEW_INSTR(fs, binary_op, span, as_mir_binop(op), lhs, rhs, output);
 }
 
 static struct MirPlace lower_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
@@ -1490,13 +1392,13 @@ static struct MirPlace lower_binop_expr(struct HirVisitor *V, struct HirBinOpExp
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    enum BuiltinKind const kind = kind_of_builtin(L, e->lhs);
     struct MirPlace const output = new_register(fs, get_type(L, e->id));
     struct MirPlace const lhs = lower_rvalue(V, e->lhs);
     struct MirPlace const rhs = lower_rvalue(V, e->rhs);
-    if (!IS_BUILTIN_TYPE(kind)) return output; // must be "!"
+    if (IrIsNever(lhs.type) || IrIsNever(rhs.type))
+        return output;
 
-    new_binary_op(V, e->span, e->op, kind, lhs, rhs, output);
+    new_binary_op(fs, e->span, e->op, lhs, rhs, output);
     return output;
 }
 
@@ -1607,29 +1509,11 @@ static struct MirPlace lower_conversion_expr(struct HirVisitor *V, struct HirCon
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    static int const NEEDS_CAST[NBUILTINS][NBUILTINS] = {
-#define FROM(From_, ...) [BUILTIN_##From_] = {__VA_ARGS__}
-#define TO(To_) [BUILTIN_##To_] = 1
-
-        FROM(BOOL, TO(CHAR), TO(INT), TO(FLOAT)),
-        FROM(CHAR, TO(BOOL), TO(INT)),
-        FROM(INT, TO(BOOL), TO(CHAR), TO(FLOAT), TO(PTR)),
-        FROM(FLOAT, TO(BOOL), TO(INT)),
-        FROM(PTR, TO(INT), TO(PTR)),
-
-#undef TO
-#undef FROM
-    };
     struct MirPlace const target = lower_rvalue(V, e->from);
     IrType *output_type = GET_NODE_TYPE(L->C, e->to);
-    enum BuiltinKind const to = builtin_kind(L, output_type);
-    enum BuiltinKind const from = builtin_kind(L, target.type);
-    if (NEEDS_CAST[from][to]) {
-        struct MirPlace const output = new_register(fs, output_type);
-        NEW_INSTR(fs, cast, e->span, target, output, from, to);
-        return output;
-    }
-    return target;
+    struct MirPlace const output = new_register(fs, output_type);
+    NEW_INSTR(fs, cast, e->span, target, output);
+    return output;
 }
 
 static struct MirPlace lower_variant_constructor(struct HirVisitor *V, struct HirCallExpr *e, struct HirVariantDecl *d)
@@ -1639,7 +1523,7 @@ static struct MirPlace lower_variant_constructor(struct HirVisitor *V, struct Hi
 
     // set the discriminant: an "int" residing in the first Value slot of the variant
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    struct MirPlace const discr = new_const_int(fs, d->span, d->index);
+    struct MirPlace const discr = new_const_int(fs, d->span, d->index, IR_INT64);
     MirPlaceList_push(fs->mir, fields, discr);
 
     struct HirExpr *const *pexpr;
@@ -1751,11 +1635,8 @@ lower_lhs(struct HirVisitor *V, struct HirExpr *lhs, struct MirPlace *result)
     return LHS_POINTER;
 }
 
-static void write_to_lhs(struct HirVisitor *V, struct SourceSpan span, struct MirPlace lhs, struct MirPlace rhs, enum LhsKind lhs_kind)
+static void write_to_lhs(struct FunctionState *fs, struct SourceSpan span, struct MirPlace lhs, struct MirPlace rhs, enum LhsKind lhs_kind)
 {
-    struct LowerHir *L = V->ud;
-    struct FunctionState *fs = L->fs;
-
     switch (lhs_kind) {
         case LHS_VALUE:
             if (!mir_place_equals(fs->mir, lhs, rhs))
@@ -1777,7 +1658,7 @@ static struct MirPlace lower_assign_expr(struct HirVisitor *V, struct HirAssignE
     struct MirPlace lhs;
     enum LhsKind const lhs_kind = lower_lhs(V, e->lhs, &lhs);
     struct MirPlace const rhs = lower_rvalue(V, e->rhs);
-    write_to_lhs(V, e->span, lhs, rhs, lhs_kind);
+    write_to_lhs(fs, e->span, lhs, rhs, lhs_kind);
 
     // setters are expressions that evaluate to "()"
     return unit_literal(fs, e->span);
@@ -1788,16 +1669,14 @@ static struct MirPlace lower_op_assign_expr(struct HirVisitor *V, struct HirOpAs
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    enum BuiltinKind const kind = kind_of_builtin(L, e->lhs);
-
     struct MirPlace output;
     enum LhsKind const lhs_kind = lower_lhs(V, e->lhs, &output);
     struct MirPlace const first = lhs_kind == LHS_POINTER
         ? load_from(fs, output.span, output) : output;
     struct MirPlace const second = lower_rvalue(V, e->rhs);
     struct MirPlace const temp = new_register(fs, first.type);
-    new_binary_op(V, e->span, e->op, kind, first, second, temp);
-    write_to_lhs(V, e->span, output, temp, lhs_kind);
+    new_binary_op(fs, e->span, e->op, first, second, temp);
+    write_to_lhs(fs, e->span, output, temp, lhs_kind);
 
     // setters are expressions that evaluate to "()"
     return unit_literal(fs, e->span);
@@ -2054,9 +1933,9 @@ static enum BuiltinKind cons_kind(enum ConstructorKind kind)
         case CONS_CHAR:
             return BUILTIN_CHAR;
         case CONS_INT:
-            return BUILTIN_INT;
+            return BUILTIN_INT64;
         case CONS_FLOAT:
-            return BUILTIN_FLOAT;
+            return BUILTIN_FLOAT64;
         case CONS_STR:
             return BUILTIN_STR;
         case CONS_TUPLE:
@@ -2119,7 +1998,7 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, struct
     struct SourceSpan span = d->multi.test.span;
     struct MirPlace const variant = get_match_reg(fs, d->multi.test);
     struct MirPlace const test = emit_get_field(fs, span,
-            variant, 0, 0, get_builtin_type(L, BUILTIN_INT));
+            variant, 0, 0, get_builtin_type(L, BUILTIN_INT64));
 
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, discr_bb, cases->count);
     terminate_switch(fs, span, test, arms, PAW_FALSE);
@@ -2128,7 +2007,7 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, struct
     struct MatchCase const *pmc;
     MirBlock const *psucc = get_successors(fs);
     K_LIST_ZIP (cases, pmc, arms, parm) {
-        parm->k = new_const_int(fs, TODO, pmc->cons.variant.index).k;
+        parm->k = new_const_int(fs, TODO, pmc->cons.variant.index, IR_INT64).k;
         set_current_bb(fs, *psucc++);
 
         struct BlockState bs;

@@ -73,8 +73,18 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_UNIT] = basic_type_name(P, "unit", BUILTIN_UNIT);
     P->string_cache[CSTR_BOOL] = basic_type_name(P, "bool", BUILTIN_BOOL);
     P->string_cache[CSTR_CHAR] = basic_type_name(P, "char", BUILTIN_CHAR);
-    P->string_cache[CSTR_INT] = basic_type_name(P, "int", BUILTIN_INT);
-    P->string_cache[CSTR_FLOAT] = basic_type_name(P, "float", BUILTIN_FLOAT);
+    P->string_cache[CSTR_INT8] = basic_type_name(P, "int8", BUILTIN_INT8);
+    P->string_cache[CSTR_INT16] = basic_type_name(P, "int16", BUILTIN_INT16);
+    P->string_cache[CSTR_INT32] = basic_type_name(P, "int32", BUILTIN_INT32);
+    P->string_cache[CSTR_INT64] = basic_type_name(P, "int64", BUILTIN_INT64);
+    P->string_cache[CSTR_ISIZE] = basic_type_name(P, "isize", BUILTIN_ISIZE);
+    P->string_cache[CSTR_UINT8] = basic_type_name(P, "uint8", BUILTIN_UINT8);
+    P->string_cache[CSTR_UINT16] = basic_type_name(P, "uint16", BUILTIN_UINT16);
+    P->string_cache[CSTR_UINT32] = basic_type_name(P, "uint32", BUILTIN_UINT32);
+    P->string_cache[CSTR_UINT64] = basic_type_name(P, "uint64", BUILTIN_UINT64);
+    P->string_cache[CSTR_USIZE] = basic_type_name(P, "usize", BUILTIN_USIZE);
+    P->string_cache[CSTR_FLOAT32] = basic_type_name(P, "float32", BUILTIN_FLOAT32);
+    P->string_cache[CSTR_FLOAT64] = basic_type_name(P, "float64", BUILTIN_FLOAT64);
     P->string_cache[CSTR_STR] = basic_type_name(P, "str", BUILTIN_STR);
     P->string_cache[CSTR_LIST] = pawS_new_fixed(P, "List");
     P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "Map");
@@ -127,9 +137,35 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, IrType *type)
     } else if (IrIsChar(type)) {
         return BUILTIN_CHAR;
     } else if (IrIsInt(type)) {
-        return BUILTIN_INT;
+        switch (IR_INT_KIND(type)) {
+            case IR_INT8:
+                return BUILTIN_INT8;
+            case IR_INT16:
+                return BUILTIN_INT16;
+            case IR_INT32:
+                return BUILTIN_INT32;
+            case IR_INT64:
+                return BUILTIN_INT64;
+            case IR_ISIZE:
+                return BUILTIN_ISIZE;
+            case IR_UINT8:
+                return BUILTIN_UINT8;
+            case IR_UINT16:
+                return BUILTIN_UINT16;
+            case IR_UINT32:
+                return BUILTIN_UINT32;
+            case IR_UINT64:
+                return BUILTIN_UINT64;
+            case IR_USIZE:
+                return BUILTIN_USIZE;
+        }
     } else if (IrIsFloat(type)) {
-        return BUILTIN_FLOAT;
+        switch (IR_FLOAT_KIND(type)) {
+            case IR_FLOAT32:
+                return BUILTIN_FLOAT32;
+            case IR_FLOAT64:
+                return BUILTIN_FLOAT64;
+        }
     } else if (IrIsString(type)) {
         return BUILTIN_STR;
     } else if (IrIsPtr(type)) {
@@ -173,19 +209,34 @@ IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind kind)
             return pawIr_new_bool(C);
         case BUILTIN_CHAR:
             return pawIr_new_char(C);
-        case BUILTIN_INT:
-            return pawIr_new_int(C);
-        case BUILTIN_FLOAT:
-            return pawIr_new_float(C);
+        case BUILTIN_INT8:
+            return pawIr_new_int(C, IR_INT8);
+        case BUILTIN_INT16:
+            return pawIr_new_int(C, IR_INT16);
+        case BUILTIN_INT32:
+            return pawIr_new_int(C, IR_INT32);
+        case BUILTIN_INT64:
+            return pawIr_new_int(C, IR_INT64);
+        case BUILTIN_ISIZE:
+            return pawIr_new_int(C, IR_ISIZE);
+        case BUILTIN_UINT8:
+            return pawIr_new_int(C, IR_UINT8);
+        case BUILTIN_UINT16:
+            return pawIr_new_int(C, IR_UINT16);
+        case BUILTIN_UINT32:
+            return pawIr_new_int(C, IR_UINT32);
+        case BUILTIN_UINT64:
+            return pawIr_new_int(C, IR_UINT64);
+        case BUILTIN_USIZE:
+            return pawIr_new_int(C, IR_USIZE);
+        case BUILTIN_FLOAT32:
+            return pawIr_new_float(C, IR_FLOAT32);
+        case BUILTIN_FLOAT64:
+            return pawIr_new_float(C, IR_FLOAT64);
         case BUILTIN_STR:
             return pawIr_new_string(C);
-//TODO        case BUILTIN_SLICE:
-//TODO            return pawIr_new_slice(C, pawIr_new_char(C));
-        default: {
+        default:
             PAW_UNREACHABLE();
-//TODO            DeclId const did = pawP_builtin_info(C, kind)->did;
-//TODO            return pawIr_get_def_type(C, did);
-        }
     }
 }
 
@@ -336,6 +387,10 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
 
     C->source_span_refs = SourceSpanRefs_new(C);
 
+    C->typesystem.primitives.int_t = IrTypeList_new(C);
+    C->typesystem.primitives.float_t = IrTypeList_new(C);
+    IrTypeList_resize(C, C->typesystem.primitives.int_t, IR_NUM_INT_KINDS);
+    IrTypeList_resize(C, C->typesystem.primitives.float_t, IR_NUM_FLOAT_KINDS);
     C->typesystem.ptrs = TypeCollection_new(C);
     C->typesystem.slices = TypeCollection_new(C);
     C->typesystem.arrays = TypeCollection_new(C);
@@ -366,8 +421,18 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     register_builtin(C, CSTR_UNIT, BUILTIN_UNIT);
     register_builtin(C, CSTR_BOOL, BUILTIN_BOOL);
     register_builtin(C, CSTR_CHAR, BUILTIN_CHAR);
-    register_builtin(C, CSTR_INT, BUILTIN_INT);
-    register_builtin(C, CSTR_FLOAT, BUILTIN_FLOAT);
+    register_builtin(C, CSTR_INT8, BUILTIN_INT8);
+    register_builtin(C, CSTR_INT16, BUILTIN_INT16);
+    register_builtin(C, CSTR_INT32, BUILTIN_INT32);
+    register_builtin(C, CSTR_INT64, BUILTIN_INT64);
+    register_builtin(C, CSTR_ISIZE, BUILTIN_ISIZE);
+    register_builtin(C, CSTR_UINT8, BUILTIN_UINT8);
+    register_builtin(C, CSTR_UINT16, BUILTIN_UINT16);
+    register_builtin(C, CSTR_UINT32, BUILTIN_UINT32);
+    register_builtin(C, CSTR_UINT64, BUILTIN_UINT64);
+    register_builtin(C, CSTR_USIZE, BUILTIN_USIZE);
+    register_builtin(C, CSTR_FLOAT32, BUILTIN_FLOAT32);
+    register_builtin(C, CSTR_FLOAT64, BUILTIN_FLOAT64);
     register_builtin(C, CSTR_STR, BUILTIN_STR);
 
     // builtin ADTs
@@ -576,13 +641,51 @@ static void mangle_add_type(struct Compiler *C, Buffer *buf, IrType *type)
             pawL_add_char(P, buf, 'c');
             break;
         case kIrInt:
-            pawL_add_char(P, buf, 'i');
+            switch (IR_INT_KIND(type)) {
+                case IR_INT8:
+                    pawL_add_char(P, buf, 'j');
+                    break;
+                case IR_INT16:
+                    pawL_add_char(P, buf, 's');
+                    break;
+                case IR_INT32:
+                    pawL_add_char(P, buf, 'i');
+                    break;
+                case IR_INT64:
+                    pawL_add_char(P, buf, 'x');
+                    break;
+                case IR_ISIZE:
+                    L_ADD_LITERAL(P, buf, "l");
+                    break;
+                case IR_UINT8:
+                    pawL_add_char(P, buf, 'k');
+                    break;
+                case IR_UINT16:
+                    pawL_add_char(P, buf, 't');
+                    break;
+                case IR_UINT32:
+                    pawL_add_char(P, buf, 'u');
+                    break;
+                case IR_UINT64:
+                    pawL_add_char(P, buf, 'y');
+                    break;
+                case IR_USIZE:
+                    L_ADD_LITERAL(P, buf, "n");
+                    break;
+            }
             break;
         case kIrFloat:
-            pawL_add_char(P, buf, 'f');
+            switch (IR_FLOAT_KIND(type)) {
+                case IR_FLOAT32:
+                    pawL_add_char(P, buf, 'f');
+                    break;
+                case IR_FLOAT64:
+                    pawL_add_char(P, buf, 'd');
+                    break;
+            }
             break;
         case kIrString:
-            pawL_add_char(P, buf, 's');
+            pawL_add_char(P, buf, 'S');
             break;
         case kIrAdt: {
             struct IrAdt const *t = IrGetAdt(type);

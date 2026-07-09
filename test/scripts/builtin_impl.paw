@@ -4,7 +4,7 @@ pub trait Repr {
     fn repr(&self) -> str;
 }
 
-impl Repr for int {
+impl Repr for int64 {
     fn repr(&self) -> str {
         self.to_str()
     }
@@ -20,13 +20,13 @@ pub trait Combine<R: Repr> {
     fn combine(&self, r: R);
 }
 
-impl Combine<int> for str {
-    fn combine(&self, r: int) {
+impl Combine<int64> for str {
+    fn combine(&self, r: int64) {
         self ++= r.to_str();
     }
 }
 
-impl<R: Repr> Combine<R> for int {
+impl<R: Repr> Combine<R> for int64 {
     fn combine(&self, r: R) {
         self += #r.repr();
     }

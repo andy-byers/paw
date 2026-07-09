@@ -22,13 +22,13 @@ impl<T: TestMerge<T> + TestDefault> TestReduce<T> for [T] {
     }
 }
 
-impl TestDefault for int {
+impl TestDefault for int64 {
     fn test_default() -> Self {
        0 
     }
 }
 
-impl TestMerge<int> for int {
+impl TestMerge<int64> for int64 {
     fn merge(&self, rhs: Self) -> Self {
         self + rhs
     }

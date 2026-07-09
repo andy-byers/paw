@@ -1,16 +1,16 @@
 // builtin_trait.paw
 
 // Terrible hash combine for testing
-fn bad_hash_combine<K: Hash>(a: K, b: K) -> int {
+fn bad_hash_combine<K: Hash>(a: K, b: K) -> uint64 {
     a.hash() * 123456789 + b.hash()
 }
 
 struct MultiIntKey {
-    pub value: (int, int),
+    pub value: (uint64, uint64),
 }
 
 impl Hash for MultiIntKey {
-    fn hash(self) -> int {
+    fn hash(self) -> uint64 {
         bad_hash_combine(self.value.0, self.value.1)
     }
 }
@@ -22,7 +22,7 @@ impl Equals for MultiIntKey {
     }
 }
 
-fn mik(a: int, b: int) -> MultiIntKey {
+fn mik(a: uint64, b: uint64) -> MultiIntKey {
     MultiIntKey{value: (a, b)}
 }
 
@@ -47,11 +47,11 @@ pub fn test_custom_key() {
 }
 
 struct Key {
-    pub value: int,
+    pub value: uint64,
 }
 
 impl Hash for Key {
-    fn hash(self) -> int {
+    fn hash(self) -> uint64 {
         self.value
     }
 }
@@ -76,7 +76,7 @@ impl<T: Hash + Equals> MultiKey<T> {
 }
 
 impl<T: Hash + Equals> Hash for MultiKey<T> {
-    fn hash(self) -> int {
+    fn hash(self) -> uint64 {
         bad_hash_combine(self.value.0, self.value.1)
     }
 }
@@ -88,7 +88,7 @@ impl<T: Hash + Equals> Equals for MultiKey<T> {
     }
 }
 
-fn mk(a: int, b: int) -> MultiKey<Key> {
+fn mk(a: uint64, b: uint64) -> MultiKey<Key> {
     let a = Key{value: a};
     let b = Key{value: b};
     MultiKey::new(a, b)

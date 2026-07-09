@@ -483,9 +483,34 @@ static void ensure_not_underscore(struct Lex *lex, struct AstIdent ident)
         PARSE_ERROR(lex, UnexpectedUnderscore, ident.span);
 }
 
-static struct AstExpr *new_basic_lit(struct Lex *lex, struct SourceSpan span, Value value, enum BuiltinKind code)
+static struct AstExpr *new_unit_lit(struct Lex *lex, struct SourceSpan span)
 {
-    return NEW_NODE(lex, basic_lit, span, next_id(lex), value, code);
+    return NEW_NODE(lex, tuple_lit, span, next_id(lex), AstExprList_new(lex->ast));
+}
+
+static struct AstExpr *new_bool_lit(struct Lex *lex, struct SourceSpan span, paw_Bool value)
+{
+    return NEW_NODE(lex, bool_lit, span, next_id(lex), value);
+}
+
+static struct AstExpr *new_char_lit(struct Lex *lex, struct SourceSpan span, paw_Char value)
+{
+    return NEW_NODE(lex, char_lit, span, next_id(lex), value);
+}
+
+static struct AstExpr *new_int_lit(struct Lex *lex, struct SourceSpan span, paw_Int64 value, enum NumberSuffix suffix)
+{
+    return NEW_NODE(lex, int_lit, span, next_id(lex), value, suffix);
+}
+
+static struct AstExpr *new_float_lit(struct Lex *lex, struct SourceSpan span, paw_Float64 value, enum NumberSuffix suffix)
+{
+    return NEW_NODE(lex, float_lit, span, next_id(lex), value, suffix);
+}
+
+static struct AstExpr *new_str_lit(struct Lex *lex, struct SourceSpan span, Str const *value)
+{
+    return NEW_NODE(lex, str_lit, span, next_id(lex), value);
 }
 
 static struct AstType *unit_type(struct Lex *lex, struct SourceSpan span)
@@ -496,7 +521,7 @@ static struct AstType *unit_type(struct Lex *lex, struct SourceSpan span)
 
 static struct AstExpr *emit_bool(struct Lex *lex, struct SourceSpan span, paw_Bool b)
 {
-    return new_basic_lit(lex, span, (Value){.i = b}, BUILTIN_BOOL);
+    return new_bool_lit(lex, span, b);
 }
 
 static struct AstType *try_parse_type(struct Lex *lex);
@@ -705,21 +730,23 @@ static paw_Bool is_wildcard_path(struct AstPath path)
     return pawS_length(name) == 1 && name->text[0] == '_';
 }
 
-static enum BuiltinKind get_builtin_kind(struct Lex *lex, struct AstIdent ident)
+static paw_Bool is_builtin_name(struct Lex *lex, struct AstIdent ident)
 {
-    if (equals_cstr(lex, ident.name, CSTR_BOOL)) {
-        return BUILTIN_BOOL;
-    } else if (equals_cstr(lex, ident.name, CSTR_CHAR)) {
-        return BUILTIN_CHAR;
-    } else if (equals_cstr(lex, ident.name, CSTR_INT)) {
-        return BUILTIN_INT;
-    } else if (equals_cstr(lex, ident.name, CSTR_FLOAT)) {
-        return BUILTIN_FLOAT;
-    } else if (equals_cstr(lex, ident.name, CSTR_STR)) {
-        return BUILTIN_STR;
-    } else {
-        return NBUILTINS;
-    }
+    return equals_cstr(lex, ident.name, CSTR_BOOL)
+        || equals_cstr(lex, ident.name, CSTR_CHAR)
+        || equals_cstr(lex, ident.name, CSTR_INT8)
+        || equals_cstr(lex, ident.name, CSTR_INT16)
+        || equals_cstr(lex, ident.name, CSTR_INT32)
+        || equals_cstr(lex, ident.name, CSTR_INT64)
+        || equals_cstr(lex, ident.name, CSTR_ISIZE)
+        || equals_cstr(lex, ident.name, CSTR_UINT8)
+        || equals_cstr(lex, ident.name, CSTR_UINT16)
+        || equals_cstr(lex, ident.name, CSTR_UINT32)
+        || equals_cstr(lex, ident.name, CSTR_UINT64)
+        || equals_cstr(lex, ident.name, CSTR_USIZE)
+        || equals_cstr(lex, ident.name, CSTR_FLOAT32)
+        || equals_cstr(lex, ident.name, CSTR_FLOAT64)
+        || equals_cstr(lex, ident.name, CSTR_STR);
 }
 
 static struct AstPat *compound_pat(struct Lex *lex)
@@ -749,7 +776,7 @@ static struct AstPat *compound_pat(struct Lex *lex)
     }
     if (path.segments->count == 1) {
         struct AstSegment const segment = K_LIST_FIRST(path.segments);
-        if (get_builtin_kind(lex, segment.ident) != NBUILTINS)
+        if (is_builtin_name(lex, segment.ident))
             PARSE_ERROR(lex, UseOfReservedIdentifier,
                     .span = segment.ident.span,
                     .name = segment.ident.name);
@@ -795,58 +822,54 @@ static struct AstExpr *literal_expr(struct Lex *lex)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
     paw_Bool const negative = test_next(lex, '-');
+    struct SourceSpan const span = RANGE(start, TOKEN_END(lex->t));
 
-    enum BuiltinKind code;
+    struct AstExpr *expr;
     switch (lex->t.kind) {
         case TK_TRUE:
-            V_SET_BOOL(&lex->t.value, PAW_TRUE);
-            code = BUILTIN_BOOL;
+            expr = new_bool_lit(lex, span, PAW_TRUE);
             break;
         case TK_FALSE:
-            V_SET_BOOL(&lex->t.value, PAW_FALSE);
-            code = BUILTIN_BOOL;
+            expr = new_bool_lit(lex, span, PAW_FALSE);
             break;
         case TK_CHAR:
-            code = BUILTIN_CHAR;
+            expr = new_char_lit(lex, span, lex->t.value.c);
             break;
         case TK_INT:
-            code = BUILTIN_INT;
+            expr = new_int_lit(lex, span, lex->t.value.i, TF_SUFFIX(lex->t.flags));
             break;
         case TK_FLOAT:
-            code = BUILTIN_FLOAT;
+            expr = new_float_lit(lex, span, lex->t.value.f, TF_SUFFIX(lex->t.flags));
             break;
         case TK_STR:
-            code = BUILTIN_STR;
+            expr = new_str_lit(lex, span, lex->t.value.s);
             break;
         default:
             PARSE_ERROR(lex, NonliteralPattern,
                     .span = RANGE(start, lex->loc));
     }
-    Value const value = lex->t.value;
-    struct SourceLoc const end = TOKEN_END(lex->t);
-    struct AstExpr *expr = new_basic_lit(lex, RANGE(start, end), value, code);
     struct AstLiteralExpr *lit = AstGetLiteralExpr(expr);
     skip(lex); // literal token
 
     if (negative) {
-        if (code == BUILTIN_FLOAT) {
-            V_SET_FLOAT(&lit->basic.value, -V_FLOAT(value));
-        } else if (code != BUILTIN_INT) {
+        if (lit->lit_kind == AST_LIT_FLOAT) {
+            lit->f.value = -lit->f.value;
+        } else if (lit->lit_kind != AST_LIT_INT) {
             PARSE_ERROR(lex, InvalidLiteralNegation,
                     .span = RANGE1(lex->loc));
-        } else if (V_UINT(value) > (paw_Uint)PAW_INT_MAX + 1) {
+        } else if ((paw_Uint64)lit->i.value > (paw_Uint64)PAW_INT_MAX + 1) {
             PARSE_ERROR(lex, NegativeIntegerOutOfRange,
                     .span = NODE_SPAN(expr),
-                    .uint64 = value.u);
-        } else if (V_UINT(value) == (paw_Uint)PAW_INT_MAX + 1) {
-            V_SET_INT(&lit->basic.value, PAW_INT_MIN);
+                    .uint64 = (paw_Uint64)lit->i.value);
+        } else if ((paw_Uint)lit->i.value == (paw_Uint)PAW_INT_MAX + 1) {
+            lit->i.value = PAW_INT_MIN;
         } else {
-            V_SET_INT(&lit->basic.value, -(paw_Int)V_UINT(value));
+            lit->i.value = -lit->i.value;
         }
-    } else if (code == BUILTIN_INT && value.u > (paw_Uint)PAW_INT_MAX) {
+    } else if (lit->lit_kind == AST_LIT_INT && (paw_Uint)lit->i.value > (paw_Uint)PAW_INT_MAX) {
         PARSE_ERROR(lex, IntegerOutOfRange,
                 .span = NODE_SPAN(expr),
-                .uint64 = value.u);
+                .uint64 = (paw_Uint64)lit->i.value);
     }
     return expr;
 }
@@ -992,19 +1015,19 @@ static struct AstGenericArg generic_arg(struct Lex *lex)
             break;
         case TK_CHAR:
             skip(lex);
-            expr = new_basic_lit(lex, t.span, t.value, BUILTIN_CHAR);
+            expr = new_char_lit(lex, t.span, t.value.c);
             break;
         case TK_INT:
             skip(lex);
-            expr = new_basic_lit(lex, t.span, t.value, BUILTIN_INT);
+            expr = new_int_lit(lex, t.span, t.value.i, TF_SUFFIX(t.flags));
             break;
         case TK_FLOAT:
             skip(lex);
-            expr = new_basic_lit(lex, t.span, t.value, BUILTIN_FLOAT);
+            expr = new_float_lit(lex, t.span, t.value.f, TF_SUFFIX(t.flags));
             break;
         case TK_STR:
             skip(lex);
-            expr = new_basic_lit(lex, t.span, t.value, BUILTIN_STR);
+            expr = new_str_lit(lex, t.span, t.value.s);
             break;
         case '{':
             expr = block(lex);
@@ -1215,7 +1238,7 @@ static struct AstExpr *paren_expr(struct Lex *lex)
     if (test(lex, ')')) {
         struct SourceLoc const end = TOKEN_END(lex->t);
         skip(lex); // ")" token
-        return new_basic_lit(lex, RANGE(start, end), (Value){0}, BUILTIN_UNIT);
+        return new_unit_lit(lex, RANGE(start, end));
     }
 
     ++lex->expr_depth;
@@ -1621,16 +1644,16 @@ static struct AstExpr *primary_expr(struct Lex *lex)
             return emit_bool(lex, span, PAW_FALSE);
         case TK_CHAR:
             skip(lex);
-            return new_basic_lit(lex, span, t.value, BUILTIN_CHAR);
+            return new_char_lit(lex, span, t.value.c);
         case TK_INT:
             skip(lex);
-            return new_basic_lit(lex, span, t.value, BUILTIN_INT);
+            return new_int_lit(lex, span, t.value.i, TF_SUFFIX(t.flags));
         case TK_FLOAT:
             skip(lex);
-            return new_basic_lit(lex, span, t.value, BUILTIN_FLOAT);
+            return new_float_lit(lex, span, t.value.f, TF_SUFFIX(t.flags));
         case TK_STR:
             skip(lex);
-            return new_basic_lit(lex, span, t.value, BUILTIN_STR);
+            return new_str_lit(lex, span, t.value.s);
         case TK_STRING_TEXT:
             skip(lex);
             return string_expr(lex, span, t.value);
@@ -2027,13 +2050,32 @@ static struct Annotations *annotations(struct Lex *lex)
                 anno.kind = BUILTIN_STR;
             } else if (AstIsLiteralExpr(expr)) {
                 struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
-                if (e->lit_kind != kAstBasicLit)
-                    PARSE_ERROR(lex, NonprimitiveAnnotationValue,
-                            .span = NODE_SPAN(expr),
-                            .name = anno.name);
-
-                anno.value = e->basic.value;
-                anno.kind = e->basic.code;
+                switch (e->lit_kind) {
+                    case AST_LIT_BOOL:
+                        anno.value.i = e->b;
+                        anno.kind = BUILTIN_BOOL;
+                        break;
+                    case AST_LIT_CHAR:
+                        anno.value.c = e->c;
+                        anno.kind = BUILTIN_CHAR;
+                        break;
+                    case AST_LIT_INT:
+                        anno.value.i = e->i.value;
+                        anno.kind = BUILTIN_INT64;
+                        break;
+                    case AST_LIT_FLOAT:
+                        anno.value.f = e->f.value;
+                        anno.kind = BUILTIN_FLOAT64;
+                        break;
+                    case AST_LIT_STR:
+                        anno.value.s = e->s;
+                        anno.kind = BUILTIN_STR;
+                        break;
+                    default:
+                        PARSE_ERROR(lex, NonprimitiveAnnotationValue,
+                                .span = NODE_SPAN(expr),
+                                .name = anno.name);
+                }
             } else {
                 PARSE_ERROR(lex, NonliteralAnnotationValue,
                         .span = NODE_SPAN(expr),
@@ -2531,8 +2573,18 @@ static void generate_builtin_items(struct Lex *lex, AstDeclList *items)
     GENERATE_DECL("unit");
     GENERATE_DECL("bool");
     GENERATE_DECL("char");
-    GENERATE_DECL("int");
-    GENERATE_DECL("float");
+    GENERATE_DECL("int8");
+    GENERATE_DECL("int16");
+    GENERATE_DECL("int32");
+    GENERATE_DECL("int64");
+    GENERATE_DECL("isize");
+    GENERATE_DECL("uint8");
+    GENERATE_DECL("uint16");
+    GENERATE_DECL("uint32");
+    GENERATE_DECL("uint64");
+    GENERATE_DECL("usize");
+    GENERATE_DECL("float32");
+    GENERATE_DECL("float64");
     GENERATE_DECL("str");
 
 #undef GENERATE_DECL

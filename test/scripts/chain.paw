@@ -1,6 +1,6 @@
 // chain.paw
 
-fn positive_option(i: int) -> Option<int> {
+fn positive_option(i: int64) -> Option<int64> {
     if i > 0 { 
         Some(i) 
     } else { 
@@ -8,7 +8,7 @@ fn positive_option(i: int) -> Option<int> {
     }
 }
 
-fn positive_even_option(i: int) -> Option<int> {
+fn positive_even_option(i: int64) -> Option<int64> {
     i = positive_option(i)?;
     if i % 2 == 0 { 
         Some(i) 
@@ -24,7 +24,7 @@ pub fn test_option() {
     assert(positive_even_option(2).unwrap() == 2);
 }
 
-fn positive_result(i: int) -> Result<int, str> {
+fn positive_result(i: int64) -> Result<int64, str> {
     if i > 0 { 
         Ok(i) 
     } else { 
@@ -32,7 +32,7 @@ fn positive_result(i: int) -> Result<int, str> {
     }
 }
 
-fn positive_even_result(i: int) -> Result<int, str> {
+fn positive_even_result(i: int64) -> Result<int64, str> {
     i = positive_result(i)?;
     if i % 2 == 0 { 
         Ok(i) 
@@ -62,7 +62,7 @@ impl<T> Padded<T> {
     }
 }
 
-fn different_positive_option(p: Padded<int>) -> Option<Padded<int>> {
+fn different_positive_option(p: Padded<int64>) -> Option<Padded<int64>> {
     if p.value > 0 { 
         Some(p) 
     } else { 
@@ -70,7 +70,7 @@ fn different_positive_option(p: Padded<int>) -> Option<Padded<int>> {
     }
 }
 
-fn different_positive_even_option(p: Padded<int>) -> Option<int> {
+fn different_positive_even_option(p: Padded<int64>) -> Option<int64> {
     p = different_positive_option(p)?;
     if p.value % 2 == 0 { 
         Some(p.value) 
@@ -88,7 +88,7 @@ pub fn test_different_option() {
     assert(different_positive_even_option(Padded::new(2)).unwrap() == 2);
 }
 
-fn different_positive_result(p: Padded<int>) -> Result<Padded<int>, str> {
+fn different_positive_result(p: Padded<int64>) -> Result<Padded<int64>, str> {
     if p.value > 0 { 
         Ok(p) 
     } else { 
@@ -96,7 +96,7 @@ fn different_positive_result(p: Padded<int>) -> Result<Padded<int>, str> {
     }
 }
 
-fn different_positive_even_result(p: Padded<int>) -> Result<int, str> {
+fn different_positive_even_result(p: Padded<int64>) -> Result<int64, str> {
     p = different_positive_result(p)?;
     if p.value % 2 == 0 { 
         Ok(p.value) 
@@ -114,12 +114,12 @@ pub fn test_different_result() {
 
 fn id<T>(value: T) -> T { value }
 
-fn nonnegative(value: int) -> Option<int> {
+fn nonnegative(value: int64) -> Option<int64> {
     if value < 0 { return None }
     Some(value)
 }
 
-fn chain_stack_value(i: int) -> Option<int> {
+fn chain_stack_value(i: int64) -> Option<int64> {
     Some(id(nonnegative(i)?))
 }
 

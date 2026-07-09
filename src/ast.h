@@ -735,22 +735,35 @@ struct AstParenExpr {
 struct AstLiteralExpr {
     AST_EXPR_HEADER;
     enum AstLitKind {
-        kAstBasicLit,
-        kAstCompositeLit,
-        kAstArrayLit,
-        kAstTupleLit,
+        AST_LIT_BOOL,
+        AST_LIT_CHAR,
+        AST_LIT_INT,
+        AST_LIT_FLOAT,
+        AST_LIT_STR,
+        AST_LIT_COMPOSITE,
+        AST_LIT_ARRAY,
+        AST_LIT_TUPLE,
     } lit_kind;
 
     union {
-        struct AstBasicLit {
-            Value value;
-            enum BuiltinKind code;
-        } basic;
+        paw_Bool b;
+        paw_Char c;
+        Str const *s;
+
+        struct AstIntLit {
+            paw_Int64 value;
+            enum NumberSuffix suffix;
+        } i;
+
+        struct AstFloatLit {
+            paw_Float64 value;
+            enum NumberSuffix suffix;
+        } f;
 
         struct AstCompositeLit {
             struct AstPath path;
             struct AstExprList *items;
-        } comp;
+        } composite;
 
         struct AstArrayLit {
             struct AstExprList *elems;
@@ -976,20 +989,78 @@ inline static struct AstExpr *pawAst_new_paren_expr(struct Ast *ast, struct Sour
     return e;
 }
 
-inline static struct AstExpr *pawAst_new_basic_lit(struct Ast *ast, struct SourceSpan span, NodeId id, Value value, enum BuiltinKind code)
+static struct AstExpr *pawAst_new_bool_lit(struct Ast *ast, struct SourceSpan span, NodeId id, paw_Bool value)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->LiteralExpr_ = (struct AstLiteralExpr){
         .id = id,
         .span = span,
         .kind = kAstLiteralExpr,
-        .lit_kind = kAstBasicLit,
-        .basic.value = value,
-        .basic.code = code,
+        .lit_kind = AST_LIT_BOOL,
+        .b = value,
     };
     pawAst_set_node(ast, id, e);
     return e;
 }
+
+static struct AstExpr *pawAst_new_char_lit(struct Ast *ast, struct SourceSpan span, NodeId id, paw_Char value)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->LiteralExpr_ = (struct AstLiteralExpr){
+        .id = id,
+        .span = span,
+        .kind = kAstLiteralExpr,
+        .lit_kind = AST_LIT_CHAR,
+        .c = value,
+    };
+    pawAst_set_node(ast, id, e);
+    return e;
+}
+
+static struct AstExpr *pawAst_new_int_lit(struct Ast *ast, struct SourceSpan span, NodeId id, paw_Int value, enum NumberSuffix suffix)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->LiteralExpr_ = (struct AstLiteralExpr){
+        .id = id,
+        .span = span,
+        .kind = kAstLiteralExpr,
+        .lit_kind = AST_LIT_INT,
+        .i.value = value,
+        .i.suffix = suffix,
+    };
+    pawAst_set_node(ast, id, e);
+    return e;
+}
+
+static struct AstExpr *pawAst_new_float_lit(struct Ast *ast, struct SourceSpan span, NodeId id, paw_Float value, enum NumberSuffix suffix)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->LiteralExpr_ = (struct AstLiteralExpr){
+        .id = id,
+        .span = span,
+        .kind = kAstLiteralExpr,
+        .lit_kind = AST_LIT_FLOAT,
+        .f.value = value,
+        .f.suffix = suffix,
+    };
+    pawAst_set_node(ast, id, e);
+    return e;
+}
+
+static struct AstExpr *pawAst_new_str_lit(struct Ast *ast, struct SourceSpan span, NodeId id, Str const *value)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->LiteralExpr_ = (struct AstLiteralExpr){
+        .id = id,
+        .span = span,
+        .kind = kAstLiteralExpr,
+        .lit_kind = AST_LIT_STR,
+        .s = value,
+    };
+    pawAst_set_node(ast, id, e);
+    return e;
+}
+
 
 inline static struct AstExpr *pawAst_new_composite_lit(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPath path, struct AstExprList *items)
 {
@@ -998,9 +1069,9 @@ inline static struct AstExpr *pawAst_new_composite_lit(struct Ast *ast, struct S
         .id = id,
         .span = span,
         .kind = kAstLiteralExpr,
-        .lit_kind = kAstCompositeLit,
-        .comp.path = path,
-        .comp.items = items,
+        .lit_kind = AST_LIT_COMPOSITE,
+        .composite.path = path,
+        .composite.items = items,
     };
     pawAst_set_node(ast, id, e);
     return e;
@@ -1013,7 +1084,7 @@ inline static struct AstExpr *pawAst_new_array_lit(struct Ast *ast, struct Sourc
         .id = id,
         .span = span,
         .kind = kAstLiteralExpr,
-        .lit_kind = kAstArrayLit,
+        .lit_kind = AST_LIT_ARRAY,
         .array.elems = elems,
     };
     pawAst_set_node(ast, id, e);
@@ -1027,7 +1098,7 @@ inline static struct AstExpr *pawAst_new_tuple_lit(struct Ast *ast, struct Sourc
         .id = id,
         .span = span,
         .kind = kAstLiteralExpr,
-        .lit_kind = kAstTupleLit,
+        .lit_kind = AST_LIT_TUPLE,
         .tuple.elems = elems,
     };
     pawAst_set_node(ast, id, e);

@@ -1,4 +1,4 @@
-// float.paw
+// float64.paw
 
 #[test]
 pub fn test_zeros() {
@@ -17,7 +17,7 @@ pub fn test_exponents() {
     assert(10e+001 == 100.0);
 }
 
-fn check_parse(s: str, o: Option<float>) {
+fn check_parse(s: str, o: Option<float64>) {
     match (s.parse_float(), o) {
         (Some(a), Some(b)) => assert(a == b),
         (None, None) => {},

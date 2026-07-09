@@ -157,7 +157,7 @@ static struct HirType *unit_type(struct LowerAst *L, struct SourceSpan span)
 
 static struct HirExpr *unit_lit(struct LowerAst *L, struct SourceSpan span)
 {
-    return NEW_NODE(L, basic_lit, span, next_node_id(L), (Value){0}, BUILTIN_UNIT);
+    return NEW_NODE(L, tuple_lit, span, next_node_id(L), HirExprList_new(L->hir));
 }
 
 static struct HirPath new_unary_path(struct LowerAst *L, struct HirIdent ident, NodeId id, enum HirPathKind kind, NodeId target)
@@ -323,15 +323,15 @@ static struct HirExpr *LowerUnOpExpr(struct LowerAst *L, struct AstUnOpExpr *e)
 {
     if (e->op == UNARY_NEG && AstIsLiteralExpr(e->target)) {
         struct AstLiteralExpr *lit = AstGetLiteralExpr(e->target);
-        if (lit->lit_kind == kAstBasicLit && lit->basic.code == BUILTIN_INT) {
-            paw_Uint const u = V_UINT(lit->basic.value);
+        if (lit->lit_kind == AST_LIT_INT) {
+            paw_Uint64 const u = (paw_Uint64)lit->i.value;
             if (u > (paw_Uint)PAW_INT_MAX + 1)
                 LOWERING_ERROR(L, IntegerOutOfRange,
                         .uint64 = u,
                         .span = e->span);
 
             paw_Int const i = u < (paw_Uint)PAW_INT_MAX + 1 ? -(paw_Int)u : PAW_INT_MIN;
-            return NEW_NODE(L, basic_lit, e->span, e->id, (Value){.i = i}, BUILTIN_INT);
+            return NEW_NODE(L, int_lit, e->span, e->id, i, lit->i.suffix);
         }
     }
     struct HirExpr *target = lower_expr(L, e->target);
@@ -579,19 +579,6 @@ static struct HirExpr *LowerConversionExpr(struct LowerAst *L, struct AstConvers
     return NEW_NODE(L, conversion_expr, e->span, e->id, from, to);
 }
 
-static struct HirExpr *lower_basic_lit(struct LowerAst *L, struct AstBasicLit *e, struct SourceSpan span, NodeId id)
-{
-    // NOTE: Integer literals are parsed as paw_Uint. Values of type paw_Uint in range [0, PAW_INT_MAX]
-    //       have the same Value representation as paw_Int and no conversion is necessary. Negative
-    //       integer literals are handled in "LowerUnOpExpr".
-    if (e->code == BUILTIN_INT && V_UINT(e->value) > (paw_Uint)PAW_INT_MAX)
-        LOWERING_ERROR(L, IntegerOutOfRange,
-                .uint64 = e->value.u,
-                .span = span);
-
-    return NEW_NODE(L, basic_lit, span, id, e->value, e->code);
-}
-
 static struct HirExpr *lower_tuple_lit(struct LowerAst *L, struct AstTupleLit *e, struct SourceSpan span, NodeId id)
 {
     HirExprList *elems = lower_expr_list(L, e->elems);
@@ -637,14 +624,22 @@ static struct HirExpr *LowerParenExpr(struct LowerAst *L, struct AstParenExpr *e
 static struct HirExpr *LowerLiteralExpr(struct LowerAst *L, struct AstLiteralExpr *e)
 {
     switch (e->lit_kind) {
-        case kAstBasicLit:
-            return lower_basic_lit(L, &e->basic, e->span, e->id);
-        case kAstTupleLit:
+        case AST_LIT_BOOL:
+            return NEW_NODE(L, bool_lit, e->span, e->id, e->b);
+        case AST_LIT_CHAR:
+            return NEW_NODE(L, char_lit, e->span, e->id, e->c);
+        case AST_LIT_INT:
+            return NEW_NODE(L, int_lit, e->span, e->id, e->i.value, e->i.suffix);
+        case AST_LIT_FLOAT:
+            return NEW_NODE(L, float_lit, e->span, e->id, e->f.value, e->f.suffix);
+        case AST_LIT_STR:
+            return NEW_NODE(L, str_lit, e->span, e->id, e->s);
+        case AST_LIT_TUPLE:
             return lower_tuple_lit(L, &e->tuple, e->span, e->id);
-        case kAstArrayLit:
+        case AST_LIT_ARRAY:
             return lower_array_lit(L, &e->array, e->span, e->id);
-        case kAstCompositeLit:
-            return lower_composite_lit(L, &e->comp, e->span, e->id);
+        case AST_LIT_COMPOSITE:
+            return lower_composite_lit(L, &e->composite, e->span, e->id);
     }
 }
 
@@ -652,7 +647,7 @@ static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr 
 {
     struct AstStringPart const first_part = AstStringList_first(e->parts);
     paw_assert(first_part.is_str);
-    return NEW_NODE(L, basic_lit, first_part.str.span, e->id, first_part.str.value, BUILTIN_STR);
+    return NEW_NODE(L, str_lit, first_part.str.span, e->id, first_part.str.value.s);
 }
 
 static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d)
@@ -672,7 +667,7 @@ static struct HirExpr *new_boolean_match(struct LowerAst *L, struct SourceSpan s
     struct Hir *hir = L->hir;
     struct HirExprList *arms = HirExprList_new(hir);
 
-    struct HirExpr *true_expr = NEW_NODE(L, basic_lit, span, next_node_id(L), (Value){.i = PAW_TRUE}, BUILTIN_BOOL);
+    struct HirExpr *true_expr = NEW_NODE(L, bool_lit, span, next_node_id(L), PAW_TRUE);
     struct HirPat *true_pat = NEW_NODE(L, literal_pat, cond->hdr.span, next_node_id(L), true_expr);
     struct HirExpr *true_arm = NEW_NODE(L, match_arm, span, next_node_id(L), true_pat, NULL, then_block);
     HirExprList_push(hir, arms, true_arm);
@@ -1214,8 +1209,8 @@ static struct HirPat *LowerLiteralPat(struct LowerAst *L, struct AstLiteralPat *
         // have type paw_Uint so they can handle overflow (UnOp(Literal(i), -) is detected and
         // converted into Literal(-i) after checking for overflow).
         struct AstLiteralExpr *e = AstGetLiteralExpr(p->expr);
-        if (e->lit_kind == kAstBasicLit && e->basic.code == BUILTIN_INT) {
-            struct HirExpr *expr = NEW_NODE(L, basic_lit, p->span, e->id, e->basic.value, BUILTIN_INT);
+        if (e->lit_kind == AST_LIT_INT) {
+            struct HirExpr *expr = NEW_NODE(L, int_lit, p->span, e->id, e->i.value, e->i.suffix);
             return NEW_NODE(L, literal_pat, p->span, p->id, expr);
         }
     }

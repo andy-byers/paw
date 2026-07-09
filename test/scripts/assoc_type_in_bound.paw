@@ -2,12 +2,12 @@
 
 use ops::Add;
 
-struct First {pub value: int}
-struct Second {pub value: int}
+struct First {pub value: int64}
+struct Second {pub value: int64}
 
-impl Add<int> for First {
-    type Output = int;
-    fn add(*self, rhs: *int) -> int {
+impl Add<int64> for First {
+    type Output = int64;
+    fn add(*self, rhs: *int64) -> int64 {
         self.value + *rhs
     }
 }
@@ -23,7 +23,7 @@ pub fn add<X: Add<Y, Output = Z>, Y, Z>(first: X, second: Y) -> Z {
     first.add(&second)
 }
 
-pub fn add_2<X: Add<int, Output = Z>, Z>(first: X, second: int) -> Z {
+pub fn add_2<X: Add<int64, Output = Z>, Z>(first: X, second: int64) -> Z {
     first.add(&second)
 }
 
@@ -33,7 +33,7 @@ pub trait AsType {
 }
 
 impl AsType for Second {
-    type Output = int;
+    type Output = int64;
     fn as_type(*self) -> Self::Output {
         self.value
     }

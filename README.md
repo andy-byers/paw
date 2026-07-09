@@ -26,8 +26,10 @@ Paw is a statically-typed, ahead-of-time compiled, general-purpose programming l
 
 ### Hello world
 ```paw
+use io;
+
 pub fn main() {
-    println("Hello, world!");
+    io::println("Hello, world!");
 }
 ```
 
@@ -36,7 +38,7 @@ pub fn main() {
 use io;
 
 pub fn main() -> Result<(), mem::OutOfMemory> {
-    // Create a closure. The type of "n" is inferred as "int" and the 
+    // Create a closure. The type of "n" is inferred as "int64" and the 
     // return type as "String".
     let fizzbuzz = |n| {
         if n % 15 == 0 { 
@@ -52,7 +54,7 @@ pub fn main() -> Result<(), mem::OutOfMemory> {
 
     // Call the closure for each integer 1 to 100, exclusive.
     for i in 1..100 {
-        io::println(s"fizzbuzz(\{i}) = \{fizzbuzz(i)?}");
+        io::println(f"fizzbuzz(\{i}) = \{fizzbuzz(i)?}"?);
     }
 }
 ```
@@ -96,7 +98,7 @@ Methods and associated functions can be attached using an [`impl` block](#impl-b
 ```paw
 struct Statistic {
     pub name: String, // accessible from anywhere
-    value: float, // only accessible from within the same module
+    value: float32, // only accessible from within the same module
 }
 ```
 
@@ -116,7 +118,7 @@ impl Copy for Expr {}
 // import variants into the global value namespace
 use Expr::*;
 
-pub fn eval(e: Expr) -> int {
+pub fn eval(e: Expr) -> int32 {
     // match expressions must be exhaustive
     match e {
         Zero => 0,
@@ -125,7 +127,7 @@ pub fn eval(e: Expr) -> int {
     }
 }
 
-pub fn three() -> int {
+pub fn three() -> int32 {
     let zero = Zero;
     let one = Succ(&zero);
     let two = Add(&one, &one);
@@ -141,11 +143,13 @@ Methods and associated functions can be defined on a data type using an `impl` b
 Paw supports parametric polymorphism, a.k.a. generic type parameters.
 
 ```paw
+use list::List;
+
 // type aliases can accept type arguments
 type PairSlice<T> = [](T, T);
 
-fn map2<X, Y>(f: fn(X, X) -> Y, xs: PairSlice<X>) -> [Y] {
-    let ys = Vec::new();
+fn map2<X, Y>(f: fn(X, X) -> Y, xs: PairSlice<X>) -> List<Y> {
+    let ys = List::new();
     // destructuring is supported in "for" loops and "let" declarations
     for (a, b) in xs {
         ys.push(f(a, b));
@@ -162,14 +166,14 @@ pub fn main() {
         (5, 6),
     ];
 
-    let data = map2(|x: int, y| x + y, data.to_slice());
+    let data = map2(|x: int16, y| x + y, data.to_slice());
 
     let total = 0;
     for value in data {
         total = total + value;
     }
 
-    println("total = \{total}"); // total = 35
+    io::println(f"total = \{total}".unwrap()); // total = 35
 }
 ```
 
@@ -209,13 +213,13 @@ pub fn main() {
     let outer = Outer{value: inner};
     let value = get(outer);
 
-    println("value = \{value}"); // value = 123
+    io::println(f"value = \{value}".unwrap()); // value = 123
 }
 ```
 
 ### Pointers
 ```paw
-pub fn increment(value: *int) {
+pub fn increment(value: *uint64) {
     *value += 1;
 }
 
@@ -269,6 +273,7 @@ A panic can also be caused by calling the `panic` builtin function.
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
 + In some cases, the compiler can't determine the type of a method without knowing the type of some arguments (happens with `IndexRange` trait)
++ Associated types on supertraits don't work properly
 + Need to add a check to make sure there are not extraneous trait bounds on trait methods (only checking for unsatisfied trait obligations, i.e. the check needs to be performed the "other way" as well)
 + Generic type parameters on type aliases can't be constrained with trait bounds
 + Type aliases need check for cycles. Also, compiler crashes when it encounters type alias in RHS that hasn't been defined yet.

@@ -8,28 +8,28 @@ enum Enum<T> {
 
 #[test]
 pub fn test_initialization() {
-    let ex = Enum::<int>::X;
-    let ey = Enum::<int>::Y(1);
-    let ez = Enum::<int>::Z(2, 3);
+    let ex = Enum::<int64>::X;
+    let ey = Enum::<int64>::Y(1);
+    let ez = Enum::<int64>::Z(2, 3);
 }
 
-fn noop(e: Enum<int>) -> Enum<int> {
+fn noop(e: Enum<int64>) -> Enum<int64> {
     let e2 = e;
     return e2;
 }
 
 #[test]
 pub fn test_arguments() {
-    noop(Enum::<int>::X);
-    noop(Enum::<int>::Y(1));
-    noop(Enum::<int>::Z(2, 3));
+    noop(Enum::<int64>::X);
+    noop(Enum::<int64>::Y(1));
+    noop(Enum::<int64>::Z(2, 3));
 }
 
 #[test]
 pub fn test_assignment() {
-    let ex = Enum::<int>::X;
-    let ey = Enum::<int>::Y(1);
-    let ez = Enum::<int>::Z(2, 3);
+    let ex = Enum::<int64>::X;
+    let ey = Enum::<int64>::Y(1);
+    let ez = Enum::<int64>::Z(2, 3);
 
     ez = ex;
     ex = ey;
@@ -37,51 +37,51 @@ pub fn test_assignment() {
 }
 
 struct Struct<T> {
-    pub x: Enum<int>,
+    pub x: Enum<int64>,
     pub y: Enum<T>,
 }
 
 #[test]
 pub fn test_fields() {
     let s = Struct::<bool>{
-        x: Enum::<int>::X,
+        x: Enum::<int64>::X,
         y: Enum::<bool>::Y(true),
     };
-    let s = Struct::<float>{
-        x: Enum::<int>::Y(1),
-        y: Enum::<float>::Z(2.0, 3.0),
+    let s = Struct::<float64>{
+        x: Enum::<int64>::Y(1),
+        y: Enum::<float64>::Z(2.0, 3.0),
     };
 }
 
-fn option(b: bool) -> Option<int> {
+fn option(b: bool) -> Option<int64> {
     if b {
-        Option::<int>::Some(42)
+        Option::<int64>::Some(42)
     } else {
-        Option::<int>::None
+        Option::<int64>::None
     }
 }
 
 #[test]
 pub fn test_chain_option() {
     let val = -1;
-    let test = || -> Option<int> {
+    let test = || -> Option<int64> {
         let i = option(true)?;
         val = i;
-        return Option::<int>::Some(i);
+        return Option::<int64>::Some(i);
     };
     test();
     assert(val == 42);
 
-    let test = || -> Option<int> {
+    let test = || -> Option<int64> {
         let i = option(false)?;
         assert(false);
-        return Option::<int>::Some(i);
+        return Option::<int64>::Some(i);
     };
     test();
 
-    let test = |o: Option<int>| {};
-    test(Option::<int>::Some(123));
-    test(Option::<int>::None);
+    let test = |o: Option<int64>| {};
+    test(Option::<int64>::Some(123));
+    test(Option::<int64>::None);
 }
 
 fn option2<Ty>(b: bool, v: Ty) -> Option<Ty> {
@@ -104,29 +104,29 @@ pub fn test_chain_option2() {
     chain_option2_aux("abc");
 }
 
-fn result(b: bool) -> Result<int, str> {
+fn result(b: bool) -> Result<int64, str> {
     if b {
-        return Result::<int, str>::Ok(42);
+        return Result::<int64, str>::Ok(42);
     } else {
-        return Result::<int, str>::Err("bad");
+        return Result::<int64, str>::Err("bad");
     }
 }
 
 #[test]
 pub fn test_chain_result() {
     let val = -1;
-    let test = || -> Result<int, str> {
+    let test = || -> Result<int64, str> {
         let i = result(true)?;
         val = i;
-        return Result::<int, str>::Ok(i);
+        return Result::<int64, str>::Ok(i);
     };
     test();
     assert(val == 42);
 
-    let test = || -> Result<int, str> {
+    let test = || -> Result<int64, str> {
         let i = result(false)?;
         assert(false);
-        return Result::<int, str>::Ok(i);
+        return Result::<int64, str>::Ok(i);
     };
     test();
 }
@@ -164,24 +164,24 @@ pub fn test_option_construction() {
 
 #[test]
 pub fn test_option_methods() {
-    let o = Option::<int>::Some(123);
+    let o = Option::<int64>::Some(123);
     assert(o.is_some());
     assert(o.unwrap() == 123);
     assert(o.unwrap_or(456) == 123);
 
-    let o = Option::<int>::None;
+    let o = Option::<int64>::None;
     assert(o.is_none());
     assert(o.unwrap_or(456) == 456);
 }
 
 #[test]
 pub fn test_result_methods() {
-    let o = Result::<int, str>::Ok(123);
+    let o = Result::<int64, str>::Ok(123);
     assert(o.is_ok());
     assert(o.unwrap() == 123);
     assert(o.unwrap_or(456) == 123);
 
-    let o = Result::<int, str>::Err("abc");
+    let o = Result::<int64, str>::Err("abc");
     assert(o.is_err());
     assert(o.unwrap_or(456) == 456);
 }

@@ -1,6 +1,6 @@
 // test_registers.paw
 
-fn check_basic_guard(a: bool) -> int {
+fn check_basic_guard(a: bool) -> int64 {
     if a {
         return 1;
     }
@@ -14,7 +14,7 @@ pub fn test_basic_guard() {
     assert(check(false) == 2);
 }
 
-//fn check_nested_guards(a: bool, b: bool) -> int {
+//fn check_nested_guards(a: bool, b: bool) -> int64 {
 //    if a {
 //        if b {
 //            return 1;
@@ -32,7 +32,7 @@ pub fn test_basic_guard() {
 //    assert(check(false, false) == 3);
 //}
 //
-//fn check_branches(a: bool, b: bool) -> int {
+//fn check_branches(a: bool, b: bool) -> int64 {
 //    let result = 0;
 //    if a {
 //        result = 20;
@@ -55,7 +55,7 @@ pub fn test_basic_guard() {
 //    assert(check(true, true) == 22);
 //}
 //
-//fn check_branches_2(a: bool, b: bool) -> int {
+//fn check_branches_2(a: bool, b: bool) -> int64 {
 //    let result = 0; // 0 not observed
 //    if a {
 //        result = 20;
@@ -112,7 +112,7 @@ pub fn test_basic_guard() {
 //    assert(result == 1);
 //}
 //
-//fn check_cfg(a: int, b: int) -> int {
+//fn check_cfg(a: int64, b: int64) -> int64 {
 //    let r = 0;
 //    if a == 0 {
 //        while b > 0 {
@@ -129,7 +129,7 @@ pub fn test_basic_guard() {
 //    return r;
 //}
 //
-//fn check_cfg2(a: int) -> int {
+//fn check_cfg2(a: int64) -> int64 {
 //    let r = 0;
 //    if true {
 //        while a > 0 {
@@ -149,7 +149,7 @@ pub fn test_basic_guard() {
 //}
 //
 //
-//fn check_cmpi(a: int, b: int) {
+//fn check_cmpi(a: int64, b: int64) {
 //    assert(a == a);
 //    assert(a != b);
 //    assert(a <= a);
@@ -160,7 +160,7 @@ pub fn test_basic_guard() {
 //    assert(b > a);
 //}
 //
-//fn check_cmpf(a: float, b: float) {
+//fn check_cmpf(a: float64, b: float64) {
 //    assert(a == a);
 //    assert(a != b);
 //    assert(a <= a);
@@ -212,8 +212,8 @@ pub fn test_basic_guard() {
 //struct Unit;
 //
 //struct A {
-//    pub a: int,
-//    pub b: int,
+//    pub a: int64,
+//    pub b: int64,
 //    pub c: [Unit],
 //}
 //
@@ -237,7 +237,7 @@ pub fn test_basic_guard() {
 //    let opt = getelem(list);
 ////    assert(opt.is_none());
 //    // propagate type argument to "list"
-//    let _: Option<int> = opt; 
+//    let _: Option<int64> = opt; 
 //}
 //
 //pub fn rec1<A, B>(a: A, b: B) {
@@ -255,7 +255,7 @@ pub fn test_basic_guard() {
 //    rec1(true, 2.0);
 //}
 //
-//pub fn rec(i: int) {
+//pub fn rec(i: int64) {
 //    if i > 0 {
 //        rec(i - 1);
 //    }
@@ -267,10 +267,10 @@ pub fn test_basic_guard() {
 //    rec(10);
 //}
 //
-//fn check_upvalues(a: int, b: int, c: int) -> int {
-//    let f = |x: int| {
-//        let g = |y: int| {
-//            let h = |z: int| {
+//fn check_upvalues(a: int64, b: int64, c: int64) -> int64 {
+//    let f = |x: int64| {
+//        let g = |y: int64| {
+//            let h = |z: int64| {
 //                return x + y + z + a + b + c;
 //            };
 //            return h(y + c);
@@ -409,7 +409,7 @@ pub fn test_basic_guard() {
 //
 //
 //pub fn test_break_upvalue_7483294723895612() {
-//    let f = |_: int| -1;
+//    let f = |_: int64| -1;
 //    while true {
 //        let state = 0;
 //        f = |x| {
@@ -427,7 +427,7 @@ pub fn test_basic_guard() {
 //}
 //
 //pub fn test_break_upvalue_578423905219457834() {
-//    let f = |_: int| -1;
+//    let f = |_: int64| -1;
 //    let state = 0;
 //    while true {
 //        f = |x| {
@@ -447,7 +447,7 @@ pub fn test_basic_guard() {
 //}
 //
 //struct Obj {
-//    inner: int,
+//    inner: int64,
 //}
 //
 //impl Obj {
@@ -455,7 +455,7 @@ pub fn test_basic_guard() {
 //        return Obj{inner: 42};
 //    }
 //
-//    pub fn k(self) -> int {
+//    pub fn k(self) -> int64 {
 //        return self.inner;
 //    }
 //}
@@ -495,27 +495,27 @@ pub fn test_basic_guard() {
 //pub fn test_ajsfdklavczxyuoewrqmn()
 //{
 //    // Vec<?0>
-//    // ?0 := int
-//    // Vec<int>::xyz(int) -> int
+//    // ?0 := int64
+//    // Vec<int64>::xyz(int64) -> int64
 //
 //    let v = Vec::xyz(123);
 //    assert(v == 123);
 //}
 //
-//////impl Vec<int> {
-//////    pub fn k() -> int {
+//////impl Vec<int64> {
+//////    pub fn k() -> int64 {
 //////        return 42;
 //////    }
 //////}
 ////
 ////pub fn test_method_abcdefg() {
-//////    let v: int = Vec::k();
-////    let v: int = Vec::x();
+//////    let v: int64 = Vec::k();
+////    let v: int64 = Vec::x();
 //////    v.push(1);
 ////}
 
 //
-//fn check_break_upvalue_inner(x: int) -> (fn(str) -> int) {
+//fn check_break_upvalue_inner(x: int64) -> (fn(str) -> int64) {
 //    let i = 0;
 //    let f = |_: str| -1;
 //    while i < 100 {
@@ -547,7 +547,7 @@ pub fn test_basic_guard() {
 //    assert(state("get") == 10);
 //}
 //
-//fn check_break_upvalue_outer(x: int) -> (fn(str) -> int) {
+//fn check_break_upvalue_outer(x: int64) -> (fn(str) -> int64) {
 //    let f = |_: str| -1;
 //    let i = 0;
 //    let outer = x;
@@ -654,23 +654,23 @@ pub fn test_basic_guard() {
 //struct Thing<Ty>;
 //
 //impl<T> Thing<T> {
-//    pub fn a(t: T) -> int {return 42;}
+//    pub fn a(t: T) -> int64 {return 42;}
 ////    pub fn b() {}
 //}
-////impl Thing<int> {
+////impl Thing<int64> {
 ////    pub fn c() {}
 ////}
 //
 //pub fn test_ins() {
-//    Thing::<int>::a(1);
+//    Thing::<int64>::a(1);
 //}
 //
 
 //pub fn test_conversions() {
-//    assert(1 == true as int);
-//    assert(1.0 == true as float);
-//    assert(1 == 1 as int);
-//    assert(1.0 == 1 as float);
+//    assert(1 == true as int64);
+//    assert(1.0 == true as float64);
+//    assert(1 == 1 as int64);
+//    assert(1.0 == 1 as float64);
 //}
 
 //pub fn test_bitwise_ops() {
@@ -686,8 +686,8 @@ pub fn test_basic_guard() {
 //
 //pub fn test_closure_inside_poly() {
 //    let fb = |x: bool| id(x);
-//    let fi = |x: int|h id(x);
-//    let ff = |x: float| id(x);
+//    let fi = |x: int64|h id(x);
+//    let ff = |x: float64| id(x);
 //    assert(fb(false) == false);
 //    assert(fb(true) == true);
 //    assert(fi(-1) == -1);
@@ -695,18 +695,18 @@ pub fn test_basic_guard() {
 //}
 //
 //struct Constant {
-//    value: int,
+//    value: int64,
 //}
 //impl Constant {
-//    pub fn new(x: int) -> Constant {
+//    pub fn new(x: int64) -> Constant {
 //        return Constant{value: x};
 //    }
-//    pub fn get(self) -> int {
+//    pub fn get(self) -> int64 {
 //        return self.value;
 //    }
 //}
 //
-//fn call_basic_method<Ignore>(_: Ignore) -> int {
+//fn call_basic_method<Ignore>(_: Ignore) -> int64 {
 //    let c = Constant::new(42);
 //    return c.get();
 //}
@@ -739,7 +739,7 @@ pub fn test_basic_guard() {
 //    assert(map.get_or("b", "c") == "c");
 //}
 //
-//fn repeat_helper<Ty>(value: Ty, times: int) -> [Ty] {
+//fn repeat_helper<Ty>(value: Ty, times: int64) -> [Ty] {
 //    let result = [];
 //    while times > 0 {
 //        result.push(value);
@@ -758,7 +758,7 @@ pub fn test_basic_guard() {
 //    pub fn get(self) -> X {
 //        return self.value;
 //    }
-//    pub fn repeat(self, times: int) -> [X] {
+//    pub fn repeat(self, times: int64) -> [X] {
 //        return repeat_helper(self.get(), times);
 //    }
 //}
@@ -790,12 +790,12 @@ pub fn test_basic_guard() {
 //}
 //
 //impl PolyConstant<[CustomTag]> {
-//    pub fn specialized(self) -> int {
+//    pub fn specialized(self) -> int64 {
 //        return #self.value;
 //    }
 //}
 //
-//fn call_specialized_method(n: int) -> int {
+//fn call_specialized_method(n: int64) -> int64 {
 //    let tags = [];
 //    while n > 0 {
 //        let k = PolyConstant::new(CustomTag);

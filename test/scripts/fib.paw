@@ -1,6 +1,6 @@
 // fib.paw
 
-fn fib(n: int) -> int {
+fn fib(n: int64) -> int64 {
     if n < 2 {
         return n;
     }

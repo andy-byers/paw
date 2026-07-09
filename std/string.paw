@@ -23,7 +23,7 @@ impl String {
         Ok(s)
     }
 
-    pub fn len(*self) -> int {
+    pub fn len(*self) -> usize {
         self.inner.len()
     }
 
@@ -31,7 +31,7 @@ impl String {
         self.len() == 0
     }
 
-    pub fn capacity(*self) -> int {
+    pub fn capacity(*self) -> usize {
         self.inner.capacity()
     }
 
@@ -39,20 +39,20 @@ impl String {
         str::from_raw_parts(self.as_ptr(), self.len())
     }
 
-    pub fn from_raw_parts(start: *char, length: int, capacity: int) -> Self {
+    pub fn from_raw_parts(start: *char, length: usize, capacity: usize) -> Self {
         Self{inner: List::from_raw_parts(start, length, capacity)}
     }
 
-    pub fn into_raw_parts(self) -> (*char, int, int) {
+    pub fn into_raw_parts(self) -> (*char, usize, usize) {
         let Self{inner} = self; // decompose
         inner.into_raw_parts()
     }
 
-    pub fn get(*self, index: int) -> Option<*char> {
+    pub fn get(*self, index: usize) -> Option<*char> {
         self.inner.get(index)
     }
 
-    pub fn set(*self, index: int, value: char) -> Option<char> {
+    pub fn set(*self, index: usize, value: char) -> Option<char> {
         self.inner.set(index, value)
     }
 
@@ -60,11 +60,11 @@ impl String {
         self.inner.push(value)
     }
 
-    pub fn insert(*self, index: int, value: char) -> Result<(), InsertError> {
+    pub fn insert(*self, index: usize, value: char) -> Result<(), InsertError> {
         self.inner.insert(index, value)
     }
 
-    pub fn remove(*self, index: int) -> char {
+    pub fn remove(*self, index: usize) -> char {
         self.inner.remove(index)
     }
 
@@ -72,7 +72,7 @@ impl String {
         self.inner.pop()
     }
 
-    pub fn reserve(*self, len: int) -> mem::Result<()> {
+    pub fn reserve(*self, len: usize) -> mem::Result<()> {
         self.inner.reserve(len)
     }
 
@@ -97,15 +97,15 @@ impl ToSlice<char> for String {
     }
 }
 
-impl Index<int> for String {
+impl Index<usize> for String {
     type Output = char;
-    fn index(*self, index: int) -> *char {
+    fn index(*self, index: usize) -> *char {
         &self.to_slice()[index]
     }
 }
 
 impl Hash for String {
-    fn hash(*self) -> int {
+    fn hash(*self) -> uint64 {
         self.to_slice().hash()
     }
 }
@@ -158,7 +158,7 @@ impl IntoIterator for *String {
 use io;
 
 impl io::Write for String {
-    fn write(*self, data: []char) -> io::Result<int> {
+    fn write(*self, data: []char) -> io::Result<usize> {
         self.extend(data)?;
         Ok(data.len())
     }

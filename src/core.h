@@ -8,6 +8,7 @@
 #include "config.h"
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 # define EXTERN_C extern "C"
@@ -17,7 +18,22 @@
 
 typedef int paw_Type;
 typedef char paw_Char;
-typedef unsigned char paw_Uint8;
+typedef int8_t paw_Int8;
+typedef int16_t paw_Int16;
+typedef int32_t paw_Int32;
+typedef int64_t paw_Int64;
+typedef intptr_t paw_Isize;
+typedef ptrdiff_t paw_Ioffset;
+typedef uint8_t paw_Uint8;
+typedef uint16_t paw_Uint16;
+typedef uint32_t paw_Uint32;
+typedef uint64_t paw_Uint64;
+typedef size_t paw_Usize;
+typedef uintptr_t paw_Uoffset;
+typedef float paw_Float32;
+typedef double paw_Float64;
+
+// TODO: remove
 typedef long long paw_Int;
 typedef unsigned long long paw_Uint;
 typedef double paw_Float;

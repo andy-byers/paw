@@ -5,11 +5,11 @@
 use result;
 
 pub trait Read {
-    fn read(*self, data: []char) -> Result<int>;
+    fn read(*self, data: []char) -> Result<usize>;
 }
 
 pub trait Write {
-    fn write(*self, data: []char) -> Result<int>;
+    fn write(*self, data: []char) -> Result<usize>;
 }
 
 
@@ -30,10 +30,10 @@ impl File {
     pub fn open(pathname: []char, mode: []char) -> Result<Self>;
 
     #[extern = "paw_io_File_seek"] 
-    pub fn seek(*self, offset: int, whence: Seek) -> Result<()>;
+    pub fn seek(*self, offset: usize, whence: Seek) -> Result<()>;
 
     #[extern = "paw_io_File_tell"] 
-    pub fn tell(*self) -> Result<int>;
+    pub fn tell(*self) -> Result<usize>;
 
     #[extern = "paw_io_File_flush"] 
     pub fn flush(*self) -> Result<()>;
@@ -41,12 +41,12 @@ impl File {
 
 impl Read for File {
     #[extern = "paw_io_File_read"] 
-    fn read(*self, data: []char) -> Result<int>;
+    fn read(*self, data: []char) -> Result<usize>;
 }
 
 impl Write for File {
     #[extern = "paw_io_File_write"] 
-    fn write(*self, data: []char) -> Result<int>;
+    fn write(*self, data: []char) -> Result<usize>;
 }
 
 impl Drop for File {
@@ -118,9 +118,9 @@ pub fn println<T: ToSlice<char>>(message: T) {
 use ptr;
 use slice;
 
-fn skip_unchecked<T>(data: *[]T, amount: int) {
+fn skip_unchecked<T>(data: *[]T, amount: usize) {
     *data = slice::from_raw_parts(
-        ptr::add(data.as_ptr(), amount), 
+        ptr::add(data.as_ptr(), amount as isize),
         data.len() - amount);
 }
 

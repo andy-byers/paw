@@ -15,7 +15,7 @@ pub fn test_basic() {
 pub fn test_flat_capture() {
     let f = {
         let upvalue = 0;
-        |o: Option<int>| {
+        |o: Option<int64>| {
             if o.is_some() {
                 upvalue = o.unwrap();    
             }
@@ -35,7 +35,7 @@ pub fn test_nested_capture() {
         let outer = 0;
         || {
             let inner = 0;
-            return |oi: Option<int>, oo: Option<int>| {
+            return |oi: Option<int64>, oo: Option<int64>| {
                 if oi.is_some() {
                     inner = oi.unwrap();    
                 }
@@ -109,7 +109,7 @@ pub fn test_modify_upvalue_in_loop_2() {
     assert(f.unwrap()() == 5);
 }
 
-fn create_closure_in_loop_3(n: int) -> (fn() -> int) {
+fn create_closure_in_loop_3(n: int64) -> (fn() -> int64) {
     let f = None;
     for i in 0..10 {
         if i == n {
@@ -186,7 +186,7 @@ pub fn test_capture_composite() {
 #[test]
 pub fn test_modify_composite() {
     let t = (1, (2, 3));
-    let f = |i: int| {
+    let f = |i: int64| {
         if i == 0 {
             t.0 += 1;
         } else if i == 1 {

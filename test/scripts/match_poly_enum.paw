@@ -5,7 +5,7 @@ enum WithoutFields<T> {
     Second,
 }
 
-fn check_match_without_fields_concrete(target: WithoutFields<int>) -> int {
+fn check_match_without_fields_concrete(target: WithoutFields<int64>) -> int64 {
     match target {
         // generic type inferred by unifying with "target"
         WithoutFields::First => {return 1;},
@@ -20,7 +20,7 @@ pub fn test_without_fields_concrete() {
     assert(check(WithoutFields::Second) == 2);
 }
 
-fn check_match_without_fields<Ty>(target: WithoutFields<Ty>) -> int {
+fn check_match_without_fields<Ty>(target: WithoutFields<Ty>) -> int64 {
     match target {
         WithoutFields::First => {return 1;},
         WithoutFields::Second => {return 2;},
@@ -29,12 +29,12 @@ fn check_match_without_fields<Ty>(target: WithoutFields<Ty>) -> int {
 
 #[test]
 pub fn test_without_fields() {
-    let check = check_match_without_fields::<int>;
+    let check = check_match_without_fields::<int64>;
     assert(check(WithoutFields::First) == 1);
     assert(check(WithoutFields::Second) == 2);
 }
 
-fn check_match_with_fields_concrete(target: Option<int>) -> int {
+fn check_match_with_fields_concrete(target: Option<int64>) -> int64 {
     match target {
         Some(42) => {return 1;},
         None => {return 2;},
@@ -59,13 +59,13 @@ fn check_match_with_fields<Ty>(target: Option<Ty>) -> Result<Ty, ()> {
 
 #[test]
 pub fn test_with_fields() {
-    let check = check_match_with_fields::<int>;
+    let check = check_match_with_fields::<int64>;
     assert(check(Some(1)).unwrap() == 1);
     assert(check(Some(2)).unwrap() == 2);
     assert(check(None).is_err());
 }
 
-fn check_match_nested_fields_poly(target: Option<Option<int>>) -> int {
+fn check_match_nested_fields_poly(target: Option<Option<int64>>) -> int64 {
     match target {
         None => {return 0;},
         Some(None) => {return 1;},
@@ -87,7 +87,7 @@ enum Nat {
     Succ(Nat),
 }
 
-pub fn eval(nat: Nat) -> int {
+pub fn eval(nat: Nat) -> int64 {
     match nat {
         Nat::Zero => {
             return 0;
@@ -98,7 +98,7 @@ pub fn eval(nat: Nat) -> int {
     }
 }
 
-fn describe(target: Option<(int, Nat)>) -> str {
+fn describe(target: Option<(int64, Nat)>) -> str {
     match target {
         None => {
             return "a";

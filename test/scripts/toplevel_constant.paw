@@ -1,6 +1,6 @@
 // toplevel_constant.paw
 
-const INTEGER: int = 123;
+const INTEGER: int64 = 123;
 
 #[test]
 pub fn test_primitive() {

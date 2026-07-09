@@ -123,7 +123,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
     MirSwitchArmList *arms = MirSwitchArmList_new(mir);
     {
         // transform the return into a switch on the discriminant
-        struct MirPlace const discr_addr = new_register(mir, new_ptr(G, pawIr_new_int(G->C)));
+        struct MirPlace const discr_addr = new_register(mir, new_ptr(G, pawIr_new_int(G->C, IR_INT64)));
         struct MirPlace const discr_value = new_register(mir, ir_deref(discr_addr.type));
         pushi(mir, last_data, select_field(mir, adt, 0, 0, discr_addr));
         pushi(mir, last_data, pawMir_new_load(mir, TODO, discr_addr, discr_value));
@@ -150,7 +150,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
         MirBlock const block = push_basic_block(mir, &block_data);
 
         MirSwitchArmList_push(mir, arms, (struct MirSwitchArm){
-                .k = pawMir_kcache_add_value(mir, mir->kcache, I2V(discr), pawIr_new_int(mir->C)),
+                .k = pawMir_kcache_add_value(mir, mir->kcache, I2V(discr), pawIr_new_int(mir->C, IR_INT64)),
             });
 
         MirBlockList_push(mir, last_data->successors, block);

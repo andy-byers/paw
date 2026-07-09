@@ -1,24 +1,24 @@
 // supertrait_methods.paw
 
-pub trait A: B + C {fn a(*self) -> int;}
-pub trait B: C {fn b(*self) -> int;}
-pub trait C {fn c(*self) -> int;}
+pub trait A: B + C {fn a(*self) -> int64;}
+pub trait B: C {fn b(*self) -> int64;}
+pub trait C {fn c(*self) -> int64;}
 
 struct S;
 
-impl A for S {fn a(*self) -> int {3}}
-impl B for S {fn b(*self) -> int {2}}
-impl C for S {fn c(*self) -> int {1}}
+impl A for S {fn a(*self) -> int64 {3}}
+impl B for S {fn b(*self) -> int64 {2}}
+impl C for S {fn c(*self) -> int64 {1}}
 
-fn fa<T: A>(t: T) -> int {
+fn fa<T: A>(t: T) -> int64 {
     t.a() + t.b() + t.c()
 }
 
-fn fb<T: B>(t: T) -> int {
+fn fb<T: B>(t: T) -> int64 {
     t.b() + t.c()
 }
 
-fn fc<T: C>(t: T) -> int {
+fn fc<T: C>(t: T) -> int64 {
     t.c()
 }
 

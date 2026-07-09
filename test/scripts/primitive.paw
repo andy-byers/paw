@@ -22,10 +22,10 @@ pub fn test_operations() {
 
 #[test]
 pub fn test_initializer_annotations() {
-    let i: int = 123;
+    let i: int64 = 123;
     let s: str = "abc";
     let b: bool = true;
-    let f: float = 1.0;
+    let f: float64 = 1.0;
 
     assert(i == 123);
     assert(s == "abc");
@@ -85,26 +85,26 @@ pub fn test_conversions() {
     let b = 0.1 as bool;
     assert(b == true);
 
-    let i = 1.0 as int;
+    let i = 1.0 as int64;
     assert(i == 1);
-    let i = 1.9 as int;
+    let i = 1.9 as int64;
     assert(i == 1);
-    let i = -1.9 as int;
+    let i = -1.9 as int64;
     assert(i == -1);
 
-    let f = 1 as float;
+    let f = 1 as float64;
     assert(f < 1.1);
-    let f = -10 as float;
+    let f = -10 as float64;
     assert(f > -10.1);
 
     let i = 0;
     let b = i as bool;
-    let i = b as int;
+    let i = b as int64;
     assert(i == 0);
 
     let i = 1234;
     let b = i as bool;
-    let i = b as int;
+    let i = b as int64;
     assert(i == 1);
 }
 

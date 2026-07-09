@@ -90,6 +90,14 @@ enum MultiChar {
 
 typedef unsigned TokenKind;
 
+#define TF_MASK 0xFF
+#define TF_SUFFIX_OFFSET 8
+#define TF_FLAGS(Tf_) ((Tf_) & TF_MASK)
+#define TF_SUFFIX(Tf_) \
+    (enum NumberSuffix)(((Tf_) >> TF_SUFFIX_OFFSET) & TF_MASK)
+#define TF_COMPOSE(Suffix_, Flags_) \
+    (((unsigned)(Suffix_) << TF_SUFFIX_OFFSET) | (unsigned)(Flags_))
+
 enum TokenFlag {
     TF_UNICODE = 1 << 0,
 };

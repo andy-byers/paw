@@ -18,24 +18,24 @@
 use ptr;
 use slice;
 
-const GROWTH_EXPONENT: int = 1;
-const LOAD_LENGTH: int = 7;
-const LOAD_CAPACITY: int = 8;
+const GROWTH_EXPONENT: usize = 1;
+const LOAD_LENGTH: usize = 7;
+const LOAD_CAPACITY: usize = 8;
 
 
 pub struct HashMap<K: Hash + Eq<K>, V> {
     buffer: *char,
-    length: int,
-    capacity: int,
+    length: usize,
+    capacity: usize,
 }
 
 
-const FINGERPRINT_WIDTH: int = 7;
-const TOMBSTONE_VALUE: int = 1;
-const VACANT_VALUE: int = 0;
+const FINGERPRINT_WIDTH: usize = 7;
+const TOMBSTONE_VALUE: uint8 = 1;
+const VACANT_VALUE: uint8 = 0;
 
 struct Metadata {
-    data: char,
+    data: uint8,
 }
 
 impl Copy for Metadata {}
@@ -48,7 +48,7 @@ enum State {
 
 impl Metadata {
     pub fn is_used(*self) -> bool {
-        self.data as int & 1 != 0
+        self.data & 1 != 0
     }
 
     pub fn clear_used_flag(*self) {
@@ -60,7 +60,7 @@ impl Metadata {
     }
 
     pub fn fingerprint(*self) -> Fingerprint {
-        Fingerprint::new(self.data as int >> 1)
+        Fingerprint::new(self.data >> 1)
     }
 
     pub fn set_fingerprint(*self, fingerprint: Fingerprint) {
@@ -78,30 +78,31 @@ impl Metadata {
         }
     }
 
-    fn encode(fingerprint: Fingerprint, is_used: bool) -> char {
-        ((fingerprint.as_int() << 1) | is_used as int) as char
+    fn encode(fingerprint: Fingerprint, is_used: bool) -> uint8 {
+        (fingerprint.as_int() << 1) | is_used as uint8
     }
 }
 
 
 struct Fingerprint {
-    value: int,
+    value: uint8,
 }
 
 impl Copy for Fingerprint {}
 
 impl Fingerprint {
-    pub fn new(value: int) -> Self {
-        assert(0 <= value && value < (1 << FINGERPRINT_WIDTH));
+    pub fn new(value: uint8) -> Self {
+        assert(value < (1 << FINGERPRINT_WIDTH as uint8));
         Self{value}
     }
 
-    pub fn from_hash(hash: int) -> Self {
-        let SHIFT: int = mem::sizeof::<int>() * 8 - FINGERPRINT_WIDTH;
-        Self::new(hash >> SHIFT)
+    pub fn from_hash(hash: uint64) -> Self {
+        // use the `FINGERPRINT_WIDTH` highest-order bits from the hash
+        let SHIFT: usize = mem::sizeof::<uint64>() * 8 - FINGERPRINT_WIDTH;
+        Self::new((hash >> SHIFT as uint64) as uint8)
     }
 
-    pub fn as_int(self) -> int {
+    pub fn as_int(self) -> uint8 {
         self.value
     }
 }
@@ -128,13 +129,13 @@ struct ItemInfo<K, V> {
 struct Cursor<K, V> {
     metadata: *Metadata,
     items: []Item<K, V>,
-    index: int,
+    index: usize,
 }
 
 impl<K, V> Copy for Cursor<K, V> {}
 
 impl<K, V> Cursor<K, V> {
-    pub fn new(metadata: *Metadata, items: []Item<K, V>, index: int) -> Self {
+    pub fn new(metadata: *Metadata, items: []Item<K, V>, index: usize) -> Self {
         Self{metadata, items, index}
     }
 
@@ -143,7 +144,7 @@ impl<K, V> Cursor<K, V> {
     }
 
     pub fn metadata(*self) -> *Metadata {
-        ptr::add(self.metadata, self.index)
+        ptr::add(self.metadata, self.index as isize)
     }
 
     pub fn prefix(*self) -> Fingerprint {
@@ -183,7 +184,7 @@ impl<K, V> Cursor<K, V> {
         }
     }
 
-    pub fn set_key(*self, key: K, hash: int) {
+    pub fn set_key(*self, key: K, hash: uint64) {
         let f = Fingerprint::from_hash(hash);
         self.metadata().set_fingerprint(f);
         self.metadata().set_used_flag();
@@ -232,11 +233,11 @@ impl<K: Hash + Eq<K>, V> HashMap<K, V> {
         }
     }
 
-    pub fn len(*self) -> int {
+    pub fn len(*self) -> usize {
         self.length
     }
 
-    pub fn capacity(*self) -> int {
+    pub fn capacity(*self) -> usize {
         self.capacity
     }
 
@@ -309,24 +310,24 @@ impl<K: Hash + Eq<K>, V> HashMap<K, V> {
 
     // Requires that "capacity" be a valid HashMap capacity (i.e. a power-of-2
     // for which "compute_buffer_size(capacity)" returns "Ok(...)").
-    fn compute_items_offset(capacity: int) -> int {
+    fn compute_items_offset(capacity: usize) -> usize {
         align_up(capacity, mem::alignof::<Item<K, V>>())
     }
 
-    fn item_at_index(items: *Item<K, V>, index: int) -> *Item<K, V> {
-        ptr::add(items, index) 
+    fn item_at_index(items: *Item<K, V>, index: usize) -> *Item<K, V> {
+        ptr::add(items, index as isize) 
     }
 
-    fn compute_buffer_size(capacity: int) -> mem::Result<int> {
-        let ITEM_ALIGNMENT: int = mem::alignof::<Item<K, V>>();
-        let ITEM_STRIDE: int = mem::strideof::<Item<K, V>>();
+    fn compute_buffer_size(capacity: usize) -> mem::Result<usize> {
+        let ITEM_ALIGNMENT: usize = mem::alignof::<Item<K, V>>();
+        let ITEM_STRIDE: usize = mem::strideof::<Item<K, V>>();
 
-        if capacity > INT_MAX - ITEM_ALIGNMENT {
+        if capacity > USIZE_MAX - ITEM_ALIGNMENT {
             return Err(mem::OutOfMemory);
         }
         let offset = Self::compute_items_offset(capacity);
-        if capacity > INT_MAX / ITEM_STRIDE
-                || offset > INT_MAX - capacity * ITEM_STRIDE {
+        if capacity > USIZE_MAX / ITEM_STRIDE
+                || offset > USIZE_MAX - capacity * ITEM_STRIDE {
             return Err(mem::OutOfMemory);
         }
         Ok(offset + capacity * ITEM_STRIDE)
@@ -334,17 +335,17 @@ impl<K: Hash + Eq<K>, V> HashMap<K, V> {
 
     fn items_region(*self) -> []Item<K, V> {
         let items_offset = Self::compute_items_offset(self.capacity);
-        let p = ptr::add(self.buffer, items_offset) as *Item<K, V>;
+        let p = ptr::add(self.buffer, items_offset as isize) as *Item<K, V>;
         slice::from_raw_parts(p, self.capacity)
     }
 
-    fn cursor(*self, hash: int) -> Cursor<K, V> {
+    fn cursor(*self, hash: uint64) -> Cursor<K, V> {
         let items = self.items_region();
-        let index = hash & (self.capacity - 1);
-        Cursor::new(self.buffer as *Metadata, items, index)
+        let index = hash & (self.capacity as uint64 - 1);
+        Cursor::new(self.buffer as *Metadata, items, index as usize)
     }
 
-    fn lookup(*self, key: *K, hash: int) -> Option<Cursor<K, V>> {
+    fn lookup(*self, key: *K, hash: uint64) -> Option<Cursor<K, V>> {
         if self.length == 0 { return None; }
         let prefix = Fingerprint::from_hash(hash);
         let cursor = self.cursor(hash);
@@ -365,16 +366,16 @@ impl<K: Hash + Eq<K>, V> HashMap<K, V> {
     }
 
     fn ensure_one(*self) -> mem::Result<()> {
-        let ITEM_ALIGNMENT: int = mem::alignof::<Item<K, V>>();
-        let ITEM_STRIDE: int = mem::strideof::<Item<K, V>>();
-        let GROWTH_FACTOR: int = 1 << GROWTH_EXPONENT;
+        let ITEM_ALIGNMENT: usize = mem::alignof::<Item<K, V>>();
+        let ITEM_STRIDE: usize = mem::strideof::<Item<K, V>>();
+        let GROWTH_FACTOR: usize = 1 << GROWTH_EXPONENT;
 
         let free_slots = self.capacity / LOAD_CAPACITY 
             * (LOAD_CAPACITY - LOAD_LENGTH);
         if self.length < self.capacity - free_slots {
             return Ok(());
         }
-        if self.capacity > INT_MAX / GROWTH_FACTOR {
+        if self.capacity > USIZE_MAX / GROWTH_FACTOR {
             return Err(mem::OutOfMemory);
         }
         let capacity = if self.capacity > 0 {
@@ -426,11 +427,11 @@ impl<K: Hash + Eq<K>, V> Default for HashMap<K, V> {
 }
 
 
-fn is_aligned(x: int, a: int) -> bool {
+fn is_aligned(x: usize, a: usize) -> bool {
     x & (a - 1) == 0
 }
 
-fn align_up(x: int, a: int) -> int {
+fn align_up(x: usize, a: usize) -> usize {
     (x + (a - 1)) & ~(a - 1)
 }
 

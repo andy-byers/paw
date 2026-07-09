@@ -17,7 +17,7 @@ use os;
 use string::String;
 use str_builder;
 
-const CHUNK_SIZE: int = 1 << 12;
+const CHUNK_SIZE: int64 = 1 << 12;
 
 fn read_to_str(path: str) -> io::Result<str> {
     let file = io::File::open(path, "r")?;
@@ -59,8 +59,8 @@ fn is_hex(c: char) -> bool {
 }
 
 struct SourceLoc {
-    pub line: int,
-    pub column: int,
+    pub line: int64,
+    pub column: int64,
 }
 
 impl SourceLoc {
@@ -73,7 +73,7 @@ struct Scanner {
     token: Token,
     location: SourceLoc,
     source: str,
-    index: int,
+    index: int64,
 }
 
 impl Scanner {
@@ -114,7 +114,7 @@ impl Scanner {
         }
     }
 
-    fn peek_char(self, n: int) -> char {
+    fn peek_char(self, n: int64) -> char {
         if self.index < #self.source - n {
             self.source[self.index + n]
         } else {
@@ -807,11 +807,11 @@ impl App {
 }
 
 
-const TEST_OK: int = 0;
-const TEST_PARSE_ERROR: int = -1;
-const TEST_ANALYSIS_ERROR: int = -2;
+const TEST_OK: int64 = 0;
+const TEST_PARSE_ERROR: int64 = -1;
+const TEST_ANALYSIS_ERROR: int64 = -2;
 
-fn test_check(source: str) -> int {
+fn test_check(source: str) -> int64 {
     let builtins = HashMap::new();
     let scanner = Scanner::new(source);
     let parser = Parser::new();
@@ -824,7 +824,7 @@ fn test_check(source: str) -> int {
     }
 }
 
-fn test_expect(name: str, source: str, result: int) {
+fn test_expect(name: str, source: str, result: int64) {
     if test_check(source) != result {
         panic("failed testcase \"\{name}\"");
     }
@@ -871,8 +871,8 @@ pub fn test_analysis_error() {
 }
 
 
-const SUCCESS: int = 0;
-const FAILURE: int = 1;
+const SUCCESS: int64 = 0;
+const FAILURE: int64 = 1;
 
 
 fn run_app() -> Result<(), EbnfError> {
@@ -916,7 +916,7 @@ fn run_app() -> Result<(), EbnfError> {
     Ok(())
 }
 
-pub fn main() -> int {
+pub fn main() -> int64 {
     let args = os::args();
     let app = App::new(args.get(0).unwrap_or("ebnf"));
     let builtins = HashMap::new();

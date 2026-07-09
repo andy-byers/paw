@@ -297,25 +297,48 @@ paw_Bool paw_str_ends_with(paw_Str self, paw_Str suffix)
     return PAW_FALSE;
 }
 
+typedef struct {
+	uint64_t s;
+} Mix64State;
 
-// From http://www.cse.yorku.ca/~oz/hash.html
-uint32_t paw_builtin_hash_bytes(paw_Char const *bytes, paw_Int length, uint32_t hash)
-{
-    for (paw_Int i = 0; i < length; ++i)
-        hash = (uint32_t)bytes[i] + (hash << 6) + (hash << 16) - hash;
-
-    return hash;
+// From https://en.wikipedia.org/wiki/Xorshift#Initialization
+static uint64_t mix64(uint64_t x) {
+	x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+	x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+	return x ^ (x >> 31);
 }
 
-paw_Int paw_builtin_rawcmp(paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length)
+// From http://www.cse.yorku.ca/~oz/hash.html
+uint64_t paw_builtin_hash_bytes(paw_Char const *bytes, size_t length, uint64_t hash)
 {
-    paw_Int const n = PAW_MIN(lhs_length, rhs_length);
-    int const r = n == 0 ? 0 : memcmp(lhs, rhs, (size_t)n);
-    return r != 0 ? r : lhs_length - rhs_length;
+#define N sizeof(hash)
+
+    uint64_t x, h = mix64(hash ^ length);
+    while (length >= N) {
+        memcpy(&x, bytes, N);
+
+        h ^= mix64(x);
+        h = mix64(h);
+
+        bytes += N;
+        length -= N;
+    }
+    memcpy(&x, bytes, length);
+    h ^= mix64(x);
+    return mix64(h);
+
+#undef N
+}
+
+int64_t paw_builtin_rawcmp(paw_Char const *lhs, size_t lhs_length, paw_Char const *rhs, size_t rhs_length)
+{
+    size_t const n = PAW_MIN(lhs_length, rhs_length);
+    int const r = n == 0 ? 0 : memcmp(lhs, rhs, n);
+    return r != 0 ? r : (int64_t)lhs_length - (int64_t)rhs_length;
 }
 
 // fn paw_slice_from_raw_parts<T>(start: *T, length: int) -> []T
-paw_Slice paw_slice_from_raw_parts(void *start, paw_Int length)
+paw_Slice paw_slice_from_raw_parts(void *start, size_t length)
 {
     return (paw_Slice){
         .start = start,
@@ -330,7 +353,7 @@ void *paw_ops_Slice_AsPtr_as_ptr(paw_Slice *self)
 }
 
 // fn len(self) -> int
-paw_Int paw_slice_Slice_len(paw_Slice self)
+size_t paw_slice_Slice_len(paw_Slice self)
 {
     return self.length;
 }
@@ -398,7 +421,7 @@ void paw_builtin_check_bounds(paw_Int index, paw_Int length)
         PAW_ASSERT((size_t)n < PAW_COUNTOF(buffer));
         paw_panic_((paw_Slice){
                 .start = buffer,
-                .length = n,
+                .length = (size_t)n,
             });
     }
 }

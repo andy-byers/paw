@@ -1,28 +1,28 @@
 // mono_impl.paw
 
 pub trait Key {
-    fn key(*self) -> int;
+    fn key(*self) -> int64;
 }
 
-impl Key for int {
-    fn key(*self) -> int {
+impl Key for int64 {
+    fn key(*self) -> int64 {
         *self
     }
 }
 
 impl Key for str {
-    fn key(*self) -> int {
+    fn key(*self) -> int64 {
         assert(self.len() > 0);
-        self[self.len() - 1] as int
+        self[self.len() - 1] as int64
     }
 }
 
 pub trait KeyForSelf {
-    fn key_for_self(*self) -> int;
+    fn key_for_self(*self) -> int64;
 }
 
 pub trait KeyForArg<R: Key> {
-    fn key_for_arg(*self, r: R) -> int;
+    fn key_for_arg(*self, r: R) -> int64;
 }
 
 struct Mono;
@@ -30,22 +30,22 @@ struct Mono;
 impl Copy for Mono {}
 
 impl KeyForSelf for Mono {
-    fn key_for_self(*self) -> int {
+    fn key_for_self(*self) -> int64 {
         42
     }
 }
 
 impl<T: Key> KeyForArg<T> for Mono {
-    fn key_for_arg(*self, value: T) -> int {
+    fn key_for_arg(*self, value: T) -> int64 {
         value.key()
     }
 }
 
-pub fn key_for_self(m: Mono) -> int {
+pub fn key_for_self(m: Mono) -> int64 {
     m.key_for_self()
 }
 
-pub fn key_for_arg<R: Key>(m: Mono, r: R) -> int {
+pub fn key_for_arg<R: Key>(m: Mono, r: R) -> int64 {
     m.key_for_arg(r)
 }
 
@@ -59,6 +59,6 @@ pub fn test() {
     assert(m.key_for_arg(123) == 123);
     assert(key_for_arg(m, 456) == 456);
 
-    assert(m.key_for_arg("abc") == 'c' as int);
-    assert(key_for_arg(m, "def") == 'f' as int);
+    assert(m.key_for_arg("abc") == 'c' as int64);
+    assert(key_for_arg(m, "def") == 'f' as int64);
 }

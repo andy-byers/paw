@@ -243,9 +243,9 @@ public:
         B->CreateCall(fn, {message});
     }
 
-    void create_memset(MaybeAlignedValue ptr, llvm::Value *value, paw_Int size, bool is_volatile = false)
+    void create_memset(MaybeAlignedValue ptr, llvm::Value *value, size_t size, bool is_volatile = false)
     {
-        create_memset(ptr, value, create_int(size), is_volatile);
+        create_memset(ptr, value, create_isize(size), is_volatile);
     }
 
     void create_memset(MaybeAlignedValue ptr, llvm::Value *value, llvm::Value *size, bool is_volatile = false)
@@ -253,9 +253,9 @@ public:
         B->CreateMemSet(ptr.value(), value, size, ptr.align(), is_volatile);
     }
 
-    void create_memmove(MaybeAlignedValue dest, MaybeAlignedValue src, paw_Int size, bool is_volatile = false)
+    void create_memmove(MaybeAlignedValue dest, MaybeAlignedValue src, size_t size, bool is_volatile = false)
     {
-        create_memmove(dest, src, create_int(size), is_volatile);
+        create_memmove(dest, src, create_isize(size), is_volatile);
     }
 
     void create_memmove(MaybeAlignedValue dest, MaybeAlignedValue src, llvm::Value *size, bool is_volatile = false)
@@ -264,9 +264,9 @@ public:
                 src.value(), src.align(), size, is_volatile);
     }
 
-    void create_memcpy(MaybeAlignedValue dest, MaybeAlignedValue src, paw_Int size, bool is_volatile = false)
+    void create_memcpy(MaybeAlignedValue dest, MaybeAlignedValue src, size_t size, bool is_volatile = false)
     {
-        create_memcpy(dest, src, create_int(size), is_volatile);
+        create_memcpy(dest, src, create_isize(size), is_volatile);
     }
 
     void create_memcpy(MaybeAlignedValue dest, MaybeAlignedValue src, llvm::Value *size, bool is_volatile = false)
@@ -285,14 +285,13 @@ public:
     llvm::FunctionCallee get_strlen_callee() const
     {
         return M->get_module()->getOrInsertFunction("strlen",
-            llvm::FunctionType::get(get_i64_ty(),
+            llvm::FunctionType::get(get_isize_ty(),
                 {get_ptr_ty()}, false));
     }
 
     llvm::Value *call_strlen(llvm::Value *str) const
     {
-        auto *len = B->CreateCall(get_strlen_callee(), {str});
-        return B->CreateSExt(len, get_int_ty());
+        return B->CreateCall(get_strlen_callee(), str);
     }
 
     llvm::FunctionCallee get_exit_callee() const
@@ -304,20 +303,18 @@ public:
 
     llvm::FunctionCallee get_rawcmp_callee() const
     {
-        return M->get_module()
-            ->getFunction(get_builtin_name(BuiltinFn::RAWCMP));
-
+        return M->get_builtin(BuiltinFn::RAWCMP);
     }
 
     llvm::Value *create_alloc(llvm::Value *size)
     {
         auto *fn = M->get_builtin(BuiltinFn::PAW_ALLOC);
-        return B->CreateCall(fn, {size});
+        return B->CreateCall(fn, size);
     }
 
-    llvm::Value *create_alloc(paw_Int size)
+    llvm::Value *create_alloc(size_t size)
     {
-        return create_alloc(create_int(size));
+        return create_alloc(create_isize(size));
     }
 
     llvm::Value *create_alloc(llvm::Type *ty)
@@ -328,7 +325,7 @@ public:
     llvm::Value *create_dealloc(llvm::Value *ptr)
     {
         auto *fn = M->get_builtin(BuiltinFn::PAW_DEALLOC);
-        return B->CreateCall(fn, {ptr});
+        return B->CreateCall(fn, ptr);
     }
 
     llvm::Value *create_imin(llvm::Value *a, llvm::Value *b)
@@ -341,104 +338,6 @@ public:
     {
         auto *a_gt_b = B->CreateICmpSGT(a, b);
         return B->CreateSelect(a_gt_b, a, b);
-    }
-
-    // Source: https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
-    // Modified to operate on 64-bit integers (requires 1 additional shift). Uses
-    // the suggestion to fix the edge case at 0.
-    llvm::Value *create_next_pow2(llvm::Value *v)
-    {
-        v = B->CreateSub(v, create_int(1));
-        v = B->CreateOr(v, B->CreateLShr(v, create_int(1)));
-        v = B->CreateOr(v, B->CreateLShr(v, create_int(2)));
-        v = B->CreateOr(v, B->CreateLShr(v, create_int(4)));
-        v = B->CreateOr(v, B->CreateLShr(v, create_int(8)));
-        v = B->CreateOr(v, B->CreateLShr(v, create_int(16)));
-        v = B->CreateOr(v, B->CreateLShr(v, create_int(32)));
-        v = B->CreateAdd(v, create_int(1));
-
-        auto *eq0 = B->CreateCmp(llvm::CmpInst::ICMP_EQ, v, create_int(0));
-        return B->CreateAdd(v, B->CreateZExt(eq0, get_int_ty()));
-    }
-
-    llvm::Value *create_gep(llvm::Type *element_ty, llvm::Value *array, llvm::Value *index)
-    {
-        return B->CreateInBoundsGEP(element_ty, array, {index});
-    }
-
-    llvm::Value *create_gep(llvm::Type *element_ty, llvm::Value *array, paw_Int index)
-    {
-        return create_gep(element_ty, array, create_int(index));
-    }
-
-    llvm::Value *create_getter(llvm::Type *element_ty, llvm::Value *array, llvm::Value *index)
-    {
-        auto *element_ptr = create_gep(element_ty, array, index);
-        return B->CreateLoad(element_ty, element_ptr);
-    }
-
-    llvm::Value *create_setter(llvm::Type *element_ty, llvm::Value *array, llvm::Value *index, llvm::Value *element)
-    {
-        auto *element_ptr = create_gep(element_ty, array, index);
-        B->CreateStore(element, element_ptr);
-        return element_ptr;
-    }
-
-    llvm::Value *create_cast(llvm::Value *target, BuiltinKind from, BuiltinKind to)
-    {
-        paw_assert(from != BUILTIN_UNIT && IS_SCALAR_TYPE(from));
-        paw_assert(to != BUILTIN_UNIT && IS_SCALAR_TYPE(to));
-
-        switch (from) {
-            case BUILTIN_BOOL:
-                if (to == BUILTIN_CHAR) {
-                    return B->CreateZExt(target, get_char_ty());
-                } else if (to == BUILTIN_INT) {
-                    return B->CreateZExt(target, get_int_ty());
-                } else { // to == BUILTIN_FLOAT
-                    auto *temp = B->CreateZExt(target, get_int_ty());
-                    return B->CreateSIToFP(temp, get_float_ty());
-                }
-            case BUILTIN_CHAR:
-                if (to == BUILTIN_BOOL) {
-                    return B->CreateCmp(llvm::CmpInst::ICMP_NE, target,
-                            create_char(0));
-                } else if (to == BUILTIN_INT) {
-                    return B->CreateZExt(target, get_int_ty());
-                } else { // to == BUILTIN_FLOAT
-                    auto *temp = B->CreateZExt(target, get_int_ty());
-                    return B->CreateSIToFP(temp, get_float_ty());
-                }
-            case BUILTIN_INT:
-                if (to == BUILTIN_BOOL) {
-                    return B->CreateCmp(llvm::CmpInst::ICMP_NE, target,
-                            create_int(0));
-                } else if (to == BUILTIN_CHAR) {
-                    return B->CreateTrunc(target, get_char_ty());
-                } else { // to == BUILTIN_FLOAT
-                    return B->CreateSIToFP(target, get_float_ty());
-                }
-            default: // from == BUILTIN_FLOAT
-                if (to == BUILTIN_BOOL) {
-                    return B->CreateCmp(llvm::CmpInst::FCMP_ONE, target,
-                            create_float(0.0));
-                } else if (to == BUILTIN_CHAR) {
-
-                    return B->CreateFPToSI(target, get_char_ty());
-                } else { // to == BUILTIN_INT
-                    return B->CreateFPToSI(target, get_int_ty());
-                }
-        }
-    }
-
-    llvm::Value *create_iadd1(llvm::Value *value)
-    {
-        return B->CreateAdd(value, create_int(1));
-    }
-
-    llvm::Value *create_isub1(llvm::Value *value)
-    {
-        return B->CreateSub(value, create_int(1));
     }
 
     llvm::ConstantPointerNull *create_null_ptr() const
@@ -463,16 +362,6 @@ public:
         return create_i8(value);
     }
 
-    llvm::ConstantInt *create_uint(paw_Uint value) const
-    {
-        return B->getInt64(value);
-    }
-
-    llvm::ConstantInt *create_int(paw_Int value) const
-    {
-        return create_i64(value);
-    }
-
     llvm::ConstantInt *create_i1(bool value) const
     {
         return B->getInt1(value);
@@ -481,6 +370,11 @@ public:
     llvm::ConstantInt *create_i8(int8_t value) const
     {
         return B->getInt8((uint8_t)value);
+    }
+
+    llvm::ConstantInt *create_i16(int16_t value) const
+    {
+        return B->getInt16((uint16_t)value);
     }
 
     llvm::ConstantInt *create_i32(int32_t value) const
@@ -493,74 +387,19 @@ public:
         return B->getInt64((uint64_t)value);
     }
 
-    llvm::IntegerType *get_iptr_ty() const
+    llvm::ConstantInt *create_isize(size_t value) const
     {
-        return B->getIntPtrTy(M->get_data_layout());
+        return llvm::ConstantInt::get(B->getIntPtrTy(M->get_data_layout()), value);
     }
 
-    llvm::ConstantInt *create_iptr(uint64_t iptr) const
+    llvm::Constant *create_f32(paw_Float32 value) const
     {
-        return llvm::ConstantInt::get(get_iptr_ty(), iptr);
+        return llvm::ConstantFP::get(get_f32_ty(), value);
     }
 
-    llvm::Value *load_int(llvm::Value *int_ptr) const
+    llvm::Constant *create_f64(paw_Float64 value) const
     {
-        return load_value(get_int_ty(), int_ptr);
-    }
-
-    llvm::Value *load_ptr(llvm::Value *ptr_ptr) const
-    {
-        return load_value(get_ptr_ty(), ptr_ptr);
-    }
-
-    llvm::Value *load_value(llvm::Type *ty, llvm::Value *ptr) const
-    {
-        paw_assert(ty && ptr);
-        return B->CreateLoad(ty, ptr);
-    }
-
-    void store_value(llvm::Value *value, llvm::Value *ptr) const
-    {
-        paw_assert(value && ptr);
-        B->CreateStore(value, ptr);
-    }
-
-    llvm::IntegerType *get_index_ty() const
-    {
-        return B->getIndexTy(M->get_data_layout(), 0);
-    }
-
-    llvm::ConstantInt *create_index(uint64_t index) const
-    {
-        return llvm::ConstantInt::get(get_index_ty(), index);
-    }
-
-    llvm::Constant *create_float(paw_Float value) const
-    {
-        return llvm::ConstantFP::get(get_float_ty(), value);
-    }
-
-    llvm::Value *create_array_gep(llvm::Type *element_ty, llvm::Value *array, llvm::Value *index)
-    {
-        return B->CreateInBoundsGEP(element_ty, array, {index});
-    }
-
-    llvm::Value *create_array_gep(llvm::Type *element_ty, llvm::Value *array, paw_Int index)
-    {
-        return create_array_gep(element_ty, array, create_int(index));
-    }
-
-    llvm::Value *create_array_get(llvm::Type *element_ty, llvm::Value *array, llvm::Value *index)
-    {
-        auto *element_ptr = create_array_gep(element_ty, array, index);
-        return B->CreateLoad(element_ty, element_ptr);
-    }
-
-    llvm::Value *create_array_set(llvm::Type *element_ty, llvm::Value *array, llvm::Value *index, llvm::Value *element)
-    {
-        auto *element_ptr = create_array_gep(element_ty, array, index);
-        B->CreateStore(element, element_ptr);
-        return element_ptr;
+        return llvm::ConstantFP::get(get_f64_ty(), value);
     }
 
     // Return the type of an opaque pointer
@@ -597,21 +436,26 @@ public:
         return get_i8_ty();
     }
 
-    llvm::Type *get_float_ty() const
+    llvm::Type *get_f32_ty() const
+    {
+        return B->getFloatTy();
+    }
+
+    llvm::Type *get_f64_ty() const
     {
         return B->getDoubleTy();
     }
 
-    llvm::IntegerType *get_int_ty() const
+    llvm::Type *get_isize_ty() const
     {
-        return get_i64_ty();
+        return M->get_data_layout().getIntPtrType(get_ptr_ty());
     }
 
     llvm::StructType *get_fatptr_ty() const
     {
         return llvm::StructType::get(*ctx_, {
                 get_ptr_ty(), // ptr
-                get_int_ty(), // len
+                get_isize_ty(), // len
             }, false);
     }
 
@@ -623,32 +467,6 @@ public:
     llvm::StructType *get_slice_ty() const
     {
         return get_fatptr_ty();
-    }
-
-    llvm::StructType *get_list_ty() const
-    {
-        return llvm::StructType::get(*ctx_, {
-                get_ptr_ty(), // data
-                get_int_ty(), // length
-                get_int_ty(), // capacity
-            }, false);
-    }
-
-    llvm::StructType *get_map_ty() const
-    {
-        return llvm::StructType::get(*ctx_, {
-                get_ptr_ty(), // data
-                get_int_ty(), // length
-                get_int_ty(), // capacity
-            }, false);
-    }
-
-    llvm::StructType *get_callable_ty() const
-    {
-        return llvm::StructType::get(*ctx_, {
-                get_ptr_ty(), // callee
-                get_ptr_ty(), // env
-            }, false);
     }
 
     llvm::IntegerType *get_i1_ty() const
@@ -684,9 +502,8 @@ public:
     UnitType *get_unit_type() const { return &scalar_types_.u; }
     BoolType *get_bool_type() const { return &scalar_types_.b; }
     CharType *get_char_type() const { return &scalar_types_.c; }
-    IntType *get_int_type() const { return &scalar_types_.i; }
-    Int32Type *get_int32_type() const { return &scalar_types_.i32; }
-    FloatType *get_float_type() const { return &scalar_types_.f; }
+    IntType *get_int_type(IntKind kind) const { return &scalar_types_.i[(size_t)kind]; }
+    FloatType *get_float_type(FloatKind kind) const { return &scalar_types_.f[(size_t)kind]; }
     StrType *get_str_type() const { return &scalar_types_.s; }
 
     SliceType *get_slice_type(Type *element_type);
@@ -731,7 +548,7 @@ public:
 
         llvm::Value *slice = llvm::UndefValue::get(get_slice_ty());
         slice = B->CreateInsertValue(slice, storage, 0);
-        slice = B->CreateInsertValue(slice, create_uint(view.length), 1);
+        slice = B->CreateInsertValue(slice, create_isize(view.length), 1);
         return slice;
     }
 
@@ -780,9 +597,8 @@ private:
         UnitType u;
         BoolType b;
         CharType c;
-        IntType i;
-        Int32Type i32;
-        FloatType f;
+        IntType i[NUM_INT_KINDS];
+        FloatType f[NUM_FLOAT_KINDS];
         StrType s;
     } mutable scalar_types_;
 };

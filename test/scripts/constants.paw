@@ -1,6 +1,6 @@
 // constants.paw
 
-fn fold_int_special_cases(i: int) {
+fn fold_int_special_cases(i: int64) {
     assert(i + 0 == i);
     assert(0 + i == i);
     assert(i - 0 == i);
@@ -40,7 +40,7 @@ pub fn test_fold_int_special_cases() {
 // NOTE: Float multiplication with 0 cannot be folded, because the sign of the
 //       non-constant variable cannot be known until runtime. Could result in
 //       either 0.0 or -0.0.
-fn fold_float_special_cases(f: float) {
+fn fold_float_special_cases(f: float64) {
     assert(f + 0.0 == f);
     assert(0.0 + f == f);
     assert(f - 0.0 == f);

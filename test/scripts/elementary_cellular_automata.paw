@@ -1,17 +1,17 @@
 // elementary_cellular_automata.paw
 
 const INVERT_COLORS: bool = true;
-const PADDING_VALUE: int = 0;
+const PADDING_VALUE: int64 = 0;
 
-const OFF: int = 0;
-const ON: int = 1;
+const OFF: int64 = 0;
+const ON: int64 = 1;
 
 use io;
 use list::List;
 use string::String;
 use string_builder;
 
-pub fn eca(num: int, rows: int, cols: int) -> mem::Result<String> {
+pub fn eca(num: int64, rows: int64, cols: int64) -> mem::Result<String> {
     //
     //  4 | 8
     // ---+---

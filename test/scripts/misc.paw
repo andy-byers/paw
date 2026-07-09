@@ -12,7 +12,7 @@ use math;
 struct Struct<T> {pub v: T}
 enum Enum<T> {X(T)}
 
-pub fn recur_with_objects<T>(n: int, t: T) {
+pub fn recur_with_objects<T>(n: int64, t: T) {
     let list = [123];
     let list = [1, 2, 3];
     let tuple = ("a", 2, 3.0, t);
@@ -35,7 +35,7 @@ pub fn test_gc() {
 use io;
 use io::File;
 
-fn file_size(f: File) -> int {
+fn file_size(f: File) -> int64 {
     f.seek(0, io::Seek::End);
     return f.tell().unwrap();
 }

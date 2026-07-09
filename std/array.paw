@@ -6,76 +6,76 @@ use slice;
 
 
 #[extern]
-pub fn repeat<const N: int, T: Copy>(value: T) -> [N]T;
+pub fn repeat<const N: usize, T: Copy>(value: T) -> [N]T;
 
 #[extern]
-pub fn uninit<const N: int, T>() -> [N]T;
+pub fn uninit<const N: usize, T>() -> [N]T;
 
 #[extern]
-pub fn zeros<const N: int, T>() -> [N]T;
+pub fn zeros<const N: usize, T>() -> [N]T;
 
 
-impl<const N: int, T> [N]T {
-    pub fn len(*self) -> int {
+impl<const N: usize, T> [N]T {
+    pub fn len(*self) -> usize {
         N
     }
 }
 
-impl<const N: int, T> AsPtr<T> for [N]T {
+impl<const N: usize, T> AsPtr<T> for [N]T {
     fn as_ptr(*self) -> *T {
         self as *char as *T
     }
 }
 
-impl<const N: int, T> ToSlice<T> for [N]T {
+impl<const N: usize, T> ToSlice<T> for [N]T {
     fn to_slice(*self) -> []T {
         slice::from_raw_parts(self.as_ptr(), N)
     }
 }
 
-impl<const N: int, T> Index<int> for [N]T {
+impl<const N: usize, T> Index<usize> for [N]T {
     type Output = T;
-    fn index(*self, index: int) -> *T {
+    fn index(*self, index: usize) -> *T {
         &self.to_slice()[index]
     }
 }
 
-impl<const N: int, T> IndexRange<Range<int>> for [N]T {
+impl<const N: usize, T> IndexRange<Range<usize>> for [N]T {
     type Output = T;
-    fn index_range(*self, idx: Range<int>) -> []T {
+    fn index_range(*self, idx: Range<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<const N: int, T> IndexRange<RangeInclusive<int>> for [N]T {
+impl<const N: usize, T> IndexRange<RangeInclusive<usize>> for [N]T {
     type Output = T;
-    fn index_range(*self, idx: RangeInclusive<int>) -> []T {
+    fn index_range(*self, idx: RangeInclusive<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<const N: int, T> IndexRange<RangeFrom<int>> for [N]T {
+impl<const N: usize, T> IndexRange<RangeFrom<usize>> for [N]T {
     type Output = T;
-    fn index_range(*self, idx: RangeFrom<int>) -> []T {
+    fn index_range(*self, idx: RangeFrom<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<const N: int, T> IndexRange<RangeTo<int>> for [N]T {
+impl<const N: usize, T> IndexRange<RangeTo<usize>> for [N]T {
     type Output = T;
-    fn index_range(*self, idx: RangeTo<int>) -> []T {
+    fn index_range(*self, idx: RangeTo<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<const N: int, T> IndexRange<RangeToInclusive<int>> for [N]T {
+impl<const N: usize, T> IndexRange<RangeToInclusive<usize>> for [N]T {
     type Output = T;
-    fn index_range(*self, idx: RangeToInclusive<int>) -> []T {
+    fn index_range(*self, idx: RangeToInclusive<usize>) -> []T {
         call_index_range(&self.to_slice(), idx)
     }
 }
 
-impl<const N: int, T> IndexRange<RangeFull> for [N]T {
+impl<const N: usize, T> IndexRange<RangeFull> for [N]T {
     type Output = T;
     fn index_range(*self, idx: RangeFull) -> []T {
         call_index_range(&self.to_slice(), idx)
@@ -87,14 +87,14 @@ fn call_index_range<R: IndexRange<Idx>, Idx>(r: *R, index: Idx) -> []R::Output {
 }
 
 
-pub struct IntoIter<const N: int, T> {
+pub struct IntoIter<const N: usize, T> {
     inner: [N]T,
-    index: int,
+    index: usize,
 }
 
 use ptr;
 
-impl<const N: int, T> Iterator for IntoIter<{N}, T> {
+impl<const N: usize, T> Iterator for IntoIter<{N}, T> {
     type Item = T;
 
     fn next(*self) -> Option<Self::Item> {
@@ -108,7 +108,7 @@ impl<const N: int, T> Iterator for IntoIter<{N}, T> {
     }
 }
 
-impl<const N: int, T> IntoIterator for [N]T {
+impl<const N: usize, T> IntoIterator for [N]T {
     type Item = T;
     type IntoIter = IntoIter<{N}, T>;
 
@@ -117,7 +117,7 @@ impl<const N: int, T> IntoIterator for [N]T {
     }
 }
 
-impl<const N: int, T> IntoIterator for *[N]T {
+impl<const N: usize, T> IntoIterator for *[N]T {
     type Item = *T;
     type IntoIter = slice::Iter<T>;
 

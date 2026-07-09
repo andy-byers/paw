@@ -31,20 +31,20 @@ impl<T: Clone> Single<T> {
     }
 }
 
-impl Single<int> {
+impl Single<int64> {
     pub fn merge(*self, rhs: Self) {
         self.value += rhs.value;
     }
 }
 
-impl Single<float> {
+impl Single<float64> {
     pub fn merge(*self, rhs: Self) {
         self.value += rhs.value;
     }
 }
 
-impl Single<(Single<int>, Single<int>)> {
-    pub fn sum(*self) -> int {
+impl Single<(Single<int64>, Single<int64>)> {
+    pub fn sum(*self) -> int64 {
         *self.value.0.clone().value()
             + *self.value.1.clone().value()
     }

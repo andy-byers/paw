@@ -48,7 +48,7 @@ pub fn test_assign_multiplet() {
     let t = ("a", 5.0, -1);
     black_box(t);
 
-    let t: (str, float, int) = t;
+    let t: (str, float64, int64) = t;
     black_box(t);
 }
 
@@ -90,7 +90,7 @@ pub fn test_set_multiplet_fields() {
     assert(t.2 == 4.0);
 }
 
-fn new_singleton(i: int) -> (int,) {
+fn new_singleton(i: int64) -> (int64,) {
     (i,)
 }
 
@@ -100,7 +100,7 @@ pub fn test_return_singleton() {
     assert(t.0 == 123);
 }
 
-fn new_multiplet(i: int, s: str, f: float) -> (int, str, float) {
+fn new_multiplet(i: int64, s: str, f: float64) -> (int64, str, float64) {
     (i, s, f)
 }
 
@@ -131,7 +131,7 @@ pub fn test_assign_nested_multiplet() {
     let t = (("a", (5.0,)), -1);
     black_box(t);
 
-    let t: ((str, (float,)), int) = t;
+    let t: ((str, (float64,)), int64) = t;
     black_box(t);
 }
 
@@ -173,7 +173,7 @@ pub fn test_set_nested_multiplet_fields() {
     assert(t.1.1 == 4.5);
 }
 
-fn new_nested_singleton(i: int) -> ((int,),) {
+fn new_nested_singleton(i: int64) -> ((int64,),) {
     ((i,),)
 }
 
@@ -183,7 +183,7 @@ pub fn test_return_nested_singleton() {
     assert(t.0.0 == 123);
 }
 
-fn new_nested_multiplet(i: int, s: str, f: float) -> (int, ((str,), float)) {
+fn new_nested_multiplet(i: int64, s: str, f: float64) -> (int64, ((str,), float64)) {
     (i, ((s,), f))
 }
 
@@ -407,7 +407,7 @@ pub fn test_multiplet_variant_field() {
     assert(t.2 == "three");
 }
 
-fn match_nested_multiplet_variant_field(e: MultipletEnum<(bool,), (int, float), str>) -> ((bool,), (int, float), str) {
+fn match_nested_multiplet_variant_field(e: MultipletEnum<(bool,), (int64, float64), str>) -> ((bool,), (int64, float64), str) {
     match e {
         MultipletEnum::First((a, b, c)) => (a, b, c),
         MultipletEnum::Second(a, b, c) => (a, b, c),

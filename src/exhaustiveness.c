@@ -432,7 +432,7 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
             fields = HirGetTuplePat(pat)->elems;
         } else {
             struct HirExpr *expr = HirGetLiteralPat(pat)->expr;
-            index = V_TRUE(HirGetLiteralExpr(expr)->basic.value);
+            index = HirGetLiteralExpr(expr)->b;
             fields = &(HirPatList){0};
         }
 
@@ -487,38 +487,39 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
         struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
         struct Constructor cons = {0};
 
-        switch (e->basic.code) {
-            case BUILTIN_UNIT:
+        switch (e->lit_kind) {
+            case HIR_LIT_TUPLE:
+                paw_assert(e->tuple.elems->count == 0);
                 cons.kind = CONS_TUPLE;
                 cons.tuple.elems = IrTypeList_new_from(U->C, U->pool);
                 break;
-            case BUILTIN_BOOL:
+            case HIR_LIT_BOOL:
                 cons.kind = CONS_BOOL;
-                cons.value = e->basic.value;
+                cons.value.i = e->b;
                 break;
-            case BUILTIN_CHAR:
+            case HIR_LIT_CHAR:
                 cons.kind = CONS_CHAR;
-                cons.value = e->basic.value;
+                cons.value.c = e->c;
                 break;
-            case BUILTIN_INT:
+            case HIR_LIT_INT:
                 cons.kind = CONS_INT;
-                cons.value = e->basic.value;
+                cons.value.i = e->i.value;
                 break;
-            case BUILTIN_FLOAT:
-                // normalize float keys
-                if (V_FLOAT(e->basic.value) == 0.0)
-                    V_SET_FLOAT(&e->basic.value, 0.0);
+            case HIR_LIT_FLOAT:
+                // normalize float values
+                if (e->f.value == 0.0)
+                    e->f.value = 0.0;
                 cons.kind = CONS_FLOAT;
-                cons.value = e->basic.value;
+                cons.value.f = e->f.value;
                 break;
             default:
-                paw_assert(e->basic.code == BUILTIN_STR);
+                paw_assert(e->lit_kind == HIR_LIT_STR);
                 cons.kind = CONS_STR;
-                cons.value = e->basic.value;
+                cons.value.s = e->s;
                 break;
         }
 
-        Value const key = e->basic.value;
+        Value const key = cons.value;
         int *pindex = CaseMap_get(U, tested, key);
         if (pindex != NULL) {
             struct RawCase rc = RawCaseList_get(raw_cases, *pindex);

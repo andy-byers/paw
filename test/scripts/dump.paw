@@ -61,10 +61,10 @@ trait Trait2 {
 
 enum Enum {
     Unit,
-    Args(int, float, str),
+    Args(int64, float64, str),
 }
 
-const CONSTANT: int = 42;
+const CONSTANT: int64 = 42;
 
 fn generics<A, B>() {}
 
@@ -82,7 +82,7 @@ fn map_literals() {
     map = [1: 2];
 }
 
-fn select_element(x: (int,)) -> int {
+fn select_element(x: (int64,)) -> int64 {
     x.0
 }
 
@@ -97,17 +97,17 @@ fn infer_type() {
 }
 
 fn type_alias() {
-    type I = int;
+    type I = int64;
 }
 
-fn match_tuple_or(t: (int,)) {
+fn match_tuple_or(t: (int64,)) {
     match t {
         (1 | 2 | 3,) => {},
         _ => {},
     }
 }
 
-fn chain_and_guard(x: Option<int>) -> Option<int> {
+fn chain_and_guard(x: Option<int64>) -> Option<int64> {
     match x? {
         123 => {},
         i if i < 0 => {},
@@ -116,11 +116,11 @@ fn chain_and_guard(x: Option<int>) -> Option<int> {
     x
 }
 
-fn takes_function_as_argument(f: fn() -> int) -> int {
+fn takes_function_as_argument(f: fn() -> int64) -> int64 {
     f()
 }
 
-pub fn main(args: [str]) -> int {
-    takes_function_as_argument(|| -> int {123});
+pub fn main(args: [str]) -> int64 {
+    takes_function_as_argument(|| -> int64 {123});
     0
 }

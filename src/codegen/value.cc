@@ -30,36 +30,6 @@ static unsigned user_args_offset(FnType const *type)
     return env_pointer_offset(type) + type->has_env();
 }
 
-Unit::Unit(State &state, llvm::Value *value, Methods const *methods)
-    : Value(state, value, state.get_context()->get_unit_type())
-    , methods_(methods)
-{
-}
-
-Bool::Bool(State &state, llvm::Value *value, Methods const *methods)
-    : Value(state, value, state.get_context()->get_bool_type())
-    , methods_(methods)
-{
-}
-
-Char::Char(State &state, llvm::Value *value, Methods const *methods)
-    : Value(state, value, state.get_context()->get_char_type())
-    , methods_(methods)
-{
-}
-
-Int::Int(State &state, llvm::Value *value, Methods const *methods)
-    : Value(state, value, state.get_context()->get_int_type())
-    , methods_(methods)
-{
-}
-
-Float::Float(State &state, llvm::Value *value, Methods const *methods)
-    : Value(state, value, state.get_context()->get_float_type())
-    , methods_(methods)
-{
-}
-
 
 Callable::Callable(State &state, llvm::Value *fn, FnType *type)
     : Value(state, fn, type)

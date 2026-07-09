@@ -1,25 +1,25 @@
 // trait.paw
 
 pub trait InstanceGet {
-    fn get(*self) -> int;
+    fn get(*self) -> int64;
 }
 
 pub trait AssociatedGet {
-    fn get_default() -> int;
+    fn get_default() -> int64;
 }
 
 struct Int {
-    pub value: int,
+    pub value: int64,
 }
 
 impl InstanceGet for Int {
-    fn get(*self) -> int {
+    fn get(*self) -> int64 {
         self.value
     }
 }
 
 impl AssociatedGet for Int {
-    fn get_default() -> int {
+    fn get_default() -> int64 {
         42
     }
 }
@@ -30,11 +30,11 @@ pub fn test_call_method() {
     assert(i.get() == 123);
 }
 
-fn call_method<Ty: InstanceGet>(t: *Ty) -> int {
+fn call_method<Ty: InstanceGet>(t: *Ty) -> int64 {
     t.get()
 }
 
-fn call_call_method<Ty: InstanceGet>(t: *Ty) -> int {
+fn call_call_method<Ty: InstanceGet>(t: *Ty) -> int64 {
     call_method(t)
 }
 
@@ -50,11 +50,11 @@ pub fn test_call_associated_fn() {
     assert(Int::get_default() == 42);
 }
 
-fn call_both_functions<Ty: InstanceGet + AssociatedGet>(t: *Ty) -> int {
+fn call_both_functions<Ty: InstanceGet + AssociatedGet>(t: *Ty) -> int64 {
     t.get() + Ty::get_default()
 }
 
-fn call_call_both_functions<Ty: AssociatedGet + InstanceGet>(t: *Ty) -> int {
+fn call_call_both_functions<Ty: AssociatedGet + InstanceGet>(t: *Ty) -> int64 {
     call_both_functions::<Ty>(t)
 }
 

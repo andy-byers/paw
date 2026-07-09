@@ -1,7 +1,7 @@
 // global_const.paw
 
-pub const INT: int = 42;
-pub const FLOAT: float = 1.23;
+pub const INT: int64 = 42;
+pub const FLOAT: float64 = 1.23;
 pub const STR: str = "abc";
 
 #[test]
@@ -11,8 +11,8 @@ pub fn test_primitive() {
     assert(STR == "abc");
 }
 
-const BNOT: int = ~0;
-const NEG: int = --1;
+const BNOT: int64 = ~0;
+const NEG: int64 = --1;
 
 #[test]
 pub fn test_unary_op() {
@@ -20,8 +20,8 @@ pub fn test_unary_op() {
    assert(NEG == 1); 
 }
 
-const ADD: int = 1 + 2 + 3;
-const ADD_MUL: int = (((1 + 2) * 3 * (4 + 5 * 6) * 7) + 8) * (9);
+const ADD: int64 = 1 + 2 + 3;
+const ADD_MUL: int64 = (((1 + 2) * 3 * (4 + 5 * 6) * 7) + 8) * (9);
 
 #[test]
 pub fn test_binary_op() {
@@ -34,9 +34,9 @@ pub fn test_dependency() {
     assert(INT2 == 84);
 }
 
-pub const INT2: int = INT + INT;
+pub const INT2: int64 = INT + INT;
 
-const BLOCK: int = {
+const BLOCK: int64 = {
     let a = 1;
     let b = 2;
     {
@@ -62,7 +62,7 @@ pub fn test_block() {
 //const CONDITION: bool = true;
 //const THEN_ARM: str = "ok";
 //
-//const BLOCK_COND: int = {
+//const BLOCK_COND: int64 = {
 //    let a = 1;
 //    let b = 2;
 //    if !CONDITION {
@@ -85,7 +85,7 @@ pub fn test_block() {
 //   assert(BLOCK_COND == 6);
 //}
 //
-//const LOGICAL: int = if CONDITION && !CONDITION {
+//const LOGICAL: int64 = if CONDITION && !CONDITION {
 //    -1
 //} else if !CONDITION || true {
 //    INT

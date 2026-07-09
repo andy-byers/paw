@@ -107,22 +107,11 @@ static void VisitType(struct Compiler *C, IrType *type)
 
     switch (IR_KINDOF(type)) {
         case kIrUnit:
-            C->typesystem.primitives.unit_t = type;
-            return;
         case kIrBool:
-            C->typesystem.primitives.bool_t = type;
-            return;
         case kIrChar:
-            C->typesystem.primitives.char_t = type;
-            return;
         case kIrInt:
-            C->typesystem.primitives.int_t = type;
-            return;
         case kIrFloat:
-            C->typesystem.primitives.float_t = type;
-            return;
         case kIrString:
-            C->typesystem.primitives.str_t = type;
             return;
         case kIrArray:
             TypeCollection_insert(C, C->typesystem.arrays, type, NULL);
@@ -199,11 +188,15 @@ static void code_items(struct Generator *G)
     void pawIr_generate_drops(struct Compiler *, BodyList *);
     pawIr_generate_drops(C, bodies);
 
+    C->typesystem.primitives.unit_t = pawIr_new_unit(C);
     C->typesystem.primitives.never_t = pawIr_new_never(C);
-    C->typesystem.primitives.bool_t = pawP_builtin_type(C, BUILTIN_BOOL);
-    C->typesystem.primitives.char_t = pawP_builtin_type(C, BUILTIN_CHAR);
-    C->typesystem.primitives.int_t = pawP_builtin_type(C, BUILTIN_INT);
-    C->typesystem.primitives.float_t = pawP_builtin_type(C, BUILTIN_FLOAT);
+    C->typesystem.primitives.bool_t = pawIr_new_bool(C);
+    C->typesystem.primitives.char_t = pawIr_new_char(C);
+    C->typesystem.primitives.str_t = pawIr_new_string(C);
+    for (unsigned i = 0; i < IR_NUM_INT_KINDS; ++i)
+        IrTypeList_set(C->typesystem.primitives.int_t, (int)i, pawIr_new_int(C, (enum IrIntKind)i));
+    for (unsigned i = 0; i < IR_NUM_FLOAT_KINDS; ++i)
+        IrTypeList_set(C->typesystem.primitives.float_t, (int)i, pawIr_new_float(C, (enum IrFloatKind)i));
 
     pawCodegen_generate(C, &(struct TranslationUnit){
         .modname = C->modname->text,

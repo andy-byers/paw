@@ -212,9 +212,35 @@ private:
             case kIrChar:
                 return X->get_char_type();
             case kIrInt:
-                return X->get_int_type();
+                switch (IR_INT_KIND(irtype)) {
+                    case IR_INT8:
+                        return X->get_int_type(IntKind::INT8);
+                    case IR_UINT8:
+                        return X->get_int_type(IntKind::UINT8);
+                    case IR_INT16:
+                        return X->get_int_type(IntKind::INT16);
+                    case IR_UINT16:
+                        return X->get_int_type(IntKind::UINT16);
+                    case IR_INT32:
+                        return X->get_int_type(IntKind::INT32);
+                    case IR_UINT32:
+                        return X->get_int_type(IntKind::UINT32);
+                    case IR_INT64:
+                        return X->get_int_type(IntKind::INT64);
+                    case IR_UINT64:
+                        return X->get_int_type(IntKind::UINT64);
+                    case IR_ISIZE:
+                        return X->get_int_type(IntKind::ISIZE);
+                    case IR_USIZE:
+                        return X->get_int_type(IntKind::USIZE);
+                }
             case kIrFloat:
-                return X->get_float_type();
+                switch (IR_FLOAT_KIND(irtype)) {
+                    case IR_FLOAT32:
+                        return X->get_float_type(FloatKind::FLOAT32);
+                    case IR_FLOAT64:
+                        return X->get_float_type(FloatKind::FLOAT64);
+                }
             case kIrPtr:
                 return create_ptr_type();
             case kIrString:
@@ -268,7 +294,7 @@ private:
         auto const elem_type = get_or_create_type(IrGetSlice(irtype)->type);
         return X->get_struct_type({
                     X->get_ptr_type(elem_type),
-                    X->get_int_type(),
+                    X->get_int_type(IntKind::USIZE),
                 });
     }
 
@@ -303,7 +329,7 @@ private:
 
     Type *define_discr_type(int num_variants)
     {
-        return X->get_int_type();
+        return X->get_int_type(IntKind::INT64);
         // TODO: Need some way to convey the discriminant size to code that loads
         //       and stores the discriminant. Could add sized integer types to Paw
         //       and use for discriminant (sized integer types could be hidden from
@@ -369,6 +395,9 @@ public:
 
     explicit PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer);
     ~PawState();
+
+    PawState(PawState const &) = delete;
+    PawState &operator=(PawState const &) = delete;
 
     void set_raw_value(MirRegister r, llvm::Value *value)
     {
@@ -553,7 +582,7 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
         auto *block = llvm::BasicBlock::Create(*c, "entry", main_fn);
         B->SetInsertPoint(block);
 
-        auto *argc64 = B->CreateSExt(main_fn->getArg(0), X->get_int_ty());
+        auto *argc64 = B->CreateSExt(main_fn->getArg(0), X->get_isize_ty());
         B->CreateStore(argc64, os_argc); B->CreateStore(main_fn->getArg(1), os_argv);
 
         for (auto const &name: test_names) {
@@ -667,7 +696,7 @@ public:
         state.create_return(array);
     }
 
-    // fn ops::repeat<const N: int, T: Copy>(value: T) -> [N]T
+    // fn ops::repeat<const N: usize, T: Copy>(value: T) -> [N]T
     void generate_array_repeat(Mir const *mir, Fn *fn)
     {
         auto const *irargs = IR_GENERIC_ARGS(mir->type);
@@ -720,7 +749,7 @@ public:
         state.create_return();
     }
 
-    // fn ptr::add<T>(p: *T, n: int) -> *T
+    // fn ptr::add<T>(p: *T, n: isize) -> *T
     void generate_ptr_add(Mir const *mir, Fn *fn)
     {
         auto *pointee_type = get_type(IrGenericArg_get_type(
@@ -753,25 +782,25 @@ public:
         state.create_return(result);
     }
 
-    // fn sizeof<T>() -> int
+    // fn sizeof<T>() -> usize
     void generate_sizeof_intrinsic(Mir const *mir, Fn *fn)
     {
         auto *type = get_type(IrGenericArg_get_type(
                     IR_FIRST_GENERIC_ARG(mir->type)));
 
         State state(X, fn);
-        auto *result = X.create_int(X.size_of(*type));
+        auto *result = X.create_isize(X.size_of(*type));
         state.create_return(result);
     }
 
-    // fn alignof<T>() -> int
+    // fn alignof<T>() -> usize
     void generate_alignof_intrinsic(Mir const *mir, Fn *fn)
     {
         auto *type = get_type(IrGenericArg_get_type(
                     IR_FIRST_GENERIC_ARG(mir->type)));
 
         State state(X, fn);
-        auto *result = X.create_int(X.align_of(*type).value());
+        auto *result = X.create_isize(X.align_of(*type).value());
         state.create_return(result);
     }
 
@@ -779,7 +808,7 @@ public:
     {
         State state(X, fn);
 
-        auto *argc = B->CreateLoad(X.get_int_ty(), os_argc_);
+        auto *argc = B->CreateLoad(X.get_isize_ty(), os_argc_);
         auto *argv = B->CreateLoad(X.get_ptr_ty(), os_argv_);
         llvm::Value *args = llvm::UndefValue::get(X.get_slice_ty());
         args = B->CreateInsertValue(args, argv, 0);
@@ -793,7 +822,7 @@ public:
         auto *fn = get_fn(mir->type);
         if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {
             auto const *fptr = IrGetFnPtr(IR_GET_FN(C, mir->type));
-            paw_Bool const materialize_return = builtin_kind(fptr->result) != BUILTIN_INT;
+            paw_Bool const materialize_return = !IrIsInt(fptr->result);
             create_main_fn_wrapper(*fn, materialize_return);
         }
 
@@ -893,9 +922,9 @@ public:
         generate_builtins();
 
         os_argc_ = new llvm::GlobalVariable(
-                **M, X.get_int_ty(), false,
+                **M, X.get_isize_ty(), false,
                 llvm::GlobalValue::InternalLinkage,
-                X.create_int(0), "paw_argc");
+                X.create_i64(0), "paw_argc");
         os_argv_ = new llvm::GlobalVariable(
                 **M, X.get_ptr_ty(), false,
                 llvm::GlobalValue::InternalLinkage,
@@ -924,8 +953,8 @@ public:
 
                 strings_[s] = StringDescriptor{
                     .text = llvm::ConstantExpr::getGetElementPtr(
-                        global->getType(), global, X.create_int(0)),
-                    .length = X.create_uint(s->length),
+                        global->getType(), global, X.create_i64(0)),
+                    .length = X.create_isize(s->length),
                 };
 
                 StringMapIterator_next(&iter);
@@ -956,7 +985,7 @@ public:
     llvm::Value *create_cstr_to_str(llvm::Value *cstr)
     {
         llvm::Value *len = B->CreateCall(X.get_strlen_callee(), {cstr});
-        len = B->CreateSExt(len, X.get_int_ty());
+        len = B->CreateSExt(len, X.get_isize_ty());
 
         llvm::Value *str = llvm::UndefValue::get(X.get_str_ty());
         str = B->CreateInsertValue(str, cstr, 0);
@@ -969,17 +998,18 @@ public:
         inner->setName("paw_main");
         inner->setLinkage(llvm::Function::PrivateLinkage);
 
-        FnType main_type(X, X.get_int32_type(), {
-                    X.get_int32_type(),
+        FnType main_type(X, X.get_int_type(IntKind::INT32), {
+                    X.get_int_type(IntKind::INT32),
                     X.get_ptr_type(),
                 });
         Fn main_fn(X, "main", llvm::Function::ExternalLinkage, &main_type);
         State state(X, &main_fn);
 
-        auto *argc64 = B->CreateSExt(main_fn.get_arg(0), X.get_int_ty());
+        auto *argc64 = B->CreateSExt(main_fn.get_arg(0), X.get_isize_ty());
         B->CreateStore(argc64, os_argc_);
         B->CreateStore(main_fn.get_arg(1), os_argv_);
 
+        // TODO: sext if smaller
         auto *ret = B->CreateCall(inner);
         state.create_return(materialize_return ? X.create_i32(0)
                 : B->CreateTrunc(ret, X.get_i32_ty()));
@@ -1009,13 +1039,6 @@ public:
         return nullptr;
     }
 
-    Unit::Methods const *get_unit_methods() const { return &scalar_info_.u.methods; }
-    Bool::Methods const *get_bool_methods() const { return &scalar_info_.b.methods; }
-    Char::Methods const *get_char_methods() const { return &scalar_info_.c.methods; }
-    Int::Methods const *get_int_methods() const { return &scalar_info_.i.methods; }
-    Float::Methods const *get_float_methods() const { return &scalar_info_.f.methods; }
-    Str::Methods const *get_str_methods() const { return &scalar_info_.s.methods; }
-
     Fn *get_fn(IrType *irtype) const
     {
         auto *itr = fns_.lookup(irtype);
@@ -1023,24 +1046,62 @@ public:
         return itr->get();
     }
 
-    llvm::Value *create_constant(MirConstantData kdata)
+    llvm::Value *create_constant_int(paw_Int64 value, IrIntKind kind)
     {
-        paw_assert(kdata.data->kind == IR_CONST_VALUE);
-        switch (IR_KINDOF(kdata.data->value.type)) {
+        switch (kind) {
+            case IR_INT8:
+            case IR_UINT8:
+                return X.create_i8((paw_Int8)value);
+            case IR_INT16:
+            case IR_UINT16:
+                return X.create_i16((paw_Int16)value);
+            case IR_INT32:
+            case IR_UINT32:
+                return X.create_i32((paw_Int32)value);
+            case IR_INT64:
+            case IR_UINT64:
+                return X.create_i64(value);
+            case IR_ISIZE:
+            case IR_USIZE:
+                return X.create_isize((paw_Usize)value);
+        }
+    }
+
+    llvm::Value *create_constant_float(paw_Float64 value, IrFloatKind kind)
+    {
+        switch (kind) {
+            case IR_FLOAT32:
+                return X.create_f32((paw_Float32)value);
+            case IR_FLOAT64:
+                return X.create_f64(value);
+        }
+    }
+
+    llvm::Value *create_constant(IrValue value, IrType *type)
+    {
+        switch (IR_KINDOF(type)) {
             case kIrUnit:
                 return X.create_unit();
             case kIrBool:
-                return X.create_bool(kdata.data->value.value.i);
+                return X.create_bool(value.i);
             case kIrChar:
-                return X.create_char(kdata.data->value.value.c);
+                return X.create_char(value.c);
             case kIrInt:
-                return X.create_int(kdata.data->value.value.i);
+                return create_constant_int(value.i, IR_INT_KIND(type));
             case kIrFloat:
-                return X.create_float(kdata.data->value.value.f);
+                return create_constant_float(value.f, IR_FLOAT_KIND(type));
             default:
-                paw_assert(IrIsString(kdata.data->value.type));
-                return get_constant_str((::Str const *)kdata.data->value.value.p);
+                paw_assert(IrIsString(type));
+                return get_constant_str((::Str const *)value.p);
         }
+    }
+
+    llvm::Value *create_constant(MirConstantData kdata)
+    {
+        paw_assert(kdata.data->kind == IR_CONST_VALUE);
+        return create_constant(
+                kdata.data->value.value,
+                kdata.data->value.type);
     }
 
 private:
@@ -1106,9 +1167,9 @@ private:
             // size_t fwrite(const void* restrict buffer, size_t size, size_t count, FILE* restrict stream);
             auto *write = llvm::cast<llvm::Function>(
                     m->getOrInsertFunction("fwrite",
-                        llvm::FunctionType::get(X.get_i64_ty(),
-                        {X.get_ptr_ty(), X.get_i64_ty(),
-                         X.get_i64_ty(), X.get_ptr_ty()}, false))
+                        llvm::FunctionType::get(X.get_isize_ty(),
+                        {X.get_ptr_ty(), X.get_isize_ty(),
+                         X.get_isize_ty(), X.get_ptr_ty()}, false))
                     .getCallee());
 
             // ABI type of "*[char]" in argument position
@@ -1133,7 +1194,7 @@ private:
             auto *ptr_as_int = B->CreateExtractValue(fn->getArg(0), 0ULL);
             auto *ptr = B->CreateIntToPtr(ptr_as_int, X.get_ptr_ty());
             auto *len = B->CreateExtractValue(fn->getArg(0), 1ULL);
-            B->CreateCall(write, {ptr, X.create_i64(1), len, stream});
+            B->CreateCall(write, {ptr, X.create_isize(1), len, stream});
 
             auto *trap = llvm::Intrinsic::getOrInsertDeclaration(*M, llvm::Intrinsic::trap);
             B->CreateCall(trap);
@@ -1141,22 +1202,22 @@ private:
             B->CreateUnreachable();
         }
 
-        // declare "ptr @paw_mem_alloc(i64)" builtin
+        // declare "ptr @paw_mem_alloc(isize)" builtin
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_ptr_ty(),
-                        {X.get_i64_ty()}, false),
+                        {X.get_isize_ty()}, false),
                     llvm::GlobalValue::ExternalLinkage,
                     get_builtin_name(BuiltinFn::PAW_ALLOC),
                     *M);
             fn->setDoesNotThrow();
         }
 
-        // declare "ptr @paw_mem_realloc(ptr, i64)" builtin
+        // declare "ptr @paw_mem_realloc(ptr, isize)" builtin
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_ptr_ty(),
-                        {X.get_ptr_ty(), X.get_i64_ty()}, false),
+                        {X.get_ptr_ty(), X.get_isize_ty()}, false),
                     llvm::GlobalValue::ExternalLinkage,
                     get_builtin_name(BuiltinFn::PAW_REALLOC),
                     *M);
@@ -1193,38 +1254,11 @@ private:
         {
             auto *fn = llvm::Function::Create(
                     llvm::FunctionType::get(X.get_void_ty(), {
-                        X.get_i64_ty(),
-                        X.get_i64_ty(),
+                        X.get_isize_ty(),
+                        X.get_isize_ty(),
                     }, false),
                     llvm::GlobalValue::ExternalLinkage,
                     get_builtin_name(BuiltinFn::CHECK_BOUNDS),
-                    *M);
-            fn->setDoesNotThrow();
-        }
-
-        // declare "i32 @paw_builtin_hash_bytes(ptr, i64, i32)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_i32_ty(), {
-                        X.get_ptr_ty(),
-                        X.get_i64_ty(),
-                        X.get_i32_ty(),
-                    }, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::HASH_BYTES),
-                    *M);
-            fn->setDoesNotThrow();
-        }
-
-        // declare "i64 @paw_builtin_rawcmp(ptr, i64, ptr, i64)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_i64_ty(), {
-                        X.get_ptr_ty(), X.get_i64_ty(),
-                        X.get_ptr_ty(), X.get_i64_ty(),
-                    }, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::RAWCMP),
                     *M);
             fn->setDoesNotThrow();
         }
@@ -1459,7 +1493,7 @@ private:
     {
         auto *value = operand(x.value);
         auto *pointer = operand(x.pointer);
-        X.store_value(value, pointer);
+        B->CreateStore(value, pointer);
     }
 
     void create_global(MirGlobal const &x)
@@ -1473,6 +1507,10 @@ private:
 
     void create_aggregate(MirAggregate const &x)
     {
+        if (IrIsUnit(x.output.type)) {
+            set_result(x.output, X.create_unit());
+            return;
+        }
         auto *object_type = cast<ObjectType>(get_type(x.output.type));
         auto *variant_ty = object_type->get_variant_ty(Discriminant(x.discr));
         llvm::Value *object = llvm::UndefValue::get(variant_ty);
@@ -1539,8 +1577,8 @@ private:
         {
             auto *konst = IrGetArray(ir_deref(x.array.type))->length;
             paw_assert(konst->kind == IR_CONST_VALUE);
-            auto const length = konst->value.value.i;
-            X.create_check_bounds(index, X.create_int(length));
+            auto const length = (size_t)konst->value.value.i;
+            X.create_check_bounds(index, X.create_isize(length));
         }
 
         auto *element_type = get_type(ir_deref(x.output.type));
@@ -1577,51 +1615,95 @@ private:
         set_result(x.output, result);
     }
 
-    llvm::Value *create_cast(llvm::Value *target, BuiltinKind from, BuiltinKind to)
+    unsigned sizeof_int(enum IrIntKind const kind)
     {
-        switch (from) {
-            case BUILTIN_PTR:
-                if (to == BUILTIN_INT) {
-                    return B->CreatePtrToInt(target, X.get_int_ty());
+        switch (kind) {
+            case IR_INT8:
+            case IR_UINT8:
+                return 1;
+            case IR_INT16:
+            case IR_UINT16:
+                return 2;
+            case IR_INT32:
+            case IR_UINT32:
+                return 4;
+            case IR_INT64:
+            case IR_UINT64:
+                return 8;
+            case IR_ISIZE:
+            case IR_USIZE:
+                return X.size_of(X.get_isize_ty());
+        }
+    }
+
+    llvm::Value *create_cast(llvm::Value *target, IrType *from, IrType *to)
+    {
+        auto const from_type = get_type(from);
+        auto const to_type = get_type(to);
+        switch (IR_KINDOF(from)) {
+            case kIrPtr:
+                if (IrIsInt(to)) {
+                    return B->CreatePtrToInt(target, *to_type);
                 } else {
+                    paw_assert(IrIsPtr(to));
                     return target;
                 }
-            case BUILTIN_BOOL:
-                if (to == BUILTIN_CHAR) {
-                    return B->CreateZExt(target, X.get_char_ty());
-                } else if (to == BUILTIN_INT) {
-                    return B->CreateZExt(target, X.get_int_ty());
-                } else { // to == BUILTIN_FLOAT
-                    auto *temp = B->CreateZExt(target, X.get_int_ty());
-                    return B->CreateSIToFP(temp, X.get_float_ty());
-                }
-            case BUILTIN_CHAR:
-                if (to == BUILTIN_BOOL) {
-                    return B->CreateCmp(llvm::CmpInst::ICMP_NE, target, X.create_char(0));
-                } else if (to == BUILTIN_INT) {
-                    return B->CreateZExt(target, X.get_int_ty());
-                } else { // to == BUILTIN_FLOAT
-                    auto *temp = B->CreateZExt(target, X.get_int_ty());
-                    return B->CreateSIToFP(temp, X.get_float_ty());
-                }
-            case BUILTIN_INT:
-                if (to == BUILTIN_BOOL) {
-                    return B->CreateCmp(llvm::CmpInst::ICMP_NE, target, X.create_int(0));
-                } else if (to == BUILTIN_CHAR) {
-                    return B->CreateTrunc(target, X.get_char_ty());
-                } else if (to == BUILTIN_FLOAT) {
-                    return B->CreateSIToFP(target, X.get_float_ty());
+            case kIrBool:
+                if (IrIsChar(to)) {
+                    return B->CreateZExt(target, X.get_i8_ty());
+                } else if (IrIsInt(to)) {
+                    return B->CreateZExt(target, *to_type);
+                } else if (IrIsFloat(to)) {
+                    return B->CreateSIToFP(target, *to_type);
                 } else {
-                    paw_assert(to == BUILTIN_PTR);
-                    return B->CreateIntToPtr(target, X.get_ptr_ty());
+                    paw_assert(IrIsBool(to));
+                    return target;
                 }
-            default: // from == BUILTIN_FLOAT
-                if (to == BUILTIN_BOOL) {
-                    return B->CreateCmp(llvm::CmpInst::FCMP_ONE, target, X.create_float(0.0));
-                } else if (to == BUILTIN_CHAR) {
-                    return B->CreateFPToSI(target, X.get_char_ty());
-                } else { // to == BUILTIN_INT
-                    return B->CreateFPToSI(target, X.get_int_ty());
+            case kIrChar:
+                if (IrIsBool(to)) {
+                    return B->CreateCmp(llvm::CmpInst::ICMP_NE, target, X.create_i8(0));
+                } else if (IrIsInt(to)) {
+                    if (X.size_of(*to_type) == 1) return target;
+                    return B->CreateZExt(target, *to_type);
+                } else if (IrIsFloat(to)) {
+                    return B->CreateSIToFP(target, *to_type);
+                } else {
+                    paw_assert(IrIsChar(to));
+                    return target;
+                }
+            case kIrInt:
+                if (IrIsBool(to)) {
+                    return B->CreateCmp(llvm::CmpInst::ICMP_NE, target,
+                            create_constant_int(0, IR_INT_KIND(from)));
+                } else if (IrIsChar(to)) {
+                    if (X.size_of(*from_type) == 1) return target;
+                    return B->CreateTrunc(target, X.get_i8_ty());
+                } else if (IrIsPtr(to)) {
+                    return B->CreateIntToPtr(target, X.get_ptr_ty());
+                } else if (IrIsFloat(to)) {
+                    return B->CreateSIToFP(target, *to_type);
+                } else {
+                    paw_assert(IrIsInt(to));
+                    auto const from_size = X.size_of(*from_type);
+                    auto const to_size = X.size_of(*to_type);
+                    if (from_size < to_size) {
+                        return cast<IntType>(to_type)->is_signed()
+                            ? B->CreateSExt(target, *to_type)
+                            : B->CreateZExt(target, *to_type);
+                    } else if (from_size > to_size) {
+                        return B->CreateTrunc(target, *to_type);
+                    } else {
+                        return target;
+                    }
+                }
+            default:
+                paw_assert(IrIsFloat(from));
+                if (IrIsBool(to)) {
+                    return B->CreateCmp(llvm::CmpInst::FCMP_ONE, target,
+                            create_constant_float(0.0, IR_FLOAT_KIND(from)));
+                } else {
+                    paw_assert(IrIsInt(to));
+                    return B->CreateFPToSI(target, *to_type);
                 }
         }
     }
@@ -1629,7 +1711,7 @@ private:
     void create_cast_instr(MirCast const &x)
     {
         auto *target = operand(x.target);
-        auto *result = create_cast(target, x.from, x.to);
+        auto *result = create_cast(target, x.target.type, x.output.type);
         set_result(x.output, result);
     }
 
@@ -1673,10 +1755,9 @@ private:
         paw_assert(value != nullptr);
 
         switch (op) {
-            case MIR_UNARY_IBITNOT:
+            case MIR_UNARY_BITNOT:
                 return B->CreateNot(value);
-            case MIR_UNARY_INEG:
-            case MIR_UNARY_FNEG:
+            case MIR_UNARY_NEG:
                 return B->CreateNeg(value);
             case MIR_UNARY_NOT:
                 return B->CreateCmp(llvm::CmpInst::ICMP_EQ, value, X.create_i1(0));
@@ -1694,92 +1775,144 @@ private:
     //       contain embedded null characters.
     llvm::Value *create_strcmp(llvm::Value *lhs, llvm::Value *rhs)
     {
-        Str a(*state_, lhs, get_str_methods());
-        Str b(*state_, rhs, get_str_methods());
+        Str a(*state_, lhs, &str_methods_);
+        Str b(*state_, rhs, &str_methods_);
         return B->CreateCall(X.get_rawcmp_callee(), {
                 a.get_text(), a.get_length(),
                 b.get_text(), b.get_length()});
     }
 
-    llvm::Value *new_binary_op(MirBinaryOpKind op, llvm::Value *lhs, llvm::Value *rhs)
+    llvm::Value *new_int_binary_op(MirBinaryOpKind op, llvm::Value *lhs, llvm::Value *rhs, bool is_signed)
+    {
+        switch (op) {
+            case MIR_BINARY_EQ:
+                return B->CreateCmp(llvm::CmpInst::ICMP_EQ, lhs, rhs);
+            case MIR_BINARY_NE:
+                return B->CreateCmp(llvm::CmpInst::ICMP_NE, lhs, rhs);
+            case MIR_BINARY_LT:
+                return B->CreateCmp(is_signed
+                        ? llvm::CmpInst::ICMP_SLT
+                        : llvm::CmpInst::ICMP_ULT, lhs, rhs);
+            case MIR_BINARY_LE:
+                return B->CreateCmp(is_signed
+                        ? llvm::CmpInst::ICMP_SLE
+                        : llvm::CmpInst::ICMP_ULE, lhs, rhs);
+            case MIR_BINARY_ADD:
+                return B->CreateAdd(lhs, rhs);
+            case MIR_BINARY_SUB:
+                return B->CreateSub(lhs, rhs);
+            case MIR_BINARY_MUL:
+                return B->CreateMul(lhs, rhs);
+            case MIR_BINARY_DIV:
+                return is_signed
+                    ? B->CreateSDiv(lhs, rhs)
+                    : B->CreateUDiv(lhs, rhs);
+            case MIR_BINARY_MOD:
+                return is_signed
+                    ? B->CreateSRem(lhs, rhs)
+                    : B->CreateURem(lhs, rhs);
+            case MIR_BINARY_BITAND:
+                return B->CreateAnd(lhs, rhs);
+            case MIR_BINARY_BITOR:
+                return B->CreateOr(lhs, rhs);
+            case MIR_BINARY_BITXOR:
+                return B->CreateXor(lhs, rhs);
+            case MIR_BINARY_SHL:
+                return B->CreateShl(lhs, rhs);
+            case MIR_BINARY_SHR:
+                return B->CreateLShr(lhs, rhs);
+            default:
+                PAW_UNREACHABLE();
+        }
+    }
+
+    llvm::Value *new_float_binary_op(MirBinaryOpKind op, llvm::Value *lhs, llvm::Value *rhs)
+    {
+        switch (op) {
+            case MIR_BINARY_EQ:
+                return B->CreateCmp(llvm::CmpInst::FCMP_OEQ, lhs, rhs);
+            case MIR_BINARY_NE:
+                return B->CreateCmp(llvm::CmpInst::FCMP_ONE, lhs, rhs);
+            case MIR_BINARY_LT:
+                return B->CreateCmp(llvm::CmpInst::FCMP_OLT, lhs, rhs);
+            case MIR_BINARY_LE:
+                return B->CreateCmp(llvm::CmpInst::FCMP_OLE, lhs, rhs);
+            case MIR_BINARY_ADD:
+                return B->CreateFAdd(lhs, rhs);
+            case MIR_BINARY_SUB:
+                return B->CreateFSub(lhs, rhs);
+            case MIR_BINARY_MUL:
+                return B->CreateFMul(lhs, rhs);
+            case MIR_BINARY_DIV:
+                return B->CreateFDiv(lhs, rhs);
+            case MIR_BINARY_MOD:
+                return B->CreateFRem(lhs, rhs);
+            default:
+                PAW_UNREACHABLE();
+        }
+    }
+
+    llvm::Value *new_str_binary_op(MirBinaryOpKind op, llvm::Value *lhs, llvm::Value *rhs)
+    {
+        switch (op) {
+            case MIR_BINARY_EQ:
+                return B->CreateCmp(llvm::CmpInst::ICMP_EQ,
+                        create_strcmp(lhs, rhs), X.create_i64(0));
+            case MIR_BINARY_NE:
+                return B->CreateCmp(llvm::CmpInst::ICMP_NE,
+                        create_strcmp(lhs, rhs), X.create_i64(0));
+            case MIR_BINARY_LT:
+                return B->CreateCmp(llvm::CmpInst::ICMP_SLT,
+                        create_strcmp(lhs, rhs), X.create_i64(0));
+            case MIR_BINARY_LE:
+                return B->CreateCmp(llvm::CmpInst::ICMP_SLE,
+                        create_strcmp(lhs, rhs), X.create_i64(0));
+            default:
+                PAW_UNREACHABLE();
+        }
+    }
+
+    llvm::Value *new_binary_op(MirBinaryOpKind op, llvm::Value *lhs, llvm::Value *rhs, IrType *irtype)
     {
         paw_assert(lhs != nullptr && rhs != nullptr);
 
-        switch (op) {
-            case MIR_BINARY_CEQ:
-                return B->CreateCmp(llvm::CmpInst::ICMP_EQ, lhs, rhs);
-            case MIR_BINARY_CNE:
-                return B->CreateCmp(llvm::CmpInst::ICMP_NE, lhs, rhs);
-            case MIR_BINARY_CLT:
-                return B->CreateCmp(llvm::CmpInst::ICMP_ULT, lhs, rhs);
-            case MIR_BINARY_CLE:
-                return B->CreateCmp(llvm::CmpInst::ICMP_ULE, lhs, rhs);
-            case MIR_BINARY_IEQ:
-                return B->CreateCmp(llvm::CmpInst::ICMP_EQ, lhs, rhs);
-            case MIR_BINARY_INE:
-                return B->CreateCmp(llvm::CmpInst::ICMP_NE, lhs, rhs);
-            case MIR_BINARY_ILT:
-                return B->CreateCmp(llvm::CmpInst::ICMP_SLT, lhs, rhs);
-            case MIR_BINARY_ILE:
-                return B->CreateCmp(llvm::CmpInst::ICMP_SLE, lhs, rhs);
-            case MIR_BINARY_FEQ:
-                return B->CreateCmp(llvm::CmpInst::FCMP_OEQ, lhs, rhs);
-            case MIR_BINARY_FNE:
-                return B->CreateCmp(llvm::CmpInst::FCMP_ONE, lhs, rhs);
-            case MIR_BINARY_FLT:
-                return B->CreateCmp(llvm::CmpInst::FCMP_OLT, lhs, rhs);
-            case MIR_BINARY_FLE:
-                return B->CreateCmp(llvm::CmpInst::FCMP_OLE, lhs, rhs);
-            case MIR_BINARY_STREQ:
-                return B->CreateCmp(llvm::CmpInst::ICMP_EQ,
-                        create_strcmp(lhs, rhs), X.create_int(0));
-            case MIR_BINARY_STRNE:
-                return B->CreateCmp(llvm::CmpInst::ICMP_NE,
-                        create_strcmp(lhs, rhs), X.create_int(0));
-            case MIR_BINARY_STRLT:
-                return B->CreateCmp(llvm::CmpInst::ICMP_SLT,
-                        create_strcmp(lhs, rhs), X.create_int(0));
-            case MIR_BINARY_STRLE:
-                return B->CreateCmp(llvm::CmpInst::ICMP_SLE,
-                        create_strcmp(lhs, rhs), X.create_int(0));
-            case MIR_BINARY_IADD:
-                return B->CreateAdd(lhs, rhs);
-            case MIR_BINARY_ISUB:
-                return B->CreateSub(lhs, rhs);
-            case MIR_BINARY_IMUL:
-                return B->CreateMul(lhs, rhs);
-            case MIR_BINARY_IDIV:
-                return B->CreateSDiv(lhs, rhs);
-            case MIR_BINARY_IMOD:
-                return B->CreateSRem(lhs, rhs);
-            case MIR_BINARY_FADD:
-                return B->CreateFAdd(lhs, rhs);
-            case MIR_BINARY_FSUB:
-                return B->CreateFSub(lhs, rhs);
-            case MIR_BINARY_FMUL:
-                return B->CreateFMul(lhs, rhs);
-            case MIR_BINARY_FDIV:
-                return B->CreateFDiv(lhs, rhs);
-            case MIR_BINARY_FMOD:
-                return B->CreateFRem(lhs, rhs);
-            case MIR_BINARY_IBITAND:
-                return B->CreateAnd(lhs, rhs);
-            case MIR_BINARY_IBITOR:
-                return B->CreateOr(lhs, rhs);
-            case MIR_BINARY_IBITXOR:
-                return B->CreateXor(lhs, rhs);
-            case MIR_BINARY_ISHL:
-                return B->CreateShl(lhs, rhs);
-            case MIR_BINARY_ISHR:
-                return B->CreateLShr(lhs, rhs);
+        Type *type = get_type(irtype);
+        switch (IR_KINDOF(irtype)) {
+            case kIrBool:
+            case kIrChar:
+                return new_int_binary_op(op, lhs, rhs, false);
+            case kIrInt:
+                return new_int_binary_op(op, lhs, rhs, type->is_signed_int());
+            case kIrFloat:
+                return new_float_binary_op(op, lhs, rhs);
+            default:
+                paw_assert(IrIsString(irtype));
+                return new_str_binary_op(op, lhs, rhs);
         }
+    }
+
+    static bool is_signed_int(IrType *type)
+    {
+        if (IrIsInt(type)) {
+            switch (IR_INT_KIND(type)) {
+                case IR_INT8:
+                case IR_INT16:
+                case IR_INT32:
+                case IR_INT64:
+                case IR_ISIZE:
+                    return true;
+                default:
+                    break;
+            }
+        }
+        return false;
     }
 
     void create_binaryop(MirBinaryOp const &x)
     {
         auto *lhs = operand(x.lhs);
         auto *rhs = operand(x.rhs);
-        auto *result = new_binary_op(x.op, lhs, rhs);
+        auto *result = new_binary_op(x.op, lhs, rhs, x.lhs.type);
         set_result(x.output, result);
     }
 
@@ -1814,13 +1947,37 @@ private:
             case kIrChar:
                 return X.create_char(kdata.data->value.value.c);
             case kIrInt:
-                return X.create_int(kdata.data->value.value.i);
+                switch (IR_INT_KIND(kdata.data->value.type)) {
+                    case IR_INT8:
+                    case IR_UINT8:
+                        return X.create_i8((paw_Int8)kdata.data->value.value.i);
+                    case IR_INT16:
+                    case IR_UINT16:
+                        return X.create_i16((paw_Int16)kdata.data->value.value.i);
+                    case IR_INT32:
+                    case IR_UINT32:
+                        return X.create_i32((paw_Int32)kdata.data->value.value.i);
+                    case IR_INT64:
+                    case IR_UINT64:
+                        return X.create_i64(kdata.data->value.value.i);
+                    case IR_ISIZE:
+                    case IR_USIZE:
+                        return X.create_isize((paw_Usize)kdata.data->value.value.i);
+                }
             default:
                 paw_assert(IrIsFloat(kdata.data->value.type));
-                return llvm::cast<llvm::ConstantInt>(
-                        llvm::ConstantExpr::getBitCast(
-                            X.create_float(kdata.data->value.value.f),
-                            X.get_int_ty()));
+                switch (IR_FLOAT_KIND(kdata.data->value.type)) {
+                    case IR_FLOAT32:
+                        return llvm::cast<llvm::ConstantInt>(
+                                llvm::ConstantExpr::getBitCast(
+                                    X.create_f32(kdata.data->value.value.f),
+                                    X.get_i32_ty()));
+                    case IR_FLOAT64:
+                        return llvm::cast<llvm::ConstantInt>(
+                                llvm::ConstantExpr::getBitCast(
+                                    X.create_f64(kdata.data->value.value.f),
+                                    X.get_i64_ty()));
+                }
         }
     }
 
@@ -1839,7 +1996,7 @@ private:
     {
         auto *discr = operand(x.discr);
         if (IrIsFloat(x.discr.type))
-            discr = B->CreateBitCast(discr, X.get_int_ty());
+            discr = B->CreateBitCast(discr, X.get_i64_ty());
         auto *node = B->CreateSwitch(discr, x.has_otherwise
                     ? get_successor_block(x.arms->count)
                     : create_unreachable_block(),
@@ -1862,7 +2019,7 @@ private:
             paw_assert(IrIsString(kdata.data->value.type));
 
             auto *target = get_constant_str((::Str const *)kdata.data->value.value.i);
-            auto *cond = B->CreateICmpEQ(create_strcmp(discr, target), X.create_int(0));
+            auto *cond = B->CreateICmpEQ(create_strcmp(discr, target), X.create_i64(0));
 
             auto *false_block = llvm::BasicBlock::Create(*c, "", *fn);
             B->CreateCondBr(cond, get_successor_block(i), false_block);
@@ -1935,20 +2092,8 @@ private:
     IrTypeHashMap<std::unique_ptr<Fn>> fns_;
     IrTypeHashMap<Mir const *> mirs_;
 
-    template<class V>
-    struct ScalarInfo {
-        std::unique_ptr<typename V::Type> type;
-        typename V::Methods methods;
-    };
-
-    struct ScalarInfoTable {
-        ScalarInfo<Unit> u;
-        ScalarInfo<Bool> b;
-        ScalarInfo<Char> c;
-        ScalarInfo<Int> i;
-        ScalarInfo<Float> f;
-        ScalarInfo<Str> s;
-    } scalar_info_;
+    std::unique_ptr<Str::Type> str_type_;
+    Str::Methods str_methods_;
 };
 
 

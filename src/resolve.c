@@ -753,8 +753,8 @@ static void declare_generics(struct Resolver *R, struct AstDeclList *generics)
 static paw_Bool resolve_literal_expr(struct AstVisitor *V, struct AstLiteralExpr *e)
 {
     struct Resolver *R = V->ud;
-    if (e->lit_kind == kAstCompositeLit)
-        lookup_or_error(R, e->comp.path, NAMESPACE_TYPE);
+    if (e->lit_kind == AST_LIT_COMPOSITE)
+        lookup_or_error(R, e->composite.path, NAMESPACE_TYPE);
 
     return PAW_TRUE;
 }

@@ -672,7 +672,7 @@
 ////        (9, 0),
 ////    ];
 ////
-////    let check_eq = |a: [(int, int)], b: [(int, int)]| {
+////    let check_eq = |a: [(int64, int64)], b: [(int64, int64)]| {
 ////        assert(#a == #b);
 ////        for i in 0..#a {
 ////            assert(a[i].0 == b[i].0);
@@ -696,7 +696,7 @@
 //    Third((T, T)),
 //}
 //
-//fn match_enum(e: Enum<int>) -> int {
+//fn match_enum(e: Enum<int64>) -> int64 {
 //    match e {
 //        Enum::First => 1,
 //        Enum::Second(a) => a,
@@ -706,9 +706,9 @@
 //
 //#[test]
 //pub fn test_enum() {
-//    let a = Enum::<int>::First;
-//    let b = Enum::<int>::Second(123);
-//    let c = Enum::<int>::Third((456, 789));
+//    let a = Enum::<int64>::First;
+//    let b = Enum::<int64>::Second(123);
+//    let c = Enum::<int64>::Third((456, 789));
 //
 //    assert(match_enum(Enum::First) == 1);
 //    assert(match_enum(Enum::Second(2)) == 2);
@@ -716,7 +716,7 @@
 //}
 //
 //struct Struct {
-//    pub x: (int, [Option<*Struct>; 1]),
+//    pub x: (int64, [Option<*Struct>; 1]),
 //}
 //
 //#[test]
@@ -734,7 +734,7 @@
 //
 ////struct SpecialCase1 {
 ////    pub string: str,
-////    pub array: [int; 1],
+////    pub array: [int64; 1],
 ////}
 ////
 ////#[test]
@@ -755,11 +755,11 @@
 ////}
 //
 //struct SpecialCase2 {
-//    pub a: (int, int),
-//    pub b: int,
+//    pub a: (int64, int64),
+//    pub b: int64,
 //}
 //
-//fn get_b(s: SpecialCase2) -> int { s.b }
+//fn get_b(s: SpecialCase2) -> int64 { s.b }
 //
 //#[test]
 //pub fn test_special_case_2() {
@@ -776,7 +776,7 @@
 //
 //enum Inner3 {
 //    First,
-//    Second(int),
+//    Second(int64),
 //}
 //
 //impl Inner3 {
@@ -889,7 +889,7 @@
 // TODO: breaks things, const obligations not working. probably need to "undo" them when unifications are rolled back
 #[test]
 pub fn test() {
-    let a: [int; 0] = [];
-    let b: [int; 1] = [1];
+    let a: [int64; 0] = [];
+    let b: [int64; 1] = [1];
 }
 

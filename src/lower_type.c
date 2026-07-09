@@ -47,6 +47,14 @@ static IrType *lower_array_type(struct LowerType *L, struct HirArrayType *t)
 
     // note that the type of `t->length` is determined in typeck
     IrConst *length = lower_const(L, t->length);
+    if (length->kind == IR_CONST_VALUE) {
+        IrType *usize = pawIr_new_int(L->C, IR_USIZE);
+        if (pawU_unify(L->C->U, length->value.type, usize) != 0)
+            LOWERING_ERROR(L, IncompatibleTypes,
+                    .lhs = pawIr_print_type_v2(L->C, length->value.type),
+                    .rhs = pawIr_print_type_v2(L->C, usize),
+                    .span = t->length->hdr.span);
+    }
     return pawIr_new_array(L->C, type, length);
 }
 
@@ -290,23 +298,72 @@ static IrConst *lower_const(struct LowerType *L, struct HirExpr *expr)
 {
     if (HirIsLiteralExpr(expr)) {
         struct HirLiteralExpr const *t = HirGetLiteralExpr(expr);
-        union IrValue value;
-        switch (t->basic.code) {
-            case BUILTIN_BOOL:
-                value.b = V_TRUE(t->basic.value);
+        union IrValue value; IrType *type;
+        switch (t->lit_kind) {
+            case HIR_LIT_BOOL:
+                value.b = t->b;
+                type = pawIr_new_bool(L->C);
                 break;
-            case BUILTIN_CHAR:
-                value.c = V_CHAR(t->basic.value);
+            case HIR_LIT_CHAR:
+                value.c = t->c;
+                type = pawIr_new_char(L->C);
                 break;
-            case BUILTIN_INT:
-                value.i = V_INT(t->basic.value);
+            case HIR_LIT_INT:
+                value.i64 = t->i.value;
+                switch (t->i.suffix) {
+                    case NS_I8:
+                        type = pawIr_new_int(L->C, IR_INT8);
+                        break;
+                    case NS_I16:
+                        type = pawIr_new_int(L->C, IR_INT16);
+                        break;
+                    case NS_I32:
+                        type = pawIr_new_int(L->C, IR_INT32);
+                        break;
+                    case NS_I64:
+                        type = pawIr_new_int(L->C, IR_INT64);
+                        break;
+                    case NS_ISIZE:
+                        type = pawIr_new_int(L->C, IR_ISIZE);
+                        break;
+                    case NS_U8:
+                        type = pawIr_new_int(L->C, IR_UINT8);
+                        break;
+                    case NS_U16:
+                        type = pawIr_new_int(L->C, IR_UINT16);
+                        break;
+                    case NS_U32:
+                        type = pawIr_new_int(L->C, IR_UINT32);
+                        break;
+                    case NS_U64:
+                        type = pawIr_new_int(L->C, IR_UINT64);
+                        break;
+                    case NS_USIZE:
+                        type = pawIr_new_int(L->C, IR_USIZE);
+                        break;
+                    default:
+                        type = pawU_new_type_var(L->C->U, IR_INFER_INTEGER, expr->hdr.span);
+                        break;
+                }
                 break;
             default:
-                paw_assert(t->basic.code == BUILTIN_FLOAT);
-                value.f = V_FLOAT(t->basic.value);
+                paw_assert(t->lit_kind == HIR_LIT_FLOAT);
+                switch (t->f.suffix) {
+                    case NS_F32:
+                        value.f32 = t->f.value;
+                        type = pawIr_new_float(L->C, IR_FLOAT32);
+                        break;
+                    case NS_F64:
+                        value.f64 = t->f.value;
+                        type = pawIr_new_float(L->C, IR_FLOAT64);
+                        break;
+                    default:
+                        value.f64 = t->f.value;
+                        type = pawU_new_type_var(L->C->U, IR_INFER_FLOAT, expr->hdr.span);
+                        break;
+                }
         }
-        return pawIr_new_const_value(L->C, value,
-                pawP_builtin_type(L->C, t->basic.code));
+        return pawIr_new_const_value(L->C, value, type);
     } else if (HirIsPathExpr(expr)) {
         struct HirPathExpr const *e = HirGetPathExpr(expr);
         paw_assert(e->path.kind != HIR_PATH_UPVALUE);

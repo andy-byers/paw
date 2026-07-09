@@ -22,9 +22,9 @@ pub fn test_tuple() {
 
 struct Unit;
 struct Fields {
-    pub first: int,
+    pub first: int64,
     pub second: str,
-    pub third: (int, Unit),
+    pub third: (int64, Unit),
 }
 
 #[test]

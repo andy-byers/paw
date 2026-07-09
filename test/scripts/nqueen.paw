@@ -1,65 +1,66 @@
-// Translated from https://github.com/attractivechaos/plb2/blob/master/src/lua/nqueen.lua
+// Translated from https://github.com/attractivechaos/plb2/blob/master/src/rust/nqueen.rs
 
+use array;
 use list::List;
 
-fn nq_solve(n: int) -> int {
+pub fn nq_solve(n: usize) -> usize {
+	let a = List::<int32>::new();
+	let l = List::<int32>::new();
+	let c = List::<int32>::new();
+	let r = List::<int32>::new();
+    for i in 0..n {
+        a.push(-1).unwrap();
+        l.push(0).unwrap();
+        c.push(0).unwrap();
+        r.push(0).unwrap();
+    }
 	let m = 0;
-    let a = List::new();
-    let l = List::new();
-    let c = List::new();
-    let r = List::new();
-	let y0 = (1 << n) - 1;
-	while a.len() < n {
-        a.push(-1);
-        l.push(0);
-        c.push(0);
-        r.push(0);
-	}
+	let y0 = (1 << n as int32) - 1;
 	let k = 0;
-	while k >= 0 {
-		let y = ((l[k] | c[k]) | r[k]) & y0;
-		if ((y ^ y0) >> (a[k] + 1)) != 0 {
+	loop {
+		let y = (l[k] | c[k] | r[k]) & y0;
+		if (y ^ y0) >> (a[k] + 1) != 0 {
 			let i = a[k] + 1;
-			while i < n && (y & (1 << i)) != 0 {
-				i = i + 1;
+			while i < n as int32 && (y & (1<<i)) != 0 {
+				i += 1;
 			}
 			if k < n - 1 {
-				let z = 1 << i;
+				let z = 1<<i;
 				a[k] = i;
-				k = k + 1;
-				l[k] = (l[k - 1] | z) << 1;
-				c[k] = c[k - 1] | z;
-				r[k] = (r[k - 1] | z) >> 1;
+				k += 1;
+				l[k] = (l[k-1] | z) << 1;
+				c[k] = c[k-1] | z;
+				r[k] = (r[k-1] | z) >> 1;
 			} else {
-				m = m + 1;
-				k = k - 1;
+				m += 1;
+				if k == 0 {
+					break;
+				}
+				k -= 1;
 			}
 		} else {
 			a[k] = -1;
-			k = k - 1;
+			if k == 0 {
+				break;
+			}
+			k -= 1;
 		}
 	}
-	m
+	return m;
 }
 
+use io;
+use os;
 
 #[test]
 pub fn test() {
-    nq_solve(1);
-    nq_solve(2);
-    nq_solve(5);
+    nq_solve(10);
 }
 
-
-use io;
-
 pub fn main() {
-//    let n = if args.len() > 1 {
-//        args[1].parse_int().unwrap()
-//    } else {
-//        5
-//    };
-    let n = 5;
-    nq_solve(n);
-//    io::print("\{nq_solve(n)}\n");
+	let n = 15;
+//	if os::args().len() > 1 {
+//	}
+    let r = nq_solve(n);
+//	io::println("\{r}");
 }

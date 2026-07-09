@@ -510,8 +510,18 @@ static void collect_builtin_types(struct ItemCollector *X)
     collect_builtin_type(X, BUILTIN_UNIT);
     collect_builtin_type(X, BUILTIN_BOOL);
     collect_builtin_type(X, BUILTIN_CHAR);
-    collect_builtin_type(X, BUILTIN_INT);
-    collect_builtin_type(X, BUILTIN_FLOAT);
+    collect_builtin_type(X, BUILTIN_INT8);
+    collect_builtin_type(X, BUILTIN_INT16);
+    collect_builtin_type(X, BUILTIN_INT32);
+    collect_builtin_type(X, BUILTIN_INT64);
+    collect_builtin_type(X, BUILTIN_ISIZE);
+    collect_builtin_type(X, BUILTIN_UINT8);
+    collect_builtin_type(X, BUILTIN_UINT16);
+    collect_builtin_type(X, BUILTIN_UINT32);
+    collect_builtin_type(X, BUILTIN_UINT64);
+    collect_builtin_type(X, BUILTIN_USIZE);
+    collect_builtin_type(X, BUILTIN_FLOAT32);
+    collect_builtin_type(X, BUILTIN_FLOAT64);
     collect_builtin_type(X, BUILTIN_STR);
 }
 
@@ -1031,14 +1041,14 @@ static void validate_main_signature(struct ItemCollector *X, struct SourceSpan s
 {
     struct IrFnPtr *fn = IrGetFnPtr(
             IR_SIGNATURE_FN(X->C, type));
+
     if (fn->params->count > 0)
         pawErr_exceeded_limit(ENV(X), X->pm->name, span,
                 "parameters for \"main\" function", 1);
 
-    if (builtin_kind(X, fn->result) != BUILTIN_UNIT
-            && builtin_kind(X, fn->result) != BUILTIN_INT)
+    if (!IrIsUnit(fn->result))
         pawErr_generic_error(ENV(X), X->pm->name, span,
-                "return type of \"main\" must have type \"()\" or \"int\"");
+                "return type of \"main\" must have type \"()\"");
 }
 
 static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
@@ -1255,6 +1265,7 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool)
 
     run_collection_phases(&X, C->hir);
 
+    pawU_check_context(C->U);
     pawU_leave_binder(C->U);
 
     // pub fn main(args: [][]char) -> int

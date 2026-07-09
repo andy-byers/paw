@@ -23,11 +23,11 @@ impl Trait for Struct1 {
 }
 
 impl A for Ta1 {
-    type Ty = int;
+    type Ty = int64;
 }
 
 impl B for Tb1 {
-    type Ty = int;
+    type Ty = int64;
 }
 
 

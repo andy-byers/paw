@@ -27,7 +27,7 @@ pub fn test_iterator_for_loop() {
     assert(i == 6);
 }
 
-fn test_list<I: IntoIterator<Item = int>>(iter: I) -> List<int> {
+fn test_list<I: IntoIterator<Item = int64>>(iter: I) -> List<int64> {
     let list = List::new();
     for i in iter { list.push(i).unwrap() }
     list
@@ -82,7 +82,7 @@ pub fn test_misc() {
     {
         let I = test_list(0..4);
         for i in 0..4 {
-            assert(i == I[i]);
+            assert(i == I[i as usize]);
         }
 
         let n = 0;

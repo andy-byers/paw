@@ -67,8 +67,18 @@ enum BuiltinKind {
     BUILTIN_UNIT,
     BUILTIN_BOOL,
     BUILTIN_CHAR,
-    BUILTIN_INT,
-    BUILTIN_FLOAT,
+    BUILTIN_INT8,
+    BUILTIN_INT16,
+    BUILTIN_INT32,
+    BUILTIN_INT64,
+    BUILTIN_ISIZE,
+    BUILTIN_UINT8,
+    BUILTIN_UINT16,
+    BUILTIN_UINT32,
+    BUILTIN_UINT64,
+    BUILTIN_USIZE,
+    BUILTIN_FLOAT32,
+    BUILTIN_FLOAT64,
     BUILTIN_STR,
     BUILTIN_PTR,
     BUILTIN_SLICE,
@@ -95,6 +105,23 @@ enum CoreTrait {
     CORE_TRAIT_FROM,
     CORE_TRAIT_INTO,
     NUM_CORE_TRAITS
+};
+
+
+enum NumberSuffix {
+    NS_NONE,
+    NS_I8,
+    NS_I16,
+    NS_I32,
+    NS_I64,
+    NS_ISIZE,
+    NS_U8,
+    NS_U16,
+    NS_U32,
+    NS_U64,
+    NS_USIZE,
+    NS_F32,
+    NS_F64,
 };
 
 

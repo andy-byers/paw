@@ -130,7 +130,7 @@ PAW_DEFINE_OPTION(Float)
 
 typedef struct {
     void *start;
-    paw_Int length;
+    size_t length;
 } paw_Slice;
 
 
@@ -146,19 +146,18 @@ paw_Option_Float paw_str_parse_float(paw_Str self);
 paw_Option_Int paw_str_find(paw_Str, paw_Str self);
 paw_Bool paw_str_starts_with(paw_Str, paw_Str self);
 paw_Bool paw_str_ends_with(paw_Str, paw_Str self);
-paw_Int paw_str_Hash_hash(paw_Str self);
 
 paw_Bool paw_ops_str_Compare_lt(paw_Str self, paw_Str rhs);
 paw_Bool paw_ops_str_Compare_le(paw_Str self, paw_Str rhs);
 
-uint32_t paw_builtin_hash_bytes(paw_Char const *bytes, paw_Int length, uint32_t hash);
-paw_Int paw_builtin_rawcmp(paw_Char const *lhs, paw_Int lhs_length, paw_Char const *rhs, paw_Int rhs_length);
+uint64_t paw_builtin_hash_bytes(paw_Char const *bytes, size_t length, uint64_t hash);
+int64_t paw_builtin_rawcmp(paw_Char const *lhs, size_t lhs_length, paw_Char const *rhs, size_t rhs_length);
 
 void paw_builtin_check_bounds(paw_Int index, paw_Int length);
 
 void *paw_ops_Slice_AsPtr_as_ptr(paw_Slice *self);
-paw_Int paw_slice_Slice_len(paw_Slice self);
-paw_Slice paw_slice_from_raw_parts(void *start, paw_Int length);
+size_t paw_slice_Slice_len(paw_Slice self);
+paw_Slice paw_slice_from_raw_parts(void *start, size_t length);
 
 typedef struct paw_mem_OOM {
     paw_Unit _;

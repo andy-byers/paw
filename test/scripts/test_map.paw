@@ -4,7 +4,7 @@ use hashmap::HashMap;
 
 #[test]
 pub fn get_from_empty_map() {
-    let map = HashMap::<int, int>::new();
+    let map = HashMap::<int64, int64>::new();
     assert(map.len() == 0);
     assert(map.get(&42).is_none());
 }
@@ -75,12 +75,12 @@ pub fn stress_test() {
 }
 
 struct BadKey {
-    pub value: int,
+    pub value: int64,
 }
 
 impl Hash for BadKey {
     // cause a collision on each insertion
-    fn hash(*self) -> int { 0 }
+    fn hash(*self) -> int64 { 0 }
 }
 
 impl Equals<Self> for BadKey {
@@ -89,7 +89,7 @@ impl Equals<Self> for BadKey {
     }
 }
 
-pub fn bk(value: int) -> BadKey {
+pub fn bk(value: int64) -> BadKey {
     BadKey{value}
 }
 
@@ -120,18 +120,18 @@ pub fn handles_lots_of_collisions() {
 }
 
 //struct Int2 {
-//    pub x: int,
-//    pub y: int,
+//    pub x: int64,
+//    pub y: int64,
 //}
 //
 //impl Int2 {
-//    pub fn new(x: int, y: int) -> Self {
+//    pub fn new(x: int64, y: int64) -> Self {
 //        Self{x, y}
 //    }
 //}
 //
 //impl Hash for Int2 {
-//    fn hash(*self) -> int {
+//    fn hash(*self) -> int64 {
 //        self.x.hash() ^ self.y.hash()
 //    }
 //}

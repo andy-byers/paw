@@ -4,32 +4,23 @@ struct Unit;
 
 #[test]
 pub fn test_option() {
-    let o: Option<int> = Option::Some(123);
-
-    // Option<?0> := Option<int>
-    //         ?0 := int
-    let o = Option::Some(1); 
-
-    //         Option<?1> := Option<Option<?2>>
-    //                 ?1 := Option<?2>
-    // Option<Option<?2>> := Option<Option<Unit>>
-    //         Option<?2> := Option<Unit>
-    //                 ?2 := Unit 
-    let o = Option::None;
-    o = Option::Some(Option::None); 
-    o = Option::Some(Option::Some(Unit));
+    let o: Option<int64> = Some(123);
+    let o = Some(1); 
+    let o = None;
+    o = Some(None); 
+    o = Some(Some(Unit));
 }
 
 #[test]
 pub fn test_result() {
-    // o: Result<int, str>
-    let o = Result::Ok(1); 
-    o = Result::Err("two");
+    // o: Result<int64, str>
+    let o = Ok(1); 
+    o = Err("two");
 
     // o: Result<Result<bool, bool>, Unit>
-    let o = Result::Err(Unit);
-    o = Result::Ok(Result::Ok(true)); 
-    o = Result::Ok(Result::Err(false));
+    let o = Err(Unit);
+    o = Ok(Ok(true)); 
+    o = Ok(Err(false));
 }
 
 struct Obj<T> {

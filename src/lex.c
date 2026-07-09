@@ -191,6 +191,18 @@ static paw_Bool test_next2(struct Lex *X, char const *c2)
     return test2(X, c2) ? (next(X), PAW_TRUE) : PAW_FALSE;
 }
 
+static paw_Bool test_next_nstr(struct Lex *X, char const *s, paw_Usize n)
+{
+    for (paw_Usize i = 0; i < n; ++i) {
+        if (X->ptr[i] != s[i])
+            return PAW_FALSE;
+    }
+    for (; n > 0; --n)
+        next(X);
+    return PAW_TRUE;
+}
+#define TEST_NEXT_LITERAL(X_, Lit_) test_next_nstr(X_, Lit_ "", PAW_LENGTHOF(Lit_))
+
 static struct Token make_token(TokenKind kind, struct SourceLoc start, struct SourceLoc end)
 {
     return (struct Token){
@@ -482,7 +494,7 @@ static struct Token consume_str(struct Lex *X, struct SourceLoc start_loc)
     goto handle_ascii;
 }
 
-static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int base)
+static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int base, enum NumberSuffix suffix)
 {
     struct StringBuffer const *b = &SCRATCH(X);
     paw_Uint u;
@@ -499,9 +511,41 @@ static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int b
     }
     return (struct Token){
         .span = span_from(X, start),
+        .flags = TF_COMPOSE(suffix, 0),
         .kind = TK_INT,
         .value.u = u,
     };
+}
+
+static enum NumberSuffix try_int_suffix(struct Lex *X)
+{
+    struct SourceLoc const start = X->loc;
+    paw_Bool const is_signed = test_next(X, 'i');
+    if (is_signed || test_next(X, 'u')) {
+        if (TEST_NEXT_LITERAL(X, "size"))
+            return is_signed ? NS_ISIZE : NS_USIZE;
+
+        if (test_next(X, '8')) {
+            return is_signed ? NS_I8 : NS_U8;
+        } else if (TEST_NEXT_LITERAL(X, "16")) {
+            return is_signed ? NS_I16 : NS_U16;
+        } else if (TEST_NEXT_LITERAL(X, "32")) {
+            return is_signed ? NS_I32 : NS_U32;
+        } else if (TEST_NEXT_LITERAL(X, "64")) {
+            return is_signed ? NS_I64 : NS_U64;
+        } else {
+            // TODO: more specific error InvalidNumberSuffix
+            LEXER_ERROR(X, InvalidCharInInteger,
+                    .span = RANGE(start, X->loc),
+                    .base = 10);
+        }
+    }
+    return NS_NONE;
+}
+
+static paw_Bool is_int_char(char c)
+{
+    return ISHEX(c) || c == '_';
 }
 
 static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start)
@@ -511,7 +555,7 @@ static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start)
                 .span = RANGE(start, X->loc),
                 .base = 2);
 
-    while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
+    while (is_int_char(*X->ptr)) {
         if (test_next(X, '_')) {
             // ignore digit separators
         } else if (!test2(X, "01")) {
@@ -524,7 +568,8 @@ static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start)
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, 2);
+    enum NumberSuffix suffix = try_int_suffix(X);
+    return consume_int_aux(X, start, 2, suffix);
 }
 
 static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start)
@@ -534,7 +579,7 @@ static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start)
                 .span = RANGE(start, X->loc),
                 .base = 8);
 
-    while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
+    while (is_int_char(*X->ptr)) {
         if (test_next(X, '_')) {
             // ignore digit separators
         } else if (*X->ptr < '0' || *X->ptr > '7') {
@@ -547,7 +592,8 @@ static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start)
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, 8);
+    enum NumberSuffix const suffix = try_int_suffix(X);
+    return consume_int_aux(X, start, 8, suffix);
 }
 
 static struct Token consume_hex_int(struct Lex *X, struct SourceLoc start)
@@ -557,20 +603,14 @@ static struct Token consume_hex_int(struct Lex *X, struct SourceLoc start)
                 .span = RANGE(start, X->loc),
                 .base = 16);
 
-    while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
-        if (test_next(X, '_')) {
-            // ignore digit separators
-        } else if (!ISHEX(*X->ptr)) {
-            LEXER_ERROR(X, InvalidCharInInteger,
-                    .span = RANGE(start, X->loc),
-                    .base = 16);
-        } else {
+    while (is_int_char(*X->ptr)) {
+        if (!test_next(X, '_'))
             SAVE_AND_NEXT(X);
-        }
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, 16);
+    enum NumberSuffix const suffix = try_int_suffix(X);
+    return consume_int_aux(X, start, 16, suffix);
 }
 
 static void save_parsed_digits(struct Lex *X, const char *begin)
@@ -585,7 +625,8 @@ static void save_parsed_digits(struct Lex *X, const char *begin)
 static struct Token consume_decimal_int(struct Lex *X, struct SourceLoc start, const char *begin)
 {
     save_parsed_digits(X, begin);
-    return consume_int_aux(X, start, 10);
+    enum NumberSuffix const suffix = try_int_suffix(X);
+    return consume_int_aux(X, start, 10, suffix);
 }
 
 static struct Token consume_float(struct Lex *X, struct SourceLoc start, const char *begin)

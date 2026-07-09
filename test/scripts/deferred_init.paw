@@ -12,7 +12,7 @@ pub fn test_deferred_init() {
     assert(b[0] == 2);
 }
 
-fn check_deferred_init_ifelse(b: bool) -> int {
+fn check_deferred_init_ifelse(b: bool) -> int64 {
     let r;
     if b {
         r = 1; 
@@ -29,7 +29,7 @@ pub fn test_deferred_init_ifelse() {
     assert(check(false) == 2);
 }
 
-fn check_deferred_init_ifelse_chain(b1: bool, b2: bool, b3: bool) -> int {
+fn check_deferred_init_ifelse_chain(b1: bool, b2: bool, b3: bool) -> int64 {
     let r;
     if b1 {
         r = 1; 
@@ -55,7 +55,7 @@ pub fn test_deferred_init_ifelse_chain() {
     assert(check(false, false, false) == 4);
 }
 
-fn check_deferred_init_ifelse_nested(b1: bool, b2: bool, b3: bool) -> int {
+fn check_deferred_init_ifelse_nested(b1: bool, b2: bool, b3: bool) -> int64 {
     let r;
     if b1 {
         if b2 {
@@ -85,7 +85,7 @@ pub fn test_deferred_init_ifelse_nested() {
     assert(check(false, false, false) == 4);
 }
 
-fn check_deferred_init_ifelse_return(b1: bool, b2: bool) -> int {
+fn check_deferred_init_ifelse_return(b1: bool, b2: bool) -> int64 {
     let r;
     if b1 {
         if b2 {
@@ -108,7 +108,7 @@ pub fn test_deferred_init_ifelse_return() {
     assert(check(false, false) == -2);
 }
 
-fn check_deferred_init_match(i: int) -> int {
+fn check_deferred_init_match(i: int64) -> int64 {
     let r;
     match i {
         0 => r = 1,
@@ -126,7 +126,7 @@ pub fn test_deferred_init_match() {
     assert(check(2) == 3);
 }
 
-fn check_deferred_init_match_nested(i: int, j: int) -> int {
+fn check_deferred_init_match_nested(i: int64, j: int64) -> int64 {
     let r;
     match i {
         0 => r = 1,
@@ -152,7 +152,7 @@ pub fn test_deferred_init_match_nested() {
     assert(check(2, 0) == 5);
 }
 
-fn check_deferred_init_match_return(i: int, j: int) -> int {
+fn check_deferred_init_match_return(i: int64, j: int64) -> int64 {
     let r;
     match i {
         0 => r = 1,

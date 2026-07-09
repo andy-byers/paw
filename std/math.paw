@@ -3,40 +3,40 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #[extern = "paw_math_PI"] 
-pub const PI: float;
+pub const PI: float64;
 
 #[extern = "paw_math_NAN"] 
-pub const NAN: float;
+pub const NAN: float64;
 
 #[extern = "paw_math_INFINITY"] 
-pub const INFINITY: float;
+pub const INFINITY: float64;
 
 #[extern = "paw_math_sin"] 
-pub fn sin(f: float) -> float;
+pub fn sin(f: float64) -> float64;
 
 #[extern = "paw_math_cos"] 
-pub fn cos(f: float) -> float;
+pub fn cos(f: float64) -> float64;
 
 #[extern = "paw_math_tan"]
-pub fn tan(f: float) -> float;
+pub fn tan(f: float64) -> float64;
 
 #[extern = "paw_math_asin"]
-pub fn asin(f: float) -> float;
+pub fn asin(f: float64) -> float64;
 
 #[extern = "paw_math_acos"]
-pub fn acos(f: float) -> float;
+pub fn acos(f: float64) -> float64;
 
 #[extern = "paw_math_atan"]
-pub fn atan(f: float) -> float;
+pub fn atan(f: float64) -> float64;
 
 #[extern = "paw_math_atan2"]
-pub fn atan2(a: float, b: float) -> float;
+pub fn atan2(a: float64, b: float64) -> float64;
 
 #[extern = "paw_math_is_nan"]
-pub fn is_nan(f: float) -> bool;
+pub fn is_nan(f: float64) -> bool;
 
 #[extern = "paw_math_is_finite"]
-pub fn is_finite(f: float) -> bool;
+pub fn is_finite(f: float64) -> bool;
 
 #[extern = "paw_math_is_negative"]
-pub fn is_negative(f: float) -> bool;
+pub fn is_negative(f: float64) -> bool;

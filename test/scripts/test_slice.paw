@@ -3,7 +3,7 @@
 use slice::Slice;
 
 // TODO: Should be replaced with code that explicitly runs a collection
-fn gc_collect() -> [[int]] {
+fn gc_collect() -> [[int64]] {
     let memory = [];
     for i in 0..100 {
         let list = [];

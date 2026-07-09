@@ -1,23 +1,23 @@
 // poly_impl.paw
 
 pub trait Key {
-    fn key(*self) -> int;
+    fn key(*self) -> int64;
 }
 
-impl Key for int {
-    fn key(*self) -> int {
+impl Key for int64 {
+    fn key(*self) -> int64 {
         *self
     }
 }
 
 impl Key for str {
-    fn key(*self) -> int {
-        self.len()
+    fn key(*self) -> int64 {
+        self.len() as int64
     }
 }
 
 pub trait Key2<K: Key> {
-    fn key2(*self) -> int;
+    fn key2(*self) -> int64;
 }
 
 struct Poly<T> {
@@ -25,12 +25,12 @@ struct Poly<T> {
 }
 
 impl<T: Key> Key2<T> for Poly<T> {
-    fn key2(*self) -> int {
+    fn key2(*self) -> int64 {
         self.value.key()
     }
 }
 
-pub fn call_key2<K: Key>(p: *Poly<K>) -> int {
+pub fn call_key2<K: Key>(p: *Poly<K>) -> int64 {
     p.key2()
 }
 

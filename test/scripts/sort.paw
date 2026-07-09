@@ -3,7 +3,7 @@
 use array;
 use iter;
 
-fn check_sort_unstable<A: ToSlice<int>>(unsorted: A, sorted: A) {
+fn check_sort_unstable<A: ToSlice<int64>>(unsorted: A, sorted: A) {
     let unsorted = unsorted.to_slice();
     let sorted = sorted.to_slice();
     unsorted.sort_unstable();

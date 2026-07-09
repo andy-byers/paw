@@ -22,6 +22,8 @@
 
 enum InferenceVarKind {
     IVAR_TYPE,
+    IVAR_INTEGER,
+    IVAR_FLOAT,
     IVAR_CONST,
 };
 
@@ -181,10 +183,10 @@ void pawU_undo_unifications(struct Unifier *U, int position)
                 break;
             case ACTION_SET_DATA: {
                 struct InferenceVar const *ivar = get_ivar(entry.table, entry.ivar_id);
-                if (ivar->kind == IVAR_TYPE) {
-                    *ivar->data.type = entry.old_data.type;
-                } else {
+                if (ivar->kind == IVAR_CONST) {
                     *ivar->data.konst = entry.old_data.konst;
+                } else {
+                    *ivar->data.type = entry.old_data.type;
                 }
                 break;
             }
@@ -265,6 +267,13 @@ static int unify_var_type(struct Unifier *U, InferenceVar *ivar, IrType *type)
 {
     debug_log(U, "unify_var_type", ivar->data.type, type);
 
+    if (ivar->kind != IVAR_TYPE && IrIsNever(type))
+        return 0;
+
+    if ((ivar->kind == IVAR_INTEGER && !IrIsInt(type))
+            || (ivar->kind == IVAR_FLOAT && !IrIsFloat(type)))
+        return -1;
+
     check_type_occurs(U, ivar, type);
     record_set_type(U, U->ctx->type_vars, ivar);
     *ivar->data.type = *type;
@@ -281,21 +290,45 @@ static int unify_var_const(struct Unifier *U, InferenceVar *ivar, IrConst *konst
 
 static int unify_var_var(struct Unifier *U, UnificationTable *table, InferenceVar *a, InferenceVar *b)
 {
+    // Const unification only calls this function when both arguments are const inference
+    // variables. The type unification path needs to handle, for example, an int inference
+    // variable unified with a general type inference variable.
+    paw_assert((a->kind != IVAR_CONST && b->kind != IVAR_CONST)
+            || (a->kind == IVAR_CONST && b->kind == IVAR_CONST));
+
     a = find_root(U, table, a->id);
     b = find_root(U, table, b->id);
 
     debug_log(U, "unify_var_var", a->data.type, b->data.type);
 
-    if (a != b) link_roots(U, table, a, b);
+    if (a->kind != b->kind) {
+        // If neither argument is a general inference var, then there must be an
+        // integer-float mismatch. Otherwise, the general inference var is known to
+        // be an integer/float, depending on the kind of the other inference var.
+        if (a->kind != IVAR_TYPE && b->kind != IVAR_TYPE)
+            return -1;
+        return a->kind == IVAR_TYPE
+            ? unify_var_type(U, a, b->data.type)
+            : unify_var_type(U, b, a->data.type);
+    }
+
+    if (a != b)
+        link_roots(U, table, a, b);
     return 0;
 }
 
 static IrType *normalize_unknown(struct Unifier *U, IrType *type)
 {
+    struct IrInfer const *target = IrGetInfer(type);
     UnificationTable *table = U->ctx->type_vars;
-    paw_assert(table->depth == IrGetInfer(type)->depth);
+    paw_assert(table->depth == target->depth);
     IrType *root = find_root(U, table, UID(type))->data.type;
-    if (IrIsInfer(root)) return root;
+    if (IrIsInfer(root)) {
+        enum IrInferKind const rk = IrGetInfer(root)->ikind;
+        if (target->ikind != IR_INFER_TYPE
+                || (rk != IR_INFER_INTEGER && rk != IR_INFER_FLOAT))
+            return root;
+    }
     return pawU_normalize(U, root);
 }
 
@@ -350,6 +383,9 @@ IrConst *pawU_normalize_const(struct Unifier *U, IrConst *k)
         IrConst *root = find_root(U, table, k->infer.index)->data.konst;
         if (root->kind == IR_CONST_INFER) return root;
         return pawU_normalize_const(U, root);
+    } else if (k->kind == IR_CONST_VALUE) {
+        return pawIr_new_const_value(U->C, k->value.value,
+                pawU_normalize(U, k->value.type));
     }
     return k;
 }
@@ -641,6 +677,10 @@ static int unify_types(struct Unifier *U, IrType *a, IrType *b)
         return -1;
 
     switch (IR_KINDOF(a)) {
+        case kIrInt:
+            return IR_INT_KIND(a) == IR_INT_KIND(b) ? 0 : -1;
+        case kIrFloat:
+            return IR_FLOAT_KIND(a) == IR_FLOAT_KIND(b) ? 0 : -1;
         case kIrFnPtr:
             return unify_fptr(U, IrGetFnPtr(a), IrGetFnPtr(b));
         case kIrClosure:
@@ -692,7 +732,8 @@ static int unify_const_value(struct Unifier *U, struct IrConstValue a, struct Ir
     if (pawU_unify(U, a.type, b.type) != 0)
         return -1;
 
-    switch (IR_KINDOF(a.type)) {
+    IrType *type = pawU_normalize(U, a.type);
+    switch (IR_KINDOF(type)) {
 #define EQ(Lhs_, Rhs_, Field_) ((Lhs_).value.Field_ == (Rhs_).value.Field_ ? 0 : -1)
 
         case kIrUnit:
@@ -702,21 +743,51 @@ static int unify_const_value(struct Unifier *U, struct IrConstValue a, struct Ir
         case kIrChar:
             return EQ(a, b, c);
         case kIrInt:
-            return EQ(a, b, i);
-        default:
-            paw_assert(IrIsFloat(a.type));
-            return EQ(a, b, f);
+            switch (IR_INT_KIND(type)) {
+                case IR_INT8:
+                case IR_UINT8:
+                    return EQ(a, b, u8);
+                case IR_INT16:
+                case IR_UINT16:
+                    return EQ(a, b, u16);
+                case IR_INT32:
+                case IR_UINT32:
+                    return EQ(a, b, u32);
+                case IR_INT64:
+                case IR_UINT64:
+                    return EQ(a, b, u64);
+                case IR_ISIZE:
+                case IR_USIZE:
+                    return EQ(a, b, usize);
+            }
+        case kIrFloat:
+            switch (IR_FLOAT_KIND(type)) {
+                case IR_FLOAT32:
+                    return EQ(a, b, f32);
+                case IR_FLOAT64:
+                    return EQ(a, b, f64);
+            }
+        default: {
+            paw_assert(IrIsInfer(type));
+            struct IrInfer const *t = IrGetInfer(type);
+            if (t->ikind == IR_INFER_INTEGER) {
+                return EQ(a, b, u64);
+            } else {
+                paw_assert(t->ikind == IR_INFER_FLOAT);
+                return EQ(a, b, f64);
+            }
+        }
 
 #undef EQ
     }
 }
 
-static int unify_const_param(struct Unifier *U, struct IrConstDecl a, struct IrConstDecl b)
+static int unify_const_param(struct IrConstDecl a, struct IrConstDecl b)
 {
     return P_ID_EQUALS(NULL, a.did, b.did) ? 0 : -1;
 }
 
-static int unify_const_pending(struct Unifier *U, struct IrConstPending a, struct IrConstPending b)
+static int unify_const_pending(struct IrConstPending a, struct IrConstPending b)
 {
     return P_ID_EQUALS(NULL, a.did, b.did) ? 0 : -1;
 }
@@ -730,9 +801,9 @@ static int unify_consts(struct Unifier *U, IrConst *a, IrConst *b)
     if (a->kind == IR_CONST_VALUE)
         return unify_const_value(U, a->value, b->value);
     if (a->kind == IR_CONST_PENDING)
-        return unify_const_pending(U, a->pending, b->pending);
+        return unify_const_pending(a->pending, b->pending);
     paw_assert(a->kind == IR_CONST_DECL);
-    return unify_const_param(U, a->decl, b->decl);
+    return unify_const_param(a->decl, b->decl);
 }
 
 int pawU_unify_const(struct Unifier *U, IrConst *a, IrConst *b)
@@ -780,12 +851,19 @@ void pawU_discard_variables(struct Unifier *U)
 
 IrType *pawU_new_unknown(struct Unifier *U, struct SourceSpan span)
 {
+    return pawU_new_type_var(U, IR_INFER_TYPE, span);
+}
+
+IrType *pawU_new_type_var(struct Unifier *U, enum IrInferKind ikind, struct SourceSpan span)
+{
     UnificationTable *table = U->ctx->type_vars;
 
     int const index = table->ivars->count;
-    IrType *type = pawIr_new_infer(U->C, table->depth, index);
+    IrType *type = pawIr_new_infer(U->C, ikind, table->depth, index);
     InferenceVar const ivar = {
-        .kind = IVAR_TYPE,
+        .kind = ikind == IR_INFER_TYPE ? IVAR_TYPE :
+            ikind == IR_INFER_INTEGER ? IVAR_INTEGER :
+            IVAR_FLOAT,
         .id = index,
         .parent = index,
         .data.type = type,
@@ -840,10 +918,25 @@ void pawU_enter_binder(struct Unifier *U, Str const *modname)
 
 void pawU_check_context(struct Unifier *U)
 {
+    IrType *default_int = pawIr_new_int(U->C, IR_INT64);
+    IrType *default_float = pawIr_new_float(U->C, IR_FLOAT64);
     K_LIST_XFOREACH (U->ctx->type_vars->ivars, InferenceVar const, var) {
         IrType *type = pawU_normalize(U, var->data.type);
-        if (IrIsInfer(type))
+        if (IrIsInfer(type)) {
+            struct IrInfer const *t = IrGetInfer(type);
+            if (t->ikind == IR_INFER_INTEGER) {
+                *type = *default_int;
+            } else if (t->ikind == IR_INFER_FLOAT) {
+                *type = *default_float;
+            }
+        }
+    }
+    K_LIST_XFOREACH (U->ctx->type_vars->ivars, InferenceVar const, var) {
+        IrType *type = pawU_normalize(U, var->data.type);
+        if (IrIsInfer(type)) {
+            paw_assert(var->kind == IR_INFER_TYPE);
             UNIFIER_ERROR(U, CannotInfer, var->span);
+        }
     }
     K_LIST_XFOREACH (U->ctx->const_vars->ivars, InferenceVar const, var) {
         IrConst *konst = pawU_normalize_const(U, var->data.konst);

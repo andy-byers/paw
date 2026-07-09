@@ -186,8 +186,8 @@ struct Compiler {
             struct IrType *unit_t;
             struct IrType *bool_t;
             struct IrType *char_t;
-            struct IrType *int_t;
-            struct IrType *float_t;
+            struct IrTypeList *int_t;
+            struct IrTypeList *float_t;
             struct IrType *str_t;
         } primitives;
 

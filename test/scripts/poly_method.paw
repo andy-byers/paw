@@ -1,15 +1,15 @@
 // poly_method.paw
 
 struct Adt {
-    pub value: int,
+    pub value: int64,
 }
 
 impl Adt {
-    pub fn method<T>(self, t: T) -> (int, T) {
+    pub fn method<T>(self, t: T) -> (int64, T) {
         (self.value, t)
     }
 
-    pub fn assoc_fn<T>(t: T) -> (int, T) {
+    pub fn assoc_fn<T>(t: T) -> (int64, T) {
         (42, t)
     }
 }
@@ -26,12 +26,12 @@ pub fn test_call() {
     assert(t.1 == "def");
 }
 
-pub fn call_indirect_method<T>(t: T) -> (int, T) {
+pub fn call_indirect_method<T>(t: T) -> (int64, T) {
     let adt = Adt{value: 123};
     return adt.method(t);
 }
 
-pub fn call_indirect_assoc_fn<T>(t: T) -> (int, T) {
+pub fn call_indirect_assoc_fn<T>(t: T) -> (int64, T) {
     return Adt::assoc_fn(t);
 }
 

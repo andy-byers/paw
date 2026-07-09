@@ -1,7 +1,7 @@
 // try_operator_conversion.paw
 
-struct Error {pub code: int}
-struct Error2 {pub code: int}
+struct Error {pub code: int64}
+struct Error2 {pub code: int64}
 
 impl From<Error> for Error2 {
     fn from(e: Error) -> Self {
@@ -9,7 +9,7 @@ impl From<Error> for Error2 {
     }
 }
 
-pub fn check(code: int) -> Result<(), Error2> {
+pub fn check(code: int64) -> Result<(), Error2> {
     Err(Error{code})?
 }
 

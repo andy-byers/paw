@@ -3,7 +3,7 @@
 //use list::List;
 //
 //pub trait Key {
-//    fn key(self) -> int;
+//    fn key(self) -> int64;
 //}
 //
 //struct Type<T> {
@@ -11,7 +11,7 @@
 //}
 //
 //impl<Ty: Key> Key for Type<List<Ty>> {
-//    fn key(self) -> int { 
+//    fn key(self) -> int64 { 
 //        let result = 0;
 //        for elem in &self.value {
 //            result += elem.key();
@@ -21,10 +21,10 @@
 //}
 //
 //impl<X, Y> Key for Type<(X, Y)> {
-//    fn key(self) -> int { 42 }
+//    fn key(self) -> int64 { 42 }
 //}
 //
-//fn key<T: Key>(t: T) -> int {
+//fn key<T: Key>(t: T) -> int64 {
 //    t.key()
 //}
 //
@@ -68,14 +68,14 @@
 //    assert(k == 33);
 //}
 //
-//impl Key for int {
-//    fn key(self) -> int { 
+//impl Key for int64 {
+//    fn key(self) -> int64 { 
 //        self 
 //    }
 //}
 //
 //impl Key for List<str> {
-//    fn key(self) -> int {  
+//    fn key(self) -> int64 {  
 //        let result = 0;
 //        for elem in self {
 //            result += elem.parse_int().unwrap();
@@ -86,17 +86,17 @@
 //
 //
 //pub trait Merge<K: Key> {
-//    fn merge(self, rhs: K) -> int;
+//    fn merge(self, rhs: K) -> int64;
 //}
 //
-//impl<K: Key> Merge<K> for int {
-//    fn merge(self, rhs: K) -> int {
+//impl<K: Key> Merge<K> for int64 {
+//    fn merge(self, rhs: K) -> int64 {
 //        self + rhs.key()
 //    }
 //}
 //
 //impl<K: Key> Merge<K> for List<K> {
-//    fn merge(self, rhs: K) -> int {
+//    fn merge(self, rhs: K) -> int64 {
 //        let r = 0;
 //        for elem in self {
 //            r = r.merge(elem);
@@ -105,7 +105,7 @@
 //    }
 //}
 //
-//fn sequential_list(n: int) -> List<int> {
+//fn sequential_list(n: int64) -> List<int64> {
 //    let seq = List::new();
 //    seq.reserve(n).unwrap();
 //    for i in 1..=n {
@@ -126,21 +126,21 @@
 use list::List;
 
 pub trait Key {
-    fn key(self) -> int;
+    fn key(self) -> int64;
 }
 
 struct Type<T> {
     pub value: T,
 }
 
-impl Key for int {
-    fn key(self) -> int { 
+impl Key for int64 {
+    fn key(self) -> int64 { 
         self 
     }
 }
 
 impl Key for List<str> {
-    fn key(self) -> int {  
+    fn key(self) -> int64 {  
         let result = 0;
         for elem in self {
             result += elem.parse_int().unwrap();
@@ -150,7 +150,7 @@ impl Key for List<str> {
 }
 
 impl<Ty: Key> Key for Type<List<Ty>> {
-    fn key(self) -> int { 
+    fn key(self) -> int64 { 
         let result = 0;
         for elem in &self.value {
             result += elem.key();
@@ -160,10 +160,10 @@ impl<Ty: Key> Key for Type<List<Ty>> {
 }
 
 impl<X, Y> Key for Type<(X, Y)> {
-    fn key(self) -> int { 42 }
+    fn key(self) -> int64 { 42 }
 }
 
-fn key<T: Key>(t: T) -> int {
+fn key<T: Key>(t: T) -> int64 {
     t.key()
 }
 

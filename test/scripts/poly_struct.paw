@@ -1,6 +1,6 @@
 // poly_struct.paw
 
-pub fn instantiate_in_signature<T>(s: Struct<T>) -> Struct<int> {
+pub fn instantiate_in_signature<T>(s: Struct<T>) -> Struct<int64> {
     return Struct{v: 42};
 }
 
@@ -20,15 +20,15 @@ struct Singleton<Value> {
 
 #[test]
 pub fn test_initialization() {
-    let singleton: Singleton<int> = Singleton::<int>{value: 1};
-    let singleton = Singleton::<int>{value: 1};
+    let singleton: Singleton<int64> = Singleton::<int64>{value: 1};
+    let singleton = Singleton::<int64>{value: 1};
 
-    let a = Singleton::<(int,)>{value: (1,)};
-//    let b = Singleton::<fn(int) -> float>{value: |x: int| x as float};
-    let c = Singleton::<Singleton<int>>{value: Singleton::<int>{value: 2}};
+    let a = Singleton::<(int64,)>{value: (1,)};
+//    let b = Singleton::<fn(int64) -> float64>{value: |x: int64| x as float64};
+    let c = Singleton::<Singleton<int64>>{value: Singleton::<int64>{value: 2}};
 
     let a2 = Singleton{value: (1,)};
-//    let b2 = Singleton{value: |x: int| x as float};
+//    let b2 = Singleton{value: |x: int64| x as float64};
     let c2 = Singleton{value: Singleton{value: 2}};
 
     a = a2;
@@ -51,23 +51,23 @@ pub fn test_arguments() {
     touch_empty::<bool>(Empty::<bool>);
     let empty = Empty::<str>;
     touch_empty::<str>(empty);
-    touch_empty(Empty::<float>);
+    touch_empty(Empty::<float64>);
     touch_empty(empty);
 
-    touch_empty::<Empty<int>>(Empty::<Empty<int>>);
-    let a = Empty::<Empty<int>>;
-    touch_empty::<Empty<int>>(a);
-    touch_empty(Empty::<Empty<int>>);
+    touch_empty::<Empty<int64>>(Empty::<Empty<int64>>);
+    let a = Empty::<Empty<int64>>;
+    touch_empty::<Empty<int64>>(a);
+    touch_empty(Empty::<Empty<int64>>);
     touch_empty(a);
 
-    touch_empty::<Empty<Empty<float>>>(Empty::<Empty<Empty<float>>>);
-    let a = Empty::<Empty<Empty<float>>>;
-    touch_empty::<Empty<Empty<float>>>(a);
-    touch_empty(Empty::<Empty<Empty<float>>>);
+    touch_empty::<Empty<Empty<float64>>>(Empty::<Empty<Empty<float64>>>);
+    let a = Empty::<Empty<Empty<float64>>>;
+    touch_empty::<Empty<Empty<float64>>>(a);
+    touch_empty(Empty::<Empty<Empty<float64>>>);
     touch_empty(a);
 
     touch_nested_empty(Empty::<Empty<str>>);
-    touch_nested_empty(Empty::<Empty<Empty<float>>>);
+    touch_nested_empty(Empty::<Empty<Empty<float64>>>);
 }
 
 #[test]
@@ -112,7 +112,7 @@ struct TypeShadowsName<TypeShadowsName> {
 
 #[test]
 pub fn test_type_shadows_name() {
-    let tsn = TypeShadowsName::<int>{value: 123};
+    let tsn = TypeShadowsName::<int64>{value: 123};
     assert(tsn.value == 123);
 }
 
@@ -160,7 +160,7 @@ pub fn test_basic_inference() {
 //    pub values: [T],
 //}
 //
-//fn check_length<T>(n: int, c: Container<T>) {
+//fn check_length<T>(n: int64, c: Container<T>) {
 //    assert(#c.values == n);
 //}
 //
@@ -248,12 +248,12 @@ fn toplevel_call<T: Copy>(a: TopLevelA<T>) -> TopLevelB<T> {
 //#[test]
 //pub fn test_recursion() {
 //    let pr = PolyRecur2{
-//        value: Option::<PolyRecur2<int, bool>>::None,
+//        value: Option::<PolyRecur2<int64, bool>>::None,
 //        value2: Option::<PolyRecur2<Empty<bool>, bool>>::None,
 //        value3: Option::<PolyRecur2<bool, str>>::None,
 //    };
-//    pr.value = Option::<PolyRecur2<int, bool>>::Some(PolyRecur2 {
-//        value: Option::<PolyRecur2<int, bool>>::None,
+//    pr.value = Option::<PolyRecur2<int64, bool>>::Some(PolyRecur2 {
+//        value: Option::<PolyRecur2<int64, bool>>::None,
 //        value2: Option::<PolyRecur2<Empty<bool>, bool>>::None,
 //        value3: Option::<PolyRecur2<bool, str>>::None,
 //    });
@@ -272,36 +272,36 @@ fn toplevel_call<T: Copy>(a: TopLevelA<T>) -> TopLevelB<T> {
 //struct PolyRecur2A<X, Y, Z> {
 //    pub value: Option<PolyRecur2B<X, Y, Z>>,
 //    pub value2: Option<PolyRecur2B<X, str, Z>>,
-//    pub value3: Option<PolyRecur2B<bool, [int], str>>,
+//    pub value3: Option<PolyRecur2B<bool, [int64], str>>,
 //}
 //
 //struct PolyRecur2B<X, Y, Z> {
 //    pub value: Option<PolyRecur2A<Z, X, Y>>,
 //    pub value2: Option<PolyRecur2A<Z, X, [bool]>>,
-//    pub value3: Option<PolyRecur2A<str, float, X>>,
+//    pub value3: Option<PolyRecur2A<str, float64, X>>,
 //}
 //
 //#[test]
 //pub fn test_recursion2() {
 //    let pr = PolyRecur2A{
-//        value: Option::<PolyRecur2B<bool, int, float>>::None,
-//        value2: Option::<PolyRecur2B<bool, str, float>>::None,
-//        value3: Option::<PolyRecur2B<bool, [int], str>>::None,
+//        value: Option::<PolyRecur2B<bool, int64, float64>>::None,
+//        value2: Option::<PolyRecur2B<bool, str, float64>>::None,
+//        value3: Option::<PolyRecur2B<bool, [int64], str>>::None,
 //    };
-//    pr.value = Option::<PolyRecur2B<bool, int, float>>::Some(PolyRecur2B{
-//        value: Option::<PolyRecur2A<float, bool, int>>::None,
-//        value2: Option::<PolyRecur2A<float, bool, [bool]>>::None,
-//        value3: Option::<PolyRecur2A<str, float, bool>>::None,
+//    pr.value = Option::<PolyRecur2B<bool, int64, float64>>::Some(PolyRecur2B{
+//        value: Option::<PolyRecur2A<float64, bool, int64>>::None,
+//        value2: Option::<PolyRecur2A<float64, bool, [bool]>>::None,
+//        value3: Option::<PolyRecur2A<str, float64, bool>>::None,
 //    });
-//    pr.value2 = Option::<PolyRecur2B<bool, str, float>>::Some(PolyRecur2B{
-//        value: Option::<PolyRecur2A<float, bool, str>>::None,
-//        value2: Option::<PolyRecur2A<float, bool, [bool]>>::None,
-//        value3: Option::<PolyRecur2A<str, float, bool>>::None,
+//    pr.value2 = Option::<PolyRecur2B<bool, str, float64>>::Some(PolyRecur2B{
+//        value: Option::<PolyRecur2A<float64, bool, str>>::None,
+//        value2: Option::<PolyRecur2A<float64, bool, [bool]>>::None,
+//        value3: Option::<PolyRecur2A<str, float64, bool>>::None,
 //    });
-//    pr.value3 = Option::<PolyRecur2B<bool, [int], str>>::Some(PolyRecur2B{
-//        value: Option::<PolyRecur2A<str, bool, [int]>>::None,
+//    pr.value3 = Option::<PolyRecur2B<bool, [int64], str>>::Some(PolyRecur2B{
+//        value: Option::<PolyRecur2A<str, bool, [int64]>>::None,
 //        value2: Option::<PolyRecur2A<str, bool, [bool]>>::None,
-//        value3: Option::<PolyRecur2A<str, float, bool>>::None,
+//        value3: Option::<PolyRecur2A<str, float64, bool>>::None,
 //    });
 //}
 //
@@ -316,7 +316,7 @@ fn toplevel_call<T: Copy>(a: TopLevelA<T>) -> TopLevelB<T> {
 //
 //#[test]
 //pub fn test_self_poly() {
-//    let ts = TestSelfPoly::<int, float>;
+//    let ts = TestSelfPoly::<int64, float64>;
 //    ts.method();
 //    ts.method2();
 //

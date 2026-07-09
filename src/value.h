@@ -9,8 +9,8 @@
 
 #define V_ISNAN(Value_) ((Value_).f != (Value_).f)
 
-#define V_FALSE(Value_) ((Value_).u == 0)
-#define V_TRUE(Value_) ((Value_).u != 0)
+#define V_FALSE(Value_) (!(Value_).b)
+#define V_TRUE(Value_) ((Value_).b)
 #define V_CHAR(Value_) ((Value_).c)
 #define V_INT(Value_) ((Value_).i)
 #define V_UINT(Value_) ((Value_).u)
@@ -61,6 +61,7 @@ typedef struct Object {
 typedef union Value {
     void *p;
     paw_Char c;
+    paw_Bool b;
     paw_Int i;
     paw_Uint u;
     paw_Float f;

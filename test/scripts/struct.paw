@@ -3,7 +3,7 @@
 struct Empty;
 
 struct Integer {
-    pub value: int,
+    pub value: int64,
 }
 
 #[test]
@@ -31,7 +31,7 @@ pub fn test_struct_syntax() {
 }
 
 struct Inner {
-    pub a: int,
+    pub a: int64,
     pub b: str,
     pub c: Empty,
 }
@@ -57,7 +57,7 @@ pub fn test_nested_struct() {
 
 struct NoComma {
     // comma only needed to separate fields
-    pub value: int 
+    pub value: int64 
 }
 
 struct TestSelf;

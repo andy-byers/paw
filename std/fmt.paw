@@ -74,22 +74,22 @@ impl Formatter {
 }
 
 #[extern = "paw_fmt_write_float"]
-fn write_float_to(value: float, precision: int, output: *char, output_len: int) -> int;
+fn write_float_to(value: float64, precision: usize, output: *char, output_len: usize) -> usize;
 
 
-impl Display for int {
+impl Display for int64 {
     fn fmt(*self, f: *Formatter) -> Result<()> {
         let temp = array::zeros::<32, char>();
         let negative = *self < 0;
         let end = temp.len();
         let idx = end - 1;
 
-        if *self == INT_MIN {
+        if *self == INT64_MIN {
             let int64_min = "-9223372036854775808";
             return f.write_slice(int64_min.to_slice());
         }
         let u = if negative { -*self } else { *self };
-        let FIRST_DIGIT: int = '0' as int;
+        let FIRST_DIGIT: int64 = '0' as int64;
         loop {
             temp[idx] = (u % 10 + FIRST_DIGIT) as char;
             idx -= 1;
@@ -109,7 +109,7 @@ impl Display for int {
     }
 } 
 
-impl Display for float {
+impl Display for float64 {
     fn fmt(*self, f: *Formatter) -> Result<()> {
         let temp = array::zeros::<32, char>();
         let len = write_float_to(*self, 17, &temp[0], temp.len());

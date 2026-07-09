@@ -2,7 +2,7 @@
 
 fn black_box<T>(t: T) -> T { t }
 
-fn ifelse_exhaustive_branches_return(i: int) -> int {
+fn ifelse_exhaustive_branches_return(i: int64) -> int64 {
     if i == 0 {
         1
     } else if i == 1 {
@@ -22,7 +22,7 @@ fn ifelse_exhaustive_branches_return(i: int) -> int {
     }
 }
 
-fn match_exhaustive_branches_return(i: int) -> int {
+fn match_exhaustive_branches_return(i: int64) -> int64 {
     match i {
         0 => 1,
         1 => return 2,
@@ -44,7 +44,7 @@ pub fn test_exhaustive_branches_return() {
     assert(match_exhaustive_branches_return(3) == 5);    
 }
 
-fn ifelse_exhaustive_branches_panic(i: int) -> int {
+fn ifelse_exhaustive_branches_panic(i: int64) -> int64 {
     if i == 0 {
         1
     } else if i == 1 {
@@ -64,7 +64,7 @@ fn ifelse_exhaustive_branches_panic(i: int) -> int {
     }
 }
 
-fn match_exhaustive_branches_panic(i: int) -> int {
+fn match_exhaustive_branches_panic(i: int64) -> int64 {
     match i {
         0 => 1,
         1 => custom_divergence(),
@@ -92,13 +92,13 @@ pub fn test_guard() {
 
 #[test]
 pub fn test_ifelse() {
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         456
     } else {
         return
     };
 
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         return
     } else {
         456
@@ -107,7 +107,7 @@ pub fn test_ifelse() {
 
 #[test]
 pub fn test_ifelse_chain() {
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         123
     } else if black_box(true) {
         456
@@ -115,7 +115,7 @@ pub fn test_ifelse_chain() {
         return
     };
 
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         123
     } else if black_box(true) {
         return
@@ -123,7 +123,7 @@ pub fn test_ifelse_chain() {
         789
     };
 
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         return
     } else if black_box(true) {
         456
@@ -132,7 +132,7 @@ pub fn test_ifelse_chain() {
     };
 
 
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         123
     } else if black_box(true) {
         return
@@ -140,7 +140,7 @@ pub fn test_ifelse_chain() {
         return
     };
 
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         return
     } else if black_box(true) {
         456
@@ -148,7 +148,7 @@ pub fn test_ifelse_chain() {
         return
     };
 
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         return
     } else if black_box(true) {
         return
@@ -156,7 +156,7 @@ pub fn test_ifelse_chain() {
         789
     };
 
-    let _: int = if black_box(true) {
+    let _: int64 = if black_box(true) {
         return
     } else if black_box(true) {
         return
@@ -167,17 +167,17 @@ pub fn test_ifelse_chain() {
 
 #[test]
 pub fn test_match() {
-    let _: int = match black_box(Option::Some(123)) {
+    let _: int64 = match black_box(Option::Some(123)) {
         Option::Some(x) => x,
         Option::None => return,
     };
 
-    let _: int = match black_box(Option::Some(123)) {
+    let _: int64 = match black_box(Option::Some(123)) {
         Option::Some(x) => return,
         Option::None => 123,
     };
 
-    let _: int = match black_box(Option::Some(123)) {
+    let _: int64 = match black_box(Option::Some(123)) {
         Option::Some(x) => return,
         Option::None => return,
     };
@@ -203,7 +203,7 @@ pub fn test_loop() {
         }
     };
 
-    let _: int = loop {
+    let _: int64 = loop {
         if black_box(true) {
             return;
         } else {
@@ -233,7 +233,7 @@ pub fn test_other_loops() {
 
 #[test]
 pub fn test_nested_loop() {
-    let _: int = loop {
+    let _: int64 = loop {
         loop {
             return;
         }
@@ -270,7 +270,7 @@ pub fn test_diverging_arm() {
 }
 
 // return value not necessary since it would be unreachable
-fn function_never_returns() -> int {
+fn function_never_returns() -> int64 {
     custom_divergence();
 }
 
@@ -280,10 +280,10 @@ fn custom_divergence() -> ! {
 
 #[test]
 pub fn test_diverging_expressions() {
-    let _: int = !return;
+    let _: int64 = !return;
 
-    let _: int = 1 + return;
-    let _: int = return + 1;
+    let _: int64 = 1 + return;
+    let _: int64 = return + 1;
 
     let _ = (1, return);    
     let _ = (return, 2);    

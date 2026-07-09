@@ -351,28 +351,28 @@ pub fn move_only_closure() {
 //    let f = || {return;};
 //    f();
 //
-//    let f = || -> int {let x: int = 0; return x;};
+//    let f = || -> int64 {let x: int64 = 0; return x;};
 //    assert(f() == 0);
 //
-//    let f = |x: int| -> int {return x;};
+//    let f = |x: int64| -> int64 {return x;};
 //    assert(f(1) == 1);
 //
-//    let f = |x: int, y: int| -> int {return x;};
+//    let f = |x: int64, y: int64| -> int64 {return x;};
 //    assert(f(0, 1) == 0);
-//    let f = |x: int, y: int| -> int {return y;};
+//    let f = |x: int64, y: int64| -> int64 {return y;};
 //    assert(f(0, 1) == 1);
 //
-//    let f = |x: int, y: int, z: int| -> int {return x;};
+//    let f = |x: int64, y: int64, z: int64| -> int64 {return x;};
 //    assert(f(0, 1, 2) == 0);
-//    let f = |x: int, y: int, z: int| -> int {return y;};
+//    let f = |x: int64, y: int64, z: int64| -> int64 {return y;};
 //    assert(f(0, 1, 2) == 1);
-//    let f = |x: int, y: int, z: int| -> int {return z;};
+//    let f = |x: int64, y: int64, z: int64| -> int64 {return z;};
 //    assert(f(0, 1, 2) == 2);
 //}
 //
 //#[test]
 //pub fn test_return_must_be_last() {
-//    let f = || -> int {
+//    let f = || -> int64 {
 //        {
 //            // Return statement must be the last statement in the block.
 //            return 42;
@@ -459,10 +459,10 @@ pub fn move_only_closure() {
 //    // this line would result in an inference error if not for the annotation,
 //    // since we never call it and the parameters are never used, meaning the type
 //    // cannot be inferred
-//    let f: fn(int, float) = |a, b| {};
+//    let f: fn(int64, float64) = |a, b| {};
 //
-//    // infer inner: fn(int) -> int
-//    let outer = |a: fn(int) -> int| {};
+//    // infer inner: fn(int64) -> int64
+//    let outer = |a: fn(int64) -> int64| {};
 //    let inner = |a| a;
 //    outer(inner) ;
 //
@@ -478,11 +478,11 @@ pub fn move_only_closure() {
 //pub fn test_infer_param_from_body() {
 //    let f = |a| {return a + 1;};
 //
-//    let f = |a, b: int| {return a + b;};
+//    let f = |a, b: int64| {return a + b;};
 //    assert(f(1, 2) == 3);
 //    assert(f(10, 20) == 30);
 //
-//    let f = |a: float, b| {return a + b;};
+//    let f = |a: float64, b| {return a + b;};
 //    assert(f(0.0, 1.0) == 1.0);
 //    assert(f(2.0, 3.0) == 5.0);
 //}
@@ -515,12 +515,12 @@ pub fn move_only_closure() {
 //    let b = map(|a| a, [2, 3]);
 //    assert(b[-1] == 3);
 //
-//    // infer type of "a" and "[]" from "-> int" (requires block due to presence of
+//    // infer type of "a" and "[]" from "-> int64" (requires block due to presence of
 //    // arrow, otherwise the syntax looks strange)
-//    let b = map(|a| -> int {return a;}, []);
+//    let b = map(|a| -> int64 {return a;}, []);
 //    assert(#b == 0);
 //    // infer closure return type and "[]" from annotation on "a"
-//    let b = map(|a: int| a, []);
+//    let b = map(|a: int64| a, []);
 //    assert(#b == 0);
 //}
 //
@@ -552,8 +552,8 @@ pub fn move_only_closure() {
 //    assert(c == 42);
 //    let c = pipeline(|a| 2, |b| 3, 1);
 //    assert(c == 3);
-//    let c = pipeline(|a: float| a as int,
-//                     |b: int| b as float,
+//    let c = pipeline(|a: float64| a as int64,
+//                     |b: int64| b as float64,
 //                     2.5);
 //    assert(c == 2.0);
 //}
@@ -611,7 +611,7 @@ pub fn move_only_closure() {
 //
 //fn use_var<T>(t: T) {}
 //
-//pub fn check_upvalue_merge(b: bool) -> int {
+//pub fn check_upvalue_merge(b: bool) -> int64 {
 //    let f = {
 //        let upvalue = 0;
 //        if b { upvalue = 1; } 
@@ -633,7 +633,7 @@ pub fn move_only_closure() {
 //    assert(check_upvalue_merge(false) == 2);
 //}
 //
-//pub fn check_upvalue_merge_2(n: int) -> (int, int) {
+//pub fn check_upvalue_merge_2(n: int64) -> (int64, int64) {
 //    let f = {
 //        let a = 0;
 //        let b = 1;
@@ -683,7 +683,7 @@ pub fn move_only_closure() {
 //
 //#[test]
 //pub fn test_nested_closures_1() {
-//    let make_closure = |a: int| {
+//    let make_closure = |a: int64| {
 //        let b = 2;
 //        let c = 1;
 //        || (c, b, a)

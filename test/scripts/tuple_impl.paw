@@ -1,6 +1,6 @@
 // tuple_impl.paw
 
-impl (int, bool) {
+impl (int64, bool) {
     pub fn set_values(*self) {
         self.0 = -1;
         self.1 = false;
@@ -45,8 +45,8 @@ pub trait Key<T: Copy> {
     fn key(*self) -> T;
 }
 
-impl Key<int> for (int, int) {
-    fn key(*self) -> int {
+impl Key<int64> for (int64, int64) {
+    fn key(*self) -> int64 {
         self.0 + self.1
     }
 }

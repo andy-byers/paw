@@ -33,20 +33,20 @@ pub fn test_without_data() {
 }
 
 inline enum WithData {
-    A(int),
-    B(int),
-    C(int),
+    A(int64),
+    B(int64),
+    C(int64),
 }
 
 impl WithData {
-    pub fn a_value(self) -> Option<int> {
+    pub fn a_value(self) -> Option<int64> {
         match self {
             WithData::A(a) => Some(a),
             _ => None,
         }
     }
 
-    pub fn b_value(self) -> Option<int> {
+    pub fn b_value(self) -> Option<int64> {
         match self {
             WithData::B(b) => Some(b),
             _ => None,

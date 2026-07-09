@@ -3,8 +3,8 @@
 pub fn function_syntax
 (
     a
-    : int
-    , b: int) -> int
+    : int64
+    , b: int64) -> int64
 {
     return
         a
@@ -14,7 +14,7 @@ pub fn function_syntax
 #[test]
 pub fn test_syntax() 
 {
-    let x: int = 0;
+    let x: int64 = 0;
     {;;;};;;{};;;
     {; x = 1; assert(x == 1);};
     x = x

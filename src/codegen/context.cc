@@ -23,6 +23,7 @@ static constexpr char const *BUILTIN_NAMES[(size_t)BuiltinFn::NUM_BUILTINS] = {
 
 char const *get_builtin_name(BuiltinFn kind)
 {
+    paw_assert(kind < BuiltinFn::NUM_BUILTINS);
     return BUILTIN_NAMES[(unsigned)kind];
 }
 
@@ -54,18 +55,40 @@ Context::Context(llvm::LLVMContext &ctx, Compiler &compiler, std::string name, C
         .u = UnitType(*this),
         .b = BoolType(*this),
         .c = CharType(*this),
-        .i = IntType(*this),
-        .i32 = Int32Type(*this),
-        .f = FloatType(*this),
+        .i = {
+            IntType(*this, IntKind::INT8),
+            IntType(*this, IntKind::INT16),
+            IntType(*this, IntKind::INT32),
+            IntType(*this, IntKind::INT64),
+            IntType(*this, IntKind::ISIZE),
+            IntType(*this, IntKind::UINT8),
+            IntType(*this, IntKind::UINT16),
+            IntType(*this, IntKind::UINT32),
+            IntType(*this, IntKind::UINT64),
+            IntType(*this, IntKind::USIZE),
+        },
+        .f = {
+            FloatType(*this, FloatKind::FLOAT32),
+            FloatType(*this, FloatKind::FLOAT64),
+        },
         .s = StrType(*this),
     }
 {
     scalar_types_.u.set_dity(DI->createBasicType("int", 0, llvm::dwarf::DW_ATE_signed));
     scalar_types_.b.set_dity(DI->createBasicType("int", 1, llvm::dwarf::DW_ATE_signed));
     scalar_types_.c.set_dity(DI->createBasicType("int", 8, llvm::dwarf::DW_ATE_signed));
-    scalar_types_.i.set_dity(DI->createBasicType("int", 64, llvm::dwarf::DW_ATE_signed));
-    scalar_types_.i32.set_dity(DI->createBasicType("int", 32, llvm::dwarf::DW_ATE_signed));
-    scalar_types_.f.set_dity(DI->createBasicType("int", 64, llvm::dwarf::DW_ATE_float));
+    scalar_types_.i[size_t(IntKind::INT8)].set_dity(DI->createBasicType("int8", 8, llvm::dwarf::DW_ATE_signed));
+    scalar_types_.i[size_t(IntKind::INT16)].set_dity(DI->createBasicType("int16", 16, llvm::dwarf::DW_ATE_signed));
+    scalar_types_.i[size_t(IntKind::INT32)].set_dity(DI->createBasicType("int32", 32, llvm::dwarf::DW_ATE_signed));
+    scalar_types_.i[size_t(IntKind::INT64)].set_dity(DI->createBasicType("int64", 64, llvm::dwarf::DW_ATE_signed));
+    scalar_types_.i[size_t(IntKind::ISIZE)].set_dity(DI->createBasicType("isize", 64, llvm::dwarf::DW_ATE_signed));
+    scalar_types_.i[size_t(IntKind::UINT8)].set_dity(DI->createBasicType("uint8", 8, llvm::dwarf::DW_ATE_unsigned));
+    scalar_types_.i[size_t(IntKind::UINT16)].set_dity(DI->createBasicType("uint16", 16, llvm::dwarf::DW_ATE_unsigned));
+    scalar_types_.i[size_t(IntKind::UINT32)].set_dity(DI->createBasicType("uint32", 32, llvm::dwarf::DW_ATE_unsigned));
+    scalar_types_.i[size_t(IntKind::UINT64)].set_dity(DI->createBasicType("uint64", 64, llvm::dwarf::DW_ATE_unsigned));
+    scalar_types_.i[size_t(IntKind::USIZE)].set_dity(DI->createBasicType("usize", 64, llvm::dwarf::DW_ATE_unsigned));
+    scalar_types_.f[size_t(FloatKind::FLOAT32)].set_dity(DI->createBasicType("float32", 32, llvm::dwarf::DW_ATE_float));
+    scalar_types_.f[size_t(FloatKind::FLOAT64)].set_dity(DI->createBasicType("float64", 64, llvm::dwarf::DW_ATE_float));
     scalar_types_.s.set_dity(DI->createStringType("int", 8));
 }
 
@@ -79,18 +102,32 @@ Context::Context(Context const &rhs, std::unique_ptr<llvm::Module> mod)
         .u = UnitType(*this),
         .b = BoolType(*this),
         .c = CharType(*this),
-        .i = IntType(*this),
-        .i32 = Int32Type(*this),
-        .f = FloatType(*this),
+        .i = {
+            IntType(*this, IntKind::INT8),
+            IntType(*this, IntKind::INT16),
+            IntType(*this, IntKind::INT32),
+            IntType(*this, IntKind::INT64),
+            IntType(*this, IntKind::ISIZE),
+            IntType(*this, IntKind::UINT8),
+            IntType(*this, IntKind::UINT16),
+            IntType(*this, IntKind::UINT32),
+            IntType(*this, IntKind::UINT64),
+            IntType(*this, IntKind::USIZE),
+        },
+        .f = {
+            FloatType(*this, FloatKind::FLOAT32),
+            FloatType(*this, FloatKind::FLOAT64),
+        },
         .s = StrType(*this),
     }
 {
     scalar_types_.u.set_dity(rhs.scalar_types_.u.get_dity());
     scalar_types_.b.set_dity(rhs.scalar_types_.b.get_dity());
     scalar_types_.c.set_dity(rhs.scalar_types_.c.get_dity());
-    scalar_types_.i.set_dity(rhs.scalar_types_.i.get_dity());
-    scalar_types_.i32.set_dity(rhs.scalar_types_.i32.get_dity());
-    scalar_types_.f.set_dity(rhs.scalar_types_.f.get_dity());
+    for (size_t i = 0; i < NUM_INT_KINDS; ++i)
+        scalar_types_.i[i].set_dity(rhs.scalar_types_.i[i].get_dity());
+    for (size_t i = 0; i < NUM_FLOAT_KINDS; ++i)
+        scalar_types_.f[i].set_dity(rhs.scalar_types_.f[i].get_dity());
     scalar_types_.s.set_dity(rhs.scalar_types_.s.get_dity());
 }
 

@@ -8,6 +8,6 @@ impl<T> Id for T {
     type Type = T;
 }
 
-fn f<T: Id<Type = U>, U: Id<Type = int>>() {
+fn f<T: Id<Type = U>, U: Id<Type = int64>>() {
     let _: <<T as Id>::Type as Id>::Type = 123;
 }

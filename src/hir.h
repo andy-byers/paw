@@ -731,15 +731,25 @@ struct HirPathExpr {
 };
 
 enum HirLitKind {
-    kHirLitBasic,
-    kHirLitComposite,
-    kHirLitArray,
-    kHirLitTuple,
+    HIR_LIT_BOOL,
+    HIR_LIT_CHAR,
+    HIR_LIT_INT,
+    HIR_LIT_FLOAT,
+    HIR_LIT_STR,
+    HIR_LIT_COMPOSITE,
+    HIR_LIT_ARRAY,
+    HIR_LIT_TUPLE,
 };
 
-struct HirBasicLit {
-    Value value;
-    enum BuiltinKind code;
+
+struct HirIntLit {
+    paw_Int64 value;
+    enum NumberSuffix suffix;
+};
+
+struct HirFloatLit {
+    paw_Float64 value;
+    enum NumberSuffix suffix;
 };
 
 struct HirArrayLit {
@@ -758,11 +768,16 @@ struct HirCompositeLit {
 struct HirLiteralExpr {
     HIR_EXPR_HEADER;
     enum HirLitKind lit_kind;
+
     union {
-        struct HirBasicLit basic;
+        paw_Bool b;
+        paw_Char c;
+        Str const *s;
+        struct HirIntLit i;
+        struct HirFloatLit f;
         struct HirArrayLit array;
         struct HirTupleLit tuple;
-        struct HirCompositeLit comp;
+        struct HirCompositeLit composite;
     };
 };
 
@@ -950,16 +965,73 @@ static struct HirExpr *pawHir_new_path_expr(struct Hir *hir, struct SourceSpan s
     return e;
 }
 
-static struct HirExpr *pawHir_new_basic_lit(struct Hir *hir, struct SourceSpan span, NodeId id, Value value, enum BuiltinKind code)
+static struct HirExpr *pawHir_new_bool_lit(struct Hir *hir, struct SourceSpan span, NodeId id, paw_Bool value)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->LiteralExpr_ = (struct HirLiteralExpr){
         .id = id,
         .span = span,
         .kind = kHirLiteralExpr,
-        .lit_kind = kHirLitBasic,
-        .basic.value = value,
-        .basic.code = code,
+        .lit_kind = HIR_LIT_BOOL,
+        .b = value,
+    };
+    pawHir_register_node(hir, id, e);
+    return e;
+}
+
+static struct HirExpr *pawHir_new_char_lit(struct Hir *hir, struct SourceSpan span, NodeId id, paw_Char value)
+{
+    struct HirExpr *e = pawHir_new_expr(hir);
+    e->LiteralExpr_ = (struct HirLiteralExpr){
+        .id = id,
+        .span = span,
+        .kind = kHirLiteralExpr,
+        .lit_kind = HIR_LIT_CHAR,
+        .c = value,
+    };
+    pawHir_register_node(hir, id, e);
+    return e;
+}
+
+static struct HirExpr *pawHir_new_int_lit(struct Hir *hir, struct SourceSpan span, NodeId id, paw_Int value, enum NumberSuffix suffix)
+{
+    struct HirExpr *e = pawHir_new_expr(hir);
+    e->LiteralExpr_ = (struct HirLiteralExpr){
+        .id = id,
+        .span = span,
+        .kind = kHirLiteralExpr,
+        .lit_kind = HIR_LIT_INT,
+        .i.value = value,
+        .i.suffix = suffix,
+    };
+    pawHir_register_node(hir, id, e);
+    return e;
+}
+
+static struct HirExpr *pawHir_new_float_lit(struct Hir *hir, struct SourceSpan span, NodeId id, paw_Float value, enum NumberSuffix suffix)
+{
+    struct HirExpr *e = pawHir_new_expr(hir);
+    e->LiteralExpr_ = (struct HirLiteralExpr){
+        .id = id,
+        .span = span,
+        .kind = kHirLiteralExpr,
+        .lit_kind = HIR_LIT_FLOAT,
+        .f.value = value,
+        .f.suffix = suffix,
+    };
+    pawHir_register_node(hir, id, e);
+    return e;
+}
+
+static struct HirExpr *pawHir_new_str_lit(struct Hir *hir, struct SourceSpan span, NodeId id, Str const *value)
+{
+    struct HirExpr *e = pawHir_new_expr(hir);
+    e->LiteralExpr_ = (struct HirLiteralExpr){
+        .id = id,
+        .span = span,
+        .kind = kHirLiteralExpr,
+        .lit_kind = HIR_LIT_STR,
+        .s = value,
     };
     pawHir_register_node(hir, id, e);
     return e;
@@ -972,8 +1044,8 @@ static struct HirExpr *pawHir_new_array_lit(struct Hir *hir, struct SourceSpan s
         .id = id,
         .span = span,
         .kind = kHirLiteralExpr,
-        .lit_kind = kHirLitArray,
-        .tuple.elems = elems,
+        .lit_kind = HIR_LIT_ARRAY,
+        .array.elems = elems,
     };
     pawHir_register_node(hir, id, e);
     return e;
@@ -986,7 +1058,7 @@ static struct HirExpr *pawHir_new_tuple_lit(struct Hir *hir, struct SourceSpan s
         .id = id,
         .span = span,
         .kind = kHirLiteralExpr,
-        .lit_kind = kHirLitTuple,
+        .lit_kind = HIR_LIT_TUPLE,
         .tuple.elems = elems,
     };
     pawHir_register_node(hir, id, e);
@@ -1000,9 +1072,9 @@ static struct HirExpr *pawHir_new_composite_lit(struct Hir *hir, struct SourceSp
         .id = id,
         .span = span,
         .kind = kHirLiteralExpr,
-        .lit_kind = kHirLitComposite,
-        .comp.path = path,
-        .comp.items = items,
+        .lit_kind = HIR_LIT_COMPOSITE,
+        .composite.path = path,
+        .composite.items = items,
     };
     pawHir_register_node(hir, id, e);
     return e;

@@ -4,8 +4,8 @@ pub trait Sum<T> {
     fn sum(&self) -> T;
 }
 
-impl Sum<int> for [int] {
-    fn sum(&self) -> int {
+impl Sum<int64> for [int64] {
+    fn sum(&self) -> int64 {
         let total = 0;
         for i in self {
             total += i;
@@ -14,7 +14,7 @@ impl Sum<int> for [int] {
     }
 }
 
-pub fn sum_ints<T: Sum<int>>(t: T) -> int {
+pub fn sum_ints<T: Sum<int64>>(t: T) -> int64 {
     t.sum()
 }
 

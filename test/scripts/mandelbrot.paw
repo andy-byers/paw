@@ -2,7 +2,7 @@
 // usage: paw mandelbrot.paw x0,x1,nx,y0,y1,ny
 // translated from https://rosettacode.org/wiki/Mandelbrot_set#ASCII_2 (Lua).
 
-pub fn main(args: [str]) -> int {
+pub fn main(args: [str]) -> int64 {
     let charmap = [
         " ", ".", ":", "-", "=",
         "+", "*", "#", "%", "@",
@@ -21,13 +21,13 @@ pub fn main(args: [str]) -> int {
     let ny = values[5].parse_int().unwrap();
 
     assert(nx > 0 && ny > 0);
-    let dy = (y1 - y0) / (ny - 1) as float;
-    let dx = (x1 - x0) / (nx - 1) as float;
+    let dy = (y1 - y0) / (ny - 1) as float64;
+    let dx = (x1 - x0) / (nx - 1) as float64;
 
     for i in 0..ny {
-        let y = y0 + i as float * dy;
+        let y = y0 + i as float64 * dy;
         for j in 0..nx {
-            let x = x0 + j as float * dx;
+            let x = x0 + j as float64 * dx;
             let zi = 0.0;
             let zr = 0.0;
             let i = 0;

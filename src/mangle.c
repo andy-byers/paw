@@ -99,13 +99,51 @@ static void add_type(struct Compiler *C, Buffer *b, IrType *type)
             pawL_add_char(P, b, 'c');
             break;
         case kIrInt:
-            pawL_add_char(P, b, 'i');
+            switch (IR_INT_KIND(type)) {
+                case IR_INT8:
+                    pawL_add_char(P, b, 'a');
+                    break;
+                case IR_INT16:
+                    pawL_add_char(P, b, 's');
+                    break;
+                case IR_INT32:
+                    pawL_add_char(P, b, 'i');
+                    break;
+                case IR_INT64:
+                    pawL_add_char(P, b, 'x');
+                    break;
+                case IR_ISIZE:
+                    pawL_add_char(P, b, 'j');
+                    break;
+                case IR_UINT8:
+                    pawL_add_char(P, b, 'h');
+                    break;
+                case IR_UINT16:
+                    pawL_add_char(P, b, 't');
+                    break;
+                case IR_UINT32:
+                    pawL_add_char(P, b, 'u');
+                    break;
+                case IR_UINT64:
+                    pawL_add_char(P, b, 'y');
+                    break;
+                case IR_USIZE:
+                    pawL_add_char(P, b, 'k');
+                    break;
+            }
             break;
         case kIrFloat:
-            pawL_add_char(P, b, 'f');
+            switch (IR_FLOAT_KIND(type)) {
+                case IR_FLOAT32:
+                    pawL_add_char(P, b, 'f');
+                    break;
+                case IR_FLOAT64:
+                    pawL_add_char(P, b, 'd');
+                    break;
+            }
             break;
         case kIrString:
-            pawL_add_char(P, b, 's');
+            pawL_add_char(P, b, 'w');
             break;
         case kIrPtr:
             pawL_add_char(P, b, 'p');

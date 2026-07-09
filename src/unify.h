@@ -26,7 +26,8 @@ int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
 int pawU_unify_const(struct Unifier *U, struct IrConst *a, struct IrConst *b);
 
 // Create a new type variable
-struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceSpan span);
+struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceSpan span); // TODO: remove
+struct IrType *pawU_new_type_var(struct Unifier *U, enum IrInferKind ikind, struct SourceSpan span);
 struct IrConst *pawU_new_const_var(struct Unifier *U, struct SourceSpan span);
 
 // Inference context handling

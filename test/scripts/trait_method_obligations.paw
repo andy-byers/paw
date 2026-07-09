@@ -13,6 +13,6 @@ pub trait Trait {
 }
 
 impl<X> Trait for Struct<X> {
-    type Target = int;
-    fn method<Y: Constraint<Output = int>>(*self, y: Y) {}
+    type Target = int64;
+    fn method<Y: Constraint<Output = int64>>(*self, y: Y) {}
 }
