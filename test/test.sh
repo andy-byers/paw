@@ -51,6 +51,7 @@ TESTS=(
     "tuple"
     "enum"
     "getters"
+    "fstring"
 #    "test_list"
 #    "test_map"
 #    "test_slice"

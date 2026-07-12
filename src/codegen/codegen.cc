@@ -1701,9 +1701,11 @@ private:
                 if (IrIsBool(to)) {
                     return B->CreateCmp(llvm::CmpInst::FCMP_ONE, target,
                             create_constant_float(0.0, IR_FLOAT_KIND(from)));
-                } else {
-                    paw_assert(IrIsInt(to));
+                } else if (IrIsInt(to)) {
                     return B->CreateFPToSI(target, *to_type);
+                } else {
+                    paw_assert(IrIsFloat(to));
+                    return target;
                 }
         }
     }

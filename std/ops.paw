@@ -943,3 +943,27 @@ impl Default for float64 {
     }
 }
 
+
+use fmt;
+
+pub fn __format_init() -> fmt::Formatter {
+    fmt::Formatter::new()
+}
+
+pub fn __format_expr<D: fmt::Display>(f: *fmt::Formatter, r: *Option<fmt::Error>, d: *D) {
+    if r.is_none() {
+        match d.fmt(f) {
+            Ok(()) => (),
+            Err(e) => *r = Some(e),
+        };
+    }
+}
+
+pub fn __format_str(f: *fmt::Formatter, r: *Option<fmt::Error>, s: str) {
+    if r.is_none() {
+        match s.fmt(f) {
+            Ok(()) => (),
+            Err(e) => *r = Some(e),
+        };
+    }
+}

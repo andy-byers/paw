@@ -22,6 +22,7 @@ enum SpanRefKind {
     SPAN_REF_QUESTION_MARK,
     SPAN_REF_FOR_LOOP,
     SPAN_REF_RANGE,
+    SPAN_REF_FSTRING,
 };
 
 typedef struct SpanRef {

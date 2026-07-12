@@ -788,6 +788,7 @@ struct AstStringPart {
 
 struct AstStringExpr {
     AST_EXPR_HEADER;
+    paw_Bool is_fstring : 1;
     struct AstStringList *parts;
 };
 

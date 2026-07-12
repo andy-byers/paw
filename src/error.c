@@ -160,6 +160,8 @@ static char const *ref_kind_name(enum SpanRefKind kind)
             return "question mark operator";
         case SPAN_REF_RANGE:
             return "constructor for range";
+        case SPAN_REF_FSTRING:
+            return "format string builder";
     }
 }
 

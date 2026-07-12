@@ -39,6 +39,10 @@ struct LowerAst {
     struct Hir *hir;
     paw_Env *P;
 
+    NodeId format_init;
+    NodeId format_str;
+    NodeId format_expr;
+
     DeclId adt_did;
     struct SegmentTable *segtab;
     struct HirStmtList *stmts;
@@ -643,11 +647,199 @@ static struct HirExpr *LowerLiteralExpr(struct LowerAst *L, struct AstLiteralExp
     }
 }
 
+static struct HirPat *binding_pat(struct LowerAst *L, struct SourceSpan span, struct HirIdent ident, NodeId id)
+{
+    return NEW_NODE(L, binding_pat, span, id, ident);
+}
+
+static struct HirExpr *new_none_expr(struct LowerAst *L, struct SourceSpan span)
+{
+    NodeId const option_id = builtin_id(L, BUILTIN_OPTION);
+    NodeId const none_id = variant_id(L, option_id, PAW_OPTION_NONE);
+
+    struct HirIdent const ident = {
+        .name = SCAN_STR(L->C, "None"),
+        .span = span,
+    };
+    return new_unary_path_expr(L, ident, next_node_id(L), HIR_PATH_ITEM, none_id);
+}
+
+static struct HirExpr *new_ok_expr(struct LowerAst *L, struct HirExpr *value, struct SourceSpan span)
+{
+    NodeId const result_id = builtin_id(L, BUILTIN_RESULT);
+    NodeId const ok_id = variant_id(L, result_id, PAW_RESULT_OK);
+
+    struct HirIdent const ident = {
+        .name = SCAN_STR(L->C, "Ok"),
+        .span = span,
+    };
+    HirExprList *args = HirExprList_new(L->hir);
+    HirExprList_push(L->hir, args, value);
+    struct HirExpr *target = new_unary_path_expr(L, ident, ok_id, HIR_PATH_ITEM, ok_id);
+    return NEW_NODE(L, call_expr, span, next_node_id(L), target, args);
+}
+
+static struct HirExpr *new_err_expr(struct LowerAst *L, struct HirExpr *error, struct SourceSpan span)
+{
+    NodeId const result_id = builtin_id(L, BUILTIN_RESULT);
+    NodeId const err_id = variant_id(L, result_id, PAW_RESULT_ERR);
+
+    struct HirIdent const ident = {
+        .name = SCAN_STR(L->C, "Err"),
+        .span = span,
+    };
+    HirExprList *args = HirExprList_new(L->hir);
+    HirExprList_push(L->hir, args, error);
+    struct HirExpr *target = new_unary_path_expr(L, ident, err_id, HIR_PATH_ITEM, err_id);
+    return NEW_NODE(L, call_expr, span, next_node_id(L), target, args);
+}
+
+static NodeId option_id(struct LowerAst *L, int discr)
+{
+    NodeId const option_id = builtin_id(L, BUILTIN_OPTION);
+    struct AstAdtDecl const *option = pawAst_get_node(L->ast, option_id);
+    struct AstDecl *variant = AstDeclList_get(option->variants, discr);
+    return variant->hdr.id;
+}
+
+static struct HirPat *new_some_pat(struct LowerAst *L, struct HirPat *pat, struct SourceSpan span)
+{
+    NodeId const first_id = next_node_id(L);
+    NodeId const second_id = next_node_id(L);
+    NodeId const option_id = builtin_id(L, BUILTIN_OPTION);
+    NodeId const some_id = variant_id(L, option_id, PAW_OPTION_SOME);
+
+    struct HirSegments *segments = HirSegments_new(L->hir);
+    pawHir_add_segment(L->hir, segments, span, first_id, make_ident(CSTR(L->C, CSTR_OPTION), span), NULL, option_id);
+    pawHir_add_segment(L->hir, segments, span, second_id, make_ident(SCAN_STR(L->C, "Some"), span), NULL, some_id);
+    struct HirPath path = pawHir_path_create(span, segments, HIR_PATH_ASSOC);
+    struct HirPatList *fields = HirPatList_new(L->hir);
+    struct HirPat *variant = NEW_NODE(L, variant_pat, span, next_node_id(L), path, fields, 0);
+    HirPatList_push(L->hir, fields, pat);
+    return variant;
+}
+
+static struct HirPat *new_none_pat(struct LowerAst *L, struct SourceSpan span)
+{
+    NodeId const first_id = next_node_id(L);
+    NodeId const second_id = next_node_id(L);
+    NodeId const option_id = builtin_id(L, BUILTIN_OPTION);
+    NodeId const none_id = variant_id(L, option_id, PAW_OPTION_NONE);
+
+    struct HirSegments *segments = HirSegments_new(L->hir);
+    pawHir_add_segment(L->hir, segments, span, first_id, make_ident(CSTR(L->C, CSTR_OPTION), span), NULL, option_id);
+    pawHir_add_segment(L->hir, segments, span, second_id, make_ident(SCAN_STR(L->C, "None"), span), NULL, none_id);
+    struct HirPath path = pawHir_path_create(span, segments, HIR_PATH_ASSOC);
+    return NEW_NODE(L, variant_pat, span, next_node_id(L), path, HirPatList_new(L->hir), 0);
+}
+
+
+// Transforms
+//
+//     f"abc\{123}"
+//
+// into
+//
+//     {
+//         let _f = ops::__format_init();
+//         let _r = None;
+//         ops::__format_str(&_f, &_r, "abc");
+//         ops::__format_expr(&_f, &_r, &123);
+//         match _r {
+//             None => Ok(_f.string()),
+//             Some(e) => Err(e),
+//         }
+//     }
 static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr *e)
 {
-    struct AstStringPart const first_part = AstStringList_first(e->parts);
-    paw_assert(first_part.is_str);
-    return NEW_NODE(L, str_lit, first_part.str.span, e->id, first_part.str.value.s);
+    struct SourceSpan const span = SourceSpan_from_ref(
+            pawSrc_create_ref(L->C, e->span), SPAN_REF_FSTRING);
+    HirStmtList *block_stmts = HirStmtList_new(L->hir);
+
+    NodeId const f_id = next_node_id(L);
+    NodeId const r_id = next_node_id(L);
+    struct HirIdent const f_ident = {
+        .name = SCAN_STR(L->C, PRIVATE("f")),
+        .span = span,
+    };
+    struct HirIdent const r_ident = {
+        .name = SCAN_STR(L->C, PRIVATE("r")),
+        .span = span,
+    };
+
+    struct AstFnDecl const *format_init_fn = AstGetFnDecl(pawAst_get_node(L->ast, L->format_init));
+    struct AstFnDecl const *format_str_fn = AstGetFnDecl(pawAst_get_node(L->ast, L->format_str));
+    struct AstFnDecl const *format_expr_fn = AstGetFnDecl(pawAst_get_node(L->ast, L->format_expr));
+#define GET_FORMAT_FN(L_, Stage_) new_unary_path_expr(L_, lower_ident(format_##Stage_##_fn->ident), next_node_id(L_), HIR_PATH_ITEM, format_##Stage_##_fn->id)
+#define GET_LOCAL_VAR(L_, Letter_) new_unary_path_expr(L, Letter_##_ident, next_node_id(L), HIR_PATH_LOCAL, Letter_##_id)
+
+    // declare local variables `_f: fmt::Formatter` and `_r: Option<fmt::Error>`
+    HirStmtList_push(L->hir, block_stmts,
+            NEW_NODE(L, let_stmt, span, next_node_id(L), binding_pat(L, span, f_ident, f_id), NULL,
+                NEW_NODE(L, call_expr, span, next_node_id(L), GET_FORMAT_FN(L, init), HirExprList_new(L->hir))));
+    HirStmtList_push(L->hir, block_stmts,
+            NEW_NODE(L, let_stmt, span, next_node_id(L), binding_pat(L, span, r_ident, r_id), NULL,
+                new_none_expr(L, span)));
+
+    // generate a call to `ops::__format_*(&_f, &_r, PART)` for each part of the format string
+    K_LIST_XFOREACH (e->parts, struct AstStringPart const, part) {
+        HirExprList *format_args = HirExprList_new(L->hir);
+        HirExprList_push(L->hir, format_args, NEW_NODE(L, unop_expr, span,
+                    next_node_id(L), GET_LOCAL_VAR(L, f), UNARY_ADDROF));
+        HirExprList_push(L->hir, format_args, NEW_NODE(L, unop_expr, span,
+                    next_node_id(L), GET_LOCAL_VAR(L, r), UNARY_ADDROF));
+
+        struct HirExpr *format_target;
+        if (part->is_str) {
+            HirExprList_push(L->hir, format_args,
+                    NEW_NODE(L, str_lit, e->span, next_node_id(L), part->str.value.s));
+            format_target = GET_FORMAT_FN(L, str);
+        } else {
+            struct HirExpr *expr = lower_expr(L, part->expr);
+            HirExprList_push(L->hir, format_args,
+                    NEW_NODE(L, unop_expr, span, next_node_id(L), expr, UNARY_ADDROF));
+            format_target = GET_FORMAT_FN(L, expr);
+        }
+
+        struct HirExpr *format_call = NEW_NODE(L, call_expr, span, next_node_id(L), format_target, format_args);
+        HirStmtList_push(L->hir, block_stmts, NEW_NODE(L, expr_stmt, span, next_node_id(L), format_call));
+    }
+
+    struct HirExprList *arms = HirExprList_new(L->hir);
+    {
+        // create the `None => Ok(_f.string())` arm
+        struct HirIdent const string_ident = {
+            .name = SCAN_STR(L->C, "string"),
+            .span = span,
+        };
+        struct HirExpr *string_selector = NEW_NODE(L, name_selector, span, next_node_id(L),
+                GET_LOCAL_VAR(L, f), string_ident);
+        struct HirExpr *string_call = NEW_NODE(L, call_expr, span, next_node_id(L),
+                string_selector, HirExprList_new(L->hir));
+        struct HirExpr *arm = NEW_NODE(L, match_arm, span, next_node_id(L),
+                new_none_pat(L, span), NULL, new_ok_expr(L, string_call, span));
+        HirExprList_push(L->hir, arms, arm);
+    }
+    {
+        // create the `Some(e) => Err(e)` arm
+        struct HirIdent const e_ident = {
+            .name = SCAN_STR(L->C, "e"),
+            .span = span,
+        };
+        NodeId const e_id = next_node_id(L);
+        struct HirPat *e_binding = NEW_NODE(L, binding_pat, span, e_id, e_ident);
+        struct HirExpr *e_expr = new_unary_path_expr(L, e_ident, next_node_id(L), HIR_PATH_LOCAL, e_id);
+        struct HirPat *e_pat = new_some_pat(L, e_binding, span);
+        struct HirExpr *arm = NEW_NODE(L, match_arm, span, next_node_id(L), e_pat, NULL,
+                new_err_expr(L, e_expr, span));
+        HirExprList_push(L->hir, arms, arm);
+    }
+
+    struct HirExpr *result = NEW_NODE(L, match_expr, span, next_node_id(L), GET_LOCAL_VAR(L, r), arms);
+    return NEW_NODE(L, block, span, next_node_id(L), block_stmts, result);
+
+#undef GET_LOCAL_VAR
+#undef GET_FORMAT_FN
 }
 
 static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d)
@@ -861,36 +1053,6 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *e
     struct HirExpr *result = unit_lit(L, e->span);
     struct HirExpr *body = NEW_NODE(L, block, e->span, next_node_id(L), stmts, result);
     return NEW_NODE(L, loop_expr, e->span, e->id, body);
-}
-
-static NodeId option_id(struct LowerAst *L, int discr)
-{
-    NodeId const option_id = builtin_id(L, BUILTIN_OPTION);
-    struct AstAdtDecl const *option = pawAst_get_node(L->ast, option_id);
-    struct AstDecl *variant = AstDeclList_get(option->variants, discr);
-    return variant->hdr.id;
-}
-
-static struct HirPat *new_some_pat(struct LowerAst *L, struct HirPat *pat, struct SourceSpan span)
-{
-    NodeId const first_id = next_node_id(L);
-    NodeId const second_id = next_node_id(L);
-    NodeId const option_id = builtin_id(L, BUILTIN_OPTION);
-    NodeId const some_id = variant_id(L, option_id, PAW_OPTION_SOME);
-
-    struct HirSegments *segments = HirSegments_new(L->hir);
-    pawHir_add_segment(L->hir, segments, span, first_id, make_ident(CSTR(L->C, CSTR_OPTION), span), NULL, option_id);
-    pawHir_add_segment(L->hir, segments, span, second_id, make_ident(SCAN_STR(L->C, "Some"), span), NULL, some_id);
-    struct HirPath path = pawHir_path_create(span, segments, HIR_PATH_ASSOC);
-    struct HirPatList *fields = HirPatList_new(L->hir);
-    struct HirPat *variant = NEW_NODE(L, variant_pat, span, next_node_id(L), path, fields, 0);
-    HirPatList_push(L->hir, fields, pat);
-    return variant;
-}
-
-static struct HirPat *binding_pat(struct LowerAst *L, struct SourceSpan span, struct HirIdent ident, NodeId id)
-{
-    return NEW_NODE(L, binding_pat, span, id, ident);
 }
 
 // Lower a ForExpr construct
@@ -1295,6 +1457,31 @@ static struct HirType *lower_type(struct LowerAst *L, struct AstType *type)
     }
 }
 
+static NodeId find_builtin_fn(struct LowerAst *L, char const *modname, char const *name)
+{
+    Str const *modname_str = SCAN_STR(L->C, modname);
+    Str const *name_str = SCAN_STR(L->C, name);
+    K_LIST_XFOREACH (L->ast->modules, struct AstDecl *const, pmodule) {
+        struct AstModuleDecl const *m = AstGetModuleDecl(*pmodule);
+        if (pawS_eq(modname_str, m->name)) {
+            K_LIST_XFOREACH (m->items, struct AstDecl *const, pdecl) {
+                if (AstIsFnDecl(*pdecl)) {
+                    struct AstFnDecl const *d = AstGetFnDecl(*pdecl);
+                    if (pawS_eq(d->ident.name, name_str))
+                        return d->id;
+                }
+            }
+            break;
+        }
+    }
+
+    LOWERING_ERROR(L, Internal,
+            .message = pawP_format_string(L->C, "builtin fn `%s::%s` no longer exists", modname, name),
+            .span = {0});
+}
+
+#warning
+#include"stdio.h"
 void pawP_lower_ast(struct Compiler *C)
 {
     paw_Env *P = ENV(C);
@@ -1307,11 +1494,16 @@ void pawP_lower_ast(struct Compiler *C)
         .C = C,
     };
 
+    L.format_init = find_builtin_fn(&L, "ops", "__format_init");
+    L.format_str = find_builtin_fn(&L, "ops", "__format_str");
+    L.format_expr = find_builtin_fn(&L, "ops", "__format_expr");
+
     L.hir = C->hir = pawHir_new(C);
     L.hir->node_count = ast->node_count;
     lower_decl_list(&L, C->ast->modules);
 
     pawP_callback(C, "paw.on_build_hir", L.hir);
+puts(pawHir_dump(L.hir));
 
     // release AST memory
     pawAst_free(ast);

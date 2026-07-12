@@ -77,35 +77,95 @@ impl Formatter {
 fn write_float_to(value: float64, precision: usize, output: *char, output_len: usize) -> usize;
 
 
-impl Display for int64 {
+impl Display for uint8 {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as uint64).fmt(f)
+    }
+} 
+
+impl Display for uint16 {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as uint64).fmt(f)
+    }
+} 
+
+impl Display for uint32 {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as uint64).fmt(f)
+    }
+} 
+
+impl Display for uint64 {
     fn fmt(*self, f: *Formatter) -> Result<()> {
         let temp = array::zeros::<32, char>();
-        let negative = *self < 0;
         let end = temp.len();
         let idx = end - 1;
 
-        if *self == INT64_MIN {
-            let int64_min = "-9223372036854775808";
-            return f.write_slice(int64_min.to_slice());
-        }
-        let u = if negative { -*self } else { *self };
-        let FIRST_DIGIT: int64 = '0' as int64;
+        let u = *self;
+        let FIRST_DIGIT: uint64 = '0' as uint64;
         loop {
             temp[idx] = (u % 10 + FIRST_DIGIT) as char;
-            idx -= 1;
             u /= 10;
             if u == 0 { 
                 break; 
             }
-        }
-        if negative {
-            temp[idx] = '-';
-        } else {
-            idx += 1;
+            idx -= 1;
         }
 
         f.write_slice(slice::from_raw_parts(
             &temp[idx], end - idx))
+    }
+} 
+
+impl Display for usize {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as uint64).fmt(f)
+    }
+} 
+
+impl Display for int8 {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as int64).fmt(f)
+    }
+} 
+
+impl Display for int16 {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as int64).fmt(f)
+    }
+} 
+
+impl Display for int32 {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as int64).fmt(f)
+    }
+} 
+
+impl Display for int64 {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        let value = *self;
+        let u = if value == INT64_MIN {
+            return f.write("-9223372036854775808");    
+        } else if value < 0 {
+            f.write_char('-')?;    
+            -value as uint64
+        } else {
+            value as uint64
+        };
+        u.fmt(f)
+    }
+} 
+
+impl Display for isize {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as int64).fmt(f)
+    }
+} 
+
+
+impl Display for float32 {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        (*self as float64).fmt(f)
     }
 } 
 
@@ -122,3 +182,5 @@ impl Display for str {
         f.write_slice(self.to_slice())
     }
 } 
+
+
