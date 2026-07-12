@@ -28,6 +28,7 @@ enum pawL_StdModule {
     PAWL_STD_OPTION,
     PAWL_STD_RESULT,
     PAWL_STD_ITER,
+    PAWL_STD_CLIB,
 
     // Standard library modules:
     PAWL_STD_STRING,

@@ -1,0 +1,21 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub type schar = int8;
+pub type uchar = uint8;
+
+pub type short = int16;
+pub type ushort = uint16;
+
+pub type int = int32;
+pub type uint = uint32;
+
+pub type long = int64;
+pub type ulong = uint64;
+
+pub type longlong = int64;
+pub type ulonglong = uint64;
+
+pub type size_t = usize;
+pub type ssize_t = isize;

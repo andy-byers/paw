@@ -71,6 +71,7 @@ static char const *STD_NAMES[PAWL_NUM_STD_MODULES] = {
     [PAWL_STD_OPTION] = "option",
     [PAWL_STD_RESULT] = "result",
     [PAWL_STD_ITER] = "iter",
+    [PAWL_STD_CLIB] = "clib",
     [PAWL_STD_STRING] = "string",
     [PAWL_STD_LIST] = "list",
     [PAWL_STD_HASHMAP] = "hashmap",
