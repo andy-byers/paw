@@ -210,7 +210,7 @@ static void test_type_error(void)
     check_binop_type_errors("!=", MAKE_LIST(PAW_TBOOL, PAW_TCHAR, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
 
     test_compiler_status(kErrUnitVariantWithParenthesis, "call_unit_variant", "enum E {X}", "let x = E::X();");
-    test_compiler_status(kErrIncompatibleTypes, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
+    test_compiler_status(kErrIncompatibleTypes, "wrong_constructor_args", "enum E {X(int64)}", "let x = E::X(1.0);");
     test_compiler_status(kErrExpectedAdt, "selector_on_function", "fn func() {}", "let a = func.field;");
     test_compiler_status(kErrUnknownPath, "selector_on_module", "use io;", "let s = io.abc;");
     test_compiler_status(kErrExtraSegment, "extraneous_method_access",
@@ -219,10 +219,10 @@ static void test_type_error(void)
         "enum E {A}", "let e = E::A::A; ");
 
     test_compiler_status(kErrIncompatibleTypes, "missing_return_type", "fn f() {123}", "");
-    test_compiler_status(kErrIncompatibleTypes, "missing_return_value", "fn f() -> int {}", "");
+    test_compiler_status(kErrIncompatibleTypes, "missing_return_value", "fn f() -> int64 {}", "");
     test_compiler_status(kErrIncompatibleTypes, "non_unit_guard", "fn f(x: bool) {if x {123}}", "");
     test_compiler_status(kErrIncompatibleTypes, "nonscalar_cast", "", "let x = 123 as str;");
-    test_compiler_status(kErrFalseObligation, "invalid_map_key", "use hashmap::HashMap; struct S;", "let x: HashMap<S, int> = HashMap::new();");
+    test_compiler_status(kErrFalseObligation, "invalid_map_key", "use hashmap::HashMap; struct S;", "let x: HashMap<S, int64> = HashMap::new();");
 }
 
 static void test_name_too_long(void)
@@ -254,26 +254,26 @@ static void test_syntax_error(void)
     test_compiler_status(kErrInvalidCharInInteger, "hex_digit_range", "", "let x = 0x5A2CG3;");
     test_compiler_status(kErrExpectedSemicolon, "malformed_binary", "", "let b = 0b00$101;");
     test_compiler_status(kErrInvalidAssignmentTarget, "malformed_octal", "", "let o = 0o37=273;");
-    test_compiler_status(kErrExpectedSemicolon, "malformed_hex", "", "let x = 0y5A2CF3;");
+    test_compiler_status(kErrInvalidCharInInteger, "malformed_hex", "", "let x = 0y5A2CF3;");
     test_compiler_status(kErrExpectedIntegerDigit, "int_digit_sep_before_bin_digits", "", "let x = 0b_01;");
     test_compiler_status(kErrExpectedIntegerDigit, "int_digit_sep_before_oct_digits", "", "let x = 0o_23;");
     test_compiler_status(kErrExpectedIntegerDigit, "int_digit_sep_before_hex_digits", "", "let x = 0x_45;");
-    test_compiler_status(kErrExpectedSemicolon, "int_digit_sep_before_b", "", "let x = 0_b01;");
-    test_compiler_status(kErrExpectedSemicolon, "int_digit_sep_before_o", "", "let x = 0_o23;");
-    test_compiler_status(kErrExpectedSemicolon, "int_digit_sep_before_x", "", "let x = 0_x45;");
-    test_compiler_status(kErrExpectedDelimiter, "missing_right_paren", "fn f(a: int, b: int, c: int -> int {return (a + b + c);}", "");
-    test_compiler_status(kErrUnexpectedSymbol, "missing_left_paren", "fn fa: int, b: int, c: int) -> int {return (a + b + c);}", "");
-    test_compiler_status(kErrExpectedExpression, "missing_right_curly", "fn f(a: int, b: int, c: int) -> int {return (a + b + c);", "");
-    test_compiler_status(kErrUnexpectedSymbol, "missing_left_curly", "fn f(a: int, b: int, c: int) -> int return (a + b + c);}", "");
+    test_compiler_status(kErrInvalidCharInInteger, "int_digit_sep_before_b", "", "let x = 0_b01;");
+    test_compiler_status(kErrInvalidCharInInteger, "int_digit_sep_before_o", "", "let x = 0_o23;");
+    test_compiler_status(kErrInvalidCharInInteger, "int_digit_sep_before_x", "", "let x = 0_x45;");
+    test_compiler_status(kErrExpectedDelimiter, "missing_right_paren", "fn f(a: int64, b: int64, c: int64 -> int64 {return (a + b + c);}", "");
+    test_compiler_status(kErrUnexpectedSymbol, "missing_left_paren", "fn fa: int64, b: int64, c: int64) -> int64 {return (a + b + c);}", "");
+    test_compiler_status(kErrExpectedExpression, "missing_right_curly", "fn f(a: int64, b: int64, c: int64) -> int64 {return (a + b + c);", "");
+    test_compiler_status(kErrUnexpectedSymbol, "missing_left_curly", "fn f(a: int64, b: int64, c: int64) -> int64 return (a + b + c);}", "");
     test_compiler_status(kErrExpectedDelimiter, "missing_right_angle", "fn f<A, B, C() {}", "");
     test_compiler_status(kErrUnexpectedSymbol, "missing_left_angle", "fn fA, B, C>() {}", "");
-    test_compiler_status(kErrExpectedSemicolon, "missing_turbo", "struct A<T>", "let a = A<int>;");
-    test_compiler_status(kErrExpectedSemicolon, "partial_turbo", "struct A<T>", "let a = A:<int>;");
-    test_compiler_status(kErrExpectedSemicolon, "missing_left_angle_tubofish", "struct A<T>", "let a = A::int>;");
-    test_compiler_status(kErrExpectedSemicolon, "missing_right_angle_turbofish", "struct A<T>", "let a = A::<int;");
+    test_compiler_status(kErrExpectedSemicolon, "missing_turbo", "struct A<T>", "let a = A<int64>;");
+    test_compiler_status(kErrExpectedSemicolon, "partial_turbo", "struct A<T>", "let a = A:<int64>;");
+    test_compiler_status(kErrExpectedSemicolon, "missing_left_angle_tubofish", "struct A<T>", "let a = A::int64>;");
+    test_compiler_status(kErrExpectedSemicolon, "missing_right_angle_turbofish", "struct A<T>", "let a = A::<int64;");
     test_compiler_status(kErrUnexpectedSymbol, "square_bracket_generics", "fn f[A, B, C]() {}", "");
     test_compiler_status(kErrExpectedExpression, "nested_fn", "", "fn f() {}");
-    test_compiler_status(kErrExpectedExpression, "nested_struct", "", "struct S {pub x: int};");
+    test_compiler_status(kErrExpectedExpression, "nested_struct", "", "struct S {pub x: int64};");
     test_compiler_status(kErrExpectedExpression, "nested_enum", "", "enum E {X};");
     test_compiler_status(kErrExpectedToplevelItem, "toplevel_var", "let v = 1", ";");
     test_compiler_status(kErrExpectedExpression, "bad_float", "", "let f = -1.0-;");
@@ -300,8 +300,8 @@ static void test_syntax_error(void)
     test_compiler_status(kErrExpectedExpression, "binop_missing_lhs", "", "let a = + 2");
     test_compiler_status(kErrExpectedExpression, "binop_invalid_lhs", "", "let a = & + 2;");
 
-    test_compiler_status(kErrUnknownPath, "primitive_type_is_not_a_value_1", "", "let a = int;");
-    test_compiler_status(kErrUnknownPath, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
+    test_compiler_status(kErrUnknownPath, "primitive_type_is_not_a_value_1", "", "let a = int64;");
+    test_compiler_status(kErrUnknownPath, "primitive_type_is_not_a_value_2", "", "let a = (1, float64,);");
     test_compiler_status(kErrUnknownPath, "primitive_type_is_not_a_value_3", "", "let a = [\"two\", str];");
     test_compiler_status(kErrUnknownPath, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
     test_compiler_status(kErrUnknownPath, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
@@ -329,7 +329,7 @@ static void test_syntax_error(void)
     test_compiler_status(kErrFunctionTypeDecl, "function_type_decl", "type F = fn();", "");
     test_compiler_status(kErrUnsupported, "trait_bounds_on_alias_generic", "struct Struct<X>; type T<X: Hash> = Struct<X>;", "");
     test_compiler_status(kErrUnsupported, "trait_bounds_on_local_alias_generic", "struct Struct<X>;", "type T<X: Hash> = Struct<X>;");
-    test_compiler_status(kErrExpectedCommaSeparator, "expected_comma_separator", "struct X {a: int b: int}", "");
+    test_compiler_status(kErrExpectedCommaSeparator, "expected_comma_separator", "struct X {a: int64 b: int64}", "");
     test_compiler_status(kErrNonprimitiveAnnotationValue, "nonprimitive_annotation_value", "#[anno=(1,)] fn f() {}", "");
 
     test_compiler_status(kErrUnterminatedStrLiteral, "missing_quote", "", "let s = \"");
@@ -341,7 +341,7 @@ static void test_closure_error(void)
 {
     test_compiler_status(PAW_OK, "infer_by_usage", "", "let f = |x| {}; f(1);");
 
-    test_compiler_status(kErrIncompatibleTypes, "call_with_wrong_type_annotation", "", "let f = |x: int| x; f(2.0);");
+    test_compiler_status(kErrIncompatibleTypes, "call_with_wrong_type_annotation", "", "let f = |x: int64| x; f(2.0);");
     test_compiler_status(kErrIncompatibleTypes, "call_with_wrong_type_inference", "", "let f = |x| x; f(1); f(2.0);");
     test_compiler_status(kErrCannotInfer, "cannot_infer_unused_param", "", "let f = |x| {};");
 
@@ -359,18 +359,18 @@ static void test_arithmetic_error(void)
 {
     test_compiler_status(kErrConstantDivideByZero, "constant_division_by_0_int", "", "let x = 1 / 0;");
     test_compiler_status(kErrConstantDivideByZero, "constant_division_by_0_float", "", "let x = 1.0 / 0.0;");
-    test_compiler_status(kErrConstantNegativeShiftCount, "constant_negative_left_shift", "", "let x = 1 << -2;");
-    test_compiler_status(kErrConstantNegativeShiftCount, "constant_negative_right_shift", "", "let x = 1 >> -2;");
+    test_compiler_status(kErrConstantOverflow, "constant_negative_left_shift", "", "let x = 1 << -2;");
+    test_compiler_status(kErrConstantOverflow, "constant_negative_right_shift", "", "let x = 1 >> -2;");
 
-    test_compiler_status(kErrConstantDivideByZero, "special_division_by_0_int", "fn f(x: int) -> int {x / 0}", "f(1);");
-    test_compiler_status(kErrConstantDivideByZero, "special_division_by_0_float", "fn f(x: float) -> float {x / 0.0}", "f(1.0);");
-    test_compiler_status(kErrConstantNegativeShiftCount, "special_negative_left_shift", "fn f(x: int) -> int {x << -2}", "f(1);");
-    test_compiler_status(kErrConstantNegativeShiftCount, "special_negative_right_shift", "fn f(x: int) -> int {x >> -2}", "f(1);");
+    test_compiler_status(kErrConstantDivideByZero, "special_division_by_0_int", "fn f(x: int64) -> int64 {x / 0}", "f(1);");
+    test_compiler_status(kErrConstantDivideByZero, "special_division_by_0_float", "fn f(x: float64) -> float64 {x / 0.0}", "f(1.0);");
+    test_compiler_status(kErrConstantOverflow, "special_negative_left_shift", "fn f(x: int64) -> int64 {x << -2}", "f(1);");
+    test_compiler_status(kErrConstantOverflow, "special_negative_right_shift", "fn f(x: int64) -> int64 {x >> -2}", "f(1);");
 
-    test_runtime_status(PAW_ERUNTIME, "division_by_0_int", "fn f(x: int) -> int {42 / x}", "f(0);");
-    test_runtime_status(PAW_ERUNTIME, "division_by_0_float", "fn f(x: float) -> float {4.2 / x}", "f(0.0);");
-    test_runtime_status(PAW_ERUNTIME, "negative_left_shift", "fn f(x: int) -> int {2 << x}", "f(-1);");
-    test_runtime_status(PAW_ERUNTIME, "negative_right_shift", "fn f(x: int) -> int {2 >> x}", "f(-1);");
+    test_runtime_status(PAW_ERUNTIME, "division_by_0_int", "fn f(x: int64) -> int64 {42 / x}", "f(0);");
+    test_runtime_status(PAW_ERUNTIME, "division_by_0_float", "fn f(x: float64) -> float64 {4.2 / x}", "f(0.0);");
+    test_runtime_status(PAW_ERUNTIME, "negative_left_shift", "fn f(x: int64) -> int64 {2 << x}", "f(-1);");
+    test_runtime_status(PAW_ERUNTIME, "negative_right_shift", "fn f(x: int64) -> int64 {2 >> x}", "f(-1);");
 }
 
 static void test_tuple_error(void)
@@ -384,25 +384,25 @@ static void test_struct_error(void)
 {
     test_compiler_status(kErrEmptyStructBody, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
     test_compiler_status(kErrExpectedSemicolon, "struct_unit_without_semicolon", "struct A", "");
-    test_compiler_status(kErrUnknownPath, "struct_missing_braces", "struct A {pub a: int}", "let a = A;");
+    test_compiler_status(kErrUnknownPath, "struct_missing_braces", "struct A {pub a: int64}", "let a = A;");
     test_compiler_status(kErrUnitStructWithBraces, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
-    test_compiler_status(kErrMissingField, "struct_missing_only_field", "struct A {pub a: int}", "let a = A{};");
-    test_compiler_status(kErrMissingField, "struct_missing_field", "struct A {pub a: int, pub b: float}", "let a = A{a: 1};");
-    test_compiler_status(kErrUnknownField, "struct_extra_field", "struct A {pub a: int}", "let a = A{a: 1, b: 2};");
-    test_compiler_status(kErrDuplicateName, "struct_duplicate_field", "struct A {pub a: int}", "let a = A{a: 1, a: 1};");
-    test_compiler_status(kErrExpectedFieldSelector, "struct_access_by_index", "struct S{pub x: int}", "let x = S{x: 1}; let y = x.0;");
-    test_compiler_status(kErrIncorrectTypeArity, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int, float>;");
-    test_compiler_status(kErrIncorrectTypeArity, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
+    test_compiler_status(kErrMissingField, "struct_missing_only_field", "struct A {pub a: int64}", "let a = A{};");
+    test_compiler_status(kErrMissingField, "struct_missing_field", "struct A {pub a: int64, pub b: float64}", "let a = A{a: 1};");
+    test_compiler_status(kErrUnknownField, "struct_extra_field", "struct A {pub a: int64}", "let a = A{a: 1, b: 2};");
+    test_compiler_status(kErrDuplicateName, "struct_duplicate_field", "struct A {pub a: int64}", "let a = A{a: 1, a: 1};");
+    test_compiler_status(kErrExpectedFieldSelector, "struct_access_by_index", "struct S{pub x: int64}", "let x = S{x: 1}; let y = x.0;");
+    test_compiler_status(kErrIncorrectTypeArity, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int64, float64>;");
+    test_compiler_status(kErrIncorrectTypeArity, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int64, float64, bool>;");
 
     // TODO: non-pub fields/items can be accessed from anywhere in the same module as the type was defined
 //    test_compiler_status(kErrAssociatedItemVisibility, "struct_select_private_field",
-//        "struct S {pub a: int, b: int} impl S {pub fn new() -> S {return S{a: 1, b: 2};}}",
+//        "struct S {pub a: int64, b: int64} impl S {pub fn new() -> S {return S{a: 1, b: 2};}}",
 //        "let x = S::new(); let a = x.a; let b = x.b;");
-//    test_compiler_status(kErrAssociatedItemVisibility, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
+//    test_compiler_status(kErrAssociatedItemVisibility, "struct_literal_private_field", "struct S {pub a: int64, b: int64}", "let x = S{a: 1, b: 2};");
 //    test_compiler_status(kErrAssociatedItemVisibility, "struct_call_private_method", "struct S; impl S {fn private(self) {}}", "let x = S; x.private();");
 
     test_compiler_status(kErrNotAMethod, "struct_not_a_method", "struct S; impl S {pub fn f(s: Self) {}}", "let x = S; x.f();");
-    test_compiler_status(kErrIncompatibleTypes, "struct_invalid_self", "struct S; impl S {pub fn f(self: int) {}}", "");
+    test_compiler_status(kErrIncompatibleTypes, "struct_invalid_self", "struct S; impl S {pub fn f(self: int64) {}}", "");
     test_compiler_status(kErrIncompatibleTypes, "struct_invalid_self_poly", "struct S<A, B>; impl<A, B> S<A, B> {fn f(self: S<B, A>) {}}", "");
 
     test_compiler_status(kErrTypeContainsSelf, "struct_infinite_size", "struct S{pub x: Option<S>}", "let x = S{x: Option::None};");
@@ -415,11 +415,11 @@ static void test_enum_error(void)
     test_compiler_status(kErrUnknownPath, "enum_missing_variant", "enum A {X}", "let a = A;");
     test_compiler_status(kErrDuplicateName, "enum_duplicate_variant", "enum A {X, X}", "");
     test_compiler_status(kErrUnknownAssociatedItem, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
-    test_compiler_status(kErrMissingVariantArgs, "variant_missing_only_field", "enum A {X(int)}", "let a = A::X;");
-    test_compiler_status(kErrIncorrectArity, "variant_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
-    test_compiler_status(kErrIncorrectArity, "variant_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
-    test_compiler_status(kErrIncompatibleTypes, "variant_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
-    test_compiler_status(kErrExpectedFieldSelector, "enum_requires_pattern_matching", "enum E{X(int)}", "let x = E::X(1); let y = x.0;");
+    test_compiler_status(kErrMissingVariantArgs, "variant_missing_only_field", "enum A {X(int64)}", "let a = A::X;");
+    test_compiler_status(kErrIncorrectArity, "variant_missing_field", "enum A {X(int64, float64)}", "let a = A::X(42);");
+    test_compiler_status(kErrIncorrectArity, "variant_extra_field", "enum A {X(int64)}", "let a = A::X(42, true);");
+    test_compiler_status(kErrIncompatibleTypes, "variant_wrong_field_type", "enum A {X(int64)}", "let a = A::X(1.0);");
+    test_compiler_status(kErrExpectedFieldSelector, "enum_requires_pattern_matching", "enum E{X(int64)}", "let x = E::X(1); let y = x.0;");
 
     test_compiler_status(kErrTypeContainsSelf, "enum_infinite_size", "enum E{X(Option<E>)}", "let x = E::X(Option::None);");
     test_compiler_status(kErrTypeContainsSelf, "enum_infinite_size_2", "enum E{X(Option<E2>)} enum E2{X(Option<E>)}", "let x = E::X(Option::None);");
@@ -440,9 +440,9 @@ static void test_list_error(void)
     test_compiler_status(kErrIncompatibleTypes, "list_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");
     test_compiler_status(kErrIncompatibleTypes, "list_mixed_types", "", "let a = [1, 2, 3, 4, '5'];");
     test_compiler_status(kErrIncompatibleTypes, "list_mixed_nesting", "", "let a = [[[1]], [[2]], [3]];");
-    test_runtime_status(PAW_EINDEX, "list_out_of_bounds_get", "fn f(list: [int]) -> int {list[100]}", "f([]);");
-    test_runtime_status(PAW_EINDEX, "list_out_of_bounds_set", "fn f(list: [int]) {list[100] = 100}", "f([]);");
-    test_runtime_status(PAW_EINDEX, "list_pop_while_empty", "fn f(list: [int]) -> int {list.pop()}", "f([]);");
+    test_runtime_status(PAW_EINDEX, "list_out_of_bounds_get", "fn f(list: [int64]) -> int64 {list[100]}", "f([]);");
+    test_runtime_status(PAW_EINDEX, "list_out_of_bounds_set", "fn f(list: [int64]) {list[100] = 100}", "f([]);");
+    test_runtime_status(PAW_EINDEX, "list_pop_while_empty", "fn f(list: [int64]) -> int64 {list.pop()}", "f([]);");
 }
 
 static void test_map_error(void)
@@ -456,7 +456,7 @@ static void test_map_error(void)
     test_compiler_status(kErrIncompatibleTypes, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6'];");
     test_compiler_status(kErrIncompatibleTypes, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
     test_compiler_status(kErrFalseObligation, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
-    test_compiler_status(kErrFalseObligation, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
+    test_compiler_status(kErrFalseObligation, "map_unhashable_type_key", "", "let map: [[int64]: int64] = [:];");
 }
 
 static void test_range_error(void)
@@ -566,7 +566,7 @@ static void test_match_error(void)
 static void test_uninit_local(void)
 {
     test_compiler_status(kErrCannotInfer, "uninit_var", "", "let x; x;"); // type of "x" cannot be inferred
-    test_compiler_status(kErrUseBeforeInitialization, "uninit_int", "", "let x: int; let y = x;");
+    test_compiler_status(kErrUseBeforeInitialization, "uninit_int", "", "let x: int64; let y = x;");
     test_compiler_status(kErrUseBeforeInitialization, "uninit_if_without_else", "", "let x; if true {x = 1;} let y = x;");
     test_compiler_status(kErrUseBeforeInitialization, "uninit_ifelse", "", "let x; if true {x = 1;} else {} let y = x;");
     test_compiler_status(kErrUseBeforeInitialization, "uninit_ifelse_chain", "", "let x; if true {x = 1;} else if true {} else {x = 3;} let y = x;");
@@ -605,9 +605,9 @@ static void test_trait_error(void)
     test_compiler_status(kErrTraitImplMissingAssocItem, "trait_missing_method",
         TRAIT "struct S; impl Trait for S {}", "");
     test_compiler_status(kErrVisibilityQualifierNotAllowed, "visibility_qualifier_on_trait_impl_method",
-        TRAIT "struct S; impl Trait for S {pub fn f(self) -> int {123}}", "");
+        TRAIT "struct S; impl Trait for S {pub fn f(self) -> int64 {123}}", "");
     test_compiler_status(kErrTraitImplAssocItemNotCompatible, "trait_wrong_type",
-        TRAIT "struct S; impl Trait for S {fn f(self) -> int {123}}", "");
+        TRAIT "struct S; impl Trait for S {fn f(self) -> int64 {123}}", "");
     test_compiler_status(kErrUnknownMethod, "generic_missing_bound",
         TRAIT "struct S; impl Trait for S {fn f(self) {}}\n"
               "pub fn call_f<T>(t: T) {t.f();}",
@@ -636,15 +636,15 @@ static void test_trait_error(void)
     "}"
 
     test_compiler_status(kErrFalseObligation, "trait_not_implemented",
-        POLY_TRAIT "struct S;" POLY_FUNCTION("int", " + Clone"),
+        POLY_TRAIT "struct S;" POLY_FUNCTION("int64", " + Clone"),
         "let x = S; call_f(x);");
     test_compiler_status(kErrFalseObligation, "trait_generic_mismatch",
-        POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int", " + Clone"),
+        POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int64", " + Clone"),
         "let x = S{v: true}; call_f(x);");
     test_compiler_status(kErrExpectedTrait, "trait_type_as_trait",
         "struct Type; struct S; impl Type for S {}", "");
     test_compiler_status(kErrUnknownPath, "trait_does_not_exist",
-        "struct S; impl Trait<int> for S {}", "");
+        "struct S; impl Trait<int64> for S {}", "");
     test_compiler_status(kErrUnknownPath, "trait_missing_generic_in_bounds",
         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", " + Clone"), "");
     test_compiler_status(kErrExpectedTypeArguments, "trait_bound_missing_args",
@@ -663,10 +663,10 @@ static void test_underscore(void)
 {
     test_compiler_status(kErrUnexpectedSymbol, "underscore_as_generic", "fn f<_>() {}", "");
     test_compiler_status(kErrUnexpectedSymbol, "underscore_as_adt_name", "struct _;", "");
-    test_compiler_status(kErrUnexpectedSymbol, "underscore_as_type_name", "type _ = int", "");
+    test_compiler_status(kErrUnexpectedSymbol, "underscore_as_type_name", "type _ = int64", "");
     test_compiler_status(kErrUnexpectedSymbol, "underscore_as_function_name", "fn _() {}", "");
     test_compiler_status(kErrUnexpectedSymbol, "underscore_as_method_name", "struct S; impl S {fn _() {}}", "");
-    test_compiler_status(kErrUnexpectedSymbol, "underscore_as_field_name", "struct S {_: int}", "");
+    test_compiler_status(kErrUnexpectedSymbol, "underscore_as_field_name", "struct S {_: int64}", "");
     test_compiler_status(kErrUnexpectedSymbol, "underscore_as_bound", "fn f<T: _>(t: T) {}", "");
     test_compiler_status(kErrUnexpectedUnderscore, "underscore_in_bound", "fn f<T: Trait<_>>(t: T) {}", "");
     test_compiler_status(kErrUnexpectedUnderscore, "underscore_as_return_type", "fn f() -> _ {}", "");
@@ -691,34 +691,34 @@ static void test_global_const(void)
     test_compiler_status(kErrReturnOutsideFunction, "const_return", "const C: () = return;", "");
     test_compiler_status(kErrJumpOutsideLoop, "const_break", "const C: () = break;", "");
     test_compiler_status(kErrJumpOutsideLoop, "const_continue", "const C: () = continue;", "");
-    test_compiler_status(kErrChainOutsideFunction, "const_chain", "const C: Option<int> = Option::Some(123)?;", "");
+    test_compiler_status(kErrChainOutsideFunction, "const_chain", "const C: Option<int64> = Option::Some(123)?;", "");
 
     test_compiler_status(kErrGlobalConstantCycle, "const_cycle_1",
-            "const C: int = C;", "");
+            "const C: int64 = C;", "");
     test_compiler_status(kErrGlobalConstantCycle, "const_cycle_2",
-            "const C1: int = C2 + 1;"
-            "const C2: int = 1 + C1;", "");
+            "const C1: int64 = C2 + 1;"
+            "const C2: int64 = 1 + C1;", "");
     test_compiler_status(kErrGlobalConstantCycle, "const_cycle_3",
-            "const C1: int = C2 + 1;"
-            "const C2: int = 1 + C3;"
-            "const C3: int = C1 + 1;", "");
+            "const C1: int64 = C2 + 1;"
+            "const C2: int64 = 1 + C3;"
+            "const C3: int64 = C1 + 1;", "");
 
     // TODO: need to store constants in MirPlace during earlier middle-end phases, in part to allow detection of this case
-//    test_compiler_status(kErrModifiedConstant, "const_assignment", "const C: int = 1;", "C = 2;");
+//    test_compiler_status(kErrModifiedConstant, "const_assignment", "const C: int64 = 1;", "C = 2;");
 }
 
 static void test_annotations(void)
 {
-//    test_compiler_status(kErrInitializedExternConstant, "const_unexpected_initializer", "#[extern] const C: int = 42;", "");
+//    test_compiler_status(kErrInitializedExternConstant, "const_unexpected_initializer", "#[extern] const C: int64 = 42;", "");
     test_compiler_status(kErrExternFunctionBody, "function_unexpected_body", "#[extern] pub fn f() {}", "");
     // NOTE: "not_extern" annotation doesn't do anything
-    test_compiler_status(kErrUninitializedConstant, "const_expected_initializer", "#[not_extern] const C: int;", "");
+    test_compiler_status(kErrUninitializedConstant, "const_expected_initializer", "#[not_extern] const C: int64;", "");
     test_compiler_status(kErrMissingFunctionBody, "function_expected_body", "#[not_extern] pub fn f();", "");
 }
 
 static void test_destructuring(void)
 {
-    char const *structure = "struct Fields {pub a: int, pub b: int}";
+    char const *structure = "struct Fields {pub a: int64, pub b: int64}";
     test_compiler_status(kErrDuplicateBinding, "destructure_duplicate_binding", "", "let (x, (x,)) = (1, (2,));");
     test_compiler_status(kErrIncompatibleTypes, "destructure_wrong_type", "", "let (a, (b,)) = (1, 2);");
     test_compiler_status(kErrIncompatibleTypes, "destructure_too_many_elems", "", "let (a, b) = (1, 2, 3);");
@@ -731,13 +731,13 @@ static void test_destructuring(void)
     test_compiler_status(kErrExpectedExpression, "destructure_wildcard_name", "", "let _ = 123; let x = _;");
     test_compiler_status(kErrNonexhaustivePatternMatch, "destructure_or", "", "let (a, 1) | (a, 2) = (123, 456);");
     test_compiler_status(kErrUninitializedDestructuring, "uninitialized_destructuring", "", "let (a,); a = 123;");
-    test_compiler_status(kErrUseOfReservedIdentifier, "reserved_identifier", "", "let int = 123;");
+    test_compiler_status(kErrUseOfReservedIdentifier, "reserved_identifier", "", "let int64 = 123;");
 }
 
 static void test_deferred_init(void)
 {
     test_compiler_status(kErrUseBeforeInitialization, "use_before_init", "", "let a; let b = a; b = 123;");
-//TODO    test_compiler_status(kErrUseBeforeInitialization, "capture_before_init", "", "let a; let f = || -> int {a};");
+//TODO    test_compiler_status(kErrUseBeforeInitialization, "capture_before_init", "", "let a; let f = || -> int64 {a};");
     test_compiler_status(kErrUseBeforeInitialization, "missing_init_in_branch", "", "let a; if true {a = 1;} let b = a;");
     test_compiler_status(kErrUseBeforeInitialization, "use_in_branch", "", "let a; if true {a = 1;} else {let b = a;}");
     test_compiler_status(kErrUseBeforeInitialization, "uninit_if_else", "", "let a; if true {a = 1;} else if true {return;} else {} let b = a;");
@@ -754,7 +754,7 @@ static void test_projections(void)
     CODELINE("}") \
     CODELINE("struct Struct;") \
     CODELINE("impl Trait for Struct {") \
-    CODELINE("  type Type = int;") \
+    CODELINE("  type Type = int64;") \
     CODELINE("  fn method(*self) {}") \
     CODELINE("}")
 
@@ -813,7 +813,7 @@ static void test_panic(void)
 
 static void test_divergence(void)
 {
-#define FUNC(Text_) "fn f(x: int) -> int {" Text_ "}"
+#define FUNC(Text_) "fn f(x: int64) -> int64 {" Text_ "}"
 
     test_compiler_status(kErrIncompatibleTypes, "non_exhaustive_branch",
         FUNC("if x == 0 {} else {123}"), "");
@@ -864,7 +864,7 @@ static void test_impl_error(void)
     test_compiler_status(kErrTraitImplMissingAssocItem, "missing_trait_method",
             GENERATE("fn f();", ""), "");
     test_compiler_status(kErrTraitImplAssocItemNotCompatible, "invalid_trait_method_type",
-            GENERATE("fn f();", "fn f(x: int) {}"), "");
+            GENERATE("fn f();", "fn f(x: int64) {}"), "");
     test_compiler_status(kErrTraitImplUnknownAssocItem, "extra_trait_method",
             GENERATE("", "fn f() {}"), "");
 #undef GENERATE
@@ -967,7 +967,7 @@ static void test_definite_assignment(void)
             "let third = first;");
 
     TESTCASE(sometimes_uninit, kErrUseBeforeInitialization,
-            "let first: int;"
+            "let first: int64;"
             "if true { first = 42; }"
             "let second = first;");
 

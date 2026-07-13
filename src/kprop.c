@@ -24,7 +24,7 @@
 #define GET_MODNAME(Mir_) (ModuleInfo_get((Mir_)->C->modinfo, (Mir_)->modno).name)
 #define KPROP_ERROR(K_, Kind_, ...) THROW_ERROR((K_)->C, Kind_, GET_MODNAME((K_)->mir), __VA_ARGS__)
 #define DIVIDE_BY_0(K, span) KPROP_ERROR(K, ConstantDivideByZero, span);
-#define SHIFT_BY_NEGATIVE(K, span) KPROP_ERROR(K, ConstantNegativeShiftCount, span);
+#define SHIFT_BY_NEGATIVE(K, span) KPROP_ERROR(K, ConstantOverflow, span);
 
 enum CellKind {
     CELL_TOP,
@@ -240,16 +240,19 @@ static int add_constant(struct KProp *K, union IrValue v, IrType *type)
     return pawMir_kcache_add_value(K->mir, K->kcache, v, type).value;
 }
 
-static struct CellInfo constant_unary_op(struct KProp *K, struct Cell *val, struct Cell *output, enum MirUnaryOpKind op)
+static struct CellInfo constant_unary_op(struct KProp *K, struct SourceSpan span, struct Cell *val, struct Cell *output, enum MirUnaryOpKind op)
 {
     union IrValue const v = val->info.v;
 
     union IrValue r;
-    if (pawMir_fold_unary_op(op, val->type, v, &r) == 0) {
+    enum MirFoldResult const status = pawMir_fold_unary_op(op, val->type, v, &r);
+    if (status == MIR_FOLD_FOLDED) {
         int const k = add_constant(K, r, output->type);
         return CONST_INFO(k, r);
+    } else {
+        paw_assert(status == MIR_FOLD_OVERFLOW);
+        KPROP_ERROR(K, ConstantOverflow, span);
     }
-    return BOTTOM_INFO();
 }
 
 static struct CellInfo constant_binary_op(struct KProp *K, struct SourceSpan span, struct Cell *lhs, struct Cell *rhs, struct Cell const *output, enum MirBinaryOpKind op)
@@ -258,11 +261,17 @@ static struct CellInfo constant_binary_op(struct KProp *K, struct SourceSpan spa
     union IrValue const y = rhs->info.v;
 
     union IrValue r;
-    if (pawMir_fold_binary_op(op, lhs->type, x, y, &r) == 0) {
-        int const k = add_constant(K, r, output->type);
-        return CONST_INFO(k, r);
+    switch (pawMir_fold_binary_op(op, lhs->type, x, y, &r)) {
+        case MIR_FOLD_FOLDED:
+            break;
+        case MIR_FOLD_OVERFLOW:
+            KPROP_ERROR(K, ConstantOverflow, span);
+        case MIR_FOLD_DIVIDE_BY_ZERO:
+            KPROP_ERROR(K, ConstantDivideByZero, span);
     }
-    return BOTTOM_INFO();
+
+    int const k = add_constant(K, r, output->type);
+    return CONST_INFO(k, r);
 }
 
 static struct CellInfo binop_to_move(struct MirBinaryOp *binop, struct MirPlace from)
@@ -587,7 +596,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             struct Cell *output = get_cell(K, x->output);
             enum CellKind const old = output->info.kind;
             if (val->info.kind == CELL_CONSTANT) {
-                output->info = constant_unary_op(K, val, output, x->op);
+                output->info = constant_unary_op(K, instr->hdr.span, val, output, x->op);
             } else {
                 output->info = BOTTOM_INFO();
             }

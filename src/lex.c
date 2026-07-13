@@ -519,6 +519,7 @@ static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int b
 
 static enum NumberSuffix try_int_suffix(struct Lex *X)
 {
+    paw_assert(!ISDIGIT(*X->ptr));
     struct SourceLoc const start = X->loc;
     paw_Bool const is_signed = test_next(X, 'i');
     if (is_signed || test_next(X, 'u')) {
@@ -539,6 +540,10 @@ static enum NumberSuffix try_int_suffix(struct Lex *X)
                     .span = RANGE(start, X->loc),
                     .base = 10);
         }
+    } else if (ISLETTER(*X->ptr)) {
+        LEXER_ERROR(X, InvalidCharInInteger,
+                .span = RANGE(start, X->loc),
+                .base = 10);
     }
     return NS_NONE;
 }

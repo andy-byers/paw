@@ -266,7 +266,7 @@ A panic can also be caused by calling the `panic` builtin function.
 + [ ] allow linking in a custom "panic handler" for platforms where the default panic handler doesn't make sense (no OS to return back to, nowhere for error messages to go, etc.)
 + [ ] prevent duplicate methods across compatible inherent impl blocks
 + [x] make sure to complain when generic params not mentioned on context of impl block. i.e. `impl<T> Trait<T> for Type {...}` is an error if `Type` has generic parameters.
-+ [ ] add overflow checks for `paw_Int` operations during constant folding and codegen
++ [ ] add overflow checks for `[u]int*` and `float*` operations during constant folding and codegen
 + [ ] remove dependency on clang (as a linker driver) and invoke linker manually
 + [ ] report multiple errors per invocation of compiler, emit warnings
 

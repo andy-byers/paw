@@ -1246,10 +1246,10 @@ static void FormatConstantDivideByZeroError(paw_Env *P, struct ConstantDivideByZ
     pawL_add_fstring(P, buffer, "constant division by 0");
 }
 
-static void FormatConstantNegativeShiftCountError(paw_Env *P, struct ConstantNegativeShiftCountError const *error, Buffer *buffer)
+static void FormatConstantOverflowError(paw_Env *P, struct ConstantOverflowError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
-    pawL_add_fstring(P, buffer, "constant negative shift count");
+    pawL_add_fstring(P, buffer, "constant arithmetic operation would overflow");
 }
 
 static void FormatTooManyVariablesError(paw_Env *P, struct TooManyVariablesError const *error, Buffer *buffer)

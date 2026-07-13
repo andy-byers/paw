@@ -1014,8 +1014,14 @@ DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegiste
 DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(BodyMap, DeclId, struct Mir *)
 
-int pawMir_fold_unary_op(enum MirUnaryOpKind op, IrType *type, union IrValue v, union IrValue *pr);
-int pawMir_fold_binary_op(enum MirBinaryOpKind op, IrType *type, union IrValue x, union IrValue y, union IrValue *pr);
+enum MirFoldResult {
+    MIR_FOLD_FOLDED,
+    MIR_FOLD_OVERFLOW,
+    MIR_FOLD_DIVIDE_BY_ZERO,
+};
+
+enum MirFoldResult pawMir_fold_unary_op(enum MirUnaryOpKind op, IrType *type, union IrValue v, union IrValue *pr);
+enum MirFoldResult pawMir_fold_binary_op(enum MirBinaryOpKind op, IrType *type, union IrValue x, union IrValue y, union IrValue *pr);
 
 void pawMir_fold_cast(union IrValue from, IrType *from_type, IrType *to_type, union IrValue *to);
 

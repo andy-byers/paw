@@ -713,7 +713,7 @@
         Str const *modname; \
         struct SourceSpan span; \
     ) \
-    X(ConstantNegativeShiftCount, ERR_CATEGORY_KFOLD, \
+    X(ConstantOverflow, ERR_CATEGORY_KFOLD, \
         Str const *modname; \
         struct SourceSpan span; \
     ) \

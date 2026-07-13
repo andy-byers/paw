@@ -34,23 +34,96 @@ typedef union IrValue KValue;
 #define SHIFT_BY_NEGATIVE(C_, Modname_, Span_) KFOLD_ERROR(C_, ConstantNegativeShiftCount, Modname_, Span_);
 #define IDIVMOD_OVERFLOWS(Left_, Right_) (V_INT(Left_) == PAW_INT_MIN && V_INT(Right_) == PAW_INT_C(-1))
 
-int pawMir_fold_unary_op(enum MirUnaryOpKind op, IrType *type, union IrValue v, union IrValue *pr)
+// TODO: replace with integer info table in Compiler for particular target to handle usize/isize, or just pretend usize is 64-bit and throw error on all overflows (even unsigned) so pointer size doesn't affect const eval
+static paw_Int64 int_lower_bound_(enum IrIntKind kind)
+{
+    switch (kind) {
+        case IR_INT8:
+            return IR_INT8_MIN;
+        case IR_INT16:
+            return IR_INT16_MIN;
+        case IR_INT32:
+            return IR_INT32_MIN;
+        case IR_INT64:
+        case IR_ISIZE:
+            return IR_INT64_MIN;
+        case IR_UINT8:
+        case IR_UINT16:
+        case IR_UINT32:
+        case IR_UINT64:
+        case IR_USIZE:
+            return 0;
+    }
+}
+
+static paw_Int64 int_upper_bound_(enum IrIntKind kind)
+{
+    switch (kind) {
+        case IR_INT8:
+            return IR_INT8_MAX;
+        case IR_INT16:
+            return IR_INT16_MAX;
+        case IR_INT32:
+            return IR_INT32_MAX;
+        case IR_INT64:
+        case IR_ISIZE:
+            return IR_INT64_MAX;
+        case IR_UINT8:
+            return IR_UINT8_MAX;
+        case IR_UINT16:
+            return IR_UINT16_MAX;
+        case IR_UINT32:
+            return IR_UINT32_MAX;
+        case IR_UINT64:
+        case IR_USIZE:
+            return (paw_Int64)IR_UINT64_MAX;
+    }
+}
+
+static paw_Bool is_signed(enum IrIntKind kind)
+{
+    switch (kind) {
+        case IR_INT8:
+        case IR_INT16:
+        case IR_INT32:
+        case IR_INT64:
+        case IR_ISIZE:
+            return PAW_TRUE;
+        case IR_UINT8:
+        case IR_UINT16:
+        case IR_UINT32:
+        case IR_UINT64:
+        case IR_USIZE:
+            return PAW_FALSE;
+    }
+}
+
+#define INT_LOWER_BOUND(Type_, IntKind_) (Type_)int_lower_bound_(IntKind_)
+#define INT_UPPER_BOUND(Type_, IntKind_) (Type_)int_upper_bound_(IntKind_)
+
+enum MirFoldResult pawMir_fold_unary_op(enum MirUnaryOpKind op, IrType *type, union IrValue v, union IrValue *pr)
 {
     switch (op) {
         case MIR_UNARY_NEG:
+            if (IrIsInt(type)) {
+#define X(Type_, Label_, Field_) case Label_: \
+        if (v.Field_ == INT_LOWER_BOUND(Type_, Label_)) \
+                return MIR_FOLD_OVERFLOW; \
+        pr->Field_ = -v.Field_; \
+        break;
+                enum IrIntKind const ikind = IR_INT_KIND(type);
+                CREATE_SWITCH(ikind, INT_KINDS(X))
+#undef X
+            } else {
 #define X(Type_, Label_, Field_) case Label_: \
         pr->Field_ = -v.Field_; \
         break;
-            if (IrIsInt(type)) {
-                enum IrIntKind const ikind = IR_INT_KIND(type);
-                CREATE_SWITCH(ikind, INT_KINDS(X))
-            } else {
                 paw_assert(IrIsFloat(type));
                 enum IrFloatKind const fkind = IR_FLOAT_KIND(type);
                 CREATE_SWITCH(fkind, FLOAT_KINDS(X))
+#undef X
             }
             break;
-#undef X
         case MIR_UNARY_BITNOT: {
 #define X(Type_, Label_, Field_) case Label_: \
         pr->Field_ = ~v.Field_; \
@@ -64,10 +137,10 @@ int pawMir_fold_unary_op(enum MirUnaryOpKind op, IrType *type, union IrValue v, 
             pr->b = !v.b;
             break;
     }
-    return 0;
+    return MIR_FOLD_FOLDED;
 }
 
-static int fold_int_binary_op(enum MirBinaryOpKind op, union IrValue x, union IrValue y, enum IrIntKind kind, union IrValue *pr)
+static enum MirFoldResult fold_int_binary_op(enum MirBinaryOpKind op, union IrValue x, union IrValue y, enum IrIntKind kind, union IrValue *pr)
 {
     switch (op) {
         case MIR_BINARY_EQ: {
@@ -128,7 +201,7 @@ static int fold_int_binary_op(enum MirBinaryOpKind op, union IrValue x, union Ir
         }
         case MIR_BINARY_DIV: {
 #define X(Type_, Label_, Field_) case Label_: \
-        if (y.Field_ == 0) return -1; \
+        if (y.Field_ == 0) return MIR_FOLD_DIVIDE_BY_ZERO; \
         pr->Field_ = x.Field_ / y.Field_; \
         break;
             CREATE_SWITCH(kind, INT_KINDS(X))
@@ -137,7 +210,7 @@ static int fold_int_binary_op(enum MirBinaryOpKind op, union IrValue x, union Ir
         }
         case MIR_BINARY_MOD: {
 #define X(Type_, Label_, Field_) case Label_: \
-        if (y.Field_ == 0) return -1; \
+        if (y.Field_ == 0) return MIR_FOLD_DIVIDE_BY_ZERO; \
         pr->Field_ = x.Field_ % y.Field_; \
         break;
             CREATE_SWITCH(kind, INT_KINDS(X))
@@ -168,8 +241,14 @@ static int fold_int_binary_op(enum MirBinaryOpKind op, union IrValue x, union Ir
             break;
 #undef X
         }
+
+// TODO: hack to prevent shift by negative int, should be replaced with proper overflow check
+#define IS_SIGNED_NEGATIVE(Value_, Field_, IntKind_) (is_signed(IntKind_) && ((Value_).Field_ < 0))
+
         case MIR_BINARY_SHL: {
 #define X(Type_, Label_, Field_) case Label_: \
+        if (IS_SIGNED_NEGATIVE(y, Field_, Label_)) \
+            return MIR_FOLD_OVERFLOW; \
         pr->Field_ = x.Field_ << y.Field_; \
         break;
             CREATE_SWITCH(kind, INT_KINDS(X))
@@ -178,6 +257,8 @@ static int fold_int_binary_op(enum MirBinaryOpKind op, union IrValue x, union Ir
         }
         case MIR_BINARY_SHR: {
 #define X(Type_, Label_, Field_) case Label_: \
+        if (IS_SIGNED_NEGATIVE(y, Field_, Label_)) \
+            return MIR_FOLD_OVERFLOW; \
         pr->Field_ = x.Field_ >> y.Field_; \
         break;
             CREATE_SWITCH(kind, INT_KINDS(X))
@@ -187,10 +268,12 @@ static int fold_int_binary_op(enum MirBinaryOpKind op, union IrValue x, union Ir
         default:
             break;
     }
-    return 0;
+#undef IS_SIGNED_NEGATIVE
+
+    return MIR_FOLD_FOLDED;
 }
 
-static int fold_float_binary_op(enum MirBinaryOpKind op, union IrValue x, union IrValue y, enum IrFloatKind kind, union IrValue *pr)
+static enum MirFoldResult fold_float_binary_op(enum MirBinaryOpKind op, union IrValue x, union IrValue y, enum IrFloatKind kind, union IrValue *pr)
 {
     switch (op) {
         case MIR_BINARY_EQ: {
@@ -251,7 +334,7 @@ static int fold_float_binary_op(enum MirBinaryOpKind op, union IrValue x, union 
         }
         case MIR_BINARY_DIV: {
 #define X(Type_, Label_, Field_) case Label_: \
-        if (y.Field_ == 0.0) return -1; \
+        if (y.Field_ == 0.0) return MIR_FOLD_DIVIDE_BY_ZERO; \
         pr->Field_ = x.Field_ / y.Field_; \
         break;
             CREATE_SWITCH(kind, FLOAT_KINDS(X))
@@ -260,7 +343,7 @@ static int fold_float_binary_op(enum MirBinaryOpKind op, union IrValue x, union 
         }
         case MIR_BINARY_MOD: {
 #define X(Type_, Label_, Field_) case Label_: \
-        if (y.Field_ == 0.0) return -1; \
+        if (y.Field_ == 0.0) return MIR_FOLD_DIVIDE_BY_ZERO; \
         pr->Field_ = fmod(x.Field_, y.Field_); \
         break;
             CREATE_SWITCH(kind, FLOAT_KINDS(X))
@@ -270,10 +353,10 @@ static int fold_float_binary_op(enum MirBinaryOpKind op, union IrValue x, union 
         default:
             break;
     }
-    return 0;
+    return MIR_FOLD_FOLDED;
 }
 
-static int fold_str_binary_op(enum MirBinaryOpKind op, union IrValue x, union IrValue y, union IrValue *pr)
+static enum MirFoldResult fold_str_binary_op(enum MirBinaryOpKind op, union IrValue x, union IrValue y, union IrValue *pr)
 {
     switch (op) {
         case MIR_BINARY_EQ:
@@ -290,10 +373,10 @@ static int fold_str_binary_op(enum MirBinaryOpKind op, union IrValue x, union Ir
             pr->b = pawS_cmp(x.s, y.s) <= 0;
             break;
     }
-    return 0;
+    return MIR_FOLD_FOLDED;
 }
 
-int pawMir_fold_binary_op(enum MirBinaryOpKind op, IrType *type, union IrValue x, union IrValue y, union IrValue *pr)
+enum MirFoldResult pawMir_fold_binary_op(enum MirBinaryOpKind op, IrType *type, union IrValue x, union IrValue y, union IrValue *pr)
 {
     switch (IR_KINDOF(type)) {
         case kIrBool:

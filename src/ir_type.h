@@ -78,6 +78,22 @@ struct IrInt {
     enum IrIntKind ikind;
 };
 
+#define IR_INT8_MIN (~IR_INT8_MAX)
+#define IR_INT8_MAX 0x7F
+#define IR_UINT8_MAX 0xFF
+
+#define IR_INT16_MIN (~IR_INT16_MAX)
+#define IR_INT16_MAX 0x7FFF
+#define IR_UINT16_MAX 0xFFFF
+
+#define IR_INT32_MIN (~IR_INT32_MAX)
+#define IR_INT32_MAX 0x7FFFFFFF
+#define IR_UINT32_MAX 0xFFFFFFFF
+
+#define IR_INT64_MIN (~IR_INT64_MAX)
+#define IR_INT64_MAX 0x7FFFFFFFFFFFFFFF
+#define IR_UINT64_MAX 0xFFFFFFFFFFFFFFFF
+
 #define IR_INT_KIND(Type_) (IrGetInt(Type_)->ikind)
 #define IR_NUM_INT_KINDS ((size_t)IR_USIZE + 1)
 
