@@ -1503,7 +1503,6 @@ void pawP_lower_ast(struct Compiler *C)
     lower_decl_list(&L, C->ast->modules);
 
     pawP_callback(C, "paw.on_build_hir", L.hir);
-puts(pawHir_dump(L.hir));
 
     // release AST memory
     pawAst_free(ast);

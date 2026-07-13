@@ -1,0 +1,14 @@
+// infer_via_obligation.paw
+
+pub fn sum<I: IntoIterator<Item = T>, T: Add<T, Output = T>>(iter: I, zero: T) -> T {
+    let result = zero;
+    for value in iter {
+        result = result.add(&value);
+    }
+    result
+}
+
+#[test]
+pub fn test() {
+    assert(sum([4, 1, 17], 20) == 42);
+}

@@ -1,0 +1,18 @@
+// infer_via_obligation_2.paw
+
+use iter;
+
+pub fn scaled_sum<I: IntoIterator<Item = T>, T: Add<T, Output = T> + Mul<T2, Output = T>, 
+        I2: IntoIterator<Item = T2>, T2>(iter: I, iter2: I2, zero: T) -> T {
+    let result = zero;
+    for (v, v2) in iter::zip(iter, iter2) {
+        result = result.add(&v.mul(&v2));
+    }
+    result
+}
+
+#[test]
+pub fn test() {
+    assert(scaled_sum([1, 2], [3, 4], 0) == 11);
+}
+

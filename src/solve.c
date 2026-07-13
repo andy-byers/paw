@@ -376,10 +376,17 @@ static enum IrSolverStatus type_implements_trait(IrSolver *S, IrType *self, IrTr
     if (candidates->count > 1)
         return IR_SOLVER_AMBIGUOUS;
 
-    struct Candidate const c = Candidates_first(candidates);
-    struct IrImplInstance const inst = pawIr_solver_instantiate_impl(S, c.impl_did);
-    pawU_unify_unchecked(C->U, inst.type, self);
-    pawIr_unify_traits_unchecked(C, inst.trait, impl_trait);
+    {
+        IrSolver *child = pawIr_push_solver(S->C);
+        struct Candidate const c = Candidates_first(candidates);
+        struct IrImplInstance const inst = pawIr_solver_instantiate_impl(child, c.impl_did);
+        pawIr_solver_add_obligations_from(child, c.impl_did, inst.args);
+        pawU_unify_unchecked(C->U, inst.type, self);
+        pawIr_unify_traits_unchecked(C, inst.trait, impl_trait);
+        struct IrSolverResult const r = pawIr_solver_solve(child);
+        paw_assert(r.status != IR_SOLVER_ERROR); PAW_UNUSED(r);
+        pawIr_pop_solver(child->C);
+    }
     return IR_SOLVER_SOLVED;
 }
 

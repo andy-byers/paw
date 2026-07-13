@@ -278,5 +278,6 @@ A panic can also be caused by calling the `panic` builtin function.
 + Generic type parameters on type aliases can't be constrained with trait bounds
 + Type aliases need check for cycles. Also, compiler crashes when it encounters type alias in RHS that hasn't been defined yet.
 + Edge cases exist related to impl blocks and traits
+    + The following should be allowed `T: Trait<int32> + Trait<uint32>`, that is, having 2 trait bounds on a single type with the same `DeclId`
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
     + See TODO comment in `test_error.c` `test_divergence` function

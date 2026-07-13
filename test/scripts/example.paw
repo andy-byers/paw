@@ -1,0 +1,34 @@
+// example.paw
+
+use fmt;
+use io;
+
+pub struct DebugIter<I> {
+    iter: I,
+    index: usize,
+}
+
+impl<I: Iterator<Item = T>, T: fmt::Display> Iterator for DebugIter<I> {
+    type Item = T;
+    fn next(*self) -> Option<T> {
+        match self.iter.next() {
+            Some(value) => {
+                io::println(f"[\{self.index}] = `\{value}`".unwrap());
+                self.index += 1;
+                Some(value)
+            },
+            None => None,
+        }
+    }
+}
+
+pub fn debug_iter<I: IntoIterator<Item = T>, T: fmt::Display>(iter: I) -> DebugIter<I::IntoIter> {
+    DebugIter{iter: iter.into_iter(), index: 0}
+}
+
+#[test]
+pub fn test() {
+    for v in debug_iter(["first", "second", "third"]) {
+        io::println(f"value = \{v}".unwrap());
+    }
+}

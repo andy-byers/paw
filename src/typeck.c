@@ -567,6 +567,11 @@ static IrType *inference_var_fixup(struct IrTypeFolder *F, struct IrInfer *infer
     return pawU_normalize(F->C->U, (IrType *)infer);
 }
 
+static IrType *projection_fixup(struct IrTypeFolder *F, struct IrProjection *projection)
+{
+    return pawU_normalize_projections(F->C->U, (IrType *)projection);
+}
+
 static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
 {
     if (d->body == NULL) return;
@@ -597,6 +602,7 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     struct HirTypeFolder F;
     pawHir_type_folder_init(&F, T->hir, T);
     F.F.FoldInfer = inference_var_fixup;
+    F.F.FoldProjection = projection_fixup;
     pawHir_fold_decl_type(&F, HIR_CAST_DECL(d));
 
     {
