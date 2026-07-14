@@ -23,28 +23,25 @@
 #define PAW_MAX(x, y) ((x) > (y) ? (x) : (y))
 #define PAW_CLAMP(v, x, y) PAW_MIN(PAW_MAX(v, x), y)
 
-#define PAW_INT_MAX INT64_MAX
-#define PAW_INT_MIN INT64_MIN
-#define PAW_INT_C(x) INT64_C(x)
+#define PAW_INT64_MAX INT64_MAX
+#define PAW_INT64_MIN INT64_MIN
+#define PAW_INT64_C(x) INT64_C(x)
 
-#define PAW_SIZE_MAX (sizeof(size_t) < sizeof(paw_Int) \
-                          ? SIZE_MAX                   \
-                          : (size_t)PAW_INT_MAX)
+#define PAW_SIZE_MAX (sizeof(paw_Usize) < sizeof(paw_Int64) \
+        ? SIZE_MAX : (paw_Usize)PAW_INT64_MAX)
 
 typedef struct {
-    // NOTE: requires zero-length array extension
-    char _[0];
+    // NOTE: Paw currently requires `sizeof(T) > 0` for all `T`
+    char _;
 } paw_Unit;
 
-#define PAW_UNIT() ((paw_Unit){._ = {}})
+#define PAW_UNIT() ((paw_Unit){0})
 
-_Static_assert(sizeof(paw_Unit) == 0,
-        "\"paw_Unit\" must be equivalent to LLVM empty struct \"{}\"");
-
-typedef _Bool paw_Bool;
+typedef uint8_t paw_Bool;
 typedef char paw_Char;
-typedef int64_t paw_Int;
-typedef double paw_Float;
+typedef int64_t paw_Int64;
+typedef size_t paw_Usize;
+typedef double paw_Float64;
 
 #define PAW_FALSE ((paw_Bool)0)
 #define PAW_TRUE ((paw_Bool)1)
@@ -56,25 +53,25 @@ typedef double paw_Float;
 
 typedef struct {
     paw_Char const *text;
-    paw_Int length;
+    paw_Usize length;
 } paw_Str;
 
 #define PAW_DEFINE_LIST(T) \
     typedef struct { \
         paw_##T *data; \
-        paw_Int length; \
-        paw_Int capacity; \
+        paw_Usize length; \
+        paw_Usize capacity; \
     } *paw_List_##T;
 
 PAW_DEFINE_LIST(Char)
 
 #define PAW_DEFINE_OPTION(T) \
     typedef struct { \
-        paw_Int discr; \
+        paw_Int64 discr; \
         paw_##T value; \
     } paw_OptionSome_##T; \
     typedef struct { \
-        paw_Int discr; \
+        paw_Int64 discr; \
     } paw_OptionNone_##T; \
     typedef struct { \
         union { \
@@ -95,16 +92,16 @@ PAW_DEFINE_LIST(Char)
             .none.discr = PAW_OPTION_NONE, \
         }; \
     }
-PAW_DEFINE_OPTION(Int)
-PAW_DEFINE_OPTION(Float)
+PAW_DEFINE_OPTION(Int64)
+PAW_DEFINE_OPTION(Float64)
 
 #define PAW_DEFINE_RESULT(T, E) \
     typedef struct { \
-        paw_Int discr; \
+        paw_Int64 discr; \
         paw_##T value; \
     } paw_ResultOk_##T##_##E; \
     typedef struct { \
-        paw_Int discr; \
+        paw_Int64 discr; \
         paw_##E error; \
     } paw_ResultErr_##T##_##E; \
     typedef struct { \
@@ -130,25 +127,25 @@ PAW_DEFINE_OPTION(Float)
 
 typedef struct {
     void *start;
-    size_t length;
+    paw_Usize length;
 } paw_Slice;
 
 
 void paw_assert(paw_Bool condition);
 _Noreturn void paw_panic_(paw_Slice message);
 
-paw_Str paw_str_from_raw_parts(char const *ptr, paw_Int len);
-paw_Int paw_str_len(paw_Str self);
+paw_Str paw_str_from_raw_parts(char const *ptr, paw_Usize len);
+paw_Usize paw_str_len(paw_Str self);
 char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self);
-paw_Option_Int paw_str_find(paw_Str, paw_Str self);
+paw_Option_Int64 paw_str_find(paw_Str, paw_Str self);
 
-paw_Option_Float paw_internal_parse_float(paw_Str self);
+paw_Option_Float64 paw_internal_parse_float(paw_Str self);
 
-void paw_builtin_check_bounds(paw_Int index, paw_Int length);
+void paw_builtin_check_bounds(paw_Usize index, paw_Usize length);
 
 void *paw_ops_Slice_AsPtr_as_ptr(paw_Slice *self);
-size_t paw_slice_Slice_len(paw_Slice self);
-paw_Slice paw_slice_from_raw_parts(void *start, size_t length);
+paw_Usize paw_slice_Slice_len(paw_Slice self);
+paw_Slice paw_slice_from_raw_parts(void *start, paw_Usize length);
 
 typedef struct paw_mem_OOM {
     paw_Unit _;
@@ -157,16 +154,16 @@ typedef struct paw_mem_OOM {
 typedef void *paw_Ptr;
 PAW_DEFINE_RESULT(Ptr, mem_OOM)
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(unsigned long size);
-paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, unsigned long size);
-paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(unsigned alignment, unsigned long size);
+paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(paw_Usize size);
+paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, paw_Usize size);
+paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(paw_Usize alignment, paw_Usize size);
 void paw_mem_raw_dealloc(void *ptr);
 
-void *paw_ptr_memcpy(void *dest, void *src, size_t size);
-void *paw_ptr_memmove(void *dest, void *src, size_t size);
-void *paw_ptr_memset(void *ptr, char value, size_t size);
-int64_t paw_ptr_memcmp(void *lhs, void *rhs, size_t size);
+void *paw_ptr_memcpy(void *dest, void *src, paw_Usize size);
+void *paw_ptr_memmove(void *dest, void *src, paw_Usize size);
+void *paw_ptr_memset(void *ptr, char value, paw_Usize size);
+paw_Int64 paw_ptr_memcmp(void *lhs, void *rhs, paw_Usize size);
 
-paw_Int paw_fmt_write_float(paw_Float value, paw_Int precision, char *output, paw_Int output_len);
+paw_Int64 paw_fmt_write_float(double value, paw_Int64 precision, char *output, paw_Usize output_len);
 
 #endif // PAW_STD_PAW_H

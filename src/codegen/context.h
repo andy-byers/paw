@@ -306,28 +306,6 @@ public:
         return M->get_builtin(BuiltinFn::RAWCMP);
     }
 
-    llvm::Value *create_alloc(llvm::Value *size)
-    {
-        auto *fn = M->get_builtin(BuiltinFn::PAW_ALLOC);
-        return B->CreateCall(fn, size);
-    }
-
-    llvm::Value *create_alloc(size_t size)
-    {
-        return create_alloc(create_isize(size));
-    }
-
-    llvm::Value *create_alloc(llvm::Type *ty)
-    {
-        return create_alloc(stride_of(ty));
-    }
-
-    llvm::Value *create_dealloc(llvm::Value *ptr)
-    {
-        auto *fn = M->get_builtin(BuiltinFn::PAW_DEALLOC);
-        return B->CreateCall(fn, ptr);
-    }
-
     llvm::Value *create_imin(llvm::Value *a, llvm::Value *b)
     {
         auto *a_lt_b = B->CreateICmpSLT(a, b);

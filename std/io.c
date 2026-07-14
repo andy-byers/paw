@@ -3,7 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "io.h"
-#include "str.h"
 #include <errno.h>
 #include <stdio.h>
 
@@ -63,12 +62,12 @@ static void os_close(paw_io_File *file)
     }
 }
 
-int os_seek(paw_io_File const *file, paw_Int offset, int whence)
+int os_seek(paw_io_File const *file, paw_Int64 offset, int whence)
 {
     return fseek(file->inner, (long)offset, whence);
 }
 
-static paw_Int os_tell(paw_io_File const *file)
+static paw_Int64 os_tell(paw_io_File const *file)
 {
     return ftell(file->inner);
 }
@@ -80,11 +79,11 @@ static int os_flush(paw_io_File const *file)
 
 #define IO_FERROR(File_) (ferror((File_)->inner) && errno != EINTR)
 
-static paw_Int os_read(paw_io_File const *file, void *data, paw_Int size)
+static paw_Int64 os_read(paw_io_File const *file, void *data, paw_Usize size)
 {
-    size_t remaining = (size_t)size;
+    paw_Usize remaining = (paw_Usize)size;
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
-        size_t const n = fread(data, 1, remaining, file->inner);
+        paw_Usize const n = fread(data, 1, remaining, file->inner);
         if (n == 0) break;
 
         data = (paw_Char *)data + n;
@@ -98,14 +97,14 @@ static paw_Int os_read(paw_io_File const *file, void *data, paw_Int size)
             return -1;
         }
     }
-    return size - (paw_Int)remaining;
+    return (paw_Int64)(size - remaining);
 }
 
-static paw_Int os_write(paw_io_File const *file, void const *data, paw_Int size)
+static paw_Int64 os_write(paw_io_File const *file, void const *data, paw_Usize size)
 {
-    size_t remaining = (size_t)size;
+    paw_Usize remaining = (paw_Usize)size;
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
-        size_t const n = fwrite(data, 1, remaining, file->inner);
+        paw_Usize const n = fwrite(data, 1, remaining, file->inner);
         if (n == 0) break;
 
         data = (paw_Char const *)data + n;
@@ -119,7 +118,7 @@ static paw_Int os_write(paw_io_File const *file, void const *data, paw_Int size)
             return -1;
         }
     }
-    return size - (paw_Int)remaining;
+    return (paw_Int64)(size - remaining);
 }
 
 static paw_io_ErrorKind check_errno(void)
@@ -147,7 +146,7 @@ static paw_io_ErrorKind check_errno(void)
     }
 }
 
-static int seek_kind(paw_Int kind)
+static int seek_kind(paw_Int64 kind)
 {
     switch ((paw_io_SeekKind)kind) {
         case paw_io_Seek_Begin:
@@ -160,7 +159,7 @@ static int seek_kind(paw_Int kind)
 }
 
 
-// pub fn drop(&self)
+// pub fn drop(*self)
 void paw_io_File_drop(paw_io_File *self)
 {
     os_close(self);
@@ -178,7 +177,7 @@ PAW_IO_RESULT(io_File) paw_io_File_open(paw_Slice pathname, paw_Slice mode)
 }
 
 // pub fn seek(self, offset: int, whence: Seek) -> Result<()>
-PAW_IO_RESULT(Unit) paw_io_File_seek(paw_io_File *self, paw_Int offset, paw_io_Seek whence)
+PAW_IO_RESULT(Unit) paw_io_File_seek(paw_io_File *self, paw_Int64 offset, paw_io_Seek whence)
 {
     if (os_seek(self, offset, seek_kind(whence.discr)) == 0) {
         return IO_RESULT_OK(Unit, PAW_UNIT());
@@ -188,32 +187,32 @@ PAW_IO_RESULT(Unit) paw_io_File_seek(paw_io_File *self, paw_Int offset, paw_io_S
 }
 
 // pub fn tell(self) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_tell(paw_io_File *self)
+PAW_IO_RESULT(Int64) paw_io_File_tell(paw_io_File *self)
 {
-    paw_Int const offset = os_tell(self);
+    paw_Int64 const offset = os_tell(self);
     if (offset >= 0) {
-        return IO_RESULT_OK(Int, offset);
+        return IO_RESULT_OK(Int64, offset);
     } else {
-        return IO_RESULT_ERR(Int, check_errno());
+        return IO_RESULT_ERR(Int64, check_errno());
     }
 }
 
 // pub fn read(self, data: SliceMut<char>) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_read(paw_io_File *self, paw_Slice data)
+PAW_IO_RESULT(Usize) paw_io_File_read(paw_io_File *self, paw_Slice data)
 {
-    paw_Int const length = os_read(self, data.start, data.length);
+    paw_Int64 const length = os_read(self, data.start, data.length);
     return length >= 0
-        ? IO_RESULT_OK(Int, length)
-        : IO_RESULT_ERR(Int, check_errno());
+        ? IO_RESULT_OK(Usize, (paw_Usize)length)
+        : IO_RESULT_ERR(Usize, check_errno());
 }
 
 // pub fn write(self, data: Slice<char>) -> Result<int>
-PAW_IO_RESULT(Int) paw_io_File_write(paw_io_File *self, paw_Slice data)
+PAW_IO_RESULT(Usize) paw_io_File_write(paw_io_File *self, paw_Slice data)
 {
-    paw_Int const length = os_write(self, data.start, data.length);
+    paw_Int64 const length = os_write(self, data.start, data.length);
     return length >= 0
-        ? IO_RESULT_OK(Int, length)
-        : IO_RESULT_ERR(Int, check_errno());
+        ? IO_RESULT_OK(Usize, (paw_Usize)length)
+        : IO_RESULT_ERR(Usize, check_errno());
 }
 
 // pub fn flush(self) -> Result<()>

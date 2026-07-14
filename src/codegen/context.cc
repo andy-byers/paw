@@ -8,10 +8,6 @@
 namespace paw::cg {
 
 static constexpr char const *BUILTIN_NAMES[(size_t)BuiltinFn::NUM_BUILTINS] = {
-    [(unsigned)BuiltinFn::PAW_ALLOC] = "paw_mem_alloc",
-    [(unsigned)BuiltinFn::PAW_REALLOC] = "paw_mem_realloc",
-    [(unsigned)BuiltinFn::PAW_DEALLOC] = "paw_mem_dealloc",
-    [(unsigned)BuiltinFn::PAW_ALIGNED_ALLOC] = "paw_aligned_alloc",
     [(unsigned)BuiltinFn::PAW_BKPT] = "paw_builtin_bkpt",
     [(unsigned)BuiltinFn::HASH_BYTES] = "_PN3ops18builtin_hash_bytes",
     [(unsigned)BuiltinFn::CHECK_BOUNDS] = "paw_builtin_check_bounds",

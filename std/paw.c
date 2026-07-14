@@ -4,7 +4,6 @@
 
 #include "paw.h"
 
-#include <inttypes.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -24,11 +23,11 @@ void paw_assert(paw_Bool cond)
 
 _Noreturn void paw_panic_(paw_Slice message)
 {
-    fwrite(message.start, 1, (size_t)message.length, stderr);
+    fwrite(message.start, 1, (paw_Usize)message.length, stderr);
     exit(EXIT_FAILURE);
 }
 
-paw_Str paw_str_from_raw_parts(char const *ptr, paw_Int len)
+paw_Str paw_str_from_raw_parts(char const *ptr, paw_Usize len)
 {
     return (paw_Str){
         .text = ptr,
@@ -36,7 +35,7 @@ paw_Str paw_str_from_raw_parts(char const *ptr, paw_Int len)
     };
 }
 
-paw_Int paw_str_len(paw_Str self)
+paw_Usize paw_str_len(paw_Str self)
 {
     return self.length;
 }
@@ -46,7 +45,7 @@ char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self)
     return self->text;
 }
 
-static int parse_float(paw_Char const *text, paw_Float *result_ptr)
+static int parse_float(paw_Char const *text, double *result_ptr)
 {
 #define IS_DIGIT(Ch_) ('0' <= (Ch_) && (Ch_) <= '9')
 #define IS_FP(Ch_) ((Ch_) == '.' || (Ch_) == 'e' || (Ch_) == 'E')
@@ -71,7 +70,7 @@ static int parse_float(paw_Char const *text, paw_Float *result_ptr)
         while (IS_DIGIT(*p)) ++p;
     }
     if (*p != '\0') return -1;
-    paw_Float const f = strtod(text, NULL);
+    double const f = strtod(text, NULL);
     *result_ptr = is_negative ? -f : f;
     return 0;
 
@@ -79,18 +78,18 @@ static int parse_float(paw_Char const *text, paw_Float *result_ptr)
 #undef IS_DIGIT
 }
 
-// fn parse_float(self) -> Option<float>
-paw_Option_Float paw_internal_parse_float(paw_Str self)
+// fn parse_float(self) -> Option<float64>
+paw_Option_Float64 paw_internal_parse_float(paw_Str self)
 {
-    paw_Float result;
+    double result;
     if (parse_float(self.text, &result) == 0) {
-        return paw_Option_Float_some(result);
+        return paw_Option_Float64_some(result);
     } else {
-        return paw_Option_Float_none();
+        return paw_Option_Float64_none();
     }
 }
 
-static paw_Char const *find_substr(paw_Char const *str, paw_Int nstr, paw_Char const *sub, paw_Int nsub)
+static paw_Char const *find_substr(paw_Char const *str, paw_Usize nstr, paw_Char const *sub, paw_Usize nsub)
 {
     if (nsub == 0)
         return str;
@@ -98,7 +97,7 @@ static paw_Char const *find_substr(paw_Char const *str, paw_Int nstr, paw_Char c
     paw_Char const *end = str + nstr;
     while ((str = strchr(str, sub[0]))) {
         if (nsub <= end - str
-                && memcmp(str, sub, (size_t)nsub) == 0)
+                && memcmp(str, sub, (paw_Usize)nsub) == 0)
             return str;
         str += nsub;
     }
@@ -107,20 +106,20 @@ static paw_Char const *find_substr(paw_Char const *str, paw_Int nstr, paw_Char c
 }
 
 // fn find(self, target: str) -> Option<int>
-paw_Option_Int paw_str_find(paw_Str self, paw_Str target)
+paw_Option_Int64 paw_str_find(paw_Str self, paw_Str target)
 {
     paw_Char const *result = find_substr(
         self.text, self.length,
         target.text, target.length);
     if (result != NULL) {
-        return paw_Option_Int_some(result - self.text);
+        return paw_Option_Int64_some(result - self.text);
     } else {
-        return paw_Option_Int_none();
+        return paw_Option_Int64_none();
     }
 }
 
 // fn paw_slice_from_raw_parts<T>(start: *T, length: int) -> []T
-paw_Slice paw_slice_from_raw_parts(void *start, size_t length)
+paw_Slice paw_slice_from_raw_parts(void *start, paw_Usize length)
 {
     return (paw_Slice){
         .start = start,
@@ -135,12 +134,12 @@ void *paw_ops_Slice_AsPtr_as_ptr(paw_Slice *self)
 }
 
 // fn len(self) -> int
-size_t paw_slice_Slice_len(paw_Slice self)
+paw_Usize paw_slice_Slice_len(paw_Slice self)
 {
     return self.length;
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(unsigned long size)
+paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(paw_Usize size)
 {
     void *ptr = malloc(size);
     return ptr != NULL
@@ -148,7 +147,7 @@ paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(unsigned long size)
         : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, unsigned long size)
+paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, paw_Usize size)
 {
     ptr = realloc(ptr, size);
     return ptr != NULL
@@ -156,7 +155,7 @@ paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, unsigned long size)
         : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(unsigned alignment, unsigned long size)
+paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(paw_Usize alignment, paw_Usize size)
 {
     void *ptr = aligned_alloc(alignment, size);
     return ptr != NULL
@@ -170,45 +169,45 @@ void paw_mem_raw_dealloc(void *ptr)
 }
 
 // fn memcpy(dest: *char, src: *char, size: int) -> *char
-void *paw_ptr_memcpy(void *dest, void *src, size_t size)
+void *paw_ptr_memcpy(void *dest, void *src, paw_Usize size)
 {
     return memcpy(dest, src, size);
 }
 
 // fn memmove(dest: *char, src: *char, size: int) -> *char
-void *paw_ptr_memmove(void *dest, void *src, size_t size)
+void *paw_ptr_memmove(void *dest, void *src, paw_Usize size)
 {
     return memmove(dest, src, size);
 }
 
 // fn memset(ptr: *char, value: char, size: int) -> *char
-void *paw_ptr_memset(void *ptr, char value, size_t size)
+void *paw_ptr_memset(void *ptr, char value, paw_Usize size)
 {
     return memset(ptr, value, size);
 }
 
 // fn memcmp(lhs: *char, rhs: *char, size: int) -> int
-int64_t paw_ptr_memcmp(void *lhs, void *rhs, size_t size)
+paw_Int64 paw_ptr_memcmp(void *lhs, void *rhs, paw_Usize size)
 {
     return memcmp(lhs, rhs, size);
 }
 
-void paw_builtin_check_bounds(paw_Int index, paw_Int length)
+void paw_builtin_check_bounds(paw_Usize index, paw_Usize length)
 {
-    if (index < 0 || index >= length) {
+    if (index >= length) {
         char buffer[200]; // space for error message
         int const n = snprintf(buffer, PAW_COUNTOF(buffer),
-                "index %" PRId64 " out of bounds for sequence of length %" PRId64 "\n",
-                index, length);
-        PAW_ASSERT((size_t)n < PAW_COUNTOF(buffer));
+                "index %llu out of bounds for sequence of length %llu\n",
+                (unsigned long long)index, (unsigned long long)length);
+        PAW_ASSERT((paw_Usize)n < PAW_COUNTOF(buffer));
         paw_panic_((paw_Slice){
                 .start = buffer,
-                .length = (size_t)n,
+                .length = (paw_Usize)n,
             });
     }
 }
 
-paw_Int paw_fmt_write_float(paw_Float value, paw_Int precision, char *output, paw_Int output_len)
+paw_Int64 paw_fmt_write_float(double value, paw_Int64 precision, char *output, paw_Usize output_len)
 {
     return snprintf(output, output_len, "%.*g", (int)precision, value);
 }

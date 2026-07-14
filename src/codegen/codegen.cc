@@ -1202,39 +1202,6 @@ private:
             B->CreateUnreachable();
         }
 
-        // declare "ptr @paw_mem_alloc(isize)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_ptr_ty(),
-                        {X.get_isize_ty()}, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::PAW_ALLOC),
-                    *M);
-            fn->setDoesNotThrow();
-        }
-
-        // declare "ptr @paw_mem_realloc(ptr, isize)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_ptr_ty(),
-                        {X.get_ptr_ty(), X.get_isize_ty()}, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::PAW_REALLOC),
-                    *M);
-            fn->setDoesNotThrow();
-        }
-
-        // declare "void @paw_mem_dealloc(ptr)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_void_ty(),
-                        {X.get_ptr_ty()}, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::PAW_DEALLOC),
-                    *M);
-            fn->setDoesNotThrow();
-        }
-
         // generate "void @paw_bkpt(ptr)" builtin
         {
             auto *fn = llvm::Function::Create(

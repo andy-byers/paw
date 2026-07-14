@@ -30,10 +30,10 @@ impl File {
     pub fn open(pathname: []char, mode: []char) -> Result<Self>;
 
     #[extern = "paw_io_File_seek"] 
-    pub fn seek(*self, offset: usize, whence: Seek) -> Result<()>;
+    pub fn seek(*self, offset: int64, whence: Seek) -> Result<()>;
 
     #[extern = "paw_io_File_tell"] 
-    pub fn tell(*self) -> Result<usize>;
+    pub fn tell(*self) -> Result<int64>;
 
     #[extern = "paw_io_File_flush"] 
     pub fn flush(*self) -> Result<()>;

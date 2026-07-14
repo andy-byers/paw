@@ -7,20 +7,20 @@
 
 #include "paw.h"
 
-extern paw_Float const paw_math_PI;
-extern paw_Float const paw_math_NAN;
-extern paw_Float const paw_math_INFINITY;
+extern paw_Float64 const paw_math_PI;
+extern paw_Float64 const paw_math_NAN;
+extern paw_Float64 const paw_math_INFINITY;
 
-paw_Float paw_math_sin(void *, paw_Float);
-paw_Float paw_math_cos(void *, paw_Float);
-paw_Float paw_math_tan(void *, paw_Float);
-paw_Float paw_math_asin(void *, paw_Float);
-paw_Float paw_math_acos(void *, paw_Float);
-paw_Float paw_math_atan(void *, paw_Float);
-paw_Float paw_math_atan2(void *, paw_Float, paw_Float);
+paw_Float64 paw_math_sin(paw_Float64);
+paw_Float64 paw_math_cos(paw_Float64);
+paw_Float64 paw_math_tan(paw_Float64);
+paw_Float64 paw_math_asin(paw_Float64);
+paw_Float64 paw_math_acos(paw_Float64);
+paw_Float64 paw_math_atan(paw_Float64);
+paw_Float64 paw_math_atan2(paw_Float64, paw_Float64);
 
-paw_Bool paw_math_is_nan(void *, paw_Float);
-paw_Bool paw_math_is_finite(void *, paw_Float);
-paw_Bool paw_math_is_negative(void *, paw_Float);
+paw_Bool paw_math_is_nan(paw_Float64);
+paw_Bool paw_math_is_finite(paw_Float64);
+paw_Bool paw_math_is_negative(paw_Float64);
 
 #endif // PAW_STD_MATH_H

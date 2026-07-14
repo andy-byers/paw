@@ -9,10 +9,19 @@ fn check_fstring(lhs: fmt::Result<String>, rhs: str) {
     assert(lhs.eq(&rhs.to_slice()));
 }
 
+struct Custom;
+
+impl fmt::Display for Custom {
+    fn fmt(*self, f: *fmt::Formatter) -> fmt::Result<()> {
+        "<Custom>".fmt(f)
+    }
+}
+
 #[test]
 pub fn test() {
     check_fstring(f"", "");
     check_fstring(f"abc", "abc");
     check_fstring(f"\{0x7B}", "123");
     check_fstring(f"abc\{123u8}def\{456i32}ghi", "abc123def456ghi");
+    check_fstring(f"before \{Custom} after", "before <Custom> after");
 }
