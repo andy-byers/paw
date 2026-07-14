@@ -114,6 +114,7 @@ TESTS=(
 #    "impl_selection"
     "sort"
     "example"
+    "example_2"
     "bubble"
     "nqueen"
     "matmul"

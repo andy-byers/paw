@@ -1,0 +1,33 @@
+// example_2.paw
+
+struct Wrapper<T> {
+    pub value: T,
+}
+
+impl<T: Add<T, Output = T>> Add<Wrapper<T>> for Wrapper<T> {
+    type Output = Self;
+    fn add(*self, rhs: *Wrapper<T>) -> Self {
+        Self{value: self.value.add(&rhs.value)}
+    }
+}
+
+impl<T> From<T> for Wrapper<T> {
+    fn from(value: T) -> Self {
+        Self{value}
+    }
+}
+
+fn transform<I: IntoIterator<Item = A>, A: Into<B>, B: Add<B, Output = B>>(iter: I, zero: B) -> B {
+    let result = zero;
+    for value in iter {
+        result = result.add(&value.into());
+    }
+    result
+}
+
+#[test]
+pub fn test() {
+    let value = transform([1, 2, 3, 4, 5], Wrapper{value: 100});
+    assert(value.value == 115); 
+}
+

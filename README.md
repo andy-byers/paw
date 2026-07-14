@@ -96,9 +96,14 @@ Enums are described greater detail in [sum types](#sum-types).
 In both cases, the datatype definition specifies only the data layout of the type.
 Methods and associated functions can be attached using an [`impl` block](#impl-blocks).
 ```paw
-struct Statistic {
+enum Statistic {
+    Discrete(int64),
+    Continuous(float64),
+}
+
+struct StatisticInfo {
     pub name: String, // accessible from anywhere
-    value: float32, // only accessible from within the same module
+    value: Statistic, // only accessible from within the same module
 }
 ```
 
