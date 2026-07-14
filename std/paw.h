@@ -141,16 +141,8 @@ paw_Str paw_str_from_raw_parts(char const *ptr, paw_Int len);
 paw_Int paw_str_len(paw_Str self);
 char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self);
 paw_Option_Int paw_str_find(paw_Str, paw_Str self);
-paw_Bool paw_str_starts_with(paw_Str, paw_Str self);
-paw_Bool paw_str_ends_with(paw_Str, paw_Str self);
-
-paw_Bool paw_ops_str_Compare_lt(paw_Str self, paw_Str rhs);
-paw_Bool paw_ops_str_Compare_le(paw_Str self, paw_Str rhs);
 
 paw_Option_Float paw_internal_parse_float(paw_Str self);
-
-uint64_t paw_builtin_hash_bytes(paw_Char const *bytes, size_t length, uint64_t hash);
-int64_t paw_builtin_rawcmp(paw_Char const *lhs, size_t lhs_length, paw_Char const *rhs, size_t rhs_length);
 
 void paw_builtin_check_bounds(paw_Int index, paw_Int length);
 
@@ -170,10 +162,10 @@ paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, unsigned long size);
 paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(unsigned alignment, unsigned long size);
 void paw_mem_raw_dealloc(void *ptr);
 
-void *paw_ptr_memcpy(void *dest, void *src, paw_Int size);
-void *paw_ptr_memmove(void *dest, void *src, paw_Int size);
-void *paw_ptr_memset(void *ptr, char value, paw_Int size);
-int paw_ptr_memcmp(void *lhs, void *rhs, paw_Int size);
+void *paw_ptr_memcpy(void *dest, void *src, size_t size);
+void *paw_ptr_memmove(void *dest, void *src, size_t size);
+void *paw_ptr_memset(void *ptr, char value, size_t size);
+int64_t paw_ptr_memcmp(void *lhs, void *rhs, size_t size);
 
 paw_Int paw_fmt_write_float(paw_Float value, paw_Int precision, char *output, paw_Int output_len);
 

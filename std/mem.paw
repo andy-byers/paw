@@ -53,14 +53,14 @@ pub fn drop_in_place<T>(ptr: *T) {}
 
 
 #[extern = "paw_mem_raw_alloc"] 
-pub fn raw_alloc(size: usize) -> Result<*char>;
+fn raw_alloc(size: usize) -> Result<*char>;
 
 #[extern = "paw_mem_raw_realloc"] 
-pub fn raw_realloc(ptr: *char, size: usize) -> Result<*char>;
+fn raw_realloc(ptr: *char, size: usize) -> Result<*char>;
 
 #[extern = "paw_mem_raw_dealloc"] 
-pub fn raw_dealloc(ptr: *char);
+fn raw_dealloc(ptr: *char);
 
 #[extern = "paw_mem_raw_aligned_alloc"] 
-pub fn raw_aligned_alloc(alignment: usize, size: usize) -> Result<*char>;
+fn raw_aligned_alloc(alignment: usize, size: usize) -> Result<*char>;
 

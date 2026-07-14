@@ -516,14 +516,44 @@ impl<T: Clone + Ord<T> + Increment> Iterator for RangeFromIter<T> {
 }
 
 
-#[extern = "paw_builtin_hash_bytes"]
-fn builtin_hash_bytes(bytes: *char, length: usize, seed: uint64) -> uint64;
+// From https://en.wikipedia.org/wiki/Xorshift#Initialization
+fn mix64(x: uint64) -> uint64 {
+	x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9;
+	x = (x ^ (x >> 27)) * 0x94D049BB133111EB;
+	return x ^ (x >> 31);
+}
+
+fn builtin_hash_bytes(bytes: *char, length: usize, hash: uint64) -> uint64
+{
+    let next_u64 = |p, n| {
+        let u = 0u64;
+        ptr::copy_nonoverlapping(p, &u as *char, n);
+        u
+    };
+
+    let N = mem::sizeof::<uint64>();
+    let h = mix64(hash ^ length as uint64);
+    while (length >= N) {
+        let x = next_u64(bytes, N);
+
+        h ^= mix64(x);
+        h = mix64(h);
+
+        bytes = ptr::add(bytes, N as isize);
+        length -= N;
+    }
+    let x = next_u64(bytes, length);
+    mix64(h ^ mix64(x))
+}
 
 // Allows "*hs" to be equal to "0 as *char" if "*hs_len" is equal to 0.
-#[extern = "paw_builtin_rawcmp"]
 fn builtin_rawcmp(
-    lhs: *char, lhs_len: usize, 
-    rhs: *char, rhs_len: usize) -> int64;
+        lhs: *char, lhs_len: usize, 
+        rhs: *char, rhs_len: usize) -> int64 {
+    let r = ptr::memcmp(lhs, rhs, minmax(lhs_len, rhs_len).0);
+    if r != 0 { return r }
+    lhs_len as int64 - rhs_len as int64
+}
 
 
 impl<T> From<T> for T {
@@ -554,7 +584,7 @@ pub trait IndexRange<Idx> {
     fn index_range(*self, index: Idx) -> []Self::Output;
 }
 
-// NOTE: below this line are the many impls of various core traits for integer/float64 types
+// NOTE: below this line are the many impls of various core traits for integer/float types
 
 impl Copy for int8 {}
 impl Clone for int8 { fn clone(*self) -> Self { *self } }
@@ -717,8 +747,6 @@ impl Increment for usize { fn increment(*self) { *self += 1; } }
 impl Default for usize { fn default() -> Self { 0 } }
 
 
-// TODO: constants overflow int64
-
 impl Hash for int8 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
 impl Hash for int16 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
 impl Hash for int32 { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)) } }
@@ -732,11 +760,7 @@ impl Hash for usize { fn hash(*self) -> uint64 { uint64::hash(&(*self as uint64)
 
 impl Hash for uint64 { 
     fn hash(*self) -> uint64 { 
-        // SplitMix64 step from https://en.wikipedia.org/wiki/Xorshift 
-        let x = *self + 0x9E3779B97F4A7C15;
-        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9;
-        x = (x ^ (x >> 27)) * 0x94D049BB133111EB;
-        x ^ (x >> 31)
+        mix64(*self)
     }
 }
 
@@ -967,3 +991,12 @@ pub fn __format_str(f: *fmt::Formatter, r: *Option<fmt::Error>, s: str) {
         };
     }
 }
+
+
+pub fn minmax<T: Ord<T>>(a: T, b: T) -> (T, T) {
+    match a.cmp(&b) {
+        Ordering::Less | Ordering::Equal => (a, b),
+        Ordering::Greater => (b, a),
+    }
+}
+

@@ -212,7 +212,7 @@ public:
     llvm::Value *create_hash_bytes(llvm::Value *bytes, llvm::Value *length) const
     {
         auto *fn = M->get_builtin(BuiltinFn::HASH_BYTES);
-        return B->CreateCall(fn, {bytes, length, create_i32(0)});
+        return B->CreateCall(fn, {bytes, length, create_i64(0)});
     }
 
     llvm::Value *create_hash_bytes(llvm::Value *bytes, llvm::Value *length, llvm::Value *hash) const

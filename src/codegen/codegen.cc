@@ -1172,7 +1172,7 @@ private:
                          X.get_isize_ty(), X.get_ptr_ty()}, false))
                     .getCallee());
 
-            // ABI type of "*[char]" in argument position
+            // ABI type of "[]char" in argument position
             auto *message_type = X.get_slice_type(
                     X.get_char_type());
             auto callee = M->get_module()

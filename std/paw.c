@@ -119,63 +119,6 @@ paw_Option_Int paw_str_find(paw_Str self, paw_Str target)
     }
 }
 
-// fn starts_with(self, prefix: str) -> bool
-paw_Bool paw_str_starts_with(paw_Str self, paw_Str prefix)
-{
-    return self.length >= prefix.length
-        && 0 == memcmp(prefix.text, self.text, (size_t)prefix.length);
-}
-
-// fn ends_with(*self, suffix: str) -> bool
-paw_Bool paw_str_ends_with(paw_Str self, paw_Str suffix)
-{
-    if (self.length >= suffix.length) {
-        paw_Char const *ptr = self.text + self.length - suffix.length;
-        return 0 == memcmp(suffix.text, ptr, (size_t)suffix.length);
-    }
-    return PAW_FALSE;
-}
-
-typedef struct {
-	uint64_t s;
-} Mix64State;
-
-// From https://en.wikipedia.org/wiki/Xorshift#Initialization
-static uint64_t mix64(uint64_t x) {
-	x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
-	x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
-	return x ^ (x >> 31);
-}
-
-// From http://www.cse.yorku.ca/~oz/hash.html
-uint64_t paw_builtin_hash_bytes(paw_Char const *bytes, size_t length, uint64_t hash)
-{
-#define N sizeof(hash)
-
-    uint64_t x, h = mix64(hash ^ length);
-    while (length >= N) {
-        memcpy(&x, bytes, N);
-
-        h ^= mix64(x);
-        h = mix64(h);
-
-        bytes += N;
-        length -= N;
-    }
-    memcpy(&x, bytes, length);
-    h ^= mix64(x);
-    return mix64(h);
-
-#undef N
-}
-
-int64_t paw_builtin_rawcmp(paw_Char const *lhs, size_t lhs_length, paw_Char const *rhs, size_t rhs_length)
-{
-    size_t const n = PAW_MIN(lhs_length, rhs_length);
-    int const r = n == 0 ? 0 : memcmp(lhs, rhs, n);
-    return r != 0 ? r : (int64_t)lhs_length - (int64_t)rhs_length;
-}
-
 // fn paw_slice_from_raw_parts<T>(start: *T, length: int) -> []T
 paw_Slice paw_slice_from_raw_parts(void *start, size_t length)
 {
@@ -227,27 +170,27 @@ void paw_mem_raw_dealloc(void *ptr)
 }
 
 // fn memcpy(dest: *char, src: *char, size: int) -> *char
-void *paw_ptr_memcpy(void *dest, void *src, paw_Int size)
+void *paw_ptr_memcpy(void *dest, void *src, size_t size)
 {
-    return memcpy(dest, src, (size_t)size);
+    return memcpy(dest, src, size);
 }
 
 // fn memmove(dest: *char, src: *char, size: int) -> *char
-void *paw_ptr_memmove(void *dest, void *src, paw_Int size)
+void *paw_ptr_memmove(void *dest, void *src, size_t size)
 {
-    return memmove(dest, src, (size_t)size);
+    return memmove(dest, src, size);
 }
 
 // fn memset(ptr: *char, value: char, size: int) -> *char
-void *paw_ptr_memset(void *ptr, char value, paw_Int size)
+void *paw_ptr_memset(void *ptr, char value, size_t size)
 {
-    return memset(ptr, value, (size_t)size);
+    return memset(ptr, value, size);
 }
 
 // fn memcmp(lhs: *char, rhs: *char, size: int) -> int
-int paw_ptr_memcmp(void *lhs, void *rhs, paw_Int size)
+int64_t paw_ptr_memcmp(void *lhs, void *rhs, size_t size)
 {
-    return memcmp(lhs, rhs, (size_t)size);
+    return memcmp(lhs, rhs, size);
 }
 
 void paw_builtin_check_bounds(paw_Int index, paw_Int length)
