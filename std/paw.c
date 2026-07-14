@@ -28,45 +28,6 @@ _Noreturn void paw_panic_(paw_Slice message)
     exit(EXIT_FAILURE);
 }
 
-
-// TODO: recast these as functions that write to a "Format" object
-//paw_Str paw_char_to_str(paw_Char *self)
-//{
-//    return new_str(self, 1);
-//}
-//
-//paw_Str paw_int_to_str(paw_Int *self)
-//{
-//    paw_Char temp[32];
-//    paw_Bool const negative = *self < 0;
-//    paw_Char *end = temp + PAW_COUNTOF(temp);
-//    paw_Char *ptr = end - 1;
-//
-//    // Don't call llabs(PAW_INT_MIN). The result is undefined on 2s complement
-//    // systems.
-//    uint64_t u = *self == PAW_INT_MIN
-//                     ? UINT64_C(1) << 63
-//                     : (uint64_t)llabs(*self);
-//    do {
-//        *ptr-- = (paw_Char)(u % 10 + '0');
-//        u /= 10;
-//    } while (u);
-//
-//    if (negative) {
-//        *ptr = '-';
-//    } else {
-//        ++ptr;
-//    }
-//    return new_str(ptr, end - ptr);
-//}
-//
-//paw_Str paw_float_to_str(paw_Float *self)
-//{
-//    paw_Char temp[32];
-//    int const n = snprintf(temp, PAW_COUNTOF(temp), "%.*g", 17, *self);
-//    return new_str(temp, n);
-//}
-
 paw_Str paw_str_from_raw_parts(char const *ptr, paw_Int len)
 {
     return (paw_Str){
@@ -83,73 +44,6 @@ paw_Int paw_str_len(paw_Str self)
 char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self)
 {
     return self->text;
-}
-
-// pub fn parse_int(self) -> Option<int>
-paw_Option_Int paw_str_parse_int(paw_Str self)
-{
-    return paw_str_parse_int_radix(self, 10);
-}
-
-static unsigned char_to_digit(paw_Char c)
-{
-    static const unsigned char LOOKUP[0x100] = {
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    };
-
-    return LOOKUP[(unsigned)c];
-}
-
-static int parse_int_radix(paw_Char const *text, paw_Int length, paw_Int base, paw_Int *result_ptr)
-{
-    paw_Bool const is_negative = *text == '-';
-    paw_Bool const skip_first = is_negative || *text == '+';
-    length -= skip_first;
-    text += skip_first;
-
-    uint64_t const b = (uint64_t)base;
-
-    if (b < 2 || b > 36)
-        return -1; // invalid "base"
-
-    uint64_t value = 0;
-    for (paw_Int i = 0; i < length; ++i) {
-        uint64_t const v = char_to_digit(text[i]);
-        if (v >= b || value > (UINT64_MAX - v) / b)
-            return -1; // "value" too large for unsigned i64
-        value = value * b + v;
-    }
-    if (value > (uint64_t)PAW_INT_MAX + is_negative)
-        return -1; // "value" too large for Paw integer (i64)
-
-    *result_ptr = (paw_Int)(is_negative ? -value : value);
-    return 0;
-}
-
-// fn parse_int_radix(self, base: int) -> Option<int>
-paw_Option_Int paw_str_parse_int_radix(paw_Str self, paw_Int base)
-{
-    paw_Int result;
-    if (parse_int_radix(self.text, self.length, base, &result) == 0) {
-        return paw_Option_Int_some(result);
-    } else {
-        return paw_Option_Int_none();
-    }
 }
 
 static int parse_float(paw_Char const *text, paw_Float *result_ptr)
@@ -186,7 +80,7 @@ static int parse_float(paw_Char const *text, paw_Float *result_ptr)
 }
 
 // fn parse_float(self) -> Option<float>
-paw_Option_Float paw_str_parse_float(paw_Str self)
+paw_Option_Float paw_internal_parse_float(paw_Str self)
 {
     paw_Float result;
     if (parse_float(self.text, &result) == 0) {
@@ -211,61 +105,6 @@ static paw_Char const *find_substr(paw_Char const *str, paw_Int nstr, paw_Char c
 
     return NULL;
 }
-
-//// pub fn split(self, sep: str) -> [str]
-//paw_List_Str paw_str_split(paw_Str self, paw_Str sep)
-//{
-//#define LIST_PUSH_STR _PM4list4ListIsE4list4push
-//    extern void LIST_PUSH_STR(void *, paw_List_Str, paw_Str);
-//
-//    if (sep->length == 0)
-//        paw_panic(NEW_LITERAL("empty separator"));
-//
-//    size_t const INITIAL_CAPACITY = 4;
-//    paw_List_Str list = PAW_MALLOC(sizeof *list);
-//    list->data = PAW_MALLOC(INITIAL_CAPACITY * sizeof *list->data);
-//    list->capacity = INITIAL_CAPACITY;
-//    list->length = 0;
-//
-//    int num_parts = 0;
-//    paw_Char const *part;
-//    paw_Int rest_length = self->length;
-//    paw_Char const *rest_text = self->text;
-//    while ((part = find_substr(rest_text, rest_length, sep->text, sep->length))) {
-//        if (num_parts == INT_MAX)
-//            paw_panic(NEW_LITERAL("too many substrings"));
-//        paw_Int const n = part - rest_text;
-//        LIST_PUSH_STR(NULL, list, new_str(rest_text, n));
-//        part += sep->length; // skip separator
-//        rest_text = part;
-//        rest_length -= n;
-//        ++num_parts;
-//    }
-//    char const *end = self->text + self->length; // add the rest
-//    LIST_PUSH_STR(NULL, list, new_str(rest_text, end - rest_text));
-//
-//    return list;
-//
-//#undef LIST_PUSH_STR
-//}
-//
-//// pub fn join(self, parts: [str]) -> str;
-//paw_Str paw_str_join(paw_Str self, paw_List_Str parts)
-//{
-//    paw_Str joined;
-//    {
-//        struct StringBuilder sb;
-//        sb_init(&sb);
-//        for (paw_Int i = 0; i < parts->length; ++i) {
-//            sb_add_str(&sb, parts->data[i]);
-//            if (i < parts->length - 1)
-//                sb_add_str(&sb, self);
-//        }
-//        joined = sb_create_str(&sb);
-//        sb_uninit(&sb);
-//    }
-//    return joined;
-//}
 
 // fn find(self, target: str) -> Option<int>
 paw_Option_Int paw_str_find(paw_Str self, paw_Str target)

@@ -25,6 +25,7 @@ pub const UINT32_MAX: uint32 = 0xFFFFFFFF;
 pub const UINT64_MAX: uint64 = 0xFFFFFFFFFFFFFFFF;
 pub const USIZE_MAX: usize = 0xFFFFFFFFFFFFFFFF;
 
+
 impl str {
     #[extern = "paw_str_from_raw_parts"] 
     pub fn from_raw_parts(ptr: *char, len: usize) -> Self;
@@ -32,14 +33,57 @@ impl str {
     #[extern = "paw_str_len"] 
     pub fn len(self) -> usize;
 
-    #[extern = "paw_str_parse_int"] 
-    pub fn parse_int(self) -> Option<int64>;
+    pub fn is_empty(self) -> bool {
+        self.len() == 0
+    }
 
-    #[extern = "paw_str_parse_int_radix"] 
-    pub fn parse_int_radix(self, base: int64) -> Option<int64>;
+    pub fn parse_int(self) -> Result<int64, ParseIntError> {
+        self.parse_int_radix(10)
+    }
 
-    #[extern = "paw_str_parse_float"] 
-    pub fn parse_float(self) -> Option<float64>;
+    pub fn parse_uint(self) -> Result<uint64, ParseIntError> {
+        self.parse_uint_radix(10)
+    }
+
+    pub fn parse_int_radix(self, base: int64) -> Result<int64, ParseIntError> {
+        if self.is_empty() { 
+            return Err(ParseIntError::Empty); 
+        }
+        let minus = self[0] == '-';
+        if minus || self[0] == '+' {
+            self = skipchar(self);
+        }
+        
+        let u = parse_uint_radix_nonempty(self, base)?;
+        if u > INT64_MAX as uint64 + minus as uint64 {
+            Err(ParseIntError::Overflow)
+        } else if minus {
+            Ok(-u as int64)
+        } else {
+            Ok(u as int64)
+        }
+    }
+
+    pub fn parse_uint_radix(self, base: int64) -> Result<uint64, ParseIntError> {
+        if self.is_empty() { 
+            return Err(ParseIntError::Empty); 
+        }
+        if self[0] == '+' {
+            self = skipchar(self);
+        }
+        
+        parse_uint_radix_nonempty(self, base)
+    }
+
+    pub fn parse_float(self) -> Result<float64, ParseFloatError> {
+        if self.is_empty() {
+            return Err(ParseFloatError::Empty);
+        }
+        match internal_parse_float(self) {
+            Some(f) => Ok(f),
+            None => Err(ParseFloatError::InvalidChar),
+        }
+    }
 
     #[extern = "paw_str_find"] 
     pub fn find(self, target: Self) -> Option<usize>;
@@ -65,4 +109,89 @@ pub fn assert(cond: bool) {
         panic("assertion failure");
     }
 }
+
+
+pub enum ParseIntError {
+    Empty,
+    InvalidChar,
+    InvalidBase,
+    Overflow,
+}
+
+impl Copy for ParseIntError {}
+
+impl Eq<Self> for ParseIntError {
+    fn eq(*self, rhs: *Self) -> bool {
+        match (*self, *rhs) {
+            (ParseIntError::Empty, ParseIntError::Empty)
+            | (ParseIntError::InvalidChar, ParseIntError::InvalidChar)
+            | (ParseIntError::InvalidBase, ParseIntError::InvalidBase)
+            | (ParseIntError::Overflow, ParseIntError::Overflow) => true,
+            _ => false,
+        }
+    } 
+}
+
+pub enum ParseFloatError {
+    Empty,
+    InvalidChar,
+}
+
+impl Copy for ParseFloatError {}
+
+use ptr;
+
+fn skipchar(s: str) -> str {
+    str::from_raw_parts(
+        ptr::add(s.as_ptr(), 1),
+        s.len() - 1)
+}
+
+fn char_to_digit(c: char) -> uint64 {
+    // TODO: const arrays of scalars
+    let LOOKUP: [0x100]uint8 = [
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    ];
+
+    LOOKUP[c as usize] as uint64
+}
+
+fn parse_uint_radix_nonempty(text: str, base: int64) -> Result<uint64, ParseIntError>
+{
+    let b = base as uint64;
+    if b < 2 || b > 36 {
+        return Err(ParseIntError::InvalidBase);
+    }
+
+    let value = 0;
+    for c in text {
+        let v = char_to_digit(*c);
+        if v >= b {
+            return Err(ParseIntError::InvalidChar);
+        }
+        if value > (UINT64_MAX - v) / b {
+            return Err(ParseIntError::Overflow);
+        }
+        value = value * b + v;
+    }
+    Ok(value)
+}
+
+#[extern = "paw_internal_parse_float"] 
+fn internal_parse_float(text: str) -> Option<float64>;
 

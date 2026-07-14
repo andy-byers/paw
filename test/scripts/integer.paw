@@ -25,58 +25,61 @@ pub fn test_non_decimal() {
     assert(0xe+1 == 0xe + 1);
 }
 
-fn check_parse(s: str, o: Option<int64>) {
+fn check_parse(s: str, o: Result<int64, ParseIntError>) {
     check_parse_radix(s, o, 10);
 }
 
-fn check_parse_radix(s: str, o: Option<int64>, base: int64) {
+fn check_parse_radix(s: str, o: Result<int64, ParseIntError>, base: int64) {
     match (s.parse_int_radix(base), o) {
-        (Some(a), Some(b)) => assert(a == b),
-        (None, None) => {},
+        (Ok(a), Ok(b)) => assert(a == b),
+        (Err(a), Err(b)) => assert(a.eq(&b)),
         _ => panic("check failed"),
     }
 }
 
 #[test]
 pub fn test_parse_valid() {
-    check_parse("0", Some(0));
-    check_parse("1", Some(1));
-    check_parse("10", Some(10));
-    check_parse("-0", Some(-0));
-    check_parse("-1", Some(-1));
-    check_parse("-10", Some(-10));
-    check_parse("+0", Some(0));
-    check_parse("+1", Some(1));
-    check_parse("+10", Some(10));
+    check_parse("0", Ok(0));
+    check_parse("1", Ok(1));
+    check_parse("10", Ok(10));
+    check_parse("-0", Ok(-0));
+    check_parse("-1", Ok(-1));
+    check_parse("-10", Ok(-10));
+    check_parse("+0", Ok(0));
+    check_parse("+1", Ok(1));
+    check_parse("+10", Ok(10));
 
-    check_parse("1234567890", Some(1234567890));
-    check_parse("-1234567890", Some(-1234567890));
+    check_parse("1234567890", Ok(1234567890));
+    check_parse("-1234567890", Ok(-1234567890));
 }
 
 #[test]
 pub fn test_parse_invalid() {
     // invalid digit
-    check_parse("  1", None);
-    check_parse("1  ", None);
-    check_parse("  -1", None);
-    check_parse("-1  ", None);
+    check_parse("  1", Err(ParseIntError::InvalidChar));
+    check_parse("1  ", Err(ParseIntError::InvalidChar));
+    check_parse("  -1", Err(ParseIntError::InvalidChar));
+    check_parse("-1  ", Err(ParseIntError::InvalidChar));
 
     // overflow
-    check_parse("99999999999999999999", None);
-    check_parse("-99999999999999999999", None);
+    check_parse("99999999999999999999", Err(ParseIntError::Overflow));
+    check_parse("-99999999999999999999", Err(ParseIntError::Overflow));
 }
 
 #[test]
-pub fn test_parse_radix_valid() {
-    check_parse_radix("0", Some(0), 2);
-    check_parse_radix("DEF", Some(3567), 16);
-    check_parse_radix("xyz", Some(44027), 36);
+pub fn handles_non_decimal_bases() {
+    check_parse_radix("0", Ok(0), 2);
+    check_parse_radix("DEF", Ok(3567), 16);
+    check_parse_radix("xyz", Ok(44027), 36);
+
+    check_parse_radix("0b0", Err(ParseIntError::InvalidChar), 2); // base prefix not supported
+    check_parse_radix("EFG", Err(ParseIntError::InvalidChar), 16); // digit out of range for base
 }
 
 #[test]
-pub fn test_parse_radix_invalid() {
-    check_parse_radix("0b0", None, 2); // base prefix not supported
-    check_parse_radix("EFG", None, 16); // digit out of range for base
+pub fn handles_boundary_values() {
+    check_parse("9223372036854775807", Ok(INT64_MAX));
+    check_parse("-9223372036854775808", Ok(INT64_MIN));
 }
 
 //fn apply<T>(f: fn(T), target: [T]) {

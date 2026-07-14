@@ -816,7 +816,7 @@
 //    }
 //}
 
-#[test]
-pub fn test() {
-}
+use io;
+use fmt;
+use string::String;
 

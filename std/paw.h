@@ -140,15 +140,14 @@ _Noreturn void paw_panic_(paw_Slice message);
 paw_Str paw_str_from_raw_parts(char const *ptr, paw_Int len);
 paw_Int paw_str_len(paw_Str self);
 char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self);
-paw_Option_Int paw_str_parse_int(paw_Str self);
-paw_Option_Int paw_str_parse_int_radix(paw_Str self, paw_Int base);
-paw_Option_Float paw_str_parse_float(paw_Str self);
 paw_Option_Int paw_str_find(paw_Str, paw_Str self);
 paw_Bool paw_str_starts_with(paw_Str, paw_Str self);
 paw_Bool paw_str_ends_with(paw_Str, paw_Str self);
 
 paw_Bool paw_ops_str_Compare_lt(paw_Str self, paw_Str rhs);
 paw_Bool paw_ops_str_Compare_le(paw_Str self, paw_Str rhs);
+
+paw_Option_Float paw_internal_parse_float(paw_Str self);
 
 uint64_t paw_builtin_hash_bytes(paw_Char const *bytes, size_t length, uint64_t hash);
 int64_t paw_builtin_rawcmp(paw_Char const *lhs, size_t lhs_length, paw_Char const *rhs, size_t rhs_length);
