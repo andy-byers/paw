@@ -597,11 +597,6 @@ static void collect_trait_def(struct ItemCollector *X, struct HirTraitDecl const
     X->in_trait_decl = PAW_FALSE;
 }
 
-static void record_impl_block(struct ItemCollector *X, IrDefs *impls, DeclId did)
-{
-    IrDefs_push(X->C, impls, did);
-}
-
 static void collect_impl_def(struct ItemCollector *X, struct HirImplDecl const *d)
 {
     IrGenericDefs *generics = get_generic_defs(X, d->did);
@@ -640,10 +635,12 @@ static void collect_impl_def(struct ItemCollector *X, struct HirImplDecl const *
         IrDefs_push(X->C, X->C->impls.blanket, impl_def->did);
     } else if (trait == NULL) {
         // found inherent implementation
-        record_impl_block(X, X->C->impls.inherent, impl_def->did);
+        IrDefs *defs = pawIr_inherent_impls_for(X->C, type);
+        IrDefs_push(X->C, defs, impl_def->did);
     } else {
         // found trait implementation
-        record_impl_block(X, X->C->impls.trait, impl_def->did);
+        IrDefs *defs = pawIr_trait_impls_for(X->C, type);
+        IrDefs_push(X->C, defs, impl_def->did);
     }
 }
 

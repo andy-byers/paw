@@ -397,9 +397,9 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->typesystem.adts = TypeCollection_new(C);
     C->typesystem.types = TypeCollection_new(C);
 
+    C->impls.inherent = IrTypeMap_new(C);
+    C->impls.trait = IrTypeMap_new(C);
     C->impls.blanket = IrDefs_new(C);
-    C->impls.inherent = IrDefs_new(C);
-    C->impls.trait = IrDefs_new(C);
 
     C->segtab = SegmentTable_new(C);
     C->upvtab = UpvalueTable_new(C);

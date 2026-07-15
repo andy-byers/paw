@@ -617,6 +617,8 @@ DEFINE_MAP(struct Compiler, IrPendingConstants, pawP_alloc, P_ID_HASH, P_ID_EQUA
 DEFINE_MAP(struct Compiler, IrResolvedConstants, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrConst *)
 DEFINE_MAP_ITERATOR(IrPendingConstants, DeclId, struct IrPendingConstant)
 
+DEFINE_MAP(struct Compiler, IrTypeMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *)
+DEFINE_MAP_ITERATOR(IrTypeMap, IrType *, void *)
 DEFINE_MAP(struct Compiler, TypeCollection, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *)
 DEFINE_MAP_ITERATOR(TypeCollection, IrType *, void *)
 DEFINE_LIST(struct Compiler, IrType2List, struct IrType2)
@@ -686,6 +688,9 @@ static IrType *ir_auto_deref(IrType *type)
 {
     return IrIsPtr(type) ? ir_deref(type) : type;
 }
+
+IrDefs *pawIr_inherent_impls_for(struct Compiler *C, IrType *self);
+IrDefs *pawIr_trait_impls_for(struct Compiler *C, IrType *self);
 
 
 EXTERN_C char const *pawIr_print_type(struct Compiler *C, IrType *type);

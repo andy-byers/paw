@@ -199,9 +199,9 @@ struct Compiler {
     } typesystem;
 
     struct {
+        struct IrTypeMap *inherent;
+        struct IrTypeMap *trait;
         struct IrDefs *blanket;
-        struct IrDefs *inherent;
-        struct IrDefs *trait;
     } impls;
 
     Str const *main_name;

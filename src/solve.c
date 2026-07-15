@@ -341,7 +341,8 @@ static enum IrSolverStatus type_implements_trait(IrSolver *S, IrType *self, IrTr
 
     // add instantiated trait type from trait impl blocks where the context type is
     // compatible with "self"
-    K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
+    IrDefs const *trait_defs = pawIr_trait_impls_for(C, self);
+    K_LIST_XFOREACH (trait_defs, DeclId const, p) {
         struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
         if (impl_is_compatible(C, self, impl_trait, impl)) {
             Candidates_push(C, candidates, (struct Candidate){

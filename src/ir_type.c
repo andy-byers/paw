@@ -1223,7 +1223,8 @@ paw_Bool pawIr_arg_equals(struct Compiler *C, IrGenericArg a, IrGenericArg b)
 IrType *pawIr_get_custom_drop_type(struct Compiler *C, IrType *type)
 {
     DeclId const drop_did = C->core_traits[CORE_TRAIT_DROP];
-    K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
+    IrDefs const *trait_defs = pawIr_trait_impls_for(C, type);
+    K_LIST_XFOREACH (trait_defs, DeclId const, p) {
         struct IrImpl const *def = pawIr_get_impl_def(C, *p);
         if (pawIr_type_equals(C, def->type, type)
                 && MIR_ID_EQUALS(def->trait->did, drop_did))
@@ -1257,7 +1258,11 @@ IrType *pawIr_materialize_drop_type(struct Compiler *C, IrType *type)
     struct IrImpl *impl = pawIr_new_impl(C, next_did(C), type, trait,
             IrGenericDefs_new(C), methods, IrAssocItems_new(C));
     ImplMap_insert(C, C->impl_defs, impl->did, impl);
-    IrDefs_push(C, C->impls.trait, impl->did);
+
+    {
+        IrDefs *trait_defs = pawIr_trait_impls_for(C, type);
+        IrDefs_push(C, trait_defs, impl->did);
+    }
 
     IrParams *params = IrParams_new(C);
     IrParams_push(C, params, (struct IrParam){
@@ -1346,6 +1351,19 @@ paw_Bool pawIr_needs_drop(struct Compiler *C, IrType *type)
 
 paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type)
 {
+    switch (IR_KINDOF(type)) {
+        case kIrUnit:
+        case kIrBool:
+        case kIrChar:
+        case kIrInt:
+        case kIrFloat:
+        case kIrString:
+        case kIrSlice:
+        case kIrPtr:
+            return PAW_TRUE;
+        default:
+            break;
+    }
     if (IrIsTuple(type)) {
         // a tuple is copyable if all of its elements are copyable
         struct IrTuple const *t = IrGetTuple(type);
@@ -1431,6 +1449,103 @@ IrTrait *pawIr_get_projection_trait(struct Compiler *C, struct IrProjection cons
 {
     struct IrAssocItem const *item = pawIr_get_assoc_item(C, t->did);
     return pawIr_new_trait(C, item->parent, t->args);
+}
+
+// Convert all type args into type `!` and all const args to their zero values
+static IrGenericArgs *cannonicalize_args(struct Compiler *C, IrGenericArgs const *params)
+{
+    IrGenericArgs *result = IrGenericArgs_new(C);
+    IrGenericArgs_reserve(C, result, params->count);
+    K_LIST_XFOREACH (params, IrGenericArg const, p) {
+        IrGenericArg r;
+        if (IrGenericArg_is_type(*p)) {
+            r = IrGenericArg_from_type(
+                    pawIr_new_never(C));
+        } else {
+            IrConst *k = IrGenericArg_get_const(*p);
+            paw_assert(k->kind == IR_CONST_DECL);
+            IrType *const_type = pawIr_get_def_type(C, k->decl.did);
+            switch (IR_KINDOF(const_type)) {
+                case kIrBool:
+                    k = pawIr_new_const_value(C, (union IrValue){.b = PAW_FALSE}, pawIr_new_bool(C));
+                    break;
+                case kIrChar:
+                    k = pawIr_new_const_value(C, (union IrValue){.c = 0}, pawIr_new_char(C));
+                    break;
+                case kIrInt:
+                    k = pawIr_new_const_value(C, (union IrValue){.i64 = 0.0}, pawIr_new_int(C, IR_INT_KIND(const_type)));
+                    break;
+                case kIrFloat:
+                    k = pawIr_new_const_value(C, (union IrValue){.f64 = 0.0}, pawIr_new_float(C, IR_FLOAT_KIND(const_type)));
+                    break;
+                default:
+                    k = pawIr_new_const_value(C, (union IrValue){.s = SCAN_STR(C, "")}, pawIr_new_string(C));
+                    break;
+            }
+            r = IrGenericArg_from_const(k);
+        }
+        IrGenericArgs_push(C, result, r);
+    }
+    return result;
+}
+
+static IrType *cannonicalize_type(struct Compiler *C, IrType *type)
+{
+    type = pawIr_remove_indirection(C, type);
+    switch (IR_KINDOF(type)) {
+        case kIrAdt:
+        case kIrClosure:
+        case kIrProjection:
+        case kIrSignature: {
+            IrGenericArgs *params = pawIr_get_generic_args(C, IR_TYPE_DID(type));
+            struct Substitution const subst = {
+                .args = cannonicalize_args(C, params),
+                .params = params,
+            };
+            type = pawIr_get_def_type(C, IR_TYPE_DID(type));
+            return pawP_substitute(C, type, subst);
+        }
+        case kIrTuple: {
+            struct IrTuple const *t = IrGetTuple(type);
+            IrTypeList *fields = IrTypeList_new(C);
+            IrTypeList_reserve(C, fields, t->elems->count);
+            while (fields->count < t->elems->count)
+                IrTypeList_push(C, fields, pawIr_new_never(C));
+            return pawIr_new_tuple(C, fields);
+        }
+        case kIrArray:
+            return pawIr_new_array(C, pawIr_new_never(C),
+                    pawIr_new_const_value(C, (union IrValue){.u64 = 0}, pawIr_new_int(C, IR_USIZE)));
+        case kIrInfer:
+        case kIrGeneric:
+            return pawIr_new_never(C);
+        case kIrSlice:
+            return pawIr_new_slice(C, pawIr_new_never(C));
+        default:
+            return type;
+    }
+}
+
+static IrDefs *get_or_create_candidates_for(struct Compiler *C, IrType *self, IrTypeMap *impls)
+{
+    self = cannonicalize_type(C, self);
+    void *const *p = IrTypeMap_get(C, impls, self);
+    if (p == NULL) {
+        IrDefs *defs = IrDefs_new(C);
+        IrTypeMap_insert(C, impls, self, defs);
+        return defs;
+    }
+    return *p;
+}
+
+IrDefs *pawIr_inherent_impls_for(struct Compiler *C, IrType *self)
+{
+    return get_or_create_candidates_for(C, self, C->impls.inherent);
+}
+
+IrDefs *pawIr_trait_impls_for(struct Compiler *C, IrType *self)
+{
+    return get_or_create_candidates_for(C, self, C->impls.trait);
 }
 
 

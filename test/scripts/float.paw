@@ -17,47 +17,52 @@ pub fn test_exponents() {
     assert(10e+001 == 100.0);
 }
 
-fn check_parse(s: str, o: Option<float64>) {
+fn check_parse(s: str, o: Result<float64, ParseFloatError>) {
     match (s.parse_float(), o) {
-        (Some(a), Some(b)) => assert(a == b),
-        (None, None) => {},
+        (Ok(a), Ok(b)) => assert(a == b),
+        (Err(a), Err(b)) => assert(a.eq(&b)),
         _ => panic("check failed"),
     }
 }
 
 #[test]
 pub fn test_parse_valid() {
-    check_parse("0.0", Some(0.0));
-    check_parse("1.0", Some(1.0));
-    check_parse("10.0", Some(10.0));
-    check_parse("1e10", Some(1e10));
-    check_parse("1E10", Some(1e10));
-    check_parse("1e+10", Some(1e+10));
+    check_parse("0.0", Ok(0.0));
+    check_parse("1.0", Ok(1.0));
+    check_parse("10.0", Ok(10.0));
+    check_parse("1e10", Ok(1e10));
+    check_parse("1E10", Ok(1e10));
+    check_parse("1e+10", Ok(1e+10));
 }
 
 #[test]
-pub fn test_parse_invalid() {
-    check_parse("  1.0", None);
-    check_parse("1.0  ", None);
-    check_parse("  -1.0", None);
-    check_parse("-1.0  ", None);
+pub fn handles_empty_string() {
+    check_parse("", Err(ParseFloatError::Empty));
+}
+
+#[test]
+pub fn handles_invalid_chars() {
+    check_parse("  1.0", Err(ParseFloatError::InvalidChar));
+    check_parse("1.0  ", Err(ParseFloatError::InvalidChar));
+    check_parse("  -1.0", Err(ParseFloatError::InvalidChar));
+    check_parse("-1.0  ", Err(ParseFloatError::InvalidChar));
 }
 
 #[test]
 pub fn test_parse_integer_as_float() {
-    check_parse("0", Some(0.0));
-    check_parse("1", Some(1.0));
-    check_parse("100", Some(100.0));
+    check_parse("0", Ok(0.0));
+    check_parse("1", Ok(1.0));
+    check_parse("100", Ok(100.0));
 }
 
 #[test]
 pub fn test_parse_missing_leading_zero() {
-    check_parse(".0", Some(0.0));
+    check_parse(".0", Ok(0.0));
 }
 
 #[test]
 pub fn test_parse_missing_trailing_zero() {
-    check_parse("0.", Some(0.0));
+    check_parse("0.", Ok(0.0));
 }
 
 #[test]

@@ -144,6 +144,16 @@ pub enum ParseFloatError {
 
 impl Copy for ParseFloatError {}
 
+impl Eq<Self> for ParseFloatError {
+    fn eq(*self, rhs: *Self) -> bool {
+        match (*self, *rhs) {
+            (ParseFloatError::Empty, ParseFloatError::Empty)
+            | (ParseFloatError::InvalidChar, ParseFloatError::InvalidChar) => true,
+            _ => false,
+        }
+    } 
+}
+
 use ptr;
 
 fn skipchar(s: str) -> str {
@@ -156,9 +166,9 @@ fn char_to_digit(c: char) -> uint64 {
     if '0' <= c && c <= '9' {
         (c as uint8 - '0' as uint8) as uint64
     } else if 'a' <= c && c <= 'z' {
-        (c as uint8 - 'a' as uint8) as uint64
+        (c as uint8 - 'a' as uint8 + 10) as uint64
     } else if 'A' <= c && c <= 'Z' {
-        (c as uint8 - 'A' as uint8) as uint64
+        (c as uint8 - 'A' as uint8 + 10) as uint64
     } else {
         UINT64_MAX
     }

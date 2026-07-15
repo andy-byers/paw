@@ -124,7 +124,8 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
         // compatible with the receiver type "self".
 
         // search inherent implementations
-        K_LIST_XFOREACH (C->impls.inherent, DeclId const, p) {
+        IrDefs const *inherent_defs = pawIr_inherent_impls_for(C, self);
+        K_LIST_XFOREACH (inherent_defs, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
             pawIr_solver_add_obligations_from(q.S, *p, inst.args);
@@ -134,7 +135,8 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, Str con
         }
 
         // search trait implementations
-        K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
+        IrDefs const *trait_defs = pawIr_trait_impls_for(C, self);
+        K_LIST_XFOREACH (trait_defs, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
             pawIr_solver_add_obligations_from(q.S, *p, inst.args);
@@ -234,7 +236,8 @@ struct Instantiation *pawP_find_trait_method(struct Compiler *C, IrType *self, I
         // compatible with the receiver type "self".
 
         // search trait implementations
-        K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
+        IrDefs const *trait_defs = pawIr_trait_impls_for(C, self);
+        K_LIST_XFOREACH (trait_defs, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
             pawIr_solver_add_obligations_from(q.S, *p, inst.args);
@@ -381,7 +384,8 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
     Candidates *candidates = Candidates_new(C);
     {
         // search trait implementations
-        K_LIST_XFOREACH (C->impls.trait, DeclId const, p) {
+        IrDefs const *trait_defs = pawIr_trait_impls_for(C, self);
+        K_LIST_XFOREACH (trait_defs, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
             struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
