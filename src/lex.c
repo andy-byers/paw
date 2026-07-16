@@ -425,7 +425,7 @@ static struct Token single_byte(struct Lex *X, struct SourceLoc quote)
 
     return (struct Token){
         // make sure the bytes used by larger scalars get cleared
-        .value.u = (paw_Uint)(paw_Uint8)b->data[0],
+        .value.u = (paw_Uint64)(paw_Uint8)b->data[0],
         .span = RANGE(quote, quote2),
         .kind = TK_CHAR,
     };
@@ -497,14 +497,14 @@ static struct Token consume_str(struct Lex *X, struct SourceLoc start_loc)
 static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int base, enum NumberSuffix suffix)
 {
     struct StringBuffer const *b = &SCRATCH(X);
-    paw_Uint u;
+    paw_Uint64 u;
 
-    int const rc = pawX_parse_uint(b->data, base, &u);
-    if (rc == PAW_EOVERFLOW) {
+    enum ParseIntStatus const rc = pawX_parse_uint(b->data, base, &u);
+    if (rc == IPARSE_ERR_OVERFLOW) {
         LEXER_ERROR(X, IntegerTooBigToParse,
                 .span = RANGE(start, X->loc),
                 .base = base);
-    } else if (rc == PAW_ESYNTAX) {
+    } else if (rc == IPARSE_ERR_SYNTAX) {
         LEXER_ERROR(X, InvalidIntegerLiteral,
                 .span = RANGE(start, X->loc),
                 .base = base);
@@ -640,8 +640,8 @@ static struct Token consume_float(struct Lex *X, struct SourceLoc start, const c
     struct StringBuffer b = SCRATCH(X);
     paw_Float f;
 
-    int const rc = pawX_parse_float(b.data, &f);
-    if (rc != PAW_OK)
+    enum ParseFloatStatus const rc = pawX_parse_float(b.data, &f);
+    if (rc != FPARSE_OK)
         LEXER_ERROR(X, InvalidFloatLiteral,
                 .span = RANGE(start, X->loc));
     return (struct Token){
@@ -669,8 +669,8 @@ static struct Token consume_number(struct Lex *X, struct SourceLoc start)
 
     if (test(X, '.')) {
         // Allow accessing fields directly on an int or float (without parenthesis),
-        // as well as chained tuple selectors. "X->ptr[1]" works because the source
-        // buffer ends with a '\0'.
+        // as well as chained tuple selectors. `X->ptr[1]` does not index out-of-bounds,
+        // because the pointed-to buffer is null terminated and `X->ptr[0]` is not 0.
         if (!ISDIGIT(X->ptr[1]) || X->t.kind == '.')
             return consume_decimal_int(X, start, begin);
 
@@ -969,19 +969,6 @@ void pawX_set_source(struct Lex *X, paw_Reader input, void *ud)
     pawX_next(X); // load first token
 }
 
-static int char2base(char c)
-{
-    if (c == 'b' || c == 'B') {
-        return 2;
-    } else if (c == 'o' || c == 'O') {
-        return 8;
-    } else if (c == 'x' || c == 'X') {
-        return 16;
-    } else {
-        return -1;
-    }
-}
-
 #define IS_FP(c) (c == 'e' || c == 'E' || c == '.')
 
 static unsigned char_to_digit(char c)
@@ -1008,26 +995,27 @@ static unsigned char_to_digit(char c)
     return LOOKUP[(unsigned)c];
 }
 
-int pawX_parse_uint(char const *text, int base, paw_Uint *out)
+enum ParseIntStatus pawX_parse_uint(char const *text, int base, paw_Uint *out)
 {
-    paw_Uint const b = (paw_Uint)base;
+    paw_assert(text != NULL);
+    paw_Uint const b = (paw_Uint64)base;
     char const *p = text;
 
     if (b < 2 || b > 36)
-        return PAW_EVALUE;
+        return IPARSE_ERR_INVALID_BASE;
 
     paw_Uint value = 0;
     for (; *p; ++p) {
         paw_Uint const v = char_to_digit(*p);
         if (v >= b) {
-            return PAW_ESYNTAX;
-        } else if (value > (PAW_UINT_MAX - v) / b) {
-            return PAW_EOVERFLOW;
+            return IPARSE_ERR_SYNTAX;
+        } else if (value > (PAW_UINT64_MAX - v) / b) {
+            return IPARSE_ERR_OVERFLOW;
         }
         value = value * b + v;
     }
     *out = value;
-    return PAW_OK;
+    return IPARSE_OK;
 }
 
 static paw_Bool parse_negative(char const **ptext)
@@ -1040,31 +1028,32 @@ static paw_Bool parse_negative(char const **ptext)
     return PAW_FALSE;
 }
 
-int pawX_parse_int(char const *text, int base, paw_Int *out)
+enum ParseIntStatus pawX_parse_int(char const *text, int base, paw_Int *out)
 {
+    paw_assert(text != NULL && *text != 0 && out != NULL);
     paw_Bool const negative = parse_negative(&text);
 
     paw_Uint u;
-    int const status = pawX_parse_uint(text, base, &u);
-    if (status != PAW_OK) return status;
+    enum ParseIntStatus const status = pawX_parse_uint(text, base, &u);
+    if (status != IPARSE_OK) return status;
 
-    if (u > (paw_Uint)PAW_INT_MAX + negative)
-        return PAW_EOVERFLOW;
+    if (u > (paw_Uint64)PAW_INT64_MAX + negative)
+        return IPARSE_ERR_OVERFLOW;
 
-    *out = PAW_CAST_INT(negative ? -u : u);
-    return PAW_OK;
+    *out = (paw_Int64)(negative ? -u : u);
+    return IPARSE_OK;
 }
 
 #define IS_DIGIT(Char_) (char_to_digit((Char_)) < 10)
 
-int pawX_parse_float(char const *text, paw_Float *out)
+enum ParseFloatStatus pawX_parse_float(char const *text, paw_Float *out)
 {
     paw_Bool const negative = parse_negative(&text);
 
     // First, validate the number format.
     char const *p = text;
     if (p[0] == '0' && p[1] != '\0' && !IS_FP(p[1]))
-        return PAW_ESYNTAX;
+        return FPARSE_ERR_SYNTAX;
 
     while (IS_DIGIT(*p)) ++p;
 
@@ -1074,11 +1063,11 @@ int pawX_parse_float(char const *text, paw_Float *out)
     }
     if (*p == 'e' || *p == 'E') {
         p += 1 + (p[1] == '+' || p[1] == '-');
-        if (!IS_DIGIT(*p)) return PAW_ESYNTAX;
+        if (!IS_DIGIT(*p)) return FPARSE_ERR_SYNTAX;
         while (IS_DIGIT(*p)) ++p;
     }
-    if (*p != '\0') return PAW_ESYNTAX;
+    if (*p != '\0') return FPARSE_ERR_SYNTAX;
     paw_Float const f = strtod(text, NULL);
     *out = negative ? -f : f;
-    return PAW_OK;
+    return FPARSE_OK;
 }

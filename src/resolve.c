@@ -43,8 +43,8 @@ struct LookupResult {
     } var;
 };
 
-DEFINE_LIST(struct Resolver, SymbolList, struct Symbol)
-DEFINE_LIST(struct Resolver, NodeIdList, NodeId)
+DEFINE_LIST(struct Resolver, SymbolList, struct Symbol,)
+DEFINE_LIST(struct Resolver, NodeIdList, NodeId,)
 
 struct FnState {
     struct FnState *outer;
@@ -73,8 +73,8 @@ struct Scope {
     NodeId id;
 };
 
-DEFINE_LIST(struct Resolver, Symbols, struct Symbol)
-DEFINE_LIST(struct Resolver, Symtab, struct Scope)
+DEFINE_LIST(struct Resolver, Symbols, struct Symbol,)
+DEFINE_LIST(struct Resolver, Symtab, struct Scope,)
 
 
 static NodeId next_id(struct Resolver *R)

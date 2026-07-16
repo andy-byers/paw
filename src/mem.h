@@ -6,6 +6,7 @@
 
 #include "call.h"
 #include "core.h"
+#include "error.h"
 
 // Throw an 'out of memory' error
 // The error message is allocated on startup, and there is always an extra

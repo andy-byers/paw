@@ -44,9 +44,9 @@ struct RawCase {
     struct RowList *rows;
 };
 
-DEFINE_LIST(struct Usefulness, RawCaseList, struct RawCase)
-DEFINE_LIST(struct Usefulness, ColumnList, struct Column)
-DEFINE_LIST(struct Usefulness, RowList, struct Row)
+DEFINE_LIST(struct Usefulness, RawCaseList, struct RawCase,)
+DEFINE_LIST(struct Usefulness, ColumnList, struct Column,)
+DEFINE_LIST(struct Usefulness, RowList, struct Row,)
 
 static struct Decision *new_decision(struct Usefulness *U, enum DecisionKind kind)
 {
@@ -457,7 +457,7 @@ struct LiteralResult {
     struct Decision *fallback;
 };
 
-DEFINE_MAP(struct Usefulness, CaseMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, int)
+DEFINE_MAP(struct Usefulness, CaseMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, int,)
 
 static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct RowList *rows, struct MatchVar branch_var)
 {

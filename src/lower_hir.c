@@ -16,6 +16,7 @@
 #include "match.h"
 #include "mir.h"
 #include "resolve.h"
+#include "solve.h"
 #include "ssa.h"
 #include "unify.h"
 
@@ -143,13 +144,13 @@ struct PlaceInfo {
     paw_Bool needs_deref;
 };
 
-DEFINE_LIST(struct LowerHir, VarStack, struct LocalVar)
-DEFINE_LIST(struct LowerHir, LabelList, struct Label)
-DEFINE_MAP(struct LowerHir, LocalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, MirRegister)
-DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, int)
-DEFINE_MAP(struct LowerHir, VarPlaces, pawP_alloc, var_hash, var_equals, struct MatchVar, struct PlaceInfo)
-DEFINE_MAP(struct LowerHir, MatchResults, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct MatchResult)
-DEFINE_LIST(struct LowerHir, GlobalList, struct GlobalInfo)
+DEFINE_LIST(struct LowerHir, VarStack, struct LocalVar,)
+DEFINE_LIST(struct LowerHir, LabelList, struct Label,)
+DEFINE_MAP(struct LowerHir, LocalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, MirRegister,)
+DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, int,)
+DEFINE_MAP(struct LowerHir, VarPlaces, pawP_alloc, var_hash, var_equals, struct MatchVar, struct PlaceInfo,)
+DEFINE_MAP(struct LowerHir, MatchResults, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct MatchResult,)
+DEFINE_LIST(struct LowerHir, GlobalList, struct GlobalInfo,)
 
 static Str const *get_modname(struct FunctionState *fs)
 {
@@ -1215,8 +1216,14 @@ static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceS
         IrGenericArgs_push(fs->C, trait_args, IrGenericArg_from_type(from_error_type));
         IrGenericArgs_push(fs->C, trait_args, IrGenericArg_from_type(into_error_type));
         IrTrait *into_trait = pawIr_new_trait(fs->C, trait_did, trait_args);
+        Str const *into_name = SCAN_STR(fs->C, "into");
         struct Instantiation const *inst = pawP_find_trait_method(fs->C, from_error_type,
-                into_trait, SCAN_STR(fs->C, "into"));
+                into_trait, into_name, (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+                    .assoc_item_lookup.self = from_error_type,
+                    .assoc_item_lookup.name = into_name,
+                    .span = span,
+                });
         if (inst == NULL)
             LOWERING_ERROR(fs->L, TraitNotImplemented,
                     .trait = pawIr_print_trait_v2(fs->C, into_trait),

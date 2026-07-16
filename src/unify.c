@@ -64,8 +64,8 @@ struct UndoEntry {
     struct UnificationTable *table;
 };
 
-DEFINE_LIST(struct Compiler, VarList, struct InferenceVar)
-DEFINE_LIST(struct Compiler, UndoLog, struct UndoEntry)
+DEFINE_LIST(struct Compiler, VarList, struct InferenceVar,)
+DEFINE_LIST(struct Compiler, UndoLog, struct UndoEntry,)
 
 typedef struct UnificationTable {
     // vector of type variables
@@ -538,7 +538,7 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
                 if (IrIsProjection(self)) {
                     struct IrProjection const *nested = IrGetProjection(self);
                     IrTrait *nested_trait = pawIr_get_projection_trait(U->C, nested);
-                    pawIr_solver_add_predicates_from_trait(child, nested_trait);
+                    pawIr_solver_add_predicates_from_trait(child, nested_trait, (struct IrObligationCause){0});
                 }
                 type = normalize_projections_aux(U, type);
                 pawIr_pop_solver(U->C);
@@ -551,8 +551,9 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
 
                 IrTrait *trait = pawIr_get_projection_trait(U->C, t);
                 Str const *name = pawIr_get_assoc_item(U->C, t->did)->name;
+                struct IrObligationCause const UNUSED = {0};
                 struct Instantiation const *assoc = pawIr_find_assoc_type_projection(
-                        U->C, self, trait, name);
+                        U->C, self, trait, name, UNUSED);
                 if (assoc != NULL) return assoc->inst;
             }
             return type;

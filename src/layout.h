@@ -70,8 +70,8 @@ struct IrLayoutField {
 
 struct IrLayout pawIr_compute_layout(struct Compiler *C, IrType *type);
 
-DEFINE_LIST(struct Compiler, IrLayouts, struct IrLayout)
-DEFINE_LIST(struct Compiler, IrLayoutFields, struct IrLayoutField)
-DEFINE_MAP(struct Compiler, IrTypeLayouts, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, struct IrLayout)
+DEFINE_LIST(struct Compiler, IrLayouts, struct IrLayout,)
+DEFINE_LIST(struct Compiler, IrLayoutFields, struct IrLayoutField,)
+DEFINE_MAP(struct Compiler, IrTypeLayouts, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, struct IrLayout,)
 
 #endif // PAW_LAYOUT_H

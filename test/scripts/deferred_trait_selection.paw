@@ -1,0 +1,14 @@
+// deferred_trait_selection.paw
+
+trait Key { fn key() -> Self; }
+impl Key for int32 { fn key() -> Self {123} }
+impl Key for uint32 { fn key() -> Self {456} }
+pub fn key<T: Key>() -> T { T::key() }
+
+#[test]
+pub fn test() {
+    let i32_key = key();
+    let u32_key = key();
+    assert(i32_key == 123i32);
+    assert(u32_key == 456u32);
+}

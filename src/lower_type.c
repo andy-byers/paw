@@ -92,7 +92,12 @@ static IrType *lower_projection_type(struct LowerType *L, struct HirProjectionTy
             assoc = pawIr_new_projection(L->C, *pdid, args);
     } else {
         struct Instantiation const *inst = pawIr_find_assoc_type_projection(
-                L->C, type, trait, t->name);
+                L->C, type, trait, t->name, (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+                    .assoc_item_lookup.self = type,
+                    .assoc_item_lookup.name = t->name,
+                    .span = t->span,
+                });
         if (inst != NULL)
             assoc = inst->inst;
     }
@@ -214,7 +219,12 @@ static IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
             // named `Type` (`T::Type` must be unambiguous, otherwise a projection type
             // is required to disambiguate).
             struct Instantiation *assoc = pawIr_find_assoc_type_generic(L->C,
-                    type, segment.ident.name);
+                    type, segment.ident.name, (struct IrObligationCause){
+                        .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+                        .assoc_item_lookup.self = type,
+                        .assoc_item_lookup.name = segment.ident.name,
+                        .span = segment.span,
+                    });
             if (assoc == NULL)
                 LOWERING_ERROR(L, UnknownAssociatedItem,
                         .type = pawIr_print_type_v2(L->C, type),
@@ -469,11 +479,17 @@ static void check_projection_type(struct HirVisitor *V, struct HirProjectionType
     IrSolver *child = pawIr_push_solver(L->C);
     if (IrIsAdt(type))
         pawIr_solver_add_well_formed_obligation(child, trait->did, p->args,
-                (struct IrObligationCause){.span = t->trait.span});
+                (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
+                    .span = t->trait.span});
     pawIr_solver_add_well_formed_obligation(child, trait->did, p->args,
-            (struct IrObligationCause){.span = t->trait.span});
+            (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
+                .span = t->trait.span});
     pawIr_solver_add_impl_trait_obligation(child, type, trait,
-            (struct IrObligationCause){.span = t->span});
+            (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
+                .span = t->span});
     struct IrSolverResult const result = pawIr_solver_solve(child);
 
     switch (result.status) {
@@ -482,14 +498,15 @@ static void check_projection_type(struct HirVisitor *V, struct HirProjectionType
         case IR_SOLVER_AMBIGUOUS: {
             struct IrObligation const example = pawIr_solver_first_obligation(L->C->S);
             LOWERING_ERROR(L, UnsatisfiedObligation,
-                    .example = pawIr_print_obligation_(L->C, example),
-                    .num_unsolved = result.ambiguous.num_unsolved,
+                    .obligation = pawIr_print_obligation_(L->C, example),
+                    .cause = pawIr_print_obligation_cause(L->C, example.cause),
                     .span = example.cause.span);
             break;
         }
         case IR_SOLVER_ERROR:
             LOWERING_ERROR(L, FalseObligation,
                     .obligation = pawIr_print_obligation_(L->C, result.error.obligation),
+                    .cause = pawIr_print_obligation_cause(L->C, result.error.obligation.cause),
                     .span = result.error.obligation.cause.span);
     }
 

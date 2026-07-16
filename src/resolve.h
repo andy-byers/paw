@@ -45,7 +45,7 @@ struct BoundName {
     int count;
 };
 
-DEFINE_MAP(struct Resolver, BoundNames, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct BoundName)
+DEFINE_MAP(struct Resolver, BoundNames, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct BoundName,)
 DEFINE_MAP_ITERATOR(BoundNames, Str const *, struct BoundName)
 
 enum ImportSymbolKind {
@@ -80,10 +80,10 @@ struct ImportScope {
     NodeId id;
 };
 
-DEFINE_LIST(struct Resolver, ImportSymbols, struct ImportSymbol)
-DEFINE_MAP(struct Resolver, ImportModules, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, int)
-DEFINE_MAP(struct Resolver, ImportScopes, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct ImportScope *)
-DEFINE_MAP(struct Resolver, ImportNames, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct ImportName *)
+DEFINE_LIST(struct Resolver, ImportSymbols, struct ImportSymbol,)
+DEFINE_MAP(struct Resolver, ImportModules, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, int,)
+DEFINE_MAP(struct Resolver, ImportScopes, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct ImportScope *,)
+DEFINE_MAP(struct Resolver, ImportNames, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct ImportName *,)
 DEFINE_MAP_ITERATOR(ImportNames, Str const *, struct ImportName *)
 
 enum ResolvedKind {
@@ -103,9 +103,9 @@ struct ResolvedSegment {
     };
 };
 
-DEFINE_MAP(struct Compiler, SegmentTable, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct ResolvedSegment)
-DEFINE_MAP(struct Compiler, UpvalueTable, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct UpvalueList *)
-DEFINE_LIST(struct Compiler, UpvalueList, struct UpvalueInfo)
+DEFINE_MAP(struct Compiler, SegmentTable, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct ResolvedSegment,)
+DEFINE_MAP(struct Compiler, UpvalueTable, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct UpvalueList *,)
+DEFINE_LIST(struct Compiler, UpvalueList, struct UpvalueInfo,)
 
 enum Namespace {
     // contains ADTs, traits, and type aliases

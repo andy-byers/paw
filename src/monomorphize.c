@@ -18,6 +18,7 @@
 #include "lib.h"
 #include "map.h"
 #include "mir.h"
+#include "solve.h"
 #include "type_folder.h"
 #include "unify.h"
 
@@ -335,9 +336,11 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, IrType *ty
 
 static IrType *get_assoc_fn(struct MonoCollector *M, IrType *self, IrTrait *trait, Str *name)
 {
+    // associated fn will always be found unless there is a bug in the compiler
+    struct IrObligationCause const INFALLIBLE = {0};
     if (trait == NULL)
-        return pawP_find_method(M->C, self, name)->inst;
-    return pawP_find_trait_method(M->C, self, trait, name)->inst;
+        return pawP_find_method(M->C, self, name, INFALLIBLE)->inst;
+    return pawP_find_trait_method(M->C, self, trait, name, INFALLIBLE)->inst;
 }
 
 static IrType *copy_type(struct MonoCollector *M, IrType *type)

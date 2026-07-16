@@ -15,19 +15,20 @@
 
 // Generate a structure type and methods for a list containing nodes of a given
 // type Value_. Value_ can be any type, so long as it is "trivially copiable".
-#define DEFINE_LIST(Context_, List_, Value_)                                                                                       \
+#define DEFINE_LIST(Context_, List_, Value_, ...)                                                                                  \
     typedef struct List_ {                                                                                                         \
         struct Pool *pool;                                                                                                         \
         Value_ *data;                                                                                                              \
         int count;                                                                                                                 \
         int alloc;                                                                                                                 \
+        __VA_ARGS__                                                                                                                \
     } List_;                                                                                                                       \
     _Static_assert(K_LIST_MAX < PAW_SIZE_MAX / sizeof(Value_),                                                                     \
                    "maximum list is too large");                                                                                   \
     static inline List_ *List_##_new_from(Context_ *ctx, struct Pool *pool)                                                        \
     {                                                                                                                              \
         PAW_UNUSED(ctx);                                                                                                           \
-        List_ *list = (List_ *)pawP_alloc(pool, NULL, 0, sizeof(List_));                                                           \
+        List_ *list = (List_ *)pawP_alloc(pool, NULL, 0, sizeof(*list));                                                           \
         list->pool = pool;                                                                                                         \
         list->data = NULL;                                                                                                         \
         list->count = 0;                                                                                                           \

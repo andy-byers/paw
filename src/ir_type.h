@@ -381,6 +381,7 @@ enum IrConstraintKind {
 
 struct IrConstraint {
     enum IrConstraintKind kind;
+    struct SourceSpan span;
     DeclId parent;
     union {
         struct {
@@ -504,16 +505,16 @@ struct IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did);
         IrIsClosure(Type_) ? IrGetClosure(Type_)->args : NULL)
 #define IR_IS_FUNC_TYPE(p) (IrIsFnPtr(p) || IrIsSignature(p) || IrIsClosure(p))
 
-DEFINE_LIST(struct Compiler, IrTypeList, IrType *)
-DEFINE_LIST(struct Compiler, IrTraitList, IrTrait *)
-DEFINE_LIST(struct Compiler, IrGenericArgs, IrGenericArg)
-DEFINE_LIST(struct Compiler, IrDefs, DeclId)
-DEFINE_LIST(struct Compiler, IrAssocItems, struct IrAssocItem *)
-DEFINE_LIST(struct Compiler, IrVariantDefs, struct IrVariantDef *)
-DEFINE_LIST(struct Compiler, IrGenericDefs, struct IrGenericDef *)
-DEFINE_LIST(struct Compiler, IrConstraints, struct IrConstraint)
-DEFINE_LIST(struct Compiler, IrFieldDefs, struct IrFieldDef *)
-DEFINE_LIST(struct Compiler, IrParams, struct IrParam)
+DEFINE_LIST(struct Compiler, IrTypeList, IrType *,)
+DEFINE_LIST(struct Compiler, IrTraitList, IrTrait *,)
+DEFINE_LIST(struct Compiler, IrGenericArgs, IrGenericArg,)
+DEFINE_LIST(struct Compiler, IrDefs, DeclId,)
+DEFINE_LIST(struct Compiler, IrAssocItems, struct IrAssocItem *,)
+DEFINE_LIST(struct Compiler, IrVariantDefs, struct IrVariantDef *,)
+DEFINE_LIST(struct Compiler, IrGenericDefs, struct IrGenericDef *,)
+DEFINE_LIST(struct Compiler, IrConstraints, struct IrConstraint,)
+DEFINE_LIST(struct Compiler, IrFieldDefs, struct IrFieldDef *,)
+DEFINE_LIST(struct Compiler, IrParams, struct IrParam,)
 
 IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name);
 
@@ -606,22 +607,22 @@ struct IrPendingConstant {
     void *payload;
 };
 
-DEFINE_MAP(struct Compiler, IrConstraintsMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrConstraints *)
-DEFINE_MAP(struct Compiler, IrGenericTypes, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrGenericArgs *)
-DEFINE_MAP(struct Compiler, IrAssocItemMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAssocItem *)
-DEFINE_MAP(struct Compiler, IrDeclArgs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrGenericArg)
-DEFINE_MAP(struct Compiler, IrTraitBounds, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrTraitList *)
-DEFINE_MAP(struct Compiler, IrDefKinds, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, enum IrDefKind)
-DEFINE_MAP(struct Compiler, IrType2Map, pawP_alloc, pawIr_type2_hash, pawIr_type2_equals, struct IrType2, void *)
-DEFINE_MAP(struct Compiler, IrPendingConstants, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrPendingConstant)
-DEFINE_MAP(struct Compiler, IrResolvedConstants, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrConst *)
+DEFINE_MAP(struct Compiler, IrConstraintsMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrConstraints *,)
+DEFINE_MAP(struct Compiler, IrGenericTypes, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrGenericArgs *,)
+DEFINE_MAP(struct Compiler, IrAssocItemMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAssocItem *,)
+DEFINE_MAP(struct Compiler, IrDeclArgs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrGenericArg,)
+DEFINE_MAP(struct Compiler, IrTraitBounds, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrTraitList *,)
+DEFINE_MAP(struct Compiler, IrDefKinds, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, enum IrDefKind,)
+DEFINE_MAP(struct Compiler, IrType2Map, pawP_alloc, pawIr_type2_hash, pawIr_type2_equals, struct IrType2, void *,)
+DEFINE_MAP(struct Compiler, IrPendingConstants, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrPendingConstant,)
+DEFINE_MAP(struct Compiler, IrResolvedConstants, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, IrConst *,)
 DEFINE_MAP_ITERATOR(IrPendingConstants, DeclId, struct IrPendingConstant)
 
-DEFINE_MAP(struct Compiler, IrTypeMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *)
+DEFINE_MAP(struct Compiler, IrTypeMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *,)
 DEFINE_MAP_ITERATOR(IrTypeMap, IrType *, void *)
-DEFINE_MAP(struct Compiler, TypeCollection, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *)
+DEFINE_MAP(struct Compiler, TypeCollection, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *,)
 DEFINE_MAP_ITERATOR(TypeCollection, IrType *, void *)
-DEFINE_LIST(struct Compiler, IrType2List, struct IrType2)
+DEFINE_LIST(struct Compiler, IrType2List, struct IrType2,)
 
 struct IrConstObligationCause {
     struct SourceSpan span;
@@ -633,7 +634,7 @@ struct IrConstObligation {
     IrConst *rhs;
 };
 
-DEFINE_LIST(struct Compiler, IrConstObligations, struct IrConstObligation)
+DEFINE_LIST(struct Compiler, IrConstObligations, struct IrConstObligation,)
 
 void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs, struct IrConstObligationCause cause);
 int pawIr_solve_const_obligations(struct Compiler *C);
@@ -703,7 +704,7 @@ EXTERN_C Str const *pawIr_print_type_v2(struct Compiler *C, IrType *type);
 EXTERN_C Str const *pawIr_print_trait_v2(struct Compiler *C, IrTrait *trait);
 EXTERN_C Str const *pawIr_print_impl_trait_obligation_v2(struct Compiler *C, IrType *type, IrTrait *trait);
 
-DEFINE_LIST(struct Compiler, TraitOwnerList, struct IrTypeList *)
-DEFINE_MAP(struct Compiler, TraitOwners, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, TraitOwnerList *)
+DEFINE_LIST(struct Compiler, TraitOwnerList, struct IrTypeList *,)
+DEFINE_MAP(struct Compiler, TraitOwners, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, TraitOwnerList *,)
 
 #endif // PAW_IR_TYPE_H

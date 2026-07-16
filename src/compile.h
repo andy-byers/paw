@@ -228,8 +228,8 @@ struct Module {
     Str const *name;
 };
 
-DEFINE_LIST(struct Compiler, ModuleInfo, struct Module)
-DEFINE_LIST(struct Compiler, Searchers, paw_Function)
+DEFINE_LIST(struct Compiler, ModuleInfo, struct Module,)
+DEFINE_LIST(struct Compiler, Searchers, paw_Function,)
 
 // TODO: get rid of this struct and put members in Compiler or something
 // Keeps track of dynamic memory used by the compiler
@@ -266,10 +266,10 @@ struct RegisterInfo {
     int size;
 };
 
-DEFINE_LIST(struct Compiler, RegisterTable, struct RegisterInfo)
+DEFINE_LIST(struct Compiler, RegisterTable, struct RegisterInfo,)
 
 typedef unsigned long long BitChunk;
-DEFINE_LIST(struct Compiler, BitSet, BitChunk)
+DEFINE_LIST(struct Compiler, BitSet, BitChunk,)
 
 BitSet *pawP_bitset_new(struct Compiler *C, int count);
 BitSet *pawP_bitset_copy(struct Compiler *C, BitSet const *bs);
@@ -355,7 +355,7 @@ struct Annotation {
     Value value;
 };
 
-DEFINE_LIST(struct Compiler, Annotations, struct Annotation)
+DEFINE_LIST(struct Compiler, Annotations, struct Annotation,)
 
 EXTERN_C paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
 paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, Value *result);
@@ -373,31 +373,31 @@ EXTERN_C Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const
 #define P_VALUE_HASH(Ctx_, Value_) ((void)Ctx_, V_UINT(Value_))
 #define P_VALUE_EQUALS(Ctx_, A_, B_) ((void)Ctx_, V_UINT(A_) == V_UINT(B_))
 
-DEFINE_MAP(struct Compiler, NodeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, NodeId)
-DEFINE_MAP(struct Compiler, FnDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrFnDef *)
-DEFINE_MAP(struct Compiler, AdtDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAdtDef *)
-DEFINE_MAP(struct Compiler, ImplMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrImpl *)
-DEFINE_MAP(struct Compiler, GenericDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrGenericDef *)
-DEFINE_MAP(struct Compiler, TraitDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTraitDef *)
-DEFINE_MAP(struct Compiler, VariantDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrVariantDef *)
-DEFINE_MAP(struct Compiler, HirTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct IrType *)
-DEFINE_MAP(struct Compiler, DefTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrType *)
-DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTrait *)
-DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *)
-DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value)
-DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *)
-DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Builtin *)
-DEFINE_MAP(struct Compiler, SourceSpanRefs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, SpanRef, struct SourceSpan)
+DEFINE_MAP(struct Compiler, NodeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, NodeId,)
+DEFINE_MAP(struct Compiler, FnDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrFnDef *,)
+DEFINE_MAP(struct Compiler, AdtDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAdtDef *,)
+DEFINE_MAP(struct Compiler, ImplMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrImpl *,)
+DEFINE_MAP(struct Compiler, GenericDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrGenericDef *,)
+DEFINE_MAP(struct Compiler, TraitDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTraitDef *,)
+DEFINE_MAP(struct Compiler, VariantDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrVariantDef *,)
+DEFINE_MAP(struct Compiler, HirTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct IrType *,)
+DEFINE_MAP(struct Compiler, DefTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrType *,)
+DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTrait *,)
+DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *,)
+DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value,)
+DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *,)
+DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Builtin *,)
+DEFINE_MAP(struct Compiler, SourceSpanRefs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, SpanRef, struct SourceSpan,)
 
 DEFINE_MAP_ITERATOR(StringMap, Str const *, void *)
 DEFINE_MAP_ITERATOR(HirTypeMap, NodeId, struct IrType *)
 
-DEFINE_LIST(struct Compiler, BodyList, struct Mir *)
-DEFINE_LIST(struct Compiler, LineBuffer, char const *)
+DEFINE_LIST(struct Compiler, BodyList, struct Mir *,)
+DEFINE_LIST(struct Compiler, LineBuffer, char const *,)
 
 // TODO: define these elsewhere, preferably in env.h but need to remove mem.h -> ... -> env.h dep
-DEFINE_LIST(paw_Env, Statistics, struct Statistic *)
-DEFINE_MAP(paw_Env, StrMap, pawK_pool_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *)
-DEFINE_MAP(paw_Env, CallbackMap, pawK_pool_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, paw_Function)
+DEFINE_LIST(paw_Env, Statistics, struct Statistic *,)
+DEFINE_MAP(paw_Env, StrMap, pawK_pool_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *,)
+DEFINE_MAP(paw_Env, CallbackMap, pawK_pool_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, paw_Function,)
 
 #endif // PAW_COMPILE_H

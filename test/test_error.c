@@ -52,34 +52,6 @@ static void test_compiler_status(enum ErrorKind expect, char const *name, char c
     paw_close(P);
 }
 
-static void test_runtime_status(int expect, char const *name, char const *item, char const *text)
-{
-    // TODO: need to run from script. maybe just generate
-//    static char buffer[100000];
-//    write_main(buffer, item, text);
-//
-//    paw_Env *P = paw_open(&(struct paw_Options){0});
-//    int status = pawL_load_chunk(P, name, buffer);
-//    check_status(P, status, PAW_OK);
-//
-//    Buffer b;
-//    pawP_mangle_start(P, &b, P->C);
-//    paw_mangle_start(P);
-//    paw_push_str(P, "main");
-//    paw_mangle_add_name(P);
-//
-//    struct paw_Item info;
-//    status = paw_lookup_item(P, -1, &info);
-//    check_status(P, status, PAW_OK);
-//    check(info.global_id >= 0);
-//    paw_get_global(P, info.global_id);
-//
-//    status = paw_call(P, 0);
-//    check_status(P, status, expect);
-//
-//    paw_close(P);
-}
-
 static void test_name_error(void)
 {
     test_compiler_status(kErrUnknownPath, "use_before_def_local", "", "let x = x;");
@@ -366,11 +338,6 @@ static void test_arithmetic_error(void)
     test_compiler_status(kErrConstantDivideByZero, "special_division_by_0_float", "fn f(x: float64) -> float64 {x / 0.0}", "f(1.0);");
     test_compiler_status(kErrConstantOverflow, "special_negative_left_shift", "fn f(x: int64) -> int64 {x << -2}", "f(1);");
     test_compiler_status(kErrConstantOverflow, "special_negative_right_shift", "fn f(x: int64) -> int64 {x >> -2}", "f(1);");
-
-    test_runtime_status(PAW_ERUNTIME, "division_by_0_int", "fn f(x: int64) -> int64 {42 / x}", "f(0);");
-    test_runtime_status(PAW_ERUNTIME, "division_by_0_float", "fn f(x: float64) -> float64 {4.2 / x}", "f(0.0);");
-    test_runtime_status(PAW_ERUNTIME, "negative_left_shift", "fn f(x: int64) -> int64 {2 << x}", "f(-1);");
-    test_runtime_status(PAW_ERUNTIME, "negative_right_shift", "fn f(x: int64) -> int64 {2 >> x}", "f(-1);");
 }
 
 static void test_tuple_error(void)
@@ -440,9 +407,6 @@ static void test_list_error(void)
     test_compiler_status(kErrIncompatibleTypes, "list_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");
     test_compiler_status(kErrIncompatibleTypes, "list_mixed_types", "", "let a = [1, 2, 3, 4, '5'];");
     test_compiler_status(kErrIncompatibleTypes, "list_mixed_nesting", "", "let a = [[[1]], [[2]], [3]];");
-    test_runtime_status(PAW_EINDEX, "list_out_of_bounds_get", "fn f(list: [int64]) -> int64 {list[100]}", "f([]);");
-    test_runtime_status(PAW_EINDEX, "list_out_of_bounds_set", "fn f(list: [int64]) {list[100] = 100}", "f([]);");
-    test_runtime_status(PAW_EINDEX, "list_pop_while_empty", "fn f(list: [int64]) -> int64 {list.pop()}", "f([]);");
 }
 
 static void test_map_error(void)
@@ -457,17 +421,6 @@ static void test_map_error(void)
     test_compiler_status(kErrIncompatibleTypes, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
     test_compiler_status(kErrFalseObligation, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
     test_compiler_status(kErrFalseObligation, "map_unhashable_type_key", "", "let map: [[int64]: int64] = [:];");
-}
-
-static void test_range_error(void)
-{
-    test_runtime_status(PAW_ERUNTIME, "list_start_out_of_bounds", "", "let x = [1, 2, 3]; let _ = x[-4..];");
-    test_runtime_status(PAW_ERUNTIME, "list_end_out_of_bounds", "", "let x = [1, 2, 3]; let _ = x[..4];");
-    test_runtime_status(PAW_ERUNTIME, "list_range_out_of_order", "", "let x = [1, 2, 3]; let _ = x[2..1];");
-
-    test_runtime_status(PAW_ERUNTIME, "str_start_out_of_bounds", "", "let x = \"abc\"; let _ = x[-4..];");
-    test_runtime_status(PAW_ERUNTIME, "str_end_out_of_bounds", "", "let x = \"abc\"; let _ = x[..4];");
-    test_runtime_status(PAW_ERUNTIME, "str_range_out_of_order", "", "let x = \"abc\"; let _ = x[2..1];");
 }
 
 static void test_import_error(void)
@@ -794,21 +747,17 @@ static void test_projections(void)
 
 static void test_interpolation(void)
 {
-    test_compiler_status(kErrExpectedExpression, "extra_close_braces", "", "let s = \"\\{103 +} 20}\";");
-    test_compiler_status(kErrUnterminatedStrLiteral, "mismatched_braces", "", "let s = \"\\{100 + 20 + 3\";");
-    test_compiler_status(kErrExpectedSymbol, "mismatched_braces_nested", "", "let s = \"\\{\"abc\" + \"\\{100 + 20 + 3\"}\";");
-    test_compiler_status(kErrUnterminatedStrLiteral, "missing_expr_close", "", "let s = \"abc\\{123\";");
-    test_compiler_status(kErrUnterminatedStrLiteral, "only_expr_open", "", "let s = \"\\{\";");
-    test_compiler_status(kErrExpectedExpression, "empty_expr", "", "let s = \"\\{}\";");
-    test_compiler_status(kErrUnterminatedStrLiteral, "missing_close_braces", "", "let s = \"\\{123\";");
+    test_compiler_status(kErrUnknownEscapeChar, "missing_f_prefix", "", "let s = \"\\{123}\";");
+    test_compiler_status(kErrExpectedExpression, "extra_close_braces", "", "let s = f\"\\{103 +} 20}\";");
+    test_compiler_status(kErrUnterminatedStrLiteral, "mismatched_braces", "", "let s = f\"\\{100 + 20 + 3\";");
+    test_compiler_status(kErrUnexpectedSymbol, "mismatched_braces_nested", "", "let s = f\"\\{\"abc\"}\\{f\"\\{100 + 20 + 3\"}\";");
+    test_compiler_status(kErrUnterminatedStrLiteral, "missing_expr_close", "", "let s = f\"abc\\{123\";");
+    test_compiler_status(kErrUnterminatedStrLiteral, "only_expr_open", "", "let s = f\"\\{\";");
+    test_compiler_status(kErrExpectedExpression, "empty_expr", "", "let s = f\"\\{}\";");
+    test_compiler_status(kErrUnterminatedStrLiteral, "missing_close_braces", "", "let s = f\"\\{123\";");
 
     // looks like the interpolated expression is a block followed by an unterminated string literal
-    test_compiler_status(kErrUnterminatedStrLiteral, "missing_close_braces_2", "", "let s = \"\\{{123}\";");
-}
-
-static void test_panic(void)
-{
-    test_runtime_status(PAW_ERUNTIME, "panic", "", "panic(\"panic message\");");
+    test_compiler_status(kErrUnterminatedStrLiteral, "missing_close_braces_2", "", "let s = f\"\\{{123}\";");
 }
 
 static void test_divergence(void)
@@ -838,11 +787,6 @@ static void test_divergence(void)
 //TODO        FUNC("if x == 0 {return 123; \"abc\"} else {x}"), "");
 
 #undef FUNC
-
-    test_runtime_status(PAW_ERUNTIME, "custom_diverging_function",
-        "fn diverge() -> ! {panic(\"diverging\")}", "diverge();");
-    test_runtime_status(PAW_ERUNTIME, "custom_diverging_function_2",
-        "fn diverge() -> ! {if true {panic(\"first divergence\")} else {panic(\"second divergence\")}}", "diverge();");
 
     // TODO: Need to throw a compiler error when a function is lying about its divergence status
     //       i.e. it has a return type of "!" but does not unconditionally call a diverging function.
@@ -1021,7 +965,6 @@ int main(void)
     test_deref_pat();
 //    test_list_error();
 //    test_map_error();
-    test_range_error();
     test_import_error();
     test_uninit_local();
     test_global_const();
@@ -1030,7 +973,6 @@ int main(void)
     test_destructuring();
     test_deferred_init();
     test_projections();
-//    test_interpolation();
-    test_panic();
+    test_interpolation();
     test_divergence();
 }

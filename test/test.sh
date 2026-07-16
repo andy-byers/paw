@@ -14,6 +14,7 @@ TESTS=(
 #TODO    "recursive_assoc_item_constraints"
     "recursive_assoc_item_constraints_2"
     "recursive_assoc_item_constraints_3"
+    "deferred_trait_selection"
     "infer_via_obligation"
     "normalize_projections"
     "recursive_supertraits"

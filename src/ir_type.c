@@ -638,7 +638,7 @@ IrTrait *pawIr_get_trait(struct Compiler *C, DeclId did)
     return pawIr_new_trait(C, did, pawIr_get_generic_args(C, did));
 }
 
-DEFINE_MAP(struct Compiler, TraitCache, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, void *)
+DEFINE_MAP(struct Compiler, TraitCache, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, void *,)
 
 static IrGenericArgs *replace_self_in_trait_args(struct Compiler *C, IrGenericArgs *args, struct IrGeneric *target)
 {
@@ -1494,8 +1494,6 @@ static IrType *cannonicalize_type(struct Compiler *C, IrType *type)
     type = pawIr_remove_indirection(C, type);
     switch (IR_KINDOF(type)) {
         case kIrAdt:
-        case kIrClosure:
-        case kIrProjection:
         case kIrSignature: {
             IrGenericArgs *params = pawIr_get_generic_args(C, IR_TYPE_DID(type));
             struct Substitution const subst = {
@@ -1631,6 +1629,10 @@ static void print_trait_omitting_self(struct Printer *P, IrTrait *t)
 
 static void print_trait(struct Printer *P, IrTrait *t)
 {
+    // TODO
+    print_trait_omitting_self(P, t);
+    return;
+
     paw_assert(t->args->count > 0);
     struct IrTraitDef const *def = pawIr_get_trait_def(P->C, t->did);
     PRINT_STRING(P, def->name);

@@ -425,7 +425,7 @@ static void FormatExpectedDelimiterError(paw_Env *P, struct ExpectedDelimiterErr
 static void FormatExpectedSemicolonError(paw_Env *P, struct ExpectedSemicolonError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
-    pawL_add_fstring(P, buffer, "expected semicolon after `%s`",
+    pawL_add_fstring(P, buffer, "expected semicolon after %s",
             error->what->text);
 }
 
@@ -710,20 +710,16 @@ static void FormatFalseObligationError(paw_Env *P, struct FalseObligationError c
 {
     add_error_header(P, error->modname, error->span, buffer);
     pawL_add_fstring(P, buffer,
-            "obligation `%s` was disproven",
-            error->obligation->text);
+            "obligation `%s` was disproven (obligation exists due to %s)",
+            error->obligation->text, error->cause->text);
 }
 
 static void FormatUnsatisfiedObligationError(paw_Env *P, struct UnsatisfiedObligationError const *error, Buffer *buffer)
 {
     add_error_header(P, error->modname, error->span, buffer);
     pawL_add_fstring(P, buffer,
-            "unsatisfiable obligation `%s`",
-            error->example->text);
-    if (error->num_unsolved > 1)
-        pawL_add_fstring(P, buffer,
-                " (and %d others)",
-                error->num_unsolved - 1);
+            "unsatisfiable obligation `%s` (obligation exists due to %s)",
+            error->obligation->text, error->cause->text);
 }
 
 static void FormatIncompatibleTypesError(paw_Env *P, struct IncompatibleTypesError const *error, Buffer *buffer)
@@ -1289,8 +1285,8 @@ static void FormatInternalError(paw_Env *P, struct InternalError const *error, B
 
 _Noreturn void pawErr_throw(struct Compiler *C, enum ErrorKind kind, void *payload)
 {
-    Buffer buffer;
     paw_Env *P = ENV(C);
+    Buffer buffer;
     pawL_init_buffer(P, &buffer);
 
     switch (kind) {

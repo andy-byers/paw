@@ -14,11 +14,12 @@
 #define K_MAP_MAX (1 << 28)
 #define K_MAP_FILL_FACTOR 4
 
-#define DEFINE_MAP(Context_, Name_, Alloc_, Hash_, Equals_, Key_, Value_) \
+#define DEFINE_MAP(Context_, Name_, Alloc_, Hash_, Equals_, Key_, Value_, ...) \
     struct Name_##Node { \
         struct Name_##Node *next; \
         Key_ key; \
         Value_ value; \
+        __VA_ARGS__ \
     }; \
     typedef struct Name_ { \
         struct Name_##Node **data; \

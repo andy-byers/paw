@@ -474,9 +474,9 @@ struct Traversal {
     paw_Env *P;
 };
 
-DEFINE_LIST(struct Traversal, VisitStack, struct Successors)
-DEFINE_MAP(struct Traversal, VisitedMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *)
-DEFINE_MAP(struct Traversal, BlockMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, MirBlock)
+DEFINE_LIST(struct Traversal, VisitStack, struct Successors,)
+DEFINE_MAP(struct Traversal, VisitedMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *,)
+DEFINE_MAP(struct Traversal, BlockMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, MirBlock,)
 
 static paw_Bool check_visited(struct Traversal *X, VisitedMap *visited, MirBlock bb)
 {
@@ -1027,7 +1027,7 @@ struct MirLocationList *pawMir_compute_locations(struct Mir *mir)
     return locations;
 }
 
-DEFINE_MAP(struct Mir, BlockCounts, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, int)
+DEFINE_MAP(struct Mir, BlockCounts, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, int,)
 
 static MirBlock get_common_block(MirBlockList *blocks)
 {

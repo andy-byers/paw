@@ -227,7 +227,7 @@ int pawL_load_file(paw_Env *P, char const *name, char const *pathname, char cons
         if (!fr.err) return status;
     }
     P->current_errmsg = pawS_new_str(P, strerror(errno));
-    return PAW_ESYSTEM;
+    return -1;
 }
 
 int pawL_load_nchunk(paw_Env *P, char const *name, char const *source, size_t length)

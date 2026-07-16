@@ -156,10 +156,10 @@ static char const *consume_prefix(char const *s, char const *p)
 static paw_Int parse_int(char const *s)
 {
     paw_Int value;
-    int const rc = pawX_parse_int(s, 10, &value);
-    if (rc == PAW_ESYNTAX) {
+    enum ParseIntStatus const rc = pawX_parse_int(s, 10, &value);
+    if (rc == IPARSE_ERR_SYNTAX) {
         error("invalid integer argument (%s)\n", s);
-    } else if (rc == PAW_EOVERFLOW) {
+    } else if (rc == IPARSE_ERR_OVERFLOW) {
         error("integer argument (%s) is too large\n", s);
     } else {
         return value;

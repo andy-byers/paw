@@ -41,6 +41,7 @@ size_t paw_bytes_used(paw_Env const *P)
 
 static int open_aux(paw_Env *P, void *arg)
 {
+//TODO    pawC_throw(P, -1);
     PAW_UNUSED(arg);
 
     int const FIRST_ARENA_SIZE = 4096;
@@ -56,14 +57,15 @@ static int open_aux(paw_Env *P, void *arg)
     pawS_init(P);
     pawP_init(P);
     pawL_init(P);
+
+    P->mem_errmsg = pawS_new_str(P, "out of memory");
     return 0;
 }
 
-#define OR_DEFAULT(a, b) ((a) ? (a) : (b))
-#define HEAP_MIN (PAW_ROUND_UP(sizeof(paw_Env)))
-
 paw_Env *paw_open(struct paw_Options const *o)
 {
+#define OR_DEFAULT(a, b) ((a) ? (a) : (b))
+
     void *ud = OR_DEFAULT(o->ud, NULL);
     paw_Alloc alloc = OR_DEFAULT(o->alloc, default_alloc);
 
@@ -79,6 +81,8 @@ paw_Env *paw_open(struct paw_Options const *o)
         return NULL;
     }
     return P;
+
+#undef OR_DEFAULT
 }
 
 void paw_close(paw_Env *P)

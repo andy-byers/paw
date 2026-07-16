@@ -36,7 +36,7 @@ static struct ImportBinding *new_binding(struct Resolver *R)
     return P_ALLOC(R->C, NULL, 0, sizeof(struct ImportBinding));
 }
 
-DEFINE_LIST(struct Resolver, ImportBindings, struct ImportBinding *)
+DEFINE_LIST(struct Resolver, ImportBindings, struct ImportBinding *,)
 
 static struct ImportName *iname_new(struct Resolver *R)
 {

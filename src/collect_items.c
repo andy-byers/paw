@@ -53,7 +53,7 @@ struct ItemCollector {
     paw_Bool in_trait_decl;
 };
 
-DEFINE_MAP(struct ItemCollector, GenericBinderMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrGenericDefs *)
+DEFINE_MAP(struct ItemCollector, GenericBinderMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrGenericDefs *,)
 
 static enum BuiltinKind builtin_kind(struct ItemCollector *X, IrType *type)
 {
@@ -87,10 +87,13 @@ static Str const *print_trait(struct ItemCollector *X, IrTrait *trait)
     return pawIr_print_trait_v2(X->C, trait);
 }
 
-static void add_predicates_from(struct ItemCollector *X, IrSolver *S, DeclId did)
+static void add_predicates_from(struct ItemCollector *X, IrSolver *S, DeclId did, struct SourceSpan span)
 {
     IrGenericArgs *params = pawIr_get_generic_args(X->C, did);
-    pawIr_solver_add_predicates_from(S, did, params);
+    pawIr_solver_add_predicates_from(S, did, params, (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_PREDICATE,
+                .span = span,
+            });
 }
 
 static DeclId resolve_trait_segment(struct ItemCollector *X, struct HirSegment s)
@@ -144,7 +147,7 @@ struct AssocItemInfo {
     paw_Bool found;
 };
 
-DEFINE_MAP(struct ItemCollector, AssocItemInfoMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct AssocItemInfo)
+DEFINE_MAP(struct ItemCollector, AssocItemInfoMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct AssocItemInfo,)
 
 static AssocItemInfoMap *collect_assoc_types_from_trait(struct ItemCollector *X, DeclId did)
 {
@@ -177,6 +180,7 @@ static void collect_equals_constraints(struct ItemCollector *X, struct HirGeneri
             IrType *lhs = pawIr_new_projection(X->C, info->did, trait->args);
             IrConstraints_push(X->C, result, (struct IrConstraint){
                         .kind = IR_CONSTRAINT_TYPE_EQUALS,
+                        .span = p->t->hdr.span,
                         .parent = d->did,
                         .eq.lhs = lhs,
                         .eq.rhs = rhs,
@@ -194,13 +198,14 @@ static void solve_all_obligations(struct ItemCollector *X)
         case IR_SOLVER_AMBIGUOUS: {
             struct IrObligation const example = pawIr_solver_first_obligation(X->C->S);
             COLLECTOR_ERROR(X, UnsatisfiedObligation,
-                    .example = pawIr_print_obligation_(X->C, example),
-                    .num_unsolved = result.ambiguous.num_unsolved,
+                    .obligation = pawIr_print_obligation_(X->C, example),
+                    .cause = pawIr_print_obligation_cause(X->C, example.cause),
                     .span = example.cause.span);
             }
         case IR_SOLVER_ERROR:
             COLLECTOR_ERROR(X, FalseObligation,
                     .obligation = pawIr_print_obligation_(X->C, result.error.obligation),
+                    .cause = pawIr_print_obligation_cause(X->C, result.error.obligation.cause),
                     .span = result.error.obligation.cause.span);
     }
 }
@@ -428,6 +433,7 @@ static void collect_bound_traits(struct ItemCollector *X, struct HirGenericDecl 
             IrTraitList_push(X->C, bounds, trait);
             IrConstraints_push(X->C, result, (struct IrConstraint){
                         .kind = IR_CONSTRAINT_IMPL_TRAIT,
+                        .span = pbound->path.span,
                         .parent = d->did,
                         .impl.type = generic,
                         .impl.trait = trait,
@@ -767,13 +773,17 @@ static void ensure_type_is_well_formed(struct ItemCollector *X, struct SourceSpa
 {
     if (IrIsAdt(type))
         pawIr_solver_add_well_formed_obligation(X->C->S, IR_TYPE_DID(type),
-                IR_GENERIC_ARGS(type), (struct IrObligationCause){.span = span});
+                IR_GENERIC_ARGS(type), (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
+                    .span = span});
 }
 
 static void ensure_trait_is_well_formed(struct ItemCollector *X, struct SourceSpan span, IrTrait *trait)
 {
     pawIr_solver_add_well_formed_obligation(X->C->S, trait->did, trait->args,
-            (struct IrObligationCause){.span = span});
+            (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
+                .span = span});
 }
 
 static AssocItemInfoMap *collect_assoc_fns_from_trait(struct ItemCollector *X, DeclId did)
@@ -791,7 +801,7 @@ static AssocItemInfoMap *collect_assoc_fns_from_trait(struct ItemCollector *X, D
 
 static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
 {
-    add_predicates_from(X, X->C->S, d->did);
+    add_predicates_from(X, X->C->S, d->did, d->span);
 
     IrType *self = collect_type(X, d->type);
     ensure_type_is_well_formed(X, d->type->hdr.span, self);
@@ -827,6 +837,7 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
         IrType *rhs = pawIr_get_def_type(X->C, item->did);
         pawIr_solver_add_norm_target(X->C->S, lhs, rhs,
                 (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_PREDICATE,
                     .span = item->span,
                 });
     }
@@ -891,9 +902,12 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
         // impl block method
         {
             IrSolver *S = pawIr_push_solver(X->C);
-            add_predicates_from(X, S, fn_def->did);
+            add_predicates_from(X, S, fn_def->did, method_decl->span);
             IrType *method = pawIr_new_signature(X->C, info->did, args);
-            pawIr_solver_add_obligations_from(S, info->did, args);
+            pawIr_solver_add_obligations_from(S, info->did, args, (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
+                    .span = method_decl->span,
+                });
             method = pawU_normalize_projections(X->C->U, method);
             IrType *type_from_impl = pawIr_get_def_type(X->C, method_decl->did);
             if (pawU_unify(X->C->U, method, type_from_impl) != 0)
@@ -907,9 +921,15 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
 
         {
             IrSolver *S = pawIr_push_solver(X->C);
-            pawIr_solver_add_predicates_from(S, info->did, args);
+            pawIr_solver_add_predicates_from(S, info->did, args, (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_PREDICATE,
+                    .span = method_decl->span,
+                });
             IrType *method = pawIr_get_def_type(X->C, method_decl->did);
-            pawIr_solver_add_obligations_from_type(S, method);
+            pawIr_solver_add_obligations_from_type(S, method, (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
+                    .span = method_decl->span,
+                });
             solve_all_obligations(X);
             pawIr_pop_solver(X->C);
         }
@@ -940,13 +960,24 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
             IrType *type = GET_NODE_TYPE(X->C, *p);
             if (IrIsAdt(type)) { // skip builtin types
                 struct HirAdtDecl const *d = HirGetAdtDecl(*p);
-                add_predicates_from(X, X->C->S, d->did);
+                add_predicates_from(X, X->C->S, d->did, d->span);
 
-                for (int discr = 0; discr < d->variants->count; ++discr) {
+                int discr;
+                struct HirDecl *const *pv;
+                K_LIST_ENUMERATE (d->variants, discr, pv) {
+                    struct HirVariantDecl const *v = HirGetVariantDecl(*pv);
                     IrType *type = pawIr_get_def_type(X->C, d->did);
                     IrTypeList *fields = pawP_instantiate_variant_fields(X->C, IrGetAdt(type), discr);
-                    K_LIST_XFOREACH (fields, IrType *const, pfield)
-                        pawIr_solver_add_obligations_from_type(X->C->S, *pfield);
+
+                    IrType *const *ptype;
+                    struct HirDecl *const *pfield;
+                    K_LIST_ZIP (fields, ptype, v->fields, pfield) {
+                        struct HirFieldDecl const *field = HirGetFieldDecl(*pfield);
+                        pawIr_solver_add_obligations_from_type(X->C->S, *ptype, (struct IrObligationCause){
+                                    .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
+                                    .span = field->tag->hdr.span,
+                                });
+                    }
                 }
 
                 X->cache = TypeCollection_new(X->C);
@@ -954,18 +985,18 @@ static void solve_signatures(struct ItemCollector *X, struct HirModule m)
             }
         } else if (HirIsTraitDecl(*p)) {
             struct HirTraitDecl const *d = HirGetTraitDecl(*p);
-            add_predicates_from(X, X->C->S, d->did);
+            add_predicates_from(X, X->C->S, d->did, d->span);
         } else if (HirIsImplDecl(*p)) {
             solve_impl_decl(X, HirGetImplDecl(*p));
         } else if (HirIsTypeDecl(*p)) {
             struct HirTypeDecl const *d = HirGetTypeDecl(*p);
-            add_predicates_from(X, X->C->S, d->did);
+            add_predicates_from(X, X->C->S, d->did, d->span);
 
             IrType *rhs = GET_NODE_TYPE(X->C, d->rhs);
             ensure_type_is_well_formed(X, d->span, rhs);
         } else if (HirIsFnDecl(*p)) {
             struct HirFnDecl const *d = HirGetFnDecl(*p);
-            add_predicates_from(X, X->C->S, d->did);
+            add_predicates_from(X, X->C->S, d->did, d->span);
 
             IrConstraints const *constraints = pawIr_get_constraints(X->C, d->did);
             K_LIST_XFOREACH (constraints, struct IrConstraint const, c) {
@@ -1000,7 +1031,7 @@ static void collect_local_type_decl(struct HirVisitor *V, struct HirTypeDecl *d)
     IrConstraintsMap_insert(X->C, X->C->ir_constraints, d->did, constraints);
 
     pawIr_push_solver(X->C);
-    add_predicates_from(X, X->C->S, d->did);
+    add_predicates_from(X, X->C->S, d->did, d->span);
     ensure_type_is_well_formed(X, d->rhs->hdr.span, rhs);
     solve_all_obligations(X);
     pawIr_pop_solver(X->C);

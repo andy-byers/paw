@@ -416,12 +416,13 @@
         Str const *modname; \
         struct SourceSpan span; \
         Str const *obligation; \
+        Str const *cause; \
     ) \
     X(UnsatisfiedObligation, ERR_CATEGORY_TYPE, \
         Str const *modname; \
         struct SourceSpan span; \
-        Str const *example; \
-        int num_unsolved; \
+        Str const *obligation; \
+        Str const *cause; \
     ) \
     X(IncompatibleTypes, ERR_CATEGORY_TYPE, \
         Str const *modname; \

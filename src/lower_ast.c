@@ -928,7 +928,7 @@ struct UnpackingInfo {
     struct HirBindingPat *match; // "x" binding inside match
 };
 
-DEFINE_LIST(struct LowerAst, UnpackingList, struct UnpackingInfo)
+DEFINE_LIST(struct LowerAst, UnpackingList, struct UnpackingInfo,)
 
 static struct HirPat *new_temp_binding(struct LowerAst *L, struct SourceSpan span, struct HirIdent ident)
 {

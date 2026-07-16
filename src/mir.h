@@ -778,7 +778,7 @@ struct MirConstantCache {
     MirConstant boolk[2];
 };
 
-DEFINE_MAP(struct Compiler, MirConstMap, pawP_alloc, pawIr_const_hash, pawIr_const_equals, IrConst *, MirConstant)
+DEFINE_MAP(struct Compiler, MirConstMap, pawP_alloc, pawIr_const_hash, pawIr_const_equals, IrConst *, MirConstant,)
 
 struct MirConstantCache *pawMir_kcache_new(struct Mir *mir);
 void pawMir_kcache_delete(struct Mir *mir, struct MirConstantCache *kcache);
@@ -817,23 +817,23 @@ EXTERN_C struct MirPlace pawMir_get_register(struct Mir const *mir, MirRegister 
 #define MIR_KINDOF(node) ((node)->hdr.kind)
 #define MIR_CAST_INSTRUCTION(p) CAST(struct MirInstruction *, p)
 
-DEFINE_LIST(struct Mir, MirScopeInfoList, struct MirScopeInfo)
-DEFINE_LIST(struct Mir, MirCaptureList, struct MirCaptureInfo)
-DEFINE_LIST(struct Mir, MirUpvalueList, struct MirUpvalueInfo)
-DEFINE_LIST(struct Mir, MirSwitchArmList, struct MirSwitchArm)
-DEFINE_LIST(struct Mir, MirProjectionList, struct MirProjection *)
-DEFINE_LIST(struct Mir, MirInstructionList, struct MirInstruction *)
-DEFINE_LIST(struct Mir, MirPlaceList, struct MirPlace)
-DEFINE_LIST(struct Mir, MirPlacePtrList, struct MirPlace *)
-DEFINE_LIST(struct Mir, MirConstantList, MirConstant)
-DEFINE_LIST(struct Mir, MirRegisterList, MirRegister)
-DEFINE_LIST(struct Mir, MirBlockList, MirBlock)
-DEFINE_LIST(struct Mir, MirBucketList, struct MirBlockList *)
-DEFINE_LIST(struct Mir, MirConstantDataList, struct MirConstantData)
-DEFINE_LIST(struct Mir, MirRegisterDataList, struct MirRegisterData)
-DEFINE_LIST(struct Mir, MirRegisterPtrList, MirRegister *)
-DEFINE_LIST(struct Mir, MirBlockDataList, struct MirBlockData *)
-DEFINE_LIST(struct Mir, MirBodyList, struct Mir *)
+DEFINE_LIST(struct Mir, MirScopeInfoList, struct MirScopeInfo,)
+DEFINE_LIST(struct Mir, MirCaptureList, struct MirCaptureInfo,)
+DEFINE_LIST(struct Mir, MirUpvalueList, struct MirUpvalueInfo,)
+DEFINE_LIST(struct Mir, MirSwitchArmList, struct MirSwitchArm,)
+DEFINE_LIST(struct Mir, MirProjectionList, struct MirProjection *,)
+DEFINE_LIST(struct Mir, MirInstructionList, struct MirInstruction *,)
+DEFINE_LIST(struct Mir, MirPlaceList, struct MirPlace,)
+DEFINE_LIST(struct Mir, MirPlacePtrList, struct MirPlace *,)
+DEFINE_LIST(struct Mir, MirConstantList, MirConstant,)
+DEFINE_LIST(struct Mir, MirRegisterList, MirRegister,)
+DEFINE_LIST(struct Mir, MirBlockList, MirBlock,)
+DEFINE_LIST(struct Mir, MirBucketList, struct MirBlockList *,)
+DEFINE_LIST(struct Mir, MirConstantDataList, struct MirConstantData,)
+DEFINE_LIST(struct Mir, MirRegisterDataList, struct MirRegisterData,)
+DEFINE_LIST(struct Mir, MirRegisterPtrList, MirRegister *,)
+DEFINE_LIST(struct Mir, MirBlockDataList, struct MirBlockData *,)
+DEFINE_LIST(struct Mir, MirBodyList, struct Mir *,)
 
 struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, Annotations *annotations, struct IrType *type, struct IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
@@ -957,7 +957,7 @@ struct MirAccess {
     MirBlock b;
 };
 
-DEFINE_LIST(struct Compiler, MirAccessList, struct MirAccess)
+DEFINE_LIST(struct Compiler, MirAccessList, struct MirAccess,)
 
 struct AccessMap;
 struct UseDefMap;
@@ -974,7 +974,7 @@ void pawMir_generate_drops(struct Mir *mir);
 void pawMir_propagate_constants(struct Mir *mir);
 void pawMir_merge_redundant_blocks(struct Mir *mir);
 
-DEFINE_LIST(struct Mir, MirLocationList, int)
+DEFINE_LIST(struct Mir, MirLocationList, int,)
 
 struct MirLocationList *pawMir_compute_locations(struct Mir *mir);
 void pawMir_set_location(struct Mir *mir, struct MirLocationList *locations, MirId mid, int location);
@@ -1009,8 +1009,8 @@ static paw_Bool mir_place_equals(struct Mir *mir, struct MirPlace lhs, struct Mi
         && lhs.value == rhs.value;
 }
 
-DEFINE_MAP(struct Mir, AccessMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirAccessList *)
-DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirBlockList *)
+DEFINE_MAP(struct Mir, AccessMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirAccessList *,)
+DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirBlockList *,)
 DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(BodyMap, DeclId, struct Mir *)
 

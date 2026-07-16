@@ -99,7 +99,7 @@ struct TypeChecker {
     DeclId enclosing_body;
 };
 
-DEFINE_LIST(struct TypeChecker, Type3List, struct Type3)
+DEFINE_LIST(struct TypeChecker, Type3List, struct Type3,)
 
 static paw_Bool is_scalar(enum IrTypeKind kind)
 {
@@ -144,9 +144,9 @@ static paw_Bool equals_core_trait(struct TypeChecker *T, IrTrait *trait, enum Co
     return trait->did.value == T->C->core_traits[kind].value;
 }
 
-DEFINE_MAP(struct TypeChecker, CopyablePats, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, void *)
-DEFINE_MAP(struct TypeChecker, FieldMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, int)
-DEFINE_MAP(struct TypeChecker, PatFieldMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, struct HirPat *)
+DEFINE_MAP(struct TypeChecker, CopyablePats, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, void *,)
+DEFINE_MAP(struct TypeChecker, FieldMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, int,)
+DEFINE_MAP(struct TypeChecker, PatFieldMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, struct HirPat *,)
 DEFINE_MAP_ITERATOR(PatFieldMap, struct HirIdent, struct HirPat *)
 DEFINE_MAP_ITERATOR(FieldMap, struct HirIdent, int)
 DEFINE_MAP_ITERATOR(CopyablePats, NodeId, void *)
@@ -247,7 +247,9 @@ static struct IrSolverResult solve_pending_obligations(struct TypeChecker *T)
             break;
         case IR_SOLVER_ERROR:
             TYPECK_ERROR(T, FalseObligation,
-                    .obligation = pawIr_print_obligation_(T->C, result.error.obligation));
+                    .obligation = pawIr_print_obligation_(T->C, result.error.obligation),
+                    .cause = pawIr_print_obligation_cause(T->C, result.error.obligation.cause),
+                    .span = result.error.obligation.cause.span);
     }
     if (pawIr_solve_const_obligations(T->C) < 0)
         TYPECK_ERROR(T, FalseConstObligation, .span = {0});
@@ -384,8 +386,11 @@ static void ensure_valid_rvalue(struct TypeChecker *T, struct HirExpr *expr)
         IrGenericArgs_push(T->C, copy_args, IrGenericArg_from_type(type));
         DeclId const copy_did = T->C->core_traits[CORE_TRAIT_COPY];
         IrTrait *copy_trait = pawIr_solver_instantiate_trait_with(T->C->S, copy_did, copy_args);
-        pawIr_solver_add_impl_trait_obligation(T->C->S, type, copy_trait,
-                (struct IrObligationCause){.span = expr->hdr.span});
+        pawIr_solver_add_impl_trait_obligation(T->C->S, type, copy_trait, (struct IrObligationCause){
+                    .kind = IR_OBLIGATION_CAUSE_INSTANTIATION,
+                    .instantiation.type = type,
+                    .span = expr->hdr.span,
+                });
     } else if (!pawIr_is_copyable(T->C, type)) {
         if (HirIsIndex(expr)) {
             TYPECK_ERROR(T, MoveOutOfElement,
@@ -582,7 +587,10 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     enter_block(T, &bs, d->span, BLOCK_NORMAL);
 
     IrGenericArgs *params = pawIr_get_generic_args(T->C, d->did);
-    pawIr_solver_add_predicates_from(T->C->S, d->did, params);
+    pawIr_solver_add_predicates_from(T->C->S, d->did, params, (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_PREDICATE,
+                .span = d->span,
+            });
     IrType *ret = normalize_type(T,
             GET_NODE_TYPE(T->C, d->result));
 
@@ -670,7 +678,7 @@ static IrTypeList *instantiate_fields(struct Compiler *C, IrType *self, struct H
     return pawIr_fold_type_list(&F, field_types);
 }
 
-static IrType *instantiate(struct TypeChecker *T, IrType *base, IrGenericArgs *args)
+static IrType *instantiate(struct TypeChecker *T, IrType *base, IrGenericArgs *args, struct SourceSpan span)
 {
     if (IrIsGeneric(base) || IrIsSlice(base) || IrIsTuple(base) || IrIsFnPtr(base) || IrIsPtr(base) || IS_BASIC_TYPE(pawP_type2code(T->C, base)))
         return base;
@@ -682,12 +690,17 @@ static IrType *instantiate(struct TypeChecker *T, IrType *base, IrGenericArgs *a
         TYPECK_ERROR(T, IncorrectTypeArity,
                 .want = IR_GENERIC_ARGS(base)->count,
                 .have = args->count,
-                .span = {0});
+                .span = span);
 
     DeclId const did = IR_TYPE_DID(base);
     if (args == NULL) args = pawIr_instantiate_args(T->C, did);
-    pawIr_solver_add_obligations_from(T->C->S, did, args);
-    return pawIr_solver_instantiate_type_with(T->C->S, did, args);
+    IrType *type = pawIr_solver_instantiate_type_with(T->C->S, did, args);
+    pawIr_solver_add_obligations_from(T->C->S, did, args, (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_INSTANTIATION,
+                .instantiation.type = type,
+                .span = span,
+            });
+    return type;
 }
 
 static paw_Bool is_enum_decl(struct HirDecl *decl)
@@ -717,7 +730,7 @@ static IrType *lower_adt_segment(struct TypeChecker *T, struct HirSegment segmen
 
     // Instantiate with type arguments, if provided. Otherwise, instantiate with
     // a list of IrInfer types which must be resolved later via unification.
-    return instantiate(T, type, args);
+    return instantiate(T, type, args, segment.span);
 }
 
 static IrType *lower_type_path(struct TypeChecker *T, struct HirPath path)
@@ -739,7 +752,7 @@ static void unify_segment_types(struct TypeChecker *T, struct HirSegment segment
     }
 }
 
-static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name);
+static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name, struct SourceSpan span);
 
 static IrTrait *get_containing_bound(struct Compiler *C, IrType *base, DeclId did)
 {
@@ -801,17 +814,17 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                             .type = pawIr_print_type_v2(T->C, base),
                             .span = segment.span);
                 if (IrIsSignature(assoc)) {
-                    base = instantiate(T, base, NULL);
+                    base = instantiate(T, base, NULL, segment.span);
                     return pawP_instantiate_assoc(T->C, base, assoc).inst;
                 } else { // TODO: need to demonstrate that this branch is hit. add a test + explanatory comment
                     IrType *target = GET_TYPE(T, segment.target.id);
                     IrGenericArgs *args = lower_generic_args(T, segment.args);
-                    target = instantiate(T, target, args);
+                    target = instantiate(T, target, args, segment.span);
                     return target;
                 }
             } else {
                 IrType *target = GET_TYPE(T, segment.target.id);
-                target = instantiate(T, target, NULL);
+                target = instantiate(T, target, NULL, segment.span);
                 IrGenericArgs *args = lower_generic_args(T, segment.args);
                 if (args != NULL) {
                     IrGenericArgs *params = IR_GENERIC_ARGS(target);
@@ -838,7 +851,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                 if (IrIsGeneric(base)) {
                     paw_assert(first.args == NULL);
                     struct IrSignature const *fn = IrGetSignature(assoc);
-                    assoc = instantiate(T, assoc, NULL);
+                    assoc = instantiate(T, assoc, NULL, first.span);
                     IrTrait *bound = get_containing_bound(T->C, base, fn->did);
                     IrType *type_ctx = pawIr_get_context(T->C, assoc);
                     IrTrait *trait_ctx = pawIr_get_trait_context(T->C, assoc);
@@ -856,7 +869,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             } else {
                 // The value must be an associated function called on an ADT. Such values
                 // cannot be found during name resolution (type information is required).
-                assoc = lookup_method(T->C, base, last.ident.name);
+                assoc = lookup_method(T->C, base, last.ident.name, last.span);
                 if (assoc == NULL)
                     TYPECK_ERROR(T, UnknownAssociatedItem,
                             .type = pawIr_print_type_v2(T->C, base),
@@ -938,7 +951,7 @@ static IrType *check_try_expr(struct TypeChecker *T, struct HirTryExpr *e)
 
     if (is_option_t(T, type) || is_result_t(T, type)) {
         IrGenericArg const arg = IrGenericArg_from_type(
-                instantiate(T, type, NULL));
+                instantiate(T, type, NULL, e->span));
         unify_args(T, NODE_SPAN(e->target), arg, ret);
     } else {
         TYPECK_ERROR(T, InvalidChainOperand,
@@ -1254,7 +1267,11 @@ static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjection
     IrTrait *trait = pawIr_new_trait(T->C, trait_decl->hdr.did, args);
 
     struct Instantiation const *inst = pawP_find_trait_method(
-            T->C, type, trait, e->name);
+            T->C, type, trait, e->name, (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+                .did = trait->did,
+                .span = e->span,
+            });
     if (inst == NULL)
         TYPECK_ERROR(T, UnknownMethod,
                 .type = pawIr_print_type_v2(T->C, type),
@@ -1263,9 +1280,14 @@ static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjection
     return inst->inst;
 }
 
-static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name)
+static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name, struct SourceSpan span)
 {
-    struct Instantiation *method = pawP_find_method(C, self, name);
+    struct Instantiation *method = pawP_find_method(C, self, name, (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+                .assoc_item_lookup.self = self,
+                .assoc_item_lookup.name = name,
+                .span = span,
+            });
     if (method == NULL) return NULL;
     return method->inst;
 }
@@ -1309,7 +1331,10 @@ static void check_impl_item(struct TypeChecker *T, struct HirImplDecl *d)
 {
     T->self = GET_TYPE(T, d->id);
     IrGenericArgs *params = pawIr_get_generic_args(T->C, d->did);
-    pawIr_solver_add_predicates_from(T->C->S, d->did, params);
+    pawIr_solver_add_predicates_from(T->C->S, d->did, params, (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_PREDICATE,
+                .span = d->span,
+            });
 
     struct IrImpl const *def = pawIr_get_impl_def(T->C, d->did);
     if (def->trait != NULL && equals_core_trait(T, def->trait, CORE_TRAIT_COPY))
@@ -1534,7 +1559,7 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
     } else if (!select->is_index) {
         IrTypeList *chain = pawIr_autoptr_chain(T->C, orig);
         K_LIST_XFOREACH (chain, IrType *const, p) {
-            method = lookup_method(T->C, *p, select->ident.name);
+            method = lookup_method(T->C, *p, select->ident.name, select->span);
             if (method != NULL) break;
         }
     }
@@ -1847,7 +1872,7 @@ static IrType *check_array_index(struct TypeChecker *T, IrType *array, IrType *i
     return IrGetArray(array)->type;
 }
 
-static IrType *find_index_fn_aux(struct TypeChecker *T, IrType *target, IrType *index)
+static IrType *find_index_fn_aux(struct TypeChecker *T, IrType *target, IrType *index, struct SourceSpan span)
 {
     // create trait descriptor for "Index<Target, Idx>"
     IrGenericArgs *args = IrGenericArgs_new(T->C);
@@ -1857,8 +1882,14 @@ static IrType *find_index_fn_aux(struct TypeChecker *T, IrType *target, IrType *
     IrGenericArgs_push(T->C, args, IrGenericArg_from_type(target));
     IrGenericArgs_push(T->C, args, IrGenericArg_from_type(index));
 
-    struct Instantiation const *inst = pawP_find_trait_method(T->C,
-            target, trait, SCAN_STR(T->C, "index"));
+    Str const *method_name = SCAN_STR(T->C, "index");
+    struct Instantiation const *inst = pawP_find_trait_method(T->C, target,
+            trait, method_name, (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+                .assoc_item_lookup.self = target,
+                .assoc_item_lookup.name = method_name,
+                .span = span,
+            });
 
     if (inst != NULL) {
         Type3List_push(T, T->defer_index, (struct Type3){
@@ -1872,9 +1903,9 @@ static IrType *find_index_fn_aux(struct TypeChecker *T, IrType *target, IrType *
 
 }
 
-static IrType *find_index_fn(struct TypeChecker *T, IrType *target, IrType *index)
+static IrType *find_index_fn(struct TypeChecker *T, IrType *target, IrType *index, struct SourceSpan span)
 {
-    return find_index_fn_aux(T, target, index);
+    return find_index_fn_aux(T, target, index, span);
 }
 
 static IrType *check_index(struct TypeChecker *T, struct HirIndex *e)
@@ -1888,7 +1919,7 @@ static IrType *check_index(struct TypeChecker *T, struct HirIndex *e)
 
     // Determine the concrete type of the "Index::index" method that will
     // be used to represent this indexing operation.
-    IrType *fn_type = find_index_fn(T, target, index);
+    IrType *fn_type = find_index_fn(T, target, index, e->span);
     if (fn_type == NULL)
         pawErr_generic_error(ENV(T), T->pm->name, e->span,
                 "type cannot be indexed");
@@ -1926,7 +1957,7 @@ struct BindingInfo {
     int uses;
 };
 
-DEFINE_MAP(struct TypeChecker, BindingMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, struct BindingInfo)
+DEFINE_MAP(struct TypeChecker, BindingMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, struct BindingInfo,)
 DEFINE_MAP_ITERATOR(BindingMap, struct HirIdent, struct BindingInfo)
 
 static void init_binding_checker(struct BindingChecker *bc, struct TypeChecker *T, struct HirVisitor *V)
@@ -2425,8 +2456,8 @@ static void check_item(struct TypeChecker *T, struct HirDecl *item)
     if (result.status == IR_SOLVER_AMBIGUOUS) {
         struct IrObligation const example = pawIr_solver_first_obligation(T->C->S);
         TYPECK_ERROR(T, UnsatisfiedObligation,
-                .example = pawIr_print_obligation_(T->C, example),
-                .num_unsolved = result.ambiguous.num_unsolved);
+                .obligation = pawIr_print_obligation_(T->C, example),
+                .cause = pawIr_print_obligation_cause(T->C, example.cause));
     }
 
     pawIr_pop_solver(T->C);

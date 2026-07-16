@@ -77,12 +77,12 @@ struct KProp {
     paw_Env *P;
 };
 
-DEFINE_LIST(struct KProp, FlowWorklist, struct FlowEdge)
-DEFINE_LIST(struct KProp, SsaWorklist, struct SsaEdge)
-DEFINE_LIST(struct KProp, Lattice, struct Cell)
+DEFINE_LIST(struct KProp, FlowWorklist, struct FlowEdge,)
+DEFINE_LIST(struct KProp, SsaWorklist, struct SsaEdge,)
+DEFINE_LIST(struct KProp, Lattice, struct Cell,)
 
-DEFINE_MAP(struct KProp, UseCountMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, int)
-DEFINE_MAP(struct KProp, ExecMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, MirBlockList *)
+DEFINE_MAP(struct KProp, UseCountMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, int,)
+DEFINE_MAP(struct KProp, ExecMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, MirBlockList *,)
 
 #if defined(PAW_DEBUG_EXTRA)
 

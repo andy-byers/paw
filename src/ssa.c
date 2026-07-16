@@ -33,8 +33,8 @@ struct SsaConverter {
     paw_Env *P;
 };
 
-DEFINE_MAP(struct SsaConverter, RenameMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, MirRegister)
-DEFINE_MAP(struct SsaConverter, PhiMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirId, MirRegister)
+DEFINE_MAP(struct SsaConverter, RenameMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, MirRegister,)
+DEFINE_MAP(struct SsaConverter, PhiMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirId, MirRegister,)
 
 static paw_Bool is_trivial_value(struct SsaConverter *S, MirRegister r)
 {
@@ -72,8 +72,8 @@ static struct MirPhi *place_trivial_phi_node(struct SsaConverter *S, MirBlock b,
     return MirGetPhi(phi);
 }
 
-DEFINE_LIST(struct SsaConverter, NameStackList, MirPlaceList *)
-DEFINE_LIST(struct SsaConverter, IntegerList, int)
+DEFINE_LIST(struct SsaConverter, NameStackList, MirPlaceList *,)
+DEFINE_LIST(struct SsaConverter, IntegerList, int,)
 
 MirPlaceList *get_name_stack(struct SsaConverter *S, MirRegister r)
 {

@@ -1845,20 +1845,20 @@ struct Ast {
 #define AST_CAST_STMT(x) CAST(struct AstStmt *, x)
 #define AST_CAST_PAT(x) CAST(struct AstPat *, x)
 
-DEFINE_LIST(struct Ast, AstDeclList, struct AstDecl *)
-DEFINE_LIST(struct Ast, AstExprList, struct AstExpr *)
-DEFINE_LIST(struct Ast, AstTypeList, struct AstType *)
-DEFINE_LIST(struct Ast, AstStmtList, struct AstStmt *)
-DEFINE_LIST(struct Ast, AstPatList, struct AstPat *)
-DEFINE_LIST(struct Ast, AstStringList, struct AstStringPart)
-DEFINE_LIST(struct Ast, AstSegments, struct AstSegment)
-DEFINE_LIST(struct Ast, AstBoundList, struct AstGenericBound)
-DEFINE_LIST(struct Ast, AstGenericArgs, struct AstGenericArg)
+DEFINE_LIST(struct Ast, AstDeclList, struct AstDecl *,)
+DEFINE_LIST(struct Ast, AstExprList, struct AstExpr *,)
+DEFINE_LIST(struct Ast, AstTypeList, struct AstType *,)
+DEFINE_LIST(struct Ast, AstStmtList, struct AstStmt *,)
+DEFINE_LIST(struct Ast, AstPatList, struct AstPat *,)
+DEFINE_LIST(struct Ast, AstStringList, struct AstStringPart,)
+DEFINE_LIST(struct Ast, AstSegments, struct AstSegment,)
+DEFINE_LIST(struct Ast, AstBoundList, struct AstGenericBound,)
+DEFINE_LIST(struct Ast, AstGenericArgs, struct AstGenericArg,)
 
 struct Ast *pawAst_new(struct Compiler *C);
 void pawAst_free(struct Ast *ast);
 
-DEFINE_MAP(struct Ast, AstNodeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, void *)
+DEFINE_MAP(struct Ast, AstNodeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, void *,)
 
 static inline void pawAst_set_node(struct Ast *ast, NodeId id, void *node)
 {

@@ -2002,12 +2002,12 @@ static struct AstDecl *use_decl(struct Lex *lex, paw_Bool is_pub)
     }
 
     struct SourceLoc const end = TOKEN_END(lex->t);
-    semicolon(lex, "'use' declaration");
+    semicolon(lex, "`use` declaration");
     return NEW_NODE(lex, use_decl, RANGE(start, end), next_id(lex), next_did(lex),
             path, as, kind, is_pub);
 }
 
-DEFINE_MAP(struct Compiler, AnnotationMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct AstIdent)
+DEFINE_MAP(struct Compiler, AnnotationMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct AstIdent,)
 
 static struct Annotations *annotations(struct Lex *lex)
 {
@@ -2102,7 +2102,7 @@ static struct AstDecl *parse_method(struct Lex *lex, struct Annotations *annos, 
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
     check_next(lex, TK_FN);
-    // indicate that 'self' has special meaning
+    // indicate that `self` has special meaning
     lex->in_impl = PAW_TRUE;
     struct AstIdent const ident = parse_ident(lex);
     struct AstDecl *method = function(lex, start, ident, annos, FUNC_METHOD, is_pub);
@@ -2149,7 +2149,7 @@ static struct SourceLoc enum_body(struct Lex *lex, struct SourceLoc start, struc
     if (variants->count == 0)
         PARSE_ERROR(lex, EmptyEnumeration, RANGE(start, rbrace));
 
-    ensure_unique_decl_names(lex, variants, "enum variants");
+    ensure_unique_decl_names(lex, variants, "enum variant");
     return rbrace;
 }
 
@@ -2345,7 +2345,7 @@ static struct SourceLoc trait_impl_body(struct Lex *lex, struct AstDeclList *typ
                 .span = span_from(lex, start),
                 .limit = MAX_ASSOC_ITEMS);
 
-    ensure_unique_decl_names(lex, types, "associated types");
+    ensure_unique_decl_names(lex, types, "associated type");
     ensure_unique_decl_names(lex, constants, "associated constant");
     ensure_unique_decl_names(lex, methods, "associated function");
     return delim_next(lex, '}', '{', start);
@@ -2432,7 +2432,7 @@ static AstStmtList *block_inner(struct Lex *lex, struct AstExpr **presult)
                 struct AstType *tag = type_annotation(lex);
                 struct AstExpr *init = test_next(lex, '=') ? expect_expr0(lex) : NULL;
                 struct SourceLoc const end = TOKEN_START(lex->t);
-                semicolon(lex, "\"let\" statement");
+                semicolon(lex, "`let` statement");
                 struct AstStmt *stmt = NEW_NODE(lex, let_stmt, RANGE(start, end),
                         next_id(lex), pat, tag, init);
                 AstStmtList_push(lex->ast, stmts, stmt);

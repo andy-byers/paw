@@ -71,14 +71,14 @@ static paw_Bool place_equals(void *ctx, struct MirPlace lhs, struct MirPlace rhs
 }
 
 // TODO: I think VarCache could be keyed on MirRegister instead of MirPlace
-DEFINE_MAP(struct VariableAnalyzer, BlockSet, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *)
-DEFINE_MAP(struct VariableAnalyzer, ConditionalMoves, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirPlace)
-DEFINE_MAP(struct VariableAnalyzer, VarCache, pawP_alloc, place_hash, place_equals, struct MirPlace, struct Variable *)
-DEFINE_MAP(struct VariableAnalyzer, WorkPool, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *)
+DEFINE_MAP(struct VariableAnalyzer, BlockSet, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *,)
+DEFINE_MAP(struct VariableAnalyzer, ConditionalMoves, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirPlace,)
+DEFINE_MAP(struct VariableAnalyzer, VarCache, pawP_alloc, place_hash, place_equals, struct MirPlace, struct Variable *,)
+DEFINE_MAP(struct VariableAnalyzer, WorkPool, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *,)
 DEFINE_MAP_ITERATOR(WorkPool, MirBlock, void *)
-DEFINE_LIST(struct VariableAnalyzer, VariableStates, unsigned char)
-DEFINE_LIST(struct VariableAnalyzer, VariableList, struct Variable *)
-DEFINE_LIST(struct VariableAnalyzer, BlockStates, VariableStates *)
+DEFINE_LIST(struct VariableAnalyzer, VariableStates, unsigned char,)
+DEFINE_LIST(struct VariableAnalyzer, VariableList, struct Variable *,)
+DEFINE_LIST(struct VariableAnalyzer, BlockStates, VariableStates *,)
 
 static IrTypeList *get_subtypes(struct Mir *mir, IrType *type)
 {

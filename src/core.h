@@ -80,17 +80,8 @@ void *paw_context(paw_Env const *P);
 
 #define PAW_OK 0U
 #define PAW_EMEMORY 1U
-#define PAW_EVALUE 2U
-#define PAW_ENAME 3U
-#define PAW_EKEY 4U
-#define PAW_EINDEX 5U
-#define PAW_ESYSTEM 6U
-#define PAW_ERUNTIME 7U
-
-// TODO: these will become more specific compiler errors
-#define PAW_ETYPE 8U
-#define PAW_ESYNTAX 9U
-#define PAW_EOVERFLOW 10U
+#define PAW_ESYSTEM 2U
+#define PAW_EOVERFLOW 3U
 
 // Load paw source code from the given 'input' source
 int paw_load(paw_Env *P, paw_Reader input, char const *modname, char const *dirname, char const *pathname, void *ud);

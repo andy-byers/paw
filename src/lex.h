@@ -12,9 +12,6 @@
 #define IS_BUILTIN(s) ((s)->flag < 0)
 #define FLAG2CODE(x) (-(x) - 1)
 
-void pawX_read_integer(paw_Env *P, char const *data, int base);
-void pawX_read_float(paw_Env *P, char const *data);
-
 enum MultiChar {
     // Control tokens:
     TK_END = 0,
@@ -151,23 +148,33 @@ enum StringState {
     STATE_STRING,
 };
 
-DEFINE_LIST(struct Lex, StateStack, enum StringState)
-DEFINE_LIST(struct Lex, IntStack, int)
+DEFINE_LIST(struct Lex, StateStack, enum StringState,)
+DEFINE_LIST(struct Lex, IntStack, int,)
 
 Str *pawX_scan_str(struct Lex *lex, char const *s, size_t n);
 void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
 TokenKind pawX_next(struct Lex *lex);
 TokenKind pawX_peek(struct Lex *lex);
 
-// Convert a null-terminated string into an unsigned integer
-// Returns PAW_ESYNTAX if the integer is malformed, PAW_EOVERFLOW if it is too large to fit
-// in a paw_Uint, and PAW_OK otherwise.
-int pawX_parse_uint(char const *text, int base, paw_Uint *out);
+enum ParseIntStatus {
+    IPARSE_OK,
+    IPARSE_ERR_INVALID_BASE,
+    IPARSE_ERR_OVERFLOW,
+    IPARSE_ERR_SYNTAX,
+};
 
-int pawX_parse_int(char const *text, int base, paw_Int *out);
+// Convert a nonempty null-terminated string into a uint64
+enum ParseIntStatus pawX_parse_uint(char const *text, int base, paw_Uint64 *out);
 
-// Convert a null-terminated string into a float
-// Returns 0 on success, -1 otherwise.
-int pawX_parse_float(char const *text, paw_Float *out);
+// Convert a nonempty null-terminated string into an int64
+enum ParseIntStatus pawX_parse_int(char const *text, int base, paw_Int64 *out);
+
+enum ParseFloatStatus {
+    FPARSE_OK,
+    FPARSE_ERR_SYNTAX,
+};
+
+// Convert a nonempty null-terminated string into a float64
+enum ParseFloatStatus pawX_parse_float(char const *text, paw_Float64 *out);
 
 #endif // PAW_LEX_H

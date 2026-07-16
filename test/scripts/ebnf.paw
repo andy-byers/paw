@@ -15,24 +15,19 @@ use hashmap::HashMap;
 use list::List;
 use os;
 use string::String;
-use str_builder;
+use string_builder;
 
 const CHUNK_SIZE: int64 = 1 << 12;
 
-fn read_to_str(path: str) -> io::Result<str> {
+fn read_to_string(path: str) -> io::Result<String> {
     let file = io::File::open(path, "r")?;
 
     let chunk = List::<char>::with_length(CHUNK_SIZE);
-    let result = str_builder::Builder::new();
+    let result = string_builder::Builder::new();
     loop {
-        match file.read(chunk.to_slice_mut())? {
+        match file.read(chunk.to_slice())? {
             0 => return Ok(result.string()),
-            n => {
-                // TODO: bulk insertion
-                for c in chunk {
-                    result.append_char(c);
-                }
-            },
+            n => result.append(chunk),
         };
     }
 }
@@ -64,8 +59,8 @@ struct SourceLoc {
 }
 
 impl SourceLoc {
-    pub fn to_str(self) -> str {
-        "\{self.line}:\{self.column}"
+    pub fn to_string(self) -> String {
+        f"\{self.line}:\{self.column}".unwrap()
     }
 }
 
@@ -73,7 +68,7 @@ struct Scanner {
     token: Token,
     location: SourceLoc,
     source: str,
-    index: int64,
+    index: usize,
 }
 
 impl Scanner {
@@ -102,9 +97,9 @@ impl Scanner {
     }
 
     fn get_char(self) -> char {
-        if self.index < #self.source {
+        if self.index < self.source.len() {
             let c = self.source[self.index];
-            if (c == '\r' || c == '\n') {
+            if c == '\r' || c == '\n' {
                 self.location.line += 1;
                 self.location.column = 0;
             }
@@ -114,8 +109,8 @@ impl Scanner {
         }
     }
 
-    fn peek_char(self, n: int64) -> char {
-        if self.index < #self.source - n {
+    fn peek_char(self, n: usize) -> char {
+        if self.index < self.source.len() - n {
             self.source[self.index + n]
         } else {
             '\0'
@@ -181,22 +176,22 @@ impl Scanner {
         self.skip_char(); // skip '*'
 
         let loc = self.location;
-        let data = "";
+        let data = string_builder::Builder::new();
 
         loop {
             match self.get_char() {
                 // reached EOF: block comment was not terminated
-                '\0' => return self.new_error(loc, TokenErrorKind::UnterminatedComment, data),
+                '\0' => return self.new_error(loc, TokenErrorKind::UnterminatedComment, data.string()),
 
                 '*' if self.peek_char(1) == ')' => {
                     self.skip_char(); // skip '*'
                     self.skip_char(); // skip ')'
-                    return self.new_token(loc, TokenKind::Comment, data);
+                    return self.new_token(loc, TokenKind::Comment, data.string());
                 },
 
                 c => {
                     self.skip_char();
-                    data ++= c.to_str(); // TODO: allow "str ++ char" and "char ++ str"
+                    data.append_char(c).unwrap();
                 },
             }
         }
@@ -204,15 +199,15 @@ impl Scanner {
 
     fn scan_ident(self) -> Token {
         let loc = self.location;
-        let data = "";
+        let data = string_builder::Builder::new();
 
         loop {
             let c = self.get_char();
             if is_alnum(c) || c == '_' {
                 self.skip_char();
-                data ++= c.to_str();
+                data.append_char(c).unwrap();
             } else {
-                return self.new_token(loc, TokenKind::Ident, data);
+                return self.new_token(loc, TokenKind::Ident, data.string());
             }
         }
     }
@@ -221,7 +216,7 @@ impl Scanner {
         self.skip_char(); // """
 
         let string_loc = self.location;
-        let data = "";
+        let data = string_builder::Builder::new();
 
         loop {
             let char_loc = self.location;
@@ -229,74 +224,82 @@ impl Scanner {
                 '\\' => {
                     self.skip_char(); // skip '\'
                     match self.get_char() {
-                        '\\' => data ++= "\\",
-                        '"' => data ++= "\"",
-                        '/' => data ++= "/",
-                        'b' => data ++= "\b",
-                        'v' => data ++= "\v",
-                        'f' => data ++= "\f",
-                        'n' => data ++= "\n",
-                        'r' => data ++= "\r",
-                        't' => data ++= "\t",
+                        '\\' => data.append_char('\\').unwrap(),
+                        '"' => data.append_char('\"').unwrap(),
+                        '/' => data.append_char('/').unwrap(),
+                        'b' => data.append_char('\b').unwrap(),
+                        'v' => data.append_char('\v').unwrap(),
+                        'f' => data.append_char('\f').unwrap(),
+                        'n' => data.append_char('\n').unwrap(),
+                        'r' => data.append_char('\r').unwrap(),
+                        't' => data.append_char('\t').unwrap(),
                         'x' => {
                             self.skip_char();
                             let upper = self.get_char();
                             self.skip_char();
                             let lower = self.get_char();
                             if is_hex(upper) && is_hex(lower) {
-                                data ++= upper.to_str();
-                                data ++= lower.to_str();
+                                data.append_char(upper).unwrap();
+                                data.append_char(lower).unwrap();
                             } else {
                                 return self.new_error(char_loc, 
                                     TokenErrorKind::InvalidHexEscape, 
-                                    "\\x\{upper}\{lower}");
+                                    f"\\x\{upper}\{lower}".unwrap());
                             }
                         },
                         c => return self.new_error(char_loc, 
                                 TokenErrorKind::InvalidEscapeChar, 
-                                "'\{c}'"),
+                                f"'\{c}'".unwrap()),
                     }
                 },
                 '"' => {
                     self.skip_char(); // skip '"'
-                    return self.new_token(string_loc, TokenKind::String, data);
+                    return self.new_token(string_loc, TokenKind::String, data.string());
                 },
                 '\0' | '\r' | '\n' => break,
-                c => data ++= c.to_str(),
+                c => data.append_char(c).unwrap(),
             }
             self.skip_char();
         }
 
-        self.new_error(self.location, TokenErrorKind::UnterminatedString, data)
+        self.new_error(self.location, TokenErrorKind::UnterminatedString, data.string())
     }
 }
 
 struct Token {
     pub location: SourceLoc,
     pub kind: TokenKind,
-    pub data: str,
+    pub data: String,
 }
 
-impl Token {
-    pub fn to_str(self) -> str {
+impl fmt::Display for Token {
+    fn fmt(*self, f: *fmt::Formatter) -> fmt::Result<()> {
         match self.kind {
-            TokenKind::Ident => self.data,
-            TokenKind::String => "\"\{self.data}\"",
-            TokenKind::Comment => "(* \{self.data} *)",
-            TokenKind::LeftParen => "(",
-            TokenKind::RightParen => ")",
-            TokenKind::LeftSquare => "[",
-            TokenKind::RightSquare => "]",
-            TokenKind::LeftCurly => "{",
-            TokenKind::RightCurly => "}",
-            TokenKind::Pipe => "|",
-            TokenKind::Equals => "=",
-            TokenKind::Hyphen => "-",
-            TokenKind::DotDot => "..",
-            TokenKind::Dot => ".",
-            TokenKind::Eof => "",
+            TokenKind::Ident => f.write(self.data),
+            TokenKind::String => {
+                f.write_char('\"')?;
+                f.write(self.data)?;
+                f.write_char('\"')
+            },
+            TokenKind::Comment =>  {
+                f.write("(* ")?;
+                f.write(self.data)?;
+                f.write(" *)")
+            },
+            TokenKind::LeftParen => f.write_char('('),
+            TokenKind::RightParen => f.write_char(')'),
+            TokenKind::LeftSquare => f.write_char('['),
+            TokenKind::RightSquare => f.write_char(']'),
+            TokenKind::LeftCurly => f.write_char('{'),
+            TokenKind::RightCurly => f.write_char('}'),
+            TokenKind::Pipe => f.write_char('|'),
+            TokenKind::Equals => f.write_char('='),
+            TokenKind::Hyphen => f.write_char('-'),
+            TokenKind::DotDot => f.write(".."),
+            TokenKind::Dot => f.write_char('.'),
+            TokenKind::Eof => Ok(()),
 
-            TokenKind::Error(e) => e.to_str(),
+            TokenKind::Error(e) => e.fmt(f), // TODO: separate into Error type and use Result
         }
     }
 }
@@ -322,24 +325,24 @@ enum TokenKind {
 }
 
 impl TokenKind {
-    pub fn to_str(self) -> str {
+    pub fn to_string(self) -> String {
         match self {
-            TokenKind::Ident => "<ident>",
-            TokenKind::String => "<string>",
-            TokenKind::Comment => "<comment>",
-            TokenKind::LeftParen => "(",
-            TokenKind::RightParen => ")",
-            TokenKind::LeftSquare => "[",
-            TokenKind::RightSquare => "]",
-            TokenKind::LeftCurly => "{",
-            TokenKind::RightCurly => "}",
-            TokenKind::Pipe => "|",
-            TokenKind::Equals => "=",
-            TokenKind::Hyphen => "-",
-            TokenKind::DotDot => "..",
-            TokenKind::Dot => ".",
-            TokenKind::Eof => "",
-            TokenKind::Error(e) => e.to_str(),
+            TokenKind::Ident => f"<ident>".unwrap(),
+            TokenKind::String => f"<string>".unwrap(),
+            TokenKind::Comment => f"<comment>".unwrap(),
+            TokenKind::LeftParen => f"(".unwrap(),
+            TokenKind::RightParen => f")".unwrap(),
+            TokenKind::LeftSquare => f"[".unwrap(),
+            TokenKind::RightSquare => f"]".unwrap(),
+            TokenKind::LeftCurly => f"{".unwrap(),
+            TokenKind::RightCurly => f"}".unwrap(),
+            TokenKind::Pipe => f"|".unwrap(),
+            TokenKind::Equals => f"=".unwrap(),
+            TokenKind::Hyphen => f"-".unwrap(),
+            TokenKind::DotDot => f"..".unwrap(),
+            TokenKind::Dot => f".".unwrap(),
+            TokenKind::Eof => String::new(),
+            TokenKind::Error(e) => e.to_string(),
         }
     }
 
@@ -375,15 +378,15 @@ enum TokenErrorKind {
 }
 
 impl TokenErrorKind {
-    pub fn to_str(self) -> str {
-        match self {
-            TokenErrorKind::UnknownToken => "unknown token",
-            TokenErrorKind::UnterminatedString => "unterminated string",
-            TokenErrorKind::UnterminatedComment => "unterminated comment",
-            TokenErrorKind::InvalidEscapeChar => "invalid escape character",
-            TokenErrorKind::InvalidHexEscape => "invalid hex escape",
-        }
-    }
+//    pub fn to_str(self) -> str {
+//        match self {
+//            TokenErrorKind::UnknownToken => "unknown token",
+//            TokenErrorKind::UnterminatedString => "unterminated string",
+//            TokenErrorKind::UnterminatedComment => "unterminated comment",
+//            TokenErrorKind::InvalidEscapeChar => "invalid escape character",
+//            TokenErrorKind::InvalidHexEscape => "invalid hex escape",
+//        }
+//    }
 
     pub fn equals(self, k: TokenErrorKind) -> bool {
         match (self, k) {
@@ -410,8 +413,8 @@ struct ParseError {
 }
 
 impl ParseError {
-    pub fn to_str(self) -> str {
-        "\{self.location}: \{self.kind}"
+    pub fn to_string(self) -> String {
+        f"\{self.location}: \{self.kind}".unwrap()
     }
 }
 
@@ -424,12 +427,12 @@ enum ParseErrorKind {
 }
 
 impl ParseErrorKind {
-    pub fn to_str(self) -> str {
+    pub fn to_str(self) -> String {
         match self {
-            ParseErrorKind::UnterminatedString(s) => "unterminated string \"\{s}\"",
-            ParseErrorKind::UnterminatedComment => "unterminated comment",
-            ParseErrorKind::ExpectedToken(k, t) => "expected token \"\{k}\" but have \"\{t}\"",
-            ParseErrorKind::UnexpectedToken(t) => "unexpected token \"\{t}\"",
+            ParseErrorKind::UnterminatedString(s) => f"unterminated string \"\{s}\"".unwrap(),
+            ParseErrorKind::UnterminatedComment => f"unterminated comment".unwrap(),
+            ParseErrorKind::ExpectedToken(k, t) => f"expected token \"\{k}\" but have \"\{t}\"".unwrap(),
+            ParseErrorKind::UnexpectedToken(t) => f"unexpected token \"\{t}\"".unwrap(),
         }
     }
 }
@@ -443,12 +446,12 @@ impl Grammer {
         Self{productions}
     }
 
-    pub fn to_str(self) -> str {
-        let result = "";
+    pub fn to_string(self) -> String {
+        let result = string_builder::Builder::new();
         for p in self.productions {
-            result ++= "\{p}\n";
+            result.append(p.to_string()).unwrap();
         }
-        result
+        result.string()
     }
 }
 
@@ -458,8 +461,8 @@ struct Production {
 }
 
 impl Production {
-    pub fn to_str(self) -> str {
-        "\{self.ident} = \{self.expr} ."
+    pub fn to_string(self) -> String {
+        f"\{self.ident} = \{self.expr} .".unwrap()
     }
 }
 
@@ -468,13 +471,13 @@ struct Expression {
 }
 
 impl Expression {
-    pub fn to_str(self) -> str {
-        let result = "";
+    pub fn to_string(self) -> String {
+        let result = string_builder::Builder::new();
         for a in self.alts {
-            if #result > 0 { result ++= " | "; }
-            result ++= a.to_str();
+            if result.len() > 0 { result.append(" | ").unwrap(); }
+            result.append(a.to_string()).unwrap();
         }
-        result
+        result.string()
     }
 }
 
@@ -483,20 +486,20 @@ struct Alternative {
 }
 
 impl Alternative {
-    pub fn to_str(self) -> str {
-        let result = "";
+    pub fn to_string(self) -> String {
+        let result = string_builder::Builder::new();
         for t in self.terms {
-            if #result > 0 { result ++= " "; }
-            result ++= t.to_str();
+            if result.len() > 0 { result.append_char(' ').unwrap(); }
+            result.append(t.to_string()).unwrap();
         }
-        result
+        result.string()
     }
 }
 
 enum Term {
-    Ident(str),
-    Terminal(str),
-    Range(str, str),
+    Ident(String),
+    Terminal(String),
+    Range(String, String),
     Exception(Term, Term),
     Group(Expression),
     Option(Expression),
@@ -504,15 +507,15 @@ enum Term {
 }
 
 impl Term {
-    pub fn to_str(self) -> str {
+    pub fn to_string(self) -> String {
         match self {
             Term::Ident(data) => data,
-            Term::Terminal(data) => "\"\{data}\"",
-            Term::Range(lhs, rhs) => "\"\{lhs}\"..\"\{rhs}\"",
-            Term::Exception(lhs, rhs) =>  "\{lhs} - \{rhs}",
-            Term::Group(expr) => "(\{expr})",
-            Term::Option(expr) =>  "[\{expr}]",
-            Term::Repetition(expr) =>  "{\{expr}}",
+            Term::Terminal(data) => f"\"\{data}\"".unwrap(),
+            Term::Range(lhs, rhs) => f"\"\{lhs}\"..\"\{rhs}\"".unwrap(),
+            Term::Exception(lhs, rhs) =>  f"\{lhs} - \{rhs}".unwrap(),
+            Term::Group(expr) => f"(\{expr})".unwrap(),
+            Term::Option(expr) =>  f"[\{expr}]".unwrap(),
+            Term::Repetition(expr) =>  f"{\{expr}}".unwrap(),
         }
     }
 }
@@ -637,7 +640,7 @@ impl Parser {
                 _ => (),
             }
         }
-        if #result == 0 {
+        if result.len() == 0 {
             assert(false);
             //return Self::expected_term();
         }
@@ -720,13 +723,13 @@ fn foreach_ident(expr: Expression, callback: fn(str)) {
 }
 
 enum Analysis {
-    DuplicateIdent(str),
-    ReservedIdent(str),
-    UnrecognizedIdent(str),
-    Ok([str: Expression]),
+    DuplicateIdent(String),
+    ReservedIdent(String),
+    UnrecognizedIdent(String),
+    Ok(HashMap<String, Expression>),
 }
 
-fn analyze_definitions(g: Grammer, reserved: [str: ()]) -> Analysis {
+fn analyze_definitions(g: Grammer, reserved: HashMap<str, ()>) -> Analysis {
     let idents = HashMap::new();
     let result = HashMap::new();
 
@@ -734,13 +737,13 @@ fn analyze_definitions(g: Grammer, reserved: [str: ()]) -> Analysis {
         if result.contains(ident) {
             return Analysis::DuplicateIdent(ident);
         }
-        if reserved.contains(ident) {
+        if reserved.contains(ident.as_str()) {
             return Analysis::ReservedIdent(ident);
         }
         result[ident] = expr;
 
-        foreach_ident(expr, |ident: str| {
-            if !reserved.contains(ident) {
+        foreach_ident(expr, |ident: String| {
+            if !reserved.contains(ident.as_str()) {
                 idents[ident] = ();
             }
         });
@@ -796,13 +799,11 @@ impl App {
 
     pub fn error(self, message: str) -> ! {
         let parts = self.program_name.split("/");
-        panic("\{parts[-1]}: \{message}\n");
+        panic(f"\{parts[-1]}: \{message}\n".unwrap());
     }
 
     pub fn help(self) {
-        self.info("paw \{self.program_name} PATH"
-            ++ "=========================================="
-            ++ "PATH: Path to file containing EBNF grammer");
+        self.info(f"paw \{self.program_name} PATH\n==========================================\nPATH: Path to file containing EBNF grammer".unwrap());
     }
 }
 
@@ -824,21 +825,21 @@ fn test_check(source: str) -> int64 {
     }
 }
 
-fn test_expect(name: str, source: str, result: int64) {
+fn test_expect(name: str, source: str, result: int64) -> fmt::Result<()> {
     if test_check(source) != result {
-        panic("failed testcase \"\{name}\"");
+        panic(f"failed testcase \"\{name}\""?);
     }
 }
 
 #[test]
 pub fn test_ok() {
     let test = |name, source| {
-        test_expect(name, source, TEST_OK);
+        test_expect(name, source, TEST_OK).unwrap();
     };
 
     test("empty grammer", "");
     test("one production", "Ident = \"Terminal\" .");
-    test("two productions", "A = \"a\" ." ++ "B = \"b\" .");
+    test("two productions", "A = \"a\" .B = \"b\" .");
     test("one dependency", "A = B . B = \"x\" .");
     test("two dependencies", "A = B . B = C . C = \"x\" .");
 }
@@ -875,19 +876,19 @@ const SUCCESS: int64 = 0;
 const FAILURE: int64 = 1;
 
 
-fn run_app() -> Result<(), EbnfError> {
+fn run_app() -> Result<(), ()> {
     let args = os::args();
     let app = App::new(args.get(0).unwrap_or("ebnf"));
     let builtins = HashMap::new();
 
-    let path = if #args < 2 {
+    let path = if args.len() < 2 {
         app.error("missing PATH argument");
     } else {
         args[1]
     };
 
-    let source = match read_to_str(path) {
-        Err(e) => app.error("unable to read EBNF file \"\{path}\" (\{e})"),
+    let source = match read_to_string(path) {
+        Err(e) => app.error(f"unable to read EBNF file \"\{path}\" (\{e})".unwrap()),
         Ok(s) => s,
     };
 
@@ -897,18 +898,18 @@ fn run_app() -> Result<(), EbnfError> {
     // completes without encountering an error, then the EBNF is syntactically correct.
     let parser = Parser::new();
     let grammer = match parser.parse(scanner) {
-        Err(e) => app.error("\{e}"),
+        Err(e) => app.error(f"\{e}".unwrap()),
         Ok(g) => g,
     };
 
     // Ensure that all identifiers are defined.
     let mapping = match analyze_definitions(grammer, builtins) {
         Analysis::DuplicateIdent(ident) =>
-            app.error("duplicate identifier \"\{ident}\""),
+            app.error(f"duplicate identifier \"\{ident}\"".unwrap()),
         Analysis::ReservedIdent(ident) =>
-            app.error("definition of builtin identifier \"\{ident}\""),
+            app.error(f"definition of builtin identifier \"\{ident}\"".unwrap()),
         Analysis::UnrecognizedIdent(ident) =>
-            app.error("missing identifier \"\{ident}\""),
+            app.error(f"missing identifier \"\{ident}\"".unwrap()),
         Analysis::Ok(r) => r,
     };
 
@@ -916,19 +917,19 @@ fn run_app() -> Result<(), EbnfError> {
     Ok(())
 }
 
-pub fn main() -> int64 {
+pub fn main() {
     let args = os::args();
     let app = App::new(args.get(0).unwrap_or("ebnf"));
     let builtins = HashMap::new();
 
-    let path = if #args < 2 {
+    let path = if args.len() < 2 {
         app.error("missing PATH argument");
     } else {
         args[1]
     };
 
-    let source = match read_to_str(path) {
-        Err(e) => app.error("unable to read EBNF file \"\{path}\" (\{e})"),
+    let source = match read_to_string(path) {
+        Err(e) => app.error(f"unable to read EBNF file \"\{path}\" (\{e})".unwrap()),
         Ok(s) => s,
     };
 
@@ -938,22 +939,21 @@ pub fn main() -> int64 {
     // completes without encountering an error, then the EBNF is syntactically correct.
     let parser = Parser::new();
     let grammer = match parser.parse(scanner) {
-        Err(e) => app.error("\{e}"),
+        Err(e) => app.error(f"\{e}".unwrap()),
         Ok(g) => g,
     };
 
     // Ensure that all identifiers are defined.
     let mapping = match analyze_definitions(grammer, builtins) {
         Analysis::DuplicateIdent(ident) =>
-            app.error("duplicate identifier \"\{ident}\""),
+            app.error(f"duplicate identifier \"\{ident}\"".unwrap()),
         Analysis::ReservedIdent(ident) =>
-            app.error("definition of builtin identifier \"\{ident}\""),
+            app.error(f"definition of builtin identifier \"\{ident}\"".unwrap()),
         Analysis::UnrecognizedIdent(ident) =>
-            app.error("missing identifier \"\{ident}\""),
+            app.error(f"missing identifier \"\{ident}\"".unwrap()),
         Analysis::Ok(r) => r,
     };
 
     app.info("OK");
-    0
 }
 
