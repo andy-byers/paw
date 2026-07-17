@@ -48,6 +48,7 @@ PAW_DEFINE_RESULT(Usize, io_Error)
 #define PAW_IO_RESULT(T) paw_Result_##T##_io_Error
 
 PAW_IO_RESULT(io_File) paw_io_File_open(paw_Slice, paw_Slice);
+PAW_IO_RESULT(Unit) paw_io_File_close(paw_io_File);
 PAW_IO_RESULT(Unit) paw_io_File_seek(paw_io_File *, paw_Int64, paw_io_Seek);
 PAW_IO_RESULT(Int64) paw_io_File_tell(paw_io_File *);
 PAW_IO_RESULT(Unit) paw_io_File_flush(paw_io_File *);

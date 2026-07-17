@@ -91,7 +91,7 @@ TESTS=(
     "constants"
     "import"
     "alias"
-#    "misc"
+    "misc"
     "modification_sequence"
     "argument_sequence"
 #    "builtin_trait"

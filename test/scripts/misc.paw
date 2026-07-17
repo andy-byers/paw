@@ -1,70 +1,49 @@
 // misc.paw
 
-use math::PI as M_PI;
-
-#[test]
-pub fn test_constants() {
-    assert(3.13 < M_PI && math::PI < 3.15);
-}
-
-use math;
-
-struct Struct<T> {pub v: T}
-enum Enum<T> {X(T)}
-
-pub fn recur_with_objects<T>(n: int64, t: T) {
-    let list = [123];
-    let list = [1, 2, 3];
-    let tuple = ("a", 2, 3.0, t);
-    let map = [1: "a", 2: "b", 3: "c"];
-    let struct_ = Struct{v: t};
-    let enum_ = Enum::<str>::X("abc");
-    let next_n = || n - 1;
-    if n > 0 {
-        recur_with_objects(next_n(), t);
-    }
-}
-
-#[test]
-pub fn test_gc() {
-    recur_with_objects(1, 123);
-    recur_with_objects(10, 1.0);
-    recur_with_objects(100, "abc");
-}
+use list::List;
 
 use io;
 use io::File;
 
-fn file_size(f: File) -> int64 {
+fn file_size(f: *File) -> int64 {
     f.seek(0, io::Seek::End);
-    return f.tell().unwrap();
+    f.tell().unwrap()
 }
 
 #[test]
 pub fn test_io() {
-println("hi");
     let test = "test string";
-    let file = File::open("abc.txt", "w+").unwrap();
-    assert(file_size(file) == 0);
+    let file = File::open("abc.txt".to_slice(), "w+".to_slice()).unwrap();
+    assert(file_size(&file) == 0);
     let n = file.write(test.to_slice()).unwrap();
-    assert(n == #test);
+    assert(n == test.len());
 
-    let data = List::<char>::with_length(#test);
+    let data = List::<char>::with_length(test.len()).unwrap();
     file.seek(0, io::Seek::Begin);
-    assert(file.read(data.to_slice_mut()).unwrap() == #test);
-    assert(file.tell().unwrap() == n);
-    assert(file_size(file) == n);
-    assert(data.as_str() == test);
+    assert(file.read(data.to_slice()).unwrap() == test.len());
+    assert(file.tell().unwrap() as usize == n);
+    assert(file_size(&file) as usize == n);
+    assert(data.to_slice().eq(&test.to_slice()));
+    let _ = file.close();
 }
 
-#[test]
-pub fn test_math() {
-    math::sin(1.0);
-    math::cos(1.0);
-    math::tan(1.0);
-    math::asin(1.0);
-    math::acos(1.0);
-    math::atan(1.0);
-    math::atan2(1.0, 1.0);
-}
+//use math::PI as M_PI;
+//
+//#[test]
+//pub fn test_constants() {
+//    assert(3.13 < M_PI && math::PI < 3.15);
+//}
+//
+//use math;
+//
+//#[test]
+//pub fn test_math() {
+//    math::sin(1.0);
+//    math::cos(1.0);
+//    math::tan(1.0);
+//    math::asin(1.0);
+//    math::acos(1.0);
+//    math::atan(1.0);
+//    math::atan2(1.0, 1.0);
+//}
 

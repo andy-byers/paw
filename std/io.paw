@@ -29,6 +29,9 @@ impl File {
     #[extern = "paw_io_File_open"] 
     pub fn open(pathname: []char, mode: []char) -> Result<Self>;
 
+    #[extern = "paw_io_File_close"] 
+    pub fn close(self) -> Result<()>;
+
     #[extern = "paw_io_File_seek"] 
     pub fn seek(*self, offset: int64, whence: Seek) -> Result<()>;
 

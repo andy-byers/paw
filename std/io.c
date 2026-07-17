@@ -49,17 +49,16 @@ static int os_open(paw_Char const *pathname, paw_Char const *mode, paw_io_File *
     return -1;
 }
 
-static void os_close(paw_io_File *file)
+static int os_close(paw_io_File *file)
 {
-    if (file->inner == NULL)
-        return;
-    for (int i = 0; i < INTR_TIMEOUT; ++i) {
-        int const rc = fclose(file->inner);
-        if (rc == 0 || errno != EINTR) {
-            file->inner = NULL;
-            break;
-        }
-    }
+    // Check for multiple calls to this function on a particular File instance. This should
+    // never happen becuase (a) `Drop::drop()` is never called more than once on any value
+    // and (b) `File::close()`, which takes ownership of the File handle, is a C function,
+    // so there is no drop call generated when the File goes out of scope.
+    paw_assert(file->inner != NULL);
+    int const rc = fclose(file->inner);
+    file->inner = NULL;
+    return rc;
 }
 
 int os_seek(paw_io_File const *file, paw_Int64 offset, int whence)
@@ -173,6 +172,16 @@ PAW_IO_RESULT(io_File) paw_io_File_open(paw_Slice pathname, paw_Slice mode)
         return IO_RESULT_OK(io_File, file);
     } else {
         return IO_RESULT_ERR(io_File, check_errno());
+    }
+}
+
+// pub fn close(self) -> Result<()>
+PAW_IO_RESULT(Unit) paw_io_File_close(paw_io_File self)
+{
+    if (os_close(&self) == 0) {
+        return IO_RESULT_OK(Unit, PAW_UNIT());
+    } else {
+        return IO_RESULT_ERR(Unit, check_errno());
     }
 }
 

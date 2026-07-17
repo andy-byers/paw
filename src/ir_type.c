@@ -1258,6 +1258,8 @@ IrType *pawIr_materialize_drop_type(struct Compiler *C, IrType *type)
     struct IrImpl *impl = pawIr_new_impl(C, next_did(C), type, trait,
             IrGenericDefs_new(C), methods, IrAssocItems_new(C));
     ImplMap_insert(C, C->impl_defs, impl->did, impl);
+    IrConstraintsMap_insert(C, C->ir_constraints, impl->did, IrConstraints_new(C));
+    DefTypeMap_insert(C, C->def_types, impl->did, type);
 
     {
         IrDefs *trait_defs = pawIr_trait_impls_for(C, type);
@@ -1274,7 +1276,11 @@ IrType *pawIr_materialize_drop_type(struct Compiler *C, IrType *type)
             pawIr_new_unit(C), params, type, impl->did,
             PAW_TRUE);
     FnDefMap_insert(C, C->fn_defs, fn->did, fn);
-    IrType *drop = pawIr_new_signature(C, fn->did, IrGenericArgs_new(C));
+    IrGenericArgs *args = IrGenericArgs_new(C);
+    IrGenericTypes_insert(C, C->ir_generic_args, fn->did, args);
+    IrConstraintsMap_insert(C, C->ir_constraints, fn->did, IrConstraints_new(C));
+    IrType *drop = pawIr_new_signature(C, fn->did, args);
+    DefTypeMap_insert(C, C->def_types, fn->did, drop);
     IrTypeList_push(C, methods, drop);
     return drop;
 }
