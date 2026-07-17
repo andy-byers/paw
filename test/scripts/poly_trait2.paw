@@ -1,19 +1,22 @@
 // poly_trait2.paw
 
+use list::List;
+use string::String;
+
 pub trait TestDefault {
     fn test_default() -> Self;
 }
 
 pub trait TestMerge<Rhs> {
-    fn merge(&self, rhs: Rhs) -> Self;
+    fn merge(*self, rhs: *Rhs) -> Self;
 }
 
 pub trait TestReduce<T: TestMerge<T> + TestDefault> {
-    fn test_reduce(&self) -> T;
+    fn test_reduce(*self) -> T;
 }
 
-impl<T: TestMerge<T> + TestDefault> TestReduce<T> for [T] {
-    fn test_reduce(&self) -> T {
+impl<T: TestMerge<T> + TestDefault> TestReduce<T> for List<T> {
+    fn test_reduce(*self) -> T {
         let total = T::test_default();
         for value in self {
             total = total.merge(value);
@@ -29,20 +32,23 @@ impl TestDefault for int64 {
 }
 
 impl TestMerge<int64> for int64 {
-    fn merge(&self, rhs: Self) -> Self {
-        self + rhs
+    fn merge(*self, rhs: *Self) -> Self {
+        *self + *rhs
     }
 }
 
-impl TestDefault for str {
+impl TestDefault for String {
     fn test_default() -> Self {
-       ""
+       String::new()
     }
 }
 
-impl TestMerge<str> for str {
-    fn merge(&self, rhs: Self) -> Self {
-        self ++ rhs
+impl TestMerge<String> for String {
+    fn merge(*self, rhs: *Self) -> Self {
+        let result = String::new();
+        result.extend(self.to_slice()).unwrap();
+        result.extend(rhs.to_slice()).unwrap();
+        result
     }
 }
 
@@ -50,11 +56,17 @@ pub fn test_reduce<X: TestReduce<Y>, Y: TestMerge<Y> + TestDefault>(x: X) -> Y {
     x.test_reduce()
 }
 
-#[test]
-pub fn test() {
-    let list = [1, 2, 3, 4, 5];
+use fmt;
+fn test_aux() -> fmt::Result<()> {
+    let list = List::from_array([1, 2, 3, 4, 5])?;
     assert(test_reduce(list) == 15);
 
-    let list = ["", "H", "ello, wor", "ld!", ""];
-    assert(test_reduce(list) == "Hello, world!");
+    let list = List::from_array([f""?, f"H"?, f"ello, wor"?, f"ld!"?, f""?])?;
+    assert(test_reduce(list).eq(&f"Hello, world!"?));
+    Ok(())
+}
+
+#[test]
+pub fn test() {
+    test_aux().unwrap();
 }

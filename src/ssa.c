@@ -109,15 +109,13 @@ static struct MirPlace get_local_name(struct SsaConverter *S, MirRegister r)
 
 static void rename_input(struct SsaConverter *S, struct MirPlace *pp)
 {
-    if (pp->kind == MIR_PLACE_REGISTER
-            && is_trivial_value(S, pp->r))
+    if (pp->kind == MIR_PLACE_REGISTER && is_trivial_value(S, pp->r))
         *pp = get_local_name(S, pp->r);
 }
 
 static void rename_output(struct SsaConverter *S, struct MirPlace *pp)
 {
-    paw_assert(pp->kind == MIR_PLACE_REGISTER);
-    if (is_trivial_value(S, pp->r)) {
+    if (pp->kind == MIR_PLACE_REGISTER && is_trivial_value(S, pp->r)) {
         struct MirPlace const output = next_register(S, pp->type);
         set_local_name(S, pp->r, output);
         *pp = output;

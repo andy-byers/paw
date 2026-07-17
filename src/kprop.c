@@ -738,12 +738,13 @@ static void transform_instr(struct KProp *K, struct MirInstruction *instr)
     MirPlacePtrList const *stores = pawMir_get_stores(K->mir, instr);
     if (is_pure(instr) && !MirIsPhi(instr) && stores->count == 1) {
         struct MirPlace const store = *K_LIST_FIRST(stores);
-        paw_assert(store.kind == MIR_PLACE_REGISTER);
-        struct Cell const cell = *get_cell(K, store);
-        if (cell.info.kind == CELL_CONSTANT) {
-            // convert producing instruction into "LoadConstant"
-            into_load_k(instr, MIR_CONST(cell.info.k), store);
-            return;
+        if (store.kind == MIR_PLACE_REGISTER) {
+            struct Cell const cell = *get_cell(K, store);
+            if (cell.info.kind == CELL_CONSTANT) {
+                // convert producing instruction into "LoadConstant"
+                into_load_k(instr, MIR_CONST(cell.info.k), store);
+                return;
+            }
         }
     }
 
@@ -1044,8 +1045,8 @@ static void propagate_copy(struct KProp *K, struct MirMove const *move)
 
 static paw_Bool can_propagate(struct KProp *K, struct MirMove const *move)
 {
-    paw_assert(move->output.kind == MIR_PLACE_REGISTER);
     return move->target.kind == MIR_PLACE_REGISTER
+        && move->output.kind == MIR_PLACE_REGISTER
         && move->output.r.value > 0
         && !mir_reg_data(K->mir, move->target.r)->is_nontrivial
         && !mir_reg_data(K->mir, move->output.r)->is_nontrivial;

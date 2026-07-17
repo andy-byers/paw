@@ -2027,8 +2027,12 @@ private:
 
     void set_result(MirPlace place, llvm::Value *value)
     {
-        paw_assert(place.kind == MIR_PLACE_REGISTER);
-        B->CreateStore(value, state_->get_raw_value(place.r));
+        if (place.kind == MIR_PLACE_REGISTER) {
+            B->CreateStore(value, state_->get_raw_value(place.r));
+        } else {
+            paw_assert(place.kind == MIR_PLACE_UPVALUE);
+            B->CreateStore(value, state_->get_upvalue_ptr(unsigned(place.up)));
+        }
     }
 
 

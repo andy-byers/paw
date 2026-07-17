@@ -50,7 +50,7 @@ struct PolyAdt<S> {
     pub value: S,
 }
 
-impl<S> PolyAdt<S> {
+impl<S: Copy> PolyAdt<S> {
     pub fn method<T>(self, t: T) -> (S, T) {
         (self.value, t)
     }
@@ -72,12 +72,12 @@ pub fn test_call_poly() {
     assert(t.1 == "def");
 }
 
-pub fn call_indirect_method_poly<X, T>(x: X, t: T) -> (X, T) {
+pub fn call_indirect_method_poly<X: Copy, T>(x: X, t: T) -> (X, T) {
     let adt = PolyAdt{value: x};
     return adt.method(t);
 }
 
-pub fn call_indirect_assoc_fn_poly<X, T>(x: X, t: T) -> (X, T) {
+pub fn call_indirect_assoc_fn_poly<X: Copy, T>(x: X, t: T) -> (X, T) {
     return PolyAdt::assoc_fn(x, t);
 }
 

@@ -55,47 +55,44 @@ pub fn test_fields() {
 
 fn option(b: bool) -> Option<int64> {
     if b {
-        Option::<int64>::Some(42)
+        Some(42)
     } else {
-        Option::<int64>::None
+        None
     }
 }
 
 #[test]
 pub fn test_chain_option() {
-    let val = -1;
     let test = || -> Option<int64> {
         let i = option(true)?;
-        val = i;
-        return Option::<int64>::Some(i);
+        Some(i)
     };
-    test();
-    assert(val == 42);
+    assert(test().unwrap() == 42);
 
     let test = || -> Option<int64> {
         let i = option(false)?;
-        assert(false);
-        return Option::<int64>::Some(i);
+        panic("control should never reach here");
+        Some(i)
     };
     test();
 
     let test = |o: Option<int64>| {};
-    test(Option::<int64>::Some(123));
-    test(Option::<int64>::None);
+    test(Some(123));
+    test(None);
 }
 
 fn option2<Ty>(b: bool, v: Ty) -> Option<Ty> {
     if b {
-        return Option::<Ty>::Some(v);
+        Some(v)
     } else {
-        return Option::<Ty>::None;
+        None
     }
 }
 
 fn chain_option2_aux<Ty2>(v: Ty2) -> Option<Ty2> {
     let t = option2(false, v)?;
-    assert(false);
-    return Option::<Ty2>::Some(t);
+    panic("control should never reach here");
+    Some(t)
 }
 
 #[test]
@@ -114,19 +111,16 @@ fn result(b: bool) -> Result<int64, str> {
 
 #[test]
 pub fn test_chain_result() {
-    let val = -1;
     let test = || -> Result<int64, str> {
         let i = result(true)?;
-        val = i;
-        return Result::<int64, str>::Ok(i);
+        Ok(i)
     };
-    test();
-    assert(val == 42);
+    assert(test().unwrap() == 42);
 
     let test = || -> Result<int64, str> {
         let i = result(false)?;
-        assert(false);
-        return Result::<int64, str>::Ok(i);
+        panic("control should never reach here");
+        Ok(i)
     };
     test();
 }
