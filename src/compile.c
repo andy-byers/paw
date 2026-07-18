@@ -96,6 +96,7 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_RANGE_FULL] = pawS_new_fixed(P, "RangeFull");
     P->string_cache[CSTR_RANGE_INCLUSIVE] = pawS_new_fixed(P, "RangeInclusive");
     P->string_cache[CSTR_RANGE_TO_INCLUSIVE] = pawS_new_fixed(P, "RangeToInclusive");
+    P->string_cache[CSTR_MANUALLY_DROP] = pawS_new_fixed(P, "ManuallyDrop");
     P->string_cache[CSTR_HASH] = pawS_new_fixed(P, "Hash");
     P->string_cache[CSTR_EQUALS] = pawS_new_fixed(P, "Equals");
     P->string_cache[CSTR_COMPARE] = pawS_new_fixed(P, "Compare");
@@ -190,6 +191,8 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, IrType *type)
             return BUILTIN_RANGE_INCLUSIVE;
         } else if (base.value == C->builtins[BUILTIN_RANGE_TO_INCLUSIVE].did.value) {
             return BUILTIN_RANGE_TO_INCLUSIVE;
+        } else if (base.value == C->builtins[BUILTIN_MANUALLY_DROP].did.value) {
+            return BUILTIN_MANUALLY_DROP;
         }
     }
     return NBUILTINS;
@@ -444,6 +447,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     register_builtin(C, CSTR_RANGE_FULL, BUILTIN_RANGE_FULL);
     register_builtin(C, CSTR_RANGE_INCLUSIVE, BUILTIN_RANGE_INCLUSIVE);
     register_builtin(C, CSTR_RANGE_TO_INCLUSIVE, BUILTIN_RANGE_TO_INCLUSIVE);
+    register_builtin(C, CSTR_MANUALLY_DROP, BUILTIN_MANUALLY_DROP);
 
     // TODO: won't work, need to get symbol from linked C math lib (use #[extern = "M_PI"])
     // external constant values must be known in the frontend

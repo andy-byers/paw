@@ -1480,8 +1480,6 @@ static NodeId find_builtin_fn(struct LowerAst *L, char const *modname, char cons
             .span = {0});
 }
 
-#warning
-#include"stdio.h"
 void pawP_lower_ast(struct Compiler *C)
 {
     paw_Env *P = ENV(C);

@@ -51,6 +51,9 @@ pub fn drop<T>(value: T) {}
 
 pub fn drop_in_place<T>(ptr: *T) {}
 
+#[extern = "paw_mem_forget"]
+pub fn forget<T>(value: T);
+
 
 #[extern = "paw_mem_raw_alloc"] 
 fn raw_alloc(size: usize) -> Result<*char>;

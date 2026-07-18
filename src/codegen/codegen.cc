@@ -725,7 +725,7 @@ public:
         // type `T` in the Paw signature.
         if (pawIr_needs_drop(C, irtype)) {
             auto *irdrop = pawIr_get_custom_drop_type(C, irtype);
-            B->CreateCall(get_fn(irdrop)->get_fn(), state.get_arg(0));
+            B->CreateCall(get_fn(irdrop)->get_fn(), fn->get_arg(0));
         }
         state.create_return();
     }
@@ -765,13 +765,10 @@ public:
         state.create_return(result);
     }
 
-    // fn ptr::drop<T>(p: *T)
-    void generate_ptr_drop(Mir const *mir, Fn *fn)
+    // fn mem::forget<T>(value: T)
+    void generate_mem_forget(Mir const *mir, Fn *fn)
     {
         State state(X, fn);
-
-        // TODO: if "T: Drop", then call "<T as Drop>::drop()"
-
         state.create_return();
     }
 
@@ -827,40 +824,40 @@ public:
         }
 
         if (is_core_op(mir, "array", "repeat"))
-            generate_array_repeat(mir, fn);
+            return generate_array_repeat(mir, fn);
 
         if (is_core_op(mir, "array", "uninit"))
-            generate_array_uninit(mir, fn);
+            return generate_array_uninit(mir, fn);
 
         if (is_core_op(mir, "array", "zeros"))
-            generate_array_zeros(mir, fn);
+            return generate_array_zeros(mir, fn);
 
         if (is_core_op(mir, "ptr", "read"))
-            generate_ptr_read(mir, fn);
+            return generate_ptr_read(mir, fn);
 
         if (is_core_op(mir, "ptr", "write"))
-            generate_ptr_write(mir, fn);
+            return generate_ptr_write(mir, fn);
 
         if (is_core_op(mir, "ptr", "add"))
-            generate_ptr_add(mir, fn);
-
-        if (is_core_op(mir, "ptr", "drop"))
-            generate_ptr_drop(mir, fn);
+            return generate_ptr_add(mir, fn);
 
         if (is_core_op(mir, "ptr", "strlen"))
-            generate_ptr_strlen(mir, fn);
+            return generate_ptr_strlen(mir, fn);
 
         if (is_core_op(mir, "os", "args"))
-            generate_os_args(mir, fn);
+            return generate_os_args(mir, fn);
 
         if (is_core_op(mir, "mem", "sizeof"))
-            generate_sizeof_intrinsic(mir, fn);
+            return generate_sizeof_intrinsic(mir, fn);
 
         if (is_core_op(mir, "mem", "alignof"))
-            generate_alignof_intrinsic(mir, fn);
+            return generate_alignof_intrinsic(mir, fn);
+
+        if (is_core_op(mir, "mem", "forget"))
+            return generate_mem_forget(mir, fn);
 
         if (is_core_op(mir, "mem", "drop_in_place"))
-            generate_mem_drop_in_place(mir, fn);
+            return generate_mem_drop_in_place(mir, fn);
 
         if (mir->blocks->count == 0)
             return;

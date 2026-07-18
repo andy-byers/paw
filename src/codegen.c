@@ -224,17 +224,6 @@ static void register_items(struct Generator *G)
 
     K_LIST_XFOREACH (G->items, struct Mir *, p)
         compute_mir_layout(G, *p);
-
-    int const status = pawIr_solve_const_obligations(G->C);
-    if (status == -1) {
-        CODEGEN_ERROR(G, FalseConstObligation,
-                .modname = SCAN_STR(G->C, "TODO"),
-                .span = {0});
-    } else if (status != 0) {
-        CODEGEN_ERROR(G, UnsatisfiedConstObligation,
-                .modname = SCAN_STR(G->C, "TODO"),
-                .span = {0});
-    }
 }
 
 void pawP_generate_code(struct Compiler *C)

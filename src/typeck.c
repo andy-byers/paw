@@ -251,8 +251,6 @@ static struct IrSolverResult solve_pending_obligations(struct TypeChecker *T)
                     .cause = pawIr_print_obligation_cause(T->C, result.error.obligation.cause),
                     .span = result.error.obligation.cause.span);
     }
-    if (pawIr_solve_const_obligations(T->C) < 0)
-        TYPECK_ERROR(T, FalseConstObligation, .span = {0});
     return result;
 }
 
@@ -2454,10 +2452,16 @@ static void check_item(struct TypeChecker *T, struct HirDecl *item)
 
     struct IrSolverResult const result = solve_pending_obligations(T);
     if (result.status == IR_SOLVER_AMBIGUOUS) {
-        struct IrObligation const example = pawIr_solver_first_obligation(T->C->S);
-        TYPECK_ERROR(T, UnsatisfiedObligation,
-                .obligation = pawIr_print_obligation_(T->C, example),
-                .cause = pawIr_print_obligation_cause(T->C, example.cause));
+        IrObligations const *const_obligations = pawIr_solver_remove_const_obligations(T->C->S);
+        K_LIST_XFOREACH (const_obligations, struct IrObligation const, o)
+            IrObligations_push(T->C, T->C->const_obligations, *o);
+
+        if (pawIr_solver_num_obligations(T->C->S) > 0) {
+            struct IrObligation const example = pawIr_solver_first_obligation(T->C->S);
+            TYPECK_ERROR(T, UnsatisfiedObligation,
+                    .obligation = pawIr_print_obligation_(T->C, example),
+                    .cause = pawIr_print_obligation_cause(T->C, example.cause));
+        }
     }
 
     pawIr_pop_solver(T->C);

@@ -19,8 +19,6 @@ Paw is a statically-typed, ahead-of-time compiled, general-purpose programming l
 + Exhaustive pattern matching and sum types
 + Traits (interfaces checked at compile time)
 + Generics and generic bounds
-+ Core language never uses dynamic memory
-+ Standard library is optional
 
 ## Examples
 

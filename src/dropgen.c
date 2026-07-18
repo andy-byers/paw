@@ -24,6 +24,14 @@ static struct MirPlace new_register(struct Mir *mir, IrType *type)
         .type = type,
     };
 }
+static struct MirPlace new_constant(MirConstant k, IrType *type)
+{
+    return (struct MirPlace){
+        .kind = MIR_PLACE_CONSTANT,
+        .type = type,
+        .k = k,
+    };
+}
 
 static IrType *new_ptr(struct DropGenerator *G, IrType *pointee)
 {
@@ -33,6 +41,13 @@ static IrType *new_ptr(struct DropGenerator *G, IrType *pointee)
 static struct MirInstruction *select_field(struct Mir *mir, struct MirPlace object, int discr, int field, struct MirPlace output)
 {
     return pawMir_new_struct_gep(mir, TODO, output, object, field, discr);
+}
+
+static struct MirInstruction *select_element(struct Mir *mir, struct MirPlace object, paw_Uint64 index, struct MirPlace output)
+{
+    IrType *usize = pawIr_new_int(mir->C, IR_USIZE);
+    MirConstant const k = pawMir_kcache_add_value(mir, mir->kcache, (union IrValue){.u = index}, usize);
+    return pawMir_new_array_gep(mir, TODO, output, object, new_constant(k, usize));
 }
 
 static void pushi(struct Mir *mir, struct MirBlockData const *data, struct MirInstruction *instr)
@@ -48,6 +63,17 @@ static void drop_fields_in_reverse(struct DropGenerator *G, struct Mir *mir, str
             struct MirPlace const field = new_register(mir, new_ptr(G, field_type));
             pushi(mir, data, select_field(mir, place, 0, field_offset + i, field));
             pushi(mir, data, pawMir_new_drop(mir, TODO, field));
+        }
+    }
+}
+
+static void drop_elements_in_reverse(struct DropGenerator *G, struct Mir *mir, struct MirBlockData const *data, struct MirPlace place, IrType *element_type, paw_Uint64 length)
+{
+    if (pawIr_needs_drop(G->C, element_type)) {
+        for (paw_Uint64 ri = 0; ri < length; ++ri) {
+            struct MirPlace const element = new_register(mir, new_ptr(G, element_type));
+            pushi(mir, data, select_element(mir, place, length - ri - 1, element));
+            pushi(mir, data, pawMir_new_drop(mir, TODO, element));
         }
     }
 }
@@ -76,6 +102,21 @@ static void drop_tuple_fields(struct DropGenerator *G, struct Mir *mir, struct M
     struct IrTuple *t = IrGetTuple(tuple.type);
 
     drop_fields_in_reverse(G, mir, data, tuple, t->elems, 0);
+
+    MirInstructionList_push(mir, data->instructions, terminator);
+}
+
+static void drop_array_elements(struct DropGenerator *G, struct Mir *mir, struct MirPlace local)
+{
+    struct MirBlockData const *data = MirBlockDataList_last(mir->blocks);
+    struct MirInstruction *terminator = popi(data);
+
+    struct IrArray const *t = IrGetArray(ir_deref(local.type));
+
+    paw_assert(t->length->kind == IR_CONST_VALUE);
+    struct IrConstValue const len = t->length->value;
+    paw_assert(IrIsInt(len.type) && IR_INT_KIND(len.type) == IR_USIZE);
+    drop_elements_in_reverse(G, mir, data, local, t->type, len.value.usize);
 
     MirInstructionList_push(mir, data->instructions, terminator);
 }
@@ -168,7 +209,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
 
 // A type needs to be dropped if
 // (a) there exists an implementation of Drop for the type, or
-// (b) a field of type needs to be dropped
+// (b) a subcomponent (field or element) of type needs to be dropped
 //
 // At this phase of compilation, there exists a MIR object representing
 // the "drop" routine for each type that needs to be dropped. Add code
@@ -186,6 +227,8 @@ static void generate_drops_for_fields(struct DropGenerator *G, BodyList *bodies)
                     struct MirPlace const local = pawMir_get_register(*p, MIR_REG(1));
                     if (IrIsTuple((*p)->self)) {
                         drop_tuple_fields(G, *p, local);
+                    } else if (IrIsArray((*p)->self)) {
+                        drop_array_elements(G, *p, local);
                     } else if (IrIsAdt((*p)->self)) {
                         struct IrAdt const *t = IrGetAdt((*p)->self);
                         struct IrAdtDef const *def = pawIr_get_adt_def(G->C, t->did);

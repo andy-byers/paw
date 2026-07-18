@@ -636,9 +636,6 @@ struct IrConstObligation {
 
 DEFINE_LIST(struct Compiler, IrConstObligations, struct IrConstObligation,)
 
-void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs, struct IrConstObligationCause cause);
-int pawIr_solve_const_obligations(struct Compiler *C);
-
 paw_Bool pawIr_type_contains_inference_var(struct Compiler *C, IrType *type);
 paw_Bool pawIr_trait_contains_inference_var(struct Compiler *C, IrTrait *trait);
 

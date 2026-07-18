@@ -32,6 +32,54 @@ static void add_module_name(struct Compiler *C, Buffer *b, int modno)
 
 static void add_type(struct Compiler *C, Buffer *b, IrType *type);
 
+static void add_int_kind(paw_Env *P, Buffer *b, enum IrIntKind kind)
+{
+    switch (kind) {
+        case IR_INT8:
+            pawL_add_char(P, b, 'a');
+            break;
+        case IR_INT16:
+            pawL_add_char(P, b, 's');
+            break;
+        case IR_INT32:
+            pawL_add_char(P, b, 'i');
+            break;
+        case IR_INT64:
+            pawL_add_char(P, b, 'x');
+            break;
+        case IR_ISIZE:
+            pawL_add_char(P, b, 'j');
+            break;
+        case IR_UINT8:
+            pawL_add_char(P, b, 'h');
+            break;
+        case IR_UINT16:
+            pawL_add_char(P, b, 't');
+            break;
+        case IR_UINT32:
+            pawL_add_char(P, b, 'u');
+            break;
+        case IR_UINT64:
+            pawL_add_char(P, b, 'y');
+            break;
+        case IR_USIZE:
+            pawL_add_char(P, b, 'k');
+            break;
+    }
+}
+
+static void add_float_kind(paw_Env *P, Buffer *b, enum IrFloatKind kind)
+{
+    switch (kind) {
+        case IR_FLOAT32:
+            pawL_add_char(P, b, 'f');
+            break;
+        case IR_FLOAT64:
+            pawL_add_char(P, b, 'd');
+            break;
+    }
+}
+
 static void add_const(struct Compiler *C, Buffer *b, IrConst *konst)
 {
     paw_Env *P = ENV(C);
@@ -52,11 +100,11 @@ static void add_const(struct Compiler *C, Buffer *b, IrConst *konst)
                 pawL_add_char(P, b, 'c');
                 break;
             case kIrInt:
-                pawL_add_char(P, b, 'i');
+                add_int_kind(P, b, IR_INT_KIND(konst->value.type));
                 break;
             default:
-                paw_assert(IrIsFloat(konst->value.type));
-                pawL_add_char(P, b, 'f');
+                add_float_kind(P, b, IR_FLOAT_KIND(konst->value.type));
+                break;
         }
         pawL_add_hex(P, b, (paw_Uint)konst->value.value.i);
     }
@@ -84,6 +132,16 @@ static void add_generic_args(struct Compiler *C, Buffer *buf, IrGenericArgs *arg
     }
 }
 
+static void add_generic_args_omitting_self(struct Compiler *C, Buffer *buf, IrGenericArgs *args)
+{
+    if (args->count > 1) {
+        start_generic_args(C, buf);
+        for (int i = 1; i < args->count; ++i)
+            add_generic_arg(C, buf, IrGenericArgs_get(args, i));
+        finish_generic_args(C, buf);
+    }
+}
+
 static void add_type(struct Compiler *C, Buffer *b, IrType *type)
 {
     paw_Env *P = ENV(C);
@@ -99,48 +157,10 @@ static void add_type(struct Compiler *C, Buffer *b, IrType *type)
             pawL_add_char(P, b, 'c');
             break;
         case kIrInt:
-            switch (IR_INT_KIND(type)) {
-                case IR_INT8:
-                    pawL_add_char(P, b, 'a');
-                    break;
-                case IR_INT16:
-                    pawL_add_char(P, b, 's');
-                    break;
-                case IR_INT32:
-                    pawL_add_char(P, b, 'i');
-                    break;
-                case IR_INT64:
-                    pawL_add_char(P, b, 'x');
-                    break;
-                case IR_ISIZE:
-                    pawL_add_char(P, b, 'j');
-                    break;
-                case IR_UINT8:
-                    pawL_add_char(P, b, 'h');
-                    break;
-                case IR_UINT16:
-                    pawL_add_char(P, b, 't');
-                    break;
-                case IR_UINT32:
-                    pawL_add_char(P, b, 'u');
-                    break;
-                case IR_UINT64:
-                    pawL_add_char(P, b, 'y');
-                    break;
-                case IR_USIZE:
-                    pawL_add_char(P, b, 'k');
-                    break;
-            }
+            add_int_kind(P, b, IR_INT_KIND(type));
             break;
         case kIrFloat:
-            switch (IR_FLOAT_KIND(type)) {
-                case IR_FLOAT32:
-                    pawL_add_char(P, b, 'f');
-                    break;
-                case IR_FLOAT64:
-                    pawL_add_char(P, b, 'd');
-                    break;
-            }
+            add_float_kind(P, b, IR_FLOAT_KIND(type));
             break;
         case kIrString:
             pawL_add_char(P, b, 'w');
@@ -201,7 +221,7 @@ static void add_trait(struct Compiler *C, Buffer *b, IrTrait *trait)
 {
     struct IrTraitDef const *def = pawIr_get_trait_def(C, trait->did);
     add_rle_string(C, b, def->name);
-    add_generic_args(C, b, trait->args);
+    add_generic_args_omitting_self(C, b, trait->args);
 }
 
 static void add_fn_part(struct Compiler *C, Buffer *b, IrType *type)

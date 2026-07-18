@@ -88,20 +88,30 @@ fn call_index_range<R: IndexRange<Idx>, Idx>(r: *R, index: Idx) -> []R::Output {
 
 
 pub struct IntoIter<const N: usize, T> {
-    inner: [N]T,
+    inner: ManuallyDrop<[N]T>,
     index: usize,
 }
 
 use ptr;
+
+impl<const N: usize, T> Drop for IntoIter<{N}, T> {
+    fn drop(*self) {
+        let inner = self.inner.value.as_ptr();
+        for i in self.index..N {
+            let p = ptr::add(inner, i as isize);
+            mem::drop_in_place(p);
+        }
+    }
+}
 
 impl<const N: usize, T> Iterator for IntoIter<{N}, T> {
     type Item = T;
 
     fn next(*self) -> Option<Self::Item> {
         if self.index < N {
-            let value = ptr::read(&self.inner[self.index]);
+            let p = &self.inner.value[self.index];
             self.index += 1;
-            Some(value)
+            Some(ptr::read(p))
         } else {
             None
         }        
@@ -113,7 +123,7 @@ impl<const N: usize, T> IntoIterator for [N]T {
     type IntoIter = IntoIter<{N}, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter{inner: self, index: 0}
+        IntoIter{inner: ManuallyDrop{value: self}, index: 0}
     }
 }
 

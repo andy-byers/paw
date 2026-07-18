@@ -36,6 +36,7 @@ struct MonoCollector {
     struct Substitution subst;
     struct MirTypeFolder *F;
     struct Compiler *C;
+    struct Mir *base;
     struct Mir *mir;
     TypeCollection *functions;
     TypeCollection *cache;
@@ -132,9 +133,21 @@ static IrTrait *finalize_trait(struct MonoCollector *M, IrTrait *trait)
 
 static IrType *copy_type(struct MonoCollector *M, IrType *type);
 
+static MirConstant refresh_constant(struct MonoCollector *M, MirConstant k)
+{
+    struct MirConstantData const *kdata = mir_const_data(M->base, k);
+    IrConst *konst = kdata->data->kind == IR_CONST_DECL
+        ? finalize_const(M, kdata->data)
+        : kdata->data;
+    return pawMir_kcache_add_value(M->mir, M->mir->kcache,
+            konst->value.value, konst->value.type);
+}
+
 static struct MirPlace finalize_place(struct MonoCollector *M, struct MirPlace place)
 {
     place.type = copy_type(M, place.type);
+    if (place.kind == MIR_PLACE_CONSTANT)
+        place.k = refresh_constant(M, place.k);
     return place;
 }
 
@@ -172,10 +185,10 @@ static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct Mir
     r->arms = MirSwitchArmList_new(M->mir);
     MirSwitchArmList_reserve(M->mir, r->arms, t->arms->count);
 
-    struct MirSwitchArm const *parm;
-    K_LIST_FOREACH (t->arms, parm) {
-        MirSwitchArmList_push(M->mir, r->arms, *parm);
-    }
+    K_LIST_XFOREACH (t->arms, struct MirSwitchArm const, parm)
+        MirSwitchArmList_push(M->mir, r->arms, (struct MirSwitchArm){
+                    .k = refresh_constant(M, parm->k),
+                });
 }
 
 static void finalize_places(struct MonoCollector *M, struct MirPlacePtrList *src, struct MirPlacePtrList *dst)
@@ -229,7 +242,7 @@ static struct Mir *allocate_drop_template(struct MonoCollector *M, IrType *type,
 
     struct MirBlockData *data = pawMir_new_block(mir, MIR_SCOPE(0));
     MirBlockDataList_push(mir, mir->blocks, data);
-    MirConstant k = pawMir_kcache_add_value(mir, mir->kcache, I2V(0), pawIr_new_unit(M->C));
+    MirConstant const k = pawMir_kcache_add_value(mir, mir->kcache, I2V(0), pawIr_new_unit(M->C));
     struct MirPlace const value = {.kind = MIR_PLACE_CONSTANT, .k = k};
     MirInstructionList_push(mir, data->instructions, pawMir_new_alloc_local(mir, TODO, SCAN_STR(M->C, "(result)"), result_local));
     MirInstructionList_push(mir, data->instructions, pawMir_new_alloc_local(mir, TODO, SCAN_STR(M->C, "self"), self_local));
@@ -249,9 +262,13 @@ static void materialize_field_dropper(struct MonoCollector *M, IrType *type)
     if (IrIsTuple(type)) {
         struct IrTuple const *t = IrGetTuple(type);
         collect_drops_for(M, t->elems);
+    } else if (IrIsArray(type)) {
+        struct IrArray const *t = IrGetArray(type);
+        collect_drop_for(M, t->type);
     } else if (IrIsAdt(type)) {
         struct IrAdt *t = IrGetAdt(type);
         struct IrAdtDef const *def = pawIr_get_adt_def(M->C, t->did);
+        // TODO: just use pawP_instantiate_variant_fields, struct is ADT with 1 variant anyway
         if (def->is_struct) {
             IrTypeList *fields = pawP_instantiate_struct_fields(M->C, t);
             collect_drops_for(M, fields);
@@ -329,6 +346,7 @@ static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct Mir
 
 static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, IrType *type, IrType *self)
 {
+    M->base = base;
     M->mir = pawMir_new(M->C, base->modno, base->span, base->name, base->annotations,
             type, self, base->child_id, base->parent_id, base->fn_kind, base->is_pub, PAW_FALSE);
     return M->mir;
@@ -399,21 +417,21 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         }
     }
 
-    {
-        struct MirConstantData const *pdata;
-        K_LIST_FOREACH (base->kcache->data, pdata) {
-            IrConst *konst = pdata->data->kind == IR_CONST_DECL
-                ? finalize_const(M, pdata->data) : pdata->data;
-
-            if (konst->kind == IR_CONST_VALUE) {
-                struct IrConstValue const value = konst->value;
-                pawMir_kcache_add_value(inst, inst->kcache, value.value, value.type);
-            } else {
-                paw_assert(konst->kind == IR_CONST_DECL);
-                pawMir_kcache_add_param(inst, inst->kcache, konst->param.did);
-            }
-        }
-    }
+//TODO    {
+//TODO        struct MirConstantData const *pdata;
+//TODO        K_LIST_FOREACH (base->kcache->data, pdata) {
+//TODO            IrConst *konst = pdata->data->kind == IR_CONST_DECL
+//TODO                ? finalize_const(M, pdata->data) : pdata->data;
+//TODO
+//TODO            if (konst->kind == IR_CONST_VALUE) {
+//TODO                struct IrConstValue const value = konst->value;
+//TODO                pawMir_kcache_add_value(inst, inst->kcache, value.value, value.type);
+//TODO            } else {
+//TODO                paw_assert(konst->kind == IR_CONST_DECL);
+//TODO                pawMir_kcache_add_param(inst, inst->kcache, konst->param.did);
+//TODO            }
+//TODO        }
+//TODO    }
 
     {
         struct MirCaptureInfo const *pci;
@@ -502,6 +520,12 @@ static IrType *collect_type(struct IrTypeFolder *F, IrType *type)
     return type;
 }
 
+static void run_collector(struct MonoCollector *M, struct Mir *mir)
+{
+    M->mir = M->F->V.mir = mir;
+    pawMir_fold(M->F, mir);
+}
+
 struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
 {
     struct MirTypeFolder F;
@@ -537,11 +561,11 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
     while (M.pending->count > 0) {
         IrType *type = K_LIST_LAST(M.pending);
         IrTypeList_pop(M.pending);
+
         struct Mir *body = monomorphize(&M, type);
         TypeCollection_insert(C, M.functions, type, body);
         BodyList_push(C, M.globals, body);
-        M.mir = M.F->V.mir = body;
-        pawMir_fold(M.F, body);
+        run_collector(&M, body);
     }
 
     pawU_discard_variables(C->U);

@@ -40,6 +40,7 @@ TESTS=(
     "op_assign"
     "block"
     "pointer"
+    "drop"
 #    "code"
     "cast"
 #    "loop"

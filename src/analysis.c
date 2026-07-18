@@ -326,7 +326,7 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
     // must run before SSA conversion
     paw_assert(bb->joins->count == 0);
 
-    K_LIST_XFOREACH (bb->instructions, struct MirInstruction *const, pinstr) {
+    K_LIST_XFOREACH (bb->instructions, struct MirInstruction *, pinstr) {
         switch (MIR_KINDOF(*pinstr)) {
             case kMirAddrOf: {
                 struct MirAddrOf *x = MirGetAddrOf(*pinstr);
@@ -359,8 +359,16 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
                 maybe_indicate_move(V, MirGetKill(*pinstr)->target);
                 break;
 
-            case kMirDrop:
+            case kMirDrop: {
+                struct MirDrop const *x = MirGetDrop(*pinstr);
+                struct Variable *const *pvar = find_variable(V, x->target);
+                if (pvar != NULL) {
+                    enum VariableState const state = states_get(V->current, (*pvar)->id);
+                    if (state != VAR_INIT)
+                        *pinstr = pawMir_new_noop(V->mir, x->span);
+                }
                 break;
+            }
 
             case kMirStructGEP: {
                 struct MirStructGEP const *x = MirGetStructGEP(*pinstr);
@@ -506,9 +514,9 @@ static struct MirPlace push_move(struct Mir *mir, struct MirBlockData const *dat
 
 static void determine_cmoves(struct VariableAnalyzer *V)
 {
-    struct Mir *mir = V->mir;
+    struct Mir const *mir = V->mir;
     K_LIST_XFOREACH (mir->blocks, struct MirBlockData *const, pbb) {
-        struct MirBlockData *bb = *pbb;
+        struct MirBlockData const *bb = *pbb;
 
         VariableStates const *current = NULL;
         K_LIST_XFOREACH (bb->predecessors, MirBlock const, pp) {

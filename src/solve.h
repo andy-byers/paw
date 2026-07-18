@@ -13,6 +13,7 @@ struct IrGenericArgs;
 enum IrObligationKind {
     IR_OBLIGATION_IMPL_TRAIT,
     IR_OBLIGATION_TYPE_EQUALS,
+    IR_OBLIGATION_CONST_EQUALS,
     IR_OBLIGATION_WELL_FORMED,
 };
 
@@ -56,6 +57,11 @@ struct IrObligation {
         } eq;
 
         struct {
+            struct IrConst *lhs;
+            struct IrConst *rhs;
+        } keq;
+
+        struct {
             DeclId did;
             struct IrGenericArgs *args;
         } wf;
@@ -70,6 +76,9 @@ void pawIr_pop_solver(struct Compiler *C);
 void pawIr_solver_add_well_formed_obligation(IrSolver *S, DeclId did, struct IrGenericArgs *args, struct IrObligationCause cause);
 void pawIr_solver_add_impl_trait_obligation(IrSolver *S, struct IrType *type, struct IrTrait *trait, struct IrObligationCause cause);
 void pawIr_solver_add_type_equals_obligation(IrSolver *S, struct IrType *lhs, struct IrType *rhs, struct IrObligationCause cause);
+void pawIr_solver_add_const_equals_obligation(IrSolver *S, struct IrConst *lhs, struct IrConst *rhs, struct IrObligationCause cause);
+
+IrObligations *pawIr_solver_remove_const_obligations(IrSolver *S);
 
 struct IrType *pawIr_solver_get_norm_target(IrSolver *S, struct IrType *type);
 void pawIr_solver_add_norm_target(IrSolver *S, struct IrType *type, struct IrType *target, struct IrObligationCause cause);
@@ -119,6 +128,12 @@ struct IrSolverResult {
 };
 
 struct IrSolverResult pawIr_solver_solve(IrSolver *S);
+void pawIr_solver_solve_all_or_error(IrSolver *S);
+
+static paw_Bool pawIr_solver_solve_all(IrSolver *S)
+{
+    return pawIr_solver_solve(S).status == IR_SOLVER_SOLVED;
+}
 
 int pawIr_solver_num_obligations(IrSolver const *S);
 struct IrObligation pawIr_solver_first_obligation(IrSolver const *S);

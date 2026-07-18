@@ -799,15 +799,6 @@ IrTrait *pawIr_get_trait_context(struct Compiler *C, IrType *fn)
             impl_def->did, IR_GENERIC_ARGS(fn)).trait;
 }
 
-void pawIr_add_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs, struct IrConstObligationCause cause)
-{
-    IrConstObligations_push(C, C->const_obligations, (struct IrConstObligation){
-                .cause = cause,
-                .lhs = lhs,
-                .rhs = rhs,
-            });
-}
-
 static paw_Bool const_equals(union IrValue x, union IrValue y, IrType *type)
 {
     switch (IR_KINDOF(type)) {
@@ -822,34 +813,6 @@ static paw_Bool const_equals(union IrValue x, union IrValue y, IrType *type)
             paw_assert(IrIsFloat(type));
             return x.f == y.f;
     }
-}
-
-static enum ObligationResult {
-    OR_ERROR,
-    OR_SOLVED,
-    OR_UNKNOWN,
-} solve_const_obligation(struct Compiler *C, IrConst *lhs, IrConst *rhs)
-{
-    if (pawU_unify_const(C->U, lhs, rhs) == 0)
-        return OR_SOLVED;
-    return OR_UNKNOWN;
-}
-
-int pawIr_solve_const_obligations(struct Compiler *C)
-{
-    for (int index = 0; index < C->const_obligations->count; ) {
-        struct IrConstObligation const o = IrConstObligations_get(C->const_obligations, index);
-        enum ObligationResult const status = solve_const_obligation(C, o.lhs, o.rhs);
-        if (status == OR_SOLVED) {
-            IrConstObligations_swap_remove(C->const_obligations, index);
-        } else if (status == OR_ERROR) {
-            return -1;
-        } else {
-            ++index;
-        }
-    }
-
-    return C->const_obligations->count;
 }
 
 static void report_type_var(struct IrTypeVisitor *V, struct IrInfer *t)
@@ -1189,11 +1152,8 @@ paw_Bool pawIr_const_equals(struct Compiler *C, IrConst const *a, IrConst const 
         case IR_CONST_VALUE:
             return pawIr_type_equals(C, a->value.type, b->value.type)
                 && a->value.value.i == b->value.value.i;
-        case IR_CONST_INFER:
-            // TODO: either expect never to call this function on an inference var or at least normalize and try again
-            return a->infer.depth == b->infer.depth
-                && a->infer.index == b->infer.index;
-        case IR_CONST_DECL:
+        default:
+            paw_assert(a->kind == IR_CONST_DECL);
             return P_ID_EQUALS(C, a->decl.did, b->decl.did);
     }
 }
@@ -1226,21 +1186,39 @@ IrType *pawIr_get_custom_drop_type(struct Compiler *C, IrType *type)
     IrDefs const *trait_defs = pawIr_trait_impls_for(C, type);
     K_LIST_XFOREACH (trait_defs, DeclId const, p) {
         struct IrImpl const *def = pawIr_get_impl_def(C, *p);
-        if (pawIr_type_equals(C, def->type, type)
-                && MIR_ID_EQUALS(def->trait->did, drop_did))
-            return IrTypeList_first(def->methods);
+        if (P_ID_EQUALS(NULL, def->trait->did, drop_did)) {
+            IrSolver *S = pawIr_push_solver(C);
+            int const position = pawU_current_position(C->U);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(S, *p);
+            pawIr_solver_add_obligations_from(S, *p, inst.args, (struct IrObligationCause){0});
+            paw_Bool const matches = P_ID_EQUALS(NULL, inst.trait->did, drop_did)
+                && pawU_unify(C->U, inst.type, type) == 0
+                && pawIr_solver_solve_all(S);
+            pawIr_pop_solver(C);
+
+            if (matches) {
+                IrType *method = IrTypeList_first(def->methods);
+                if (def->generics->count == 0) return method;
+                // `Drop::drop()` has no generic args of its own, meaning `inst.args`
+                // can be used directly
+                return pawIr_solver_instantiate_type_with(C->S,
+                        IR_TYPE_DID(method), inst.args);
+            }
+            pawU_undo_unifications(C->U, position);
+        }
     }
     return NULL;
 }
 
 
-static paw_Bool field_needs_drop_aux(struct Compiler *C, IrTypeList *types, IrTypeList *result)
+static paw_Bool any_needs_drop(struct Compiler *C, IrTypeList *types)
 {
     K_LIST_XFOREACH (types, IrType *const, p) {
         if (pawIr_needs_drop(C, *p)) return PAW_TRUE;
     }
     return PAW_FALSE;
 }
+
 
 static DeclId next_did(struct Compiler *C)
 {
@@ -1285,29 +1263,21 @@ IrType *pawIr_materialize_drop_type(struct Compiler *C, IrType *type)
     return drop;
 }
 
-static paw_Bool needs_drop_in_list(struct Compiler *C, IrTypeList *types)
-{
-    K_LIST_XFOREACH (types, IrType *const, p) {
-        if (pawIr_needs_drop(C, *p)) return PAW_TRUE;
-    }
-    return PAW_FALSE;
-}
-
 static paw_Bool has_field_with_drop(struct Compiler *C, IrType *type)
 {
     if (IrIsTuple(type)) {
         struct IrTuple const *t = IrGetTuple(type);
-        return needs_drop_in_list(C, t->elems);
+        return any_needs_drop(C, t->elems);
     } else if (IrIsAdt(type)) {
         struct IrAdt *t = IrGetAdt(type);
         struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
         if (def->is_struct) {
             IrTypeList *fields = pawP_instantiate_struct_fields(C, t);
-            return needs_drop_in_list(C, fields);
+            return any_needs_drop(C, fields);
         } else {
             K_LIST_XFOREACH (def->variants, struct IrVariantDef *const, v) {
                 IrTypeList *fields = pawP_instantiate_variant_fields(C, t, (*v)->discr);
-                if (needs_drop_in_list(C, fields)) return PAW_TRUE;
+                if (any_needs_drop(C, fields)) return PAW_TRUE;
             }
         }
     } else if (IrIsArray(type)) {
@@ -1324,35 +1294,38 @@ IrType *pawIr_get_drop_type(struct Compiler *C, IrType *type)
     return drop;
 }
 
-static paw_Bool field_needs_drop(struct Compiler *C, IrType *type)
-{
-    IrTypeList *result = IrTypeList_new(C);
-    if (IrIsTuple(type)) {
-        struct IrTuple const *t = IrGetTuple(type);
-        return field_needs_drop_aux(C, t->elems, result);
-    } else if (IrIsAdt(type)) {
-        struct IrAdt *t = IrGetAdt(type);
-        struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
-        if (def->is_struct) {
-            IrTypeList *fields = pawP_instantiate_struct_fields(C, t);
-            return field_needs_drop_aux(C, fields, result);
-        } else {
-            K_LIST_XFOREACH (def->variants, struct IrVariantDef *const, v) {
-                IrTypeList *fields = pawP_instantiate_variant_fields(C, t, (*v)->discr);
-                if (field_needs_drop_aux(C, fields, result)) return PAW_TRUE;
-            }
-            return PAW_FALSE;
-        }
-    }
-    return PAW_FALSE;
-}
-
 paw_Bool pawIr_needs_drop(struct Compiler *C, IrType *type)
 {
     if (IrIsGeneric(type)) return PAW_TRUE;
     IrType *drop = pawIr_get_custom_drop_type(C, type);
     if (drop != NULL) return PAW_TRUE;
-    return field_needs_drop(C, type);
+
+    if (IrIsTuple(type)) {
+        struct IrTuple const *t = IrGetTuple(type);
+        return any_needs_drop(C, t->elems);
+    } else if (IrIsArray(type)) {
+        struct IrArray const *t = IrGetArray(type);
+        return pawIr_needs_drop(C, t->type);
+    } else if (IrIsAdt(type)) {
+        struct IrAdt *t = IrGetAdt(type);
+        struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
+        {
+            // special case: Drop is not generated for ManuallyDrop instances
+            struct Builtin const *b = pawP_builtin_info(C, BUILTIN_MANUALLY_DROP);
+            if (P_ID_EQUALS(NULL, def->did, b->did)) return PAW_FALSE;
+        }
+        if (def->is_struct) {
+            IrTypeList *fields = pawP_instantiate_struct_fields(C, t);
+            return any_needs_drop(C, fields);
+        } else {
+            K_LIST_XFOREACH (def->variants, struct IrVariantDef *const, v) {
+                IrTypeList *fields = pawP_instantiate_variant_fields(C, t, (*v)->discr);
+                if (any_needs_drop(C, fields)) return PAW_TRUE;
+            }
+            return PAW_FALSE;
+        }
+    }
+    return PAW_FALSE;
 }
 
 paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type)

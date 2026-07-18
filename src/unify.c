@@ -598,10 +598,14 @@ static int unify(struct Unifier *U, IrType *a, IrType *b);
 
 static int unify_array(struct Unifier *U, struct IrArray *a, struct IrArray *b)
 {
-    // TODO: need to undo const obligations, maybe store in IrSolver. the problem is they can be long-lived
-    if (pawU_unify_const(U, a->length, b->length) != 0)
-        pawIr_add_const_obligation(U->C, a->length, b->length,
-                (struct IrConstObligationCause){0});
+    if (pawU_unify_const(U, a->length, b->length) != 0) {
+        if (a->length->kind != IR_CONST_PENDING
+                && b->length->kind != IR_CONST_PENDING)
+            // "const equals" obligation would fail anyway
+            return -1;
+        pawIr_solver_add_const_equals_obligation(U->C->S, a->length, b->length,
+                (struct IrObligationCause){0});
+    }
     return pawU_unify(U, a->type, b->type);
 }
 

@@ -286,9 +286,12 @@ impl<T> IntoIter<T> {
 
 impl<T> Drop for IntoIter<T> {
     fn drop(*self) {
-        let t = ptr::replace(&self.inner, List::new())
-            .into_raw_parts();        
-        let _ = List::from_raw_parts(t.0, 0, t.2);
+        for i in self.index..self.inner.len() {
+            mem::drop_in_place(self.inner.get_element_ptr(i));
+        }
+
+        // prevent elements from being dropped again
+        self.inner.length = 0;
     }
 }
 

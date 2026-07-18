@@ -201,6 +201,16 @@ void pawIr_solver_add_type_equals_obligation(IrSolver *S, struct IrType *lhs, st
         });
 }
 
+void pawIr_solver_add_const_equals_obligation(IrSolver *S, struct IrConst *lhs, struct IrConst *rhs, struct IrObligationCause cause)
+{
+    IrObligations_push(S->C, S->obligations, (struct IrObligation){
+            .kind = IR_OBLIGATION_CONST_EQUALS,
+            .cause = cause,
+            .keq.lhs = lhs,
+            .keq.rhs = rhs,
+        });
+}
+
 static void add_obligations(IrSolver *S, DeclId did, struct Substitution subst, PredicateCache *cache, struct IrObligationCause cause)
 {
     if (PredicateCache_insert(S->C, cache, did, NULL))
@@ -289,6 +299,7 @@ static paw_Bool matches_impl_predicate(IrSolver *S, IrType *type, IrTrait *trait
                     break;
             }
             case IR_OBLIGATION_TYPE_EQUALS:
+            case IR_OBLIGATION_CONST_EQUALS:
             case IR_OBLIGATION_WELL_FORMED:
                 break;
         }
@@ -520,6 +531,17 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     }
                     break;
                 }
+                case IR_OBLIGATION_CONST_EQUALS: {
+                    IrConst *lhs = pawU_normalize_const(S->U, o.keq.lhs);
+                    IrConst *rhs = pawU_normalize_const(S->U, o.keq.rhs);
+                    if (lhs->kind == IR_CONST_PENDING
+                            || rhs->kind == IR_CONST_PENDING)
+                        break; // ambiguous
+                    if (pawU_unify_const(S->U, lhs, rhs) != 0)
+                        return RESULT_ERROR(o);
+                    solved = PAW_TRUE;
+                    break;
+                }
             }
             if (solved) {
                 IrObligations_swap_remove(S->obligations, i--);
@@ -536,6 +558,30 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
 
     LOGLN("SOLVER:%p: finished with SUCCESS status", (void *)S);
     return RESULT_SOLVED();
+}
+
+void pawIr_solver_solve_all_or_error(IrSolver *S)
+{
+    struct IrSolverResult const r = pawIr_solver_solve(S);
+    if (r.status != IR_SOLVER_SOLVED)
+        THROW_ERROR(S->C, Unsupported,
+                .modname = S->C->modname,
+                .span = {0});
+}
+
+IrObligations *pawIr_solver_remove_const_obligations(IrSolver *S)
+{
+    IrObligations *result = IrObligations_new(S->C);
+    for (int i = 0; i < S->obligations->count;) {
+        struct IrObligation const o = IrObligations_get(S->obligations, i);
+        if (o.kind == IR_OBLIGATION_CONST_EQUALS) {
+            IrObligations_push(S->C, result, o);
+            IrObligations_swap_remove(S->obligations, i);
+        } else {
+            ++i;
+        }
+    }
+    return result;
 }
 
 int pawIr_solver_num_obligations(IrSolver const *S)

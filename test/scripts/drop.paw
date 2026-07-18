@@ -1,0 +1,194 @@
+// drop.paw
+
+// TODO: drop order is subject to change. consider just making sure drop is called on each element ignoring order
+
+use io;
+use iter;
+use list::List;
+use string::String;
+use string_builder;
+
+struct Droppable {
+    tag: int64,
+    tracker: *List<int64>,
+}
+
+impl Drop for Droppable {
+    fn drop(*self) {
+        assert(self.tag != -1);
+        self.tracker.push(self.tag).unwrap();
+        self.tag = -1;
+    }
+}
+
+struct Test {
+    tracker: List<int64>,
+    num_droppables: usize,
+}
+
+impl Test {
+    pub fn new() -> Self {
+        Self{tracker: List::new(), num_droppables: 0}
+    }
+
+    pub fn create_droppable(*self) -> Droppable {
+        self.num_droppables += 1;
+        Droppable{
+            tag: self.num_droppables as int64, 
+            tracker: &self.tracker,
+        }
+    }
+
+    fn render_tracker<I: IntoIterator<Item = *int64>>(iter: I) -> String {
+        let b = string_builder::Builder::new();
+        b.append_char('[').unwrap();
+        for (i, x) in iter::zip(0.., iter) {
+            if i > 0 { b.append(", ").unwrap(); }
+            b.append(&f"\{*x}".unwrap()).unwrap();
+        }
+        b.append_char(']').unwrap();
+        b.string()
+    }
+
+    pub fn assert_order<const N: usize>(*self, order: [N]int64) {
+        let ok = self.tracker.len() == N;
+        if ok {
+            for (x, y) in iter::zip(&self.tracker, &order) {
+                if *x != *y { ok = false; }
+            }
+        }
+        if !ok {
+            io::println(f"have: \{Self::render_tracker(&self.tracker)}".unwrap());
+            io::println(f"want: \{Self::render_tracker(&order)}".unwrap());
+            panic("incorrect drop order\n");
+        }
+    }
+}
+
+struct Struct {
+    a: Droppable,
+    b: Droppable,
+    c: Droppable,
+}
+
+#[test]
+pub fn struct_fields_are_dropped() {
+    let test = Test::new();
+    {
+        let x = Struct{
+            a: test.create_droppable(),
+            b: test.create_droppable(),
+            c: test.create_droppable(),
+        };
+    }
+    test.assert_order([3, 2, 1]);
+}
+
+#[test]
+pub fn tuple_fields_are_dropped() {
+    let test = Test::new();
+    {
+        let x = (
+            test.create_droppable(),
+            (
+                test.create_droppable(),
+                (
+                    test.create_droppable(),
+                    test.create_droppable(),
+                ),
+            ),
+        );
+    }
+    test.assert_order([4, 3, 2, 1]);
+}
+
+#[test]
+pub fn array_elements_are_dropped() {
+    let test = Test::new();
+    {
+        let a = [
+            test.create_droppable(), 
+            test.create_droppable(), 
+            test.create_droppable(),
+        ];
+    }
+    test.assert_order([3, 2, 1]);
+}
+
+#[test]
+pub fn list_elements_are_dropped() {
+    let test = Test::new();
+    {
+        let x = List::new();
+        x.push(test.create_droppable()).unwrap(); 
+        x.push(test.create_droppable()).unwrap(); 
+        x.push(test.create_droppable()).unwrap(); 
+    }
+    test.assert_order([3, 2, 1]);
+}
+
+#[test]
+pub fn iterator_behavior() {
+    let test = Test::new();
+    {
+        let a = [
+            test.create_droppable(), 
+            test.create_droppable(), 
+            test.create_droppable(),
+            test.create_droppable(),
+            test.create_droppable(),
+        ];
+        let iter = a.into_iter();
+        let v1 = iter.next().unwrap();
+        let v2 = iter.next().unwrap();
+        let v3 = iter.next().unwrap();
+        let iter = iter;
+    }
+    test.assert_order([4, 5, 3, 2, 1]);
+}
+
+#[test]
+pub fn array_elements_are_consumed_by_iterator() {
+    let test = Test::new();
+    {
+        let a = [
+            test.create_droppable(), 
+            test.create_droppable(), 
+            test.create_droppable(),
+        ];
+        for v in a {}
+    }
+    test.assert_order([1, 2, 3]);
+}
+
+#[test]
+pub fn list_elements_are_consumed_by_iterator() {
+    let test = Test::new();
+    {
+        let x = List::new();
+        x.push(test.create_droppable()).unwrap(); 
+        x.push(test.create_droppable()).unwrap(); 
+        x.push(test.create_droppable()).unwrap(); 
+        for v in x {}
+    }
+    test.assert_order([1, 2, 3]);
+}
+
+#[test]
+pub fn drop_is_called_on_nested_fields() {
+    let test = Test::new();
+    {
+        let a = (
+            [
+                Struct{
+                    a: test.create_droppable(),
+                    b: test.create_droppable(),
+                    c: test.create_droppable(),
+                },
+            ],
+            test.create_droppable(),
+            test.create_droppable(),
+        );
+    }
+    test.assert_order([5, 4, 3, 2, 1]);
+}

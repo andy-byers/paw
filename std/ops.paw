@@ -578,6 +578,18 @@ impl<I: Iterator> IntoIterator for I {
 }
 
 
+#[core_item]
+pub struct ManuallyDrop<T> {
+    pub value: T,
+}
+
+impl<T> ManuallyDrop<T> {
+    pub fn drop(*self) {
+        mem::drop_in_place(&self.value);
+    }
+}
+
+
 // TODO: This is a helper to make range indexing more ergonomic until Index can be specialized for Range* types (need unsized types so Index can return a slice, i.e. slices need to be a pointer type)
 pub trait IndexRange<Idx> {
     type Output;

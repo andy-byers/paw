@@ -173,7 +173,7 @@ struct Compiler {
     struct IrTraitBounds *ir_trait_bounds;
     struct IrPendingConstants *pending_constants;
     struct IrResolvedConstants *resolved_constants;
-    struct IrConstObligations *const_obligations;
+    struct IrObligations *const_obligations;
     struct NodeMap *self_types;
     struct IrType2Map *indexes;
 
