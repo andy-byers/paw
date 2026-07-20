@@ -84,6 +84,21 @@ pub fn struct_fields_are_dropped() {
     test.assert_order([3, 2, 1]);
 }
 
+enum Enum {
+    First(Droppable),
+    Second(Droppable, Droppable),
+}
+
+#[test]
+pub fn enum_variants_are_dropped() {
+    let test = Test::new();
+    {
+        let a = Enum::First(test.create_droppable());
+        let b = Enum::Second(test.create_droppable(), test.create_droppable());
+    }
+    test.assert_order([3, 2, 1]);
+}
+
 #[test]
 pub fn tuple_fields_are_dropped() {
     let test = Test::new();
@@ -192,3 +207,20 @@ pub fn drop_is_called_on_nested_fields() {
     }
     test.assert_order([5, 4, 3, 2, 1]);
 }
+
+#[test]
+pub fn unpack_enum_variants() {
+    let defer = None;
+    let test = Test::new();
+    {
+        // NOTE: `target` must not be dropped since it was destructured by-value
+        let target = Enum::Second(test.create_droppable(), test.create_droppable());
+        match target {
+            Enum::First(a) => (),
+            Enum::Second(a, b) => defer = Some(a),
+        }
+        let marker = test.create_droppable();
+    }
+    test.assert_order([2, 3]);
+}
+

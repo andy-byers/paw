@@ -2216,9 +2216,13 @@ PawState::~PawState()
 {
     std::string error;
     llvm::raw_string_ostream os(error);
-    if (llvm::verifyFunction(*fn_->get_fn(), &os))
+    if (llvm::verifyFunction(*fn_->get_fn(), &os)) {
         llvm::errs() << "\nfunction verification failed for "
             << fn_->get_fn()->getName() << ":\n" << error << "\n";
+        auto const log_name = fn_->get_name() + "_failure.log";
+        llvm::errs() << "IR dump located in `" << log_name << "`\n";
+        print_ir(*fn_->get_fn(), log_name);
+    }
 
     G->state_ = outer_;
 }

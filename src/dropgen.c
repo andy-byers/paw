@@ -55,13 +55,13 @@ static void pushi(struct Mir *mir, struct MirBlockData const *data, struct MirIn
     MirInstructionList_push(mir, data->instructions, instr);
 }
 
-static void drop_fields_in_reverse(struct DropGenerator *G, struct Mir *mir, struct MirBlockData const *data, struct MirPlace place, IrTypeList *field_types, int field_offset)
+static void drop_fields_in_reverse(struct DropGenerator *G, struct Mir *mir, struct MirBlockData const *data, struct MirPlace place, int discr, IrTypeList *field_types, int field_offset)
 {
     for (int i = field_types->count - 1; i >= 0; --i) {
         IrType *field_type = IrTypeList_get(field_types, i);
         if (pawIr_needs_drop(G->C, field_type)) {
             struct MirPlace const field = new_register(mir, new_ptr(G, field_type));
-            pushi(mir, data, select_field(mir, place, 0, field_offset + i, field));
+            pushi(mir, data, select_field(mir, place, discr, field_offset + i, field));
             pushi(mir, data, pawMir_new_drop(mir, TODO, field));
         }
     }
@@ -98,10 +98,8 @@ static void drop_tuple_fields(struct DropGenerator *G, struct Mir *mir, struct M
     struct MirBlockData const *data = MirBlockDataList_last(mir->blocks);
     struct MirInstruction *terminator = popi(data);
 
-    struct MirPlace const tuple = push_deref(mir, data, local);
-    struct IrTuple *t = IrGetTuple(tuple.type);
-
-    drop_fields_in_reverse(G, mir, data, tuple, t->elems, 0);
+    struct IrTuple *t = IrGetTuple(ir_deref(local.type));
+    drop_fields_in_reverse(G, mir, data, local, 0, t->elems, 0);
 
     MirInstructionList_push(mir, data->instructions, terminator);
 }
@@ -126,11 +124,9 @@ static void drop_struct_fields(struct DropGenerator *G, struct Mir *mir, struct 
     struct MirBlockData const *data = MirBlockDataList_last(mir->blocks);
     struct MirInstruction *terminator = popi(data);
 
-    struct MirPlace const adt = push_deref(mir, data, local);
-    struct IrAdt *t = IrGetAdt(adt.type);
-
+    struct IrAdt *t = IrGetAdt(ir_deref(local.type));
     IrTypeList *fields = pawP_instantiate_struct_fields(G->C, t);
-    drop_fields_in_reverse(G, mir, data, adt, fields, 0);
+    drop_fields_in_reverse(G, mir, data, local, 0, fields, 0);
 
     MirInstructionList_push(mir, data->instructions, terminator);
 }
@@ -159,14 +155,13 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
     struct MirBlockData const *last_data = MirBlockDataList_last(mir->blocks);
     struct MirInstruction *terminator = popi(last_data);
     struct MirInstruction *store_ret = popi(last_data);
-    struct MirPlace const adt = push_deref(mir, last_data, local);
 
     MirSwitchArmList *arms = MirSwitchArmList_new(mir);
     {
         // transform the return into a switch on the discriminant
         struct MirPlace const discr_addr = new_register(mir, new_ptr(G, pawIr_new_int(G->C, IR_INT64)));
         struct MirPlace const discr_value = new_register(mir, ir_deref(discr_addr.type));
-        pushi(mir, last_data, select_field(mir, adt, 0, 0, discr_addr));
+        pushi(mir, last_data, select_field(mir, local, 0, 0, discr_addr));
         pushi(mir, last_data, pawMir_new_load(mir, TODO, discr_addr, discr_value));
         terminator->Switch_ = (struct MirSwitch){
             .kind = kMirSwitch,
@@ -182,7 +177,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
     pushi(mir, exit_data, store_ret);
     push_return(mir, exit_data);
 
-    struct IrAdt *t = IrGetAdt(adt.type);
+    struct IrAdt *t = IrGetAdt(ir_deref(local.type));
     struct IrAdtDef const *def = pawIr_get_adt_def(G->C, t->did);
     K_LIST_XFOREACH (def->variants, struct IrVariantDef *const, v) {
         int const discr = (*v)->discr;
@@ -201,7 +196,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
 
         // drop fields from this particular variant (indicated by "discr")
         IrTypeList *fields = pawP_instantiate_variant_fields(G->C, t, discr);
-        drop_fields_in_reverse(G, mir, block_data, adt, fields, 1);
+        drop_fields_in_reverse(G, mir, block_data, local, discr, fields, 1);
 
         push_goto(mir, block_data);
     }
