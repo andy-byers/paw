@@ -224,3 +224,11 @@ pub fn unpack_enum_variants() {
     test.assert_order([2, 3]);
 }
 
+#[test]
+pub fn temporaries_are_dropped() {
+    let test = Test::new();
+    {
+        test.create_droppable();
+    }
+    test.assert_order([1]);
+}

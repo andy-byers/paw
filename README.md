@@ -280,6 +280,10 @@ A panic can also be caused by calling the `panic` builtin function.
 + Need to add a check to make sure there are not extraneous trait bounds on trait methods (only checking for unsatisfied trait obligations, i.e. the check needs to be performed the "other way" as well)
 + Generic type parameters on type aliases can't be constrained with trait bounds
 + Type aliases need check for cycles. Also, compiler crashes when it encounters type alias in RHS that hasn't been defined yet.
++ Variables bound to `_` (wildcard pattern) are not dropped 
+    + Happens because a local variable is not created for such (non-)bindings so there is nothing to drop in `lower_hir.c`)
+    + Code in `lower_hir.c` relies on the pattern matching compiler in `exhaustiveness.c` to provide a list of variables bound by a pattern
+    + Could add binding named `_` for each wildcard pattern and disallow mentioning `_` outside pattern context (i.e. variables named `_` can only be declared, never used)
 + Edge cases exist related to impl blocks and traits
     + The following should be allowed `T: Trait<int32> + Trait<uint32>`, that is, having 2 trait bounds on a single type with the same `DeclId`
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 

@@ -661,8 +661,6 @@ static void leave_block(struct FunctionState *fs)
 
 static struct MirPlace set_local(struct FunctionState *fs, struct HirIdent ident, NodeId id, struct MirPlace place)
 {
-//TODO    NEW_INSTR(fs, alloc_local, ident.span, ident.name, place);
-
     LocalMap_insert(fs->L, fs->mapping, id, place.r);
     VarStack_push(fs->L, fs->stack, (struct LocalVar){
         .index = fs->nlocals,
@@ -1781,15 +1779,7 @@ static paw_Bool visit_expr_stmt(struct HirVisitor *V, struct HirExprStmt *s)
     struct FunctionState *fs = L->fs;
 
     struct MirPlace const place = lower_rvalue(V, s->expr);
-    if (pawIr_needs_drop(fs->C, place.type)) {
-        struct BlockState bs;
-        enter_block(fs, &bs, s->expr->hdr.span, PAW_FALSE);
-
-        struct MirPlace const local = new_register(fs, place.type);
-        move_to(fs, NODE_SPAN(s->expr), place, local);
-
-        leave_block(fs);
-    }
+    drop_if_necessary(fs, place, place.type);
 
     return PAW_FALSE;
 }
