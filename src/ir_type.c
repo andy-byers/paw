@@ -1801,7 +1801,14 @@ static void print_type(struct Printer *P, IrType *type)
             break;
         }
         case kIrInfer: {
-            PRINT_CHAR(P, '_');
+            struct IrInfer const *t = IrGetInfer(type);
+            if (t->ikind == IR_INFER_INTEGER) {
+                PRINT_LITERAL(P, "(integer)");
+            } else if (t->ikind == IR_INFER_FLOAT) {
+                PRINT_LITERAL(P, "(float)");
+            } else {
+                PRINT_CHAR(P, '_');
+            }
             break;
         }
         case kIrNever:

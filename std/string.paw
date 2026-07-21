@@ -17,6 +17,12 @@ impl String {
         Self{inner: List::new()}
     }
 
+    pub fn from_chars<T: ToSlice<char>>(chars: T) -> mem::Result<Self> {
+        let s = Self::new();
+        s.extend(chars.to_slice())?;
+        Ok(s)
+    }
+
     pub fn from_slice(text: []char) -> mem::Result<Self> {
         let s = Self::new();
         s.extend(text)?;

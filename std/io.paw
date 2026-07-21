@@ -76,21 +76,6 @@ pub enum Error {
     Other,
 }
 
-//TODO impl ToString for Error {
-//TODO     fn to_string(*self) -> mem::Result<String> {
-//TODO         match self {
-//TODO             Error::NotFound => s"not found",
-//TODO             Error::TooLarge => s"too large",
-//TODO             Error::PermissionDenied => s"permission denied",
-//TODO             Error::AlreadyExists => s"already exists",
-//TODO             Error::NotOpened => s"not opened",
-//TODO             Error::NotSupported => s"not supported",
-//TODO             Error::InvalidArgument => s"invalid argument",
-//TODO             Error::Other => s"other error",
-//TODO         }
-//TODO     }
-//TODO }
-
 impl Copy for Error {}
 
 

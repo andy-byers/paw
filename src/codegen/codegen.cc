@@ -509,8 +509,8 @@ static void compile_object(Context &X, llvm::TargetMachine &machine, std::string
         std::string error;
         llvm::raw_string_ostream os(error);
         if (llvm::verifyModule(*m, &os)) {
-            print_ir(*m, modname + "_failure.ll");
             fatal_error("module verification failed:\n" + error);
+            print_ir(*m, modname + "_failure.ll");
         }
     }
 

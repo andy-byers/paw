@@ -879,48 +879,12 @@ impl Eq<Self> for float32 {
     }
 }
 
-impl Ord<Self> for float32 {
-    fn cmp(*self, rhs: *Self) -> Ordering { 
-        if *self < *rhs {
-            Ordering::Less
-        } else if *self > *rhs {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    }
-}
-
 impl Default for float32 {
     fn default() -> Self {
         0.0
     }
 }
 
-
-impl Ord<Self> for float64 {
-    fn cmp(*self, rhs: *Self) -> Ordering { 
-        if *self < *rhs {
-            Ordering::Less
-        } else if *self > *rhs {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    }
-}
-
-impl Ord<Self> for float64 {
-    fn cmp(*self, rhs: *Self) -> Ordering { 
-        if *self < *rhs {
-            Ordering::Less
-        } else if *self > *rhs {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    }
-}
 
 impl Add<Self> for float64 {
     type Output = Self;
@@ -958,18 +922,6 @@ impl Div<Self> for float64 {
 impl Eq<Self> for float64 { 
     fn eq(*self, rhs: *Self) -> bool { 
         *self == *rhs 
-    }
-}
-
-impl Ord<Self> for float64 {
-    fn cmp(*self, rhs: *Self) -> Ordering { 
-        if *self < *rhs {
-            Ordering::Less
-        } else if *self > *rhs {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
     }
 }
 

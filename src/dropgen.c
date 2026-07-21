@@ -133,7 +133,7 @@ static void drop_struct_fields(struct DropGenerator *G, struct Mir *mir, struct 
 
 static MirBlock push_basic_block(struct Mir *mir, struct MirBlockData const **data_ptr)
 {
-    struct MirBlockData *data = pawMir_new_block(mir, MIR_SCOPE(0));
+    struct MirBlockData *data = pawMir_new_block(mir);
     MirBlockDataList_push(mir, mir->blocks, data);
     if (data_ptr != NULL) *data_ptr = data;
     return MIR_BB(mir->blocks->count - 1);

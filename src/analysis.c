@@ -475,7 +475,7 @@ static MirBlock new_basic_block(struct VariableAnalyzer *V)
     VariableStates *states = new_states(V, V->num_vars);
     BlockStates_push(V, V->blocks, states);
 
-    struct MirBlockData *after_data = pawMir_new_block(V->mir, (MirScope){0});
+    struct MirBlockData *after_data = pawMir_new_block(V->mir);
     MirBlockDataList_push(V->mir, V->mir->blocks, after_data);
     return MIR_BB(V->mir->blocks->count - 1);
 }
@@ -514,7 +514,7 @@ static struct MirPlace push_move(struct Mir *mir, struct MirBlockData const *dat
 
 static void determine_cmoves(struct VariableAnalyzer *V)
 {
-    struct Mir const *mir = V->mir;
+    struct Mir *mir = V->mir;
     K_LIST_XFOREACH (mir->blocks, struct MirBlockData *const, pbb) {
         struct MirBlockData const *bb = *pbb;
 

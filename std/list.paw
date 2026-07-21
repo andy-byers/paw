@@ -98,7 +98,7 @@ impl<T> List<T> {
 
     pub fn pop(*self) -> T {
         if self.length == 0 {
-            panic("pop from empty list");
+            panic("pop from empty list\n");
         }
         self.length -= 1;
         ptr::read(self.get_element_ptr(self.length))
@@ -130,7 +130,7 @@ impl<T> List<T> {
 
     fn ensure_bounds(*self, index: usize) {
         match self.check_bounds(index) {
-            None => panic("index out of bounds"),
+            None => panic("index out of bounds\n"),
             _ => (),
         }
     }
@@ -218,7 +218,7 @@ impl<T> Index<usize> for List<T> {
     fn index(*self, index: usize) -> *T {
         match self.get(index) {
             Some(value) => value,
-            None => panic("index out of bounds for list"),
+            None => panic("index out of bounds for list\n"),
         }
     }
 }

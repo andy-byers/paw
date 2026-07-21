@@ -1,16 +1,6 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-//
-// TODO: Try to support format strings again. All expressions
-//       should be evaluated and combined with text parts using a Formatter instance.
-//       Then a format string literal (s"abc\{var}def") will actually have type
-//       mem::Result<String> since it calls mem::alloc (non s-prefixed strings will
-//       have type str, formatting is not supported for non-s-prefixed strings).
-//
-//       pub trait Format {
-//           fn format(*self, f: *Formatter) -> mem::Result<()>;
-//       }
 
 #include "ast.h"
 #include "code.h"
@@ -157,6 +147,14 @@ static struct HirType *unit_type(struct LowerAst *L, struct SourceSpan span)
     pawHir_add_segment(L->hir, segments, span, id, ident, NULL, target);
     struct HirPath const path = pawHir_path_create(span, segments, HIR_PATH_ITEM);
     return NEW_NODE(L, path_type, span, next_node_id(L), path);
+}
+
+static struct HirType *lower_or_create_return_type(struct LowerAst *L, struct SourceSpan parent, struct AstType *type)
+{
+    if (type != NULL) return lower_type(L, type);
+    SpanRef const ref = pawSrc_create_ref(L->C, parent);
+    struct SourceSpan const span = SourceSpan_from_ref(ref, SPAN_REF_RETURN_TYPE);
+    return unit_type(L, span);
 }
 
 static struct HirExpr *unit_lit(struct LowerAst *L, struct SourceSpan span)
@@ -847,8 +845,7 @@ static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d)
     struct HirIdent const ident = lower_ident(d->ident);
     struct HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirDeclList *params = lower_decl_list(L, d->params);
-    struct HirType *result = d->result != NULL ? lower_type(L, d->result)
-        : unit_type(L, (struct SourceSpan){0}); // TODO: "params" needs a span that includes the parenthesis
+    struct HirType *result = lower_or_create_return_type(L, d->span, d->result);
     struct HirExpr *body = d->body != NULL ? lower_expr(L, d->body) : NULL;
     return NEW_NODE(L, fn_decl, d->span, d->id, d->did, ident, d->annos, generics,
             params, result, body, d->fn_kind, d->is_pub, !d->is_method);
@@ -1224,8 +1221,7 @@ static struct HirType *LowerTupleType(struct LowerAst *L, struct AstTupleType *t
 static struct HirType *LowerFnType(struct LowerAst *L, struct AstFnType *t)
 {
     struct HirTypeList *params = lower_type_list(L, t->params);
-    struct HirType *result = t->result != NULL ? lower_type(L, t->result)
-        : unit_type(L, (struct SourceSpan){0}); // TODO: see TODO in LowerFnDecl
+    struct HirType *result = lower_or_create_return_type(L, t->span, t->result);
     return NEW_NODE(L, fn_ptr, t->span, t->id, params, result);
 }
 

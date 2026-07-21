@@ -52,7 +52,6 @@ struct FunctionState {
     struct MirConstantDataList *constants;
     struct MirRegisterDataList *registers;
     struct MirUpvalueList *upvalues;
-    struct MirPlaceList *locals;
     struct LocalMap *mapping;
     struct LabelList *labels;
     struct VarStack *stack;
@@ -62,7 +61,6 @@ struct FunctionState {
     struct Compiler *C;
     struct Mir *mir;
     IrType *result;
-    MirScope scope;
     MirBlock current;
     MirBlock exit;
     struct MirPlace ret;
@@ -485,7 +483,6 @@ static void add_edge(struct FunctionState *fs, MirBlock from, MirBlock to)
 
 static struct MirInstruction *add_instruction(struct FunctionState *fs, struct MirInstruction *instr)
 {
-    instr->hdr.scope = fs->scope;
     struct MirBlockData const *block = current_bb_data(fs);
     MirInstructionList_push(fs->mir, block->instructions, instr);
     return instr;
@@ -533,15 +530,9 @@ static void set_current_bb(struct FunctionState *fs, MirBlock b)
 static MirBlock new_bb(struct FunctionState *fs)
 {
     int const id = bb_list(fs)->count;
-    struct MirBlockData *bb = pawMir_new_block(fs->mir, fs->scope);
+    struct MirBlockData *bb = pawMir_new_block(fs->mir);
     MirBlockDataList_push(fs->mir, bb_list(fs), bb);
-    bb->scope = fs->scope;
     return MIR_BB(id);
-}
-
-static struct LocalVar *get_local_slot(struct FunctionState *fs, int index)
-{
-    return &K_LIST_AT(fs->stack, fs->level + index);
 }
 
 static void add_label(struct FunctionState *fs, struct SourceSpan span, enum JumpKind kind)
@@ -603,17 +594,6 @@ static enum BuiltinKind kind_of_builtin(struct LowerHir *L, struct HirExpr *expr
 {
     IrType *type = GET_NODE_TYPE(L->C, expr);
     return builtin_kind(L, type);
-}
-
-static void enter_scope(struct FunctionState *fs)
-{
-    fs->scope = pawMir_new_scope(fs->mir, fs->scope);
-}
-
-static void leave_scope(struct FunctionState *fs)
-{
-    struct MirScopeInfo const info = pawMir_get_scope_info(fs->mir, fs->scope);
-    fs->scope = info.outer;
 }
 
 static void drop_if_necessary(struct FunctionState *fs, struct MirPlace p, IrType *type)
@@ -685,7 +665,7 @@ static struct MirPlace set_anon_local(struct FunctionState *fs, struct SourceSpa
             (struct HirIdent){
                 .name = pawP_format_string(fs->C, "(local%d)", fs->nlocals),
                 .span = span,
-            }, (NodeId){(unsigned)-1}, place);
+            }, INVALID_NODE_ID, place);
 }
 
 static struct MirPlace alloc_anon_local(struct FunctionState *fs, struct SourceSpan span, IrType *type)
@@ -694,7 +674,7 @@ static struct MirPlace alloc_anon_local(struct FunctionState *fs, struct SourceS
             (struct HirIdent){
                 .name = pawP_format_string(fs->C, "(local%d)", fs->nlocals),
                 .span = span,
-            }, (NodeId){(unsigned)-1}, type);
+            }, INVALID_NODE_ID, type);
 }
 
 static struct MirPlace unit_literal(struct FunctionState *fs, struct SourceSpan span)
@@ -731,9 +711,7 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
         .result = fn->result,
         .registers = mir->registers,
         .level = L->stack->count,
-        .scope = MIR_INVALID_SCOPE,
         .mapping = LocalMap_new(L),
-        .locals = MirPlaceList_new(mir),
         .labels = L->labels,
         .stack = L->stack,
         .outer = L->fs,
@@ -743,7 +721,6 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
     };
     L->fs = fs;
 
-    enter_scope(fs);
     enter_block(fs, bs, mir->span, PAW_FALSE);
     MirBlock const entry = new_bb(fs);
     set_current_bb(fs, entry);
@@ -769,18 +746,8 @@ static void leave_function(struct LowerHir *L)
     drop_locals(fs, fs->bs);
     NEW_INSTR(fs, return, mir->span);
 
-    leave_scope(fs);
     fs->stack->count = fs->level;
     L->fs = fs->outer;
-
-    // TODO: fs->locals no longer used so this won't do anything. closures are broken and need to be refactored anyway
-    struct MirPlace const *plocal;
-    // write capture list in order that locals were allocated
-    K_LIST_FOREACH (fs->locals, plocal) {
-        if (mir_reg_data(mir, plocal->r)->is_captured)
-            MirCaptureList_push(mir, mir->captured,
-                (struct MirCaptureInfo){.local = plocal->r});
-    }
 }
 
 #define LOWER_BLOCK(L, b) lower_rvalue((L)->V, HIR_CAST_EXPR(b))
@@ -1691,13 +1658,10 @@ static struct MirPlace lower_block(struct HirVisitor *V, struct HirBlock *e)
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    IrType *result_type = e->result != NULL
-        ? GET_NODE_TYPE(fs->C, e->result)
-        : pawIr_new_unit(fs->C);
+    IrType *result_type = get_type(L, e->id);
     struct MirPlace const result = new_register(fs, result_type);
 
     struct BlockState bs;
-    enter_scope(fs);
     enter_block(fs, &bs, e->span, PAW_FALSE);
 
     pawHir_visit_stmt_list(V, e->stmts);
@@ -1705,19 +1669,15 @@ static struct MirPlace lower_block(struct HirVisitor *V, struct HirBlock *e)
     struct MirPlace temp;
     if (e->result != NULL) {
         temp = lower_rvalue(V, e->result);
+    } else if (IrIsNever(result_type)) {
+        temp = never_place(fs, e->span);
     } else {
-        IrType *type = get_type(L, e->id);
-        if (IrIsNever(type)) {
-            temp = never_place(fs, e->span);
-        } else {
-            paw_assert(IrIsUnit(type));
-            temp = unit_literal(fs, e->span);
-        }
+        paw_assert(IrIsUnit(result_type));
+        temp = unit_literal(fs, e->span);
     }
     move_to(fs, e->span, temp, result);
 
     leave_block(fs);
-    leave_scope(fs);
     return result;
 }
 

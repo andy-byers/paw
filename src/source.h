@@ -18,6 +18,7 @@ enum SpanKind {
 };
 
 enum SpanRefKind {
+    SPAN_REF_RETURN_TYPE,
     SPAN_REF_TRAIT_SELF,
     SPAN_REF_QUESTION_MARK,
     SPAN_REF_FOR_LOOP,

@@ -73,27 +73,12 @@ typedef struct MirConstant {
     int value;
 } MirConstant;
 
-#define MIR_INVALID_SCOPE MIR_SCOPE(-1)
-#define MIR_BASE_SCOPE MIR_SCOPE(0)
-#define MIR_SCOPE(X_) ((MirScope){X_})
-typedef struct MirScope {
-    int value;
-} MirScope;
-
-MirScope pawMir_new_scope(struct Mir *mir, MirScope outer);
-struct MirScopeInfo pawMir_get_scope_info(struct Mir *mir, MirScope scope);
-
 typedef struct MirId {
     int value;
 } MirId;
 
 inline static MirId pawMir_next_id(struct Mir *mir);
 
-
-struct MirScopeInfo {
-    MirScope outer;
-    int depth;
-};
 
 struct MirCaptureInfo {
     MirRegister local;
@@ -132,7 +117,6 @@ enum MirInstructionKind {
 
 #define MIR_INSTRUCTION_HEADER \
     struct SourceSpan span; \
-    MirScope scope; \
     MirId mid; \
     enum MirInstructionKind kind : 8
 
@@ -758,7 +742,6 @@ struct MirBlockData {
     struct MirBlockList *successors;
     struct MirInstructionList *joins;
     struct MirInstructionList *instructions;
-    MirScope scope;
     MirId mid;
 };
 
@@ -793,7 +776,6 @@ struct Mir {
     struct MirUpvalueList *upvalues;
     struct MirCaptureList *captured;
     struct MirConstantCache *kcache;
-    struct MirScopeInfoList *scopes;
     struct SourceSpan span;
     struct IrType *env_type;
     struct IrType *type;
@@ -817,7 +799,6 @@ EXTERN_C struct MirPlace pawMir_get_register(struct Mir const *mir, MirRegister 
 #define MIR_KINDOF(node) ((node)->hdr.kind)
 #define MIR_CAST_INSTRUCTION(p) CAST(struct MirInstruction *, p)
 
-DEFINE_LIST(struct Mir, MirScopeInfoList, struct MirScopeInfo,)
 DEFINE_LIST(struct Mir, MirCaptureList, struct MirCaptureInfo,)
 DEFINE_LIST(struct Mir, MirUpvalueList, struct MirUpvalueInfo,)
 DEFINE_LIST(struct Mir, MirSwitchArmList, struct MirSwitchArm,)
@@ -838,7 +819,7 @@ DEFINE_LIST(struct Mir, MirBodyList, struct Mir *,)
 struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, Annotations *annotations, struct IrType *type, struct IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
 
-struct MirBlockData *pawMir_new_block(struct Mir *mir, MirScope scope);
+struct MirBlockData *pawMir_new_block(struct Mir *mir);
 
 // Get a pointer to each variable read or written by a given instruction
 struct MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr);

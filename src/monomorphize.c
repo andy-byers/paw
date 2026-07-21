@@ -240,7 +240,7 @@ static struct Mir *allocate_drop_template(struct MonoCollector *M, IrType *type,
     struct MirPlace const result_local = add_local(mir, "(result)", pawIr_new_unit(M->C));
     struct MirPlace const self_local = add_local(mir, "self", pawIr_new_ptr(M->C, self));
 
-    struct MirBlockData *data = pawMir_new_block(mir, MIR_SCOPE(0));
+    struct MirBlockData *data = pawMir_new_block(mir);
     MirBlockDataList_push(mir, mir->blocks, data);
     MirConstant const k = pawMir_kcache_add_value(mir, mir->kcache, I2V(0), pawIr_new_unit(M->C));
     struct MirPlace const value = {.kind = MIR_PLACE_CONSTANT, .k = k};
@@ -317,7 +317,7 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
 
 static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct MirBlockData *block)
 {
-    struct MirBlockData *result = pawMir_new_block(M->mir, block->scope);
+    struct MirBlockData *result = pawMir_new_block(M->mir);
     MirBlockList_reserve(M->mir, result->predecessors, block->predecessors->count);
     MirBlockList_reserve(M->mir, result->successors, block->successors->count);
     MirInstructionList_reserve(M->mir, result->joins, block->joins->count);
@@ -391,15 +391,11 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
 {
 #define RESERVE_MEMORY(M_, ListT_, Member_) \
         ListT_##_reserve((M_)->mir, inst->Member_, base->Member_->count);
-    RESERVE_MEMORY(M, MirScopeInfoList, scopes);
     RESERVE_MEMORY(M, MirRegisterDataList, registers);
     RESERVE_MEMORY(M, MirBlockDataList, blocks);
     RESERVE_MEMORY(M, MirCaptureList, captured);
     RESERVE_MEMORY(M, MirUpvalueList, upvalues);
 #undef RESERVE_MEMORY
-
-    K_LIST_XFOREACH (base->scopes, struct MirScopeInfo const, info)
-        MirScopeInfoList_push(inst, inst->scopes, *info);
 
     {
         struct MirRegisterData *pfrom;

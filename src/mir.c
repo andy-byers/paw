@@ -27,7 +27,6 @@ struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, St
     };
     mir->captured = MirCaptureList_new(mir);
     mir->kcache = pawMir_kcache_new(mir);
-    mir->scopes = MirScopeInfoList_new(mir);
     mir->registers = MirRegisterDataList_new(mir);
     mir->blocks = MirBlockDataList_new(mir);
     mir->upvalues = MirUpvalueList_new(mir);
@@ -43,25 +42,6 @@ void pawMir_free(struct Mir *mir)
     MirUpvalueList_delete(mir, mir->upvalues);
     pawMir_kcache_delete(mir, mir->kcache);
     P_ALLOC(mir->C, mir, sizeof(*mir), 0);
-}
-
-MirScope pawMir_new_scope(struct Mir *mir, MirScope outer)
-{
-    struct MirScopeInfo info = {
-        .outer = outer,
-        .depth = 0,
-    };
-    if (!MIR_ID_EQUALS(outer, MIR_INVALID_SCOPE)) {
-        struct MirScopeInfo outer_info = pawMir_get_scope_info(mir, outer);
-        info.depth = outer_info.depth + 1;
-    }
-    MirScopeInfoList_push(mir, mir->scopes, info);
-    return MIR_SCOPE(mir->scopes->count - 1);
-}
-
-struct MirScopeInfo pawMir_get_scope_info(struct Mir *mir, MirScope scope)
-{
-    return MirScopeInfoList_get(mir->scopes, scope.value);
 }
 
 paw_Bool pawMir_is_main(struct Mir const *mir)
@@ -159,7 +139,7 @@ MirInstruction *pawMir_new_instruction(struct Mir *mir)
     return P_ALLOC(mir->C, NULL, 0, sizeof(MirInstruction));
 }
 
-struct MirBlockData *pawMir_new_block(struct Mir *mir, MirScope scope)
+struct MirBlockData *pawMir_new_block(struct Mir *mir)
 {
     struct Compiler *C = mir->C;
     struct MirBlockData *block = P_ALLOC(C, NULL, 0, sizeof(struct MirBlockData));
@@ -169,7 +149,6 @@ struct MirBlockData *pawMir_new_block(struct Mir *mir, MirScope scope)
         .joins = MirInstructionList_new(mir),
         .instructions = MirInstructionList_new(mir),
         .mid = pawMir_next_id(mir),
-        .scope = scope,
     };
     return block;
 }
