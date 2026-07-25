@@ -567,8 +567,8 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
     remove_function_if_exists(*m, "paw_main");
     remove_function_if_exists(*m, "main");
 
-    auto *os_argc = m->getNamedGlobal("paw_argc");
-    auto *os_argv = m->getNamedGlobal("paw_argv");
+    llvm::Value *os_argc = m->getNamedGlobal("paw_argc");
+    llvm::Value *os_argv = m->getNamedGlobal("paw_argv");
 
     auto *main_fn = llvm::Function::Create(
             llvm::FunctionType::get(X->get_i32_ty(),
@@ -582,8 +582,12 @@ static void generate_test_driver(Context &base, llvm::TargetMachine &machine, st
         auto *block = llvm::BasicBlock::Create(*c, "entry", main_fn);
         B->SetInsertPoint(block);
 
-        auto *argc64 = B->CreateSExt(main_fn->getArg(0), X->get_isize_ty());
-        B->CreateStore(argc64, os_argc); B->CreateStore(main_fn->getArg(1), os_argv);
+        if (os_argc != nullptr) {
+            paw_assert(os_argv != nullptr);
+            auto *argc64 = B->CreateSExt(main_fn->getArg(0), X->get_isize_ty());
+            B->CreateStore(argc64, os_argc);
+            B->CreateStore(main_fn->getArg(1), os_argv);
+        }
 
         for (auto const &name: test_names) {
             auto *fn_ty = llvm::FunctionType::get(B->getInt32Ty(), B->getPtrTy(), true);
