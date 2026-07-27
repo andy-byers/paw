@@ -6,7 +6,7 @@
 #include "ir_type.h"
 #include "map.h"
 
-struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, Annotations *annotations, IrType *type, IrType *self, int child_id, DeclId impl_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
+struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, DeclId did, IrGenericArgs *args, Annotations *annotations, IrType *type, IrType *self, int child_id, DeclId impl_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = P_ALLOC(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
@@ -17,6 +17,8 @@ struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, St
         .child_id = child_id,
         .parent_id = impl_id,
         .annotations = annotations,
+        .args = args,
+        .did = did,
         .modno = modno,
         .name = name,
         .span = span,

@@ -539,7 +539,6 @@ EXTERN_C IrTrait *pawIr_get_trait_context(struct Compiler *C, IrType *fn);
 EXTERN_C IrGenericArgs *pawIr_get_generic_args(struct Compiler *C, DeclId did);
 EXTERN_C IrConstraints *pawIr_get_constraints(struct Compiler *C, DeclId did);
 EXTERN_C IrTraitList *pawIr_get_trait_bounds(struct Compiler *C, DeclId did);
-EXTERN_C paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type);
 
 EXTERN_C paw_Bool pawIr_needs_drop(struct Compiler *C, IrType *type);
 EXTERN_C IrType *pawIr_get_custom_drop_type(struct Compiler *C, IrType *type);

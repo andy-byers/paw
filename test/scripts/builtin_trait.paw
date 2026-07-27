@@ -1,7 +1,12 @@
 // builtin_trait.paw
 
+use list;
+use list::List;
+use hashmap;
+use hashmap::HashMap;
+
 // Terrible hash combine for testing
-fn bad_hash_combine<K: Hash>(a: K, b: K) -> uint64 {
+fn bad_hash_combine<K: Hash>(a: *K, b: *K) -> uint64 {
     a.hash() * 123456789 + b.hash()
 }
 
@@ -10,13 +15,13 @@ struct MultiIntKey {
 }
 
 impl Hash for MultiIntKey {
-    fn hash(self) -> uint64 {
-        bad_hash_combine(self.value.0, self.value.1)
+    fn hash(*self) -> uint64 {
+        bad_hash_combine(&self.value.0, &self.value.1)
     }
 }
 
-impl Equals for MultiIntKey {
-    fn eq(self, rhs: Self) -> bool {
+impl Eq<Self> for MultiIntKey {
+    fn eq(*self, rhs: *Self) -> bool {
         self.value.0 == rhs.value.0
             && self.value.1 == rhs.value.1
     }
@@ -28,22 +33,22 @@ fn mik(a: uint64, b: uint64) -> MultiIntKey {
 
 #[test]
 pub fn test_custom_key() {
-    let m = [:];
+    let m = HashMap::new();
 
-    m[mik(1, 1)] = 11;
-    m[mik(2, 2)] = 22;
+    m.insert(mik(1, 1), 11).unwrap();
+    m.insert(mik(2, 2), 22).unwrap();
 
     for x in 1..50 {
         let i = x * 2;
-        m[mik(i, i + 1)] = i;
+        m.insert(mik(i, i + 1), i).unwrap();
     }
     for x in 1..50 {
         let i = x * 2;
-        assert(m[mik(i, i + 1)] == i);
+        assert(m[&mik(i, i + 1)] == i);
     }
 
-    assert(m[mik(1, 1)] == 11);
-    assert(m[mik(2, 2)] == 22);
+    assert(m[&mik(1, 1)] == 11);
+    assert(m[&mik(2, 2)] == 22);
 }
 
 struct Key {
@@ -51,13 +56,13 @@ struct Key {
 }
 
 impl Hash for Key {
-    fn hash(self) -> uint64 {
+    fn hash(*self) -> uint64 {
         self.value
     }
 }
 
-impl Equals for Key {
-    fn eq(self, rhs: Self) -> bool {
+impl Eq<Self> for Key {
+    fn eq(*self, rhs: *Self) -> bool {
         self.value == rhs.value
     }
 }
@@ -65,26 +70,26 @@ impl Equals for Key {
 // NOTE: Make sure not to call MultiKey<T>::hash or MultiKey<T>::equals directly.
 //       This causes a special case where both functions must be added manually
 //       during monomorphization.
-struct MultiKey<T: Hash + Equals> {
+struct MultiKey<T: Hash + Eq<T>> {
     value: (T, T),
 }
 
-impl<T: Hash + Equals> MultiKey<T> {
+impl<T: Hash + Eq<T>> MultiKey<T> {
     pub fn new(a: T, b: T) -> Self {
         Self{value: (a, b)}
     }
 }
 
-impl<T: Hash + Equals> Hash for MultiKey<T> {
-    fn hash(self) -> uint64 {
-        bad_hash_combine(self.value.0, self.value.1)
+impl<T: Hash + Eq<T>> Hash for MultiKey<T> {
+    fn hash(*self) -> uint64 {
+        bad_hash_combine(&self.value.0, &self.value.1)
     }
 }
 
-impl<T: Hash + Equals> Equals for MultiKey<T> {
-    fn eq(self, rhs: Self) -> bool {
-        self.value.0.eq(rhs.value.0)
-            && self.value.1.eq(rhs.value.1)
+impl<T: Hash + Eq<T>> Eq<Self> for MultiKey<T> {
+    fn eq(*self, rhs: *Self) -> bool {
+        self.value.0.eq(&rhs.value.0)
+            && self.value.1.eq(&rhs.value.1)
     }
 }
 
@@ -96,57 +101,57 @@ fn mk(a: uint64, b: uint64) -> MultiKey<Key> {
 
 #[test]
 pub fn test_custom_key2() {
-    let m = [:];
+    let m = HashMap::new();
 
-    m[mk(1, 1)] = 11;
-    m[mk(2, 2)] = 22;
+    m.insert(mk(1, 1), 11).unwrap();
+    m.insert(mk(2, 2), 22).unwrap();
 
     for x in 1..50 {
         let i = x * 2;
-        m[mk(i, i + 1)] = i;
+        m.insert(mk(i, i + 1), i).unwrap();
     }
     for x in 1..50 {
         let i = x * 2;
-        assert(m[mk(i, i + 1)] == i);
+        assert(m[&mk(i, i + 1)] == i);
     }
 
-    assert(m[mk(1, 1)] == 11);
-    assert(m[mk(2, 2)] == 22);
+    assert(m[&mk(1, 1)] == 11);
+    assert(m[&mk(2, 2)] == 22);
 }
 
-pub fn iterate_list<T: Equals>(L: [T], iter: ListIterator<T>) {
-    assert(iter.next().unwrap().eq(L[0]));
-    assert(iter.next().unwrap().eq(L[1]));
-    assert(iter.next().unwrap().eq(L[2]));
+pub fn iterate_list<T: Eq<int64>>(iter: list::IntoIter<T>, zero: int64) {
+    assert(iter.next().unwrap().eq(&(zero + 1)));
+    assert(iter.next().unwrap().eq(&(zero + 2)));
+    assert(iter.next().unwrap().eq(&(zero + 3)));
     assert(iter.next().is_none());
     assert(iter.next().is_none());
 }
 
 #[test]
 pub fn test_iterate_list() {
-    let L = [1, 2, 3];
-    iterate_list(L, ListIterator::new(L));
-    iterate_list(L, L.iterator());
+    let L = List::from_array([1, 2, 3]).unwrap();
+    iterate_list(L.into_iter(), 0);
 }
 
-fn iterate_map<K: Hash + Equals, V>(m: [K: V], iter: MapIterator<K, V>) {
+fn iterate_map<K: Hash + Eq<K>, V>(iter: hashmap::IntoIter<K, V>) {
     while iter.next().is_some() { }
     assert(iter.next().is_none());
 }
 
 #[test]
 pub fn test_iterate_map() {
-    let m = ["a": 1, "b": 2, "c": 3];
-    iterate_map(m, MapIterator::new(m));
-
-    let m = ["d": 4, "e": 5, "f": 6];
-    iterate_map(m, m.iterator());
+    let m = HashMap::from_array([
+        ("a", 1), 
+        ("b", 2), 
+        ("c", 3),
+    ]).unwrap();
+    iterate_map(m.into_iter());
 }
 
 #[test]
 pub fn test_iterate_range() {
     let r = Range{start: 0, end: 3};
-    let iter = r.iterator();
+    let iter = r.into_iter();
     assert(iter.next().unwrap() == 0);
     assert(iter.next().unwrap() == 1);
     assert(iter.next().unwrap() == 2);

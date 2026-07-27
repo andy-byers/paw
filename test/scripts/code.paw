@@ -1,16 +1,16 @@
-//// code.paw
-//
+// code.paw
+
 //pub fn unification_special_case() -> int64 {
 //    match None {
 //        Some(v) => v,
 //        None => return -1,
 //    }
 //}
-//
-//pub fn try_operator_special_case() -> Option<int64> {
-//    Some(Some(None?)?)
-//}
-//  
+
+pub fn try_operator_special_case() -> Option<int64> {
+    Some(Some(None?)?)
+}
+  
 //struct Flat1 {
 //    pub v: int64,
 //}
@@ -815,7 +815,3 @@
 //        io::println(chunk);
 //    }
 //}
-
-#[test]
-pub fn test() {
-}

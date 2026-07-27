@@ -45,6 +45,7 @@ struct ItemCollector {
     struct Compiler *C;
     struct Pool *pool;
     struct GenericBinderMap *binders;
+    IrConstraints *outer_constraints;
     TypeCollection *cache;
     IrGenericArgs *binder;
     IrType *ctx;
@@ -634,7 +635,7 @@ static void collect_impl_def(struct ItemCollector *X, struct HirImplDecl const *
     K_LIST_XFOREACH (d->methods, struct HirDecl *const, p)
         collect_fn_def(X, HirGetFnDecl(*p));
 
-    if (IrIsGeneric(type)) {
+    if (IrIsGeneric(pawIr_remove_indirection(X->C, type))) {
         if (trait == NULL)
             COLLECTOR_ERROR(X, BlanketInherentImpl, d->span);
         // found blanket trait implementation
@@ -705,6 +706,12 @@ static void collect_definitions(struct ItemCollector *X, struct HirModule m)
 static void collect_constraints_from(struct ItemCollector *X, struct HirDecl *decl)
 {
     IrConstraints *constraints = IrConstraints_new(X->C);
+    if (X->outer_constraints != NULL) {
+        IrConstraints_reserve(X->C, constraints, X->outer_constraints->count);
+        K_LIST_XFOREACH (X->outer_constraints, struct IrConstraint const, c) {
+            IrConstraints_push(X->C, constraints, *c);
+        }
+    }
     if (HirIsAdtDecl(decl)) {
         struct HirAdtDecl const *d = HirGetAdtDecl(decl);
         collect_generic_bounds(X, d->generics, constraints);
@@ -712,13 +719,19 @@ static void collect_constraints_from(struct ItemCollector *X, struct HirDecl *de
         struct HirTraitDecl const *d = HirGetTraitDecl(decl);
         collect_generic_bounds(X, d->generics, constraints);
         collect_generic_bounds(X, d->types, constraints);
+        paw_assert(X->outer_constraints == NULL);
+        X->outer_constraints = constraints;
         K_LIST_XFOREACH (d->methods, struct HirDecl *const, p)
             collect_constraints_from(X, *p);
+        X->outer_constraints = NULL;
     } else if (HirIsImplDecl(decl)) {
         struct HirImplDecl const *d = HirGetImplDecl(decl);
         collect_generic_bounds(X, d->generics, constraints);
+        paw_assert(X->outer_constraints == NULL);
+        X->outer_constraints = constraints;
         K_LIST_XFOREACH (d->methods, struct HirDecl *const, p)
             collect_constraints_from(X, *p);
+        X->outer_constraints = NULL;
     } else if (HirIsTypeDecl(decl)) {
         struct HirTypeDecl const *d = HirGetTypeDecl(decl);
         collect_generic_bounds(X, d->generics, constraints);

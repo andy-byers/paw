@@ -20,6 +20,8 @@
 #include "ssa.h"
 #include "unify.h"
 
+#include <math.h>
+
 #define LOWERING_ERROR(L_, Kind_, ...) THROW_ERROR((L_)->C, \
         Kind_, .modname = (L_)->pm->name, __VA_ARGS__)
 #define NODE_SPAN(Node_) ((Node_)->hdr.span)
@@ -1408,8 +1410,8 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
     IrType *type = get_type(L, e->id);
 
     struct Mir *result = pawMir_new(L->C, L->pm->modno, e->span,
-            SCAN_STR(L->C, PRIVATE("closure")), NULL, type, NULL,
-            -1, INVALID_DECL_ID, FUNC_CLOSURE,
+            SCAN_STR(L->C, PRIVATE("closure")), e->did, IR_GENERIC_ARGS(type),
+            NULL, type, NULL, -1, INVALID_DECL_ID, FUNC_CLOSURE,
             PAW_FALSE, PAW_FALSE);
     BodyMap_insert(L->C, L->C->bodies, e->did, result);
 
@@ -2231,8 +2233,8 @@ static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFnDecl *fn)
 {
     IrType *type = pawIr_get_def_type(L->C, fn->did);
     struct Mir *result = pawMir_new(L->C, L->pm->modno, fn->span, fn->ident.name,
-            fn->annos, type, pawIr_get_context(L->C, type), -1, fn->parent_id,
-            fn->fn_kind, fn->is_pub, is_polymorphic_fn(L, fn));
+            fn->did, IR_GENERIC_ARGS(type), fn->annos, type, pawIr_get_context(L->C, type),
+            -1, fn->parent_id, fn->fn_kind, fn->is_pub, is_polymorphic_fn(L, fn));
     if (fn->body != NULL) {
         validate_fn_annotations(L, result);
         lower_hir_body_aux(L, fn, result);
@@ -2284,7 +2286,7 @@ static struct MirConstantData lower_constant_expression(struct LowerHir *L, stru
     IrType *artificial_result = get_type(L, expr->hdr.id);
     IrType *artificial_type = pawIr_new_fn_ptr(L->C, artificial_params, artificial_result);
     struct Mir *artificial = pawMir_new(L->C, L->pm->modno, expr->hdr.span, SCAN_STR(L->C, PRIVATE("toplevel")),
-            NULL, artificial_type, NULL, -1, INVALID_DECL_ID, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
+            INVALID_DECL_ID, NULL, NULL, artificial_type, NULL, -1, INVALID_DECL_ID, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
 
     struct BlockState bs;
     struct FunctionState fs;
@@ -2325,8 +2327,15 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
     struct HirModule *outer = L->pm;
     L->pm = &K_LIST_AT(L->hir->modules, d->did.modno);
 
-    // TODO: handle extern constants
-    if (d->init == NULL)
+    if (P_ID_EQUALS(NULL, d->did, L->C->std_math_NAN)) {
+        register_global_constant(L, d, (union IrValue){.f64 = NAN},
+                pawIr_new_float(L->C, IR_FLOAT64));
+        return;
+    } else if (P_ID_EQUALS(NULL, d->did, L->C->std_math_INFINITY)) {
+        register_global_constant(L, d, (union IrValue){.f64 = INFINITY},
+                pawIr_new_float(L->C, IR_FLOAT64));
+        return;
+    } else if (d->init == NULL)
         LOWERING_ERROR(L, UninitializedConstant,
                 .name = d->ident.name,
                 .span = d->span);
@@ -2349,8 +2358,10 @@ static void lower_global_constants(struct LowerHir *L)
     K_LIST_FOREACH (L->hir->modules, pmod) {
         struct HirDecl *const *pdecl;
         K_LIST_FOREACH (pmod->items, pdecl) {
-            if (HirIsConstDecl(*pdecl))
-                lower_global_constant(L, HirGetConstDecl(*pdecl));
+            if (HirIsConstDecl(*pdecl)) {
+                struct HirConstDecl *d = HirGetConstDecl(*pdecl);
+                lower_global_constant(L, d);
+            }
         }
     }
 }

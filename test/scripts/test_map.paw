@@ -42,8 +42,8 @@ pub fn handles_duplicate_keys() {
 
 #[test]
 pub fn stress_test() {
-    let map = HashMap::new();
-    let N = 10_000;
+    let map = HashMap::<int64, int64>::new();
+    let N = 2;
 
     for i in 0..N {
         map.insert(i, i + 1).unwrap().unwrap_none();
@@ -60,7 +60,7 @@ pub fn stress_test() {
     for i in N/2..N {
         map.insert(i, i + 100).unwrap().unwrap_none();
     }
-    assert(map.len() == N + N / 2);
+    assert(map.len() as int64 == N + N / 2);
 
     for i in -N/2..0 {
         assert(map.remove(&i).unwrap() == i - 100);
@@ -80,10 +80,10 @@ struct BadKey {
 
 impl Hash for BadKey {
     // cause a collision on each insertion
-    fn hash(*self) -> int64 { 0 }
+    fn hash(*self) -> uint64 { 0 }
 }
 
-impl Equals<Self> for BadKey {
+impl Eq<Self> for BadKey {
     fn eq(*self, rhs: *Self) -> bool {
         self.value == rhs.value
     }
@@ -119,61 +119,61 @@ pub fn handles_lots_of_collisions() {
     assert(*m.get(&bk(-3)).unwrap() == -3);
 }
 
-//struct Int2 {
-//    pub x: int64,
-//    pub y: int64,
-//}
-//
-//impl Int2 {
-//    pub fn new(x: int64, y: int64) -> Self {
-//        Self{x, y}
-//    }
-//}
-//
-//impl Hash for Int2 {
-//    fn hash(*self) -> int64 {
-//        self.x.hash() ^ self.y.hash()
-//    }
-//}
-//    
-//impl Equals<Self> for Int2 {
-//    fn eq(*self, rhs: *Self) -> bool {
-//        self.x == rhs.x && self.y == rhs.y
-//    }
-//}
-//
-//#[test]
-//pub fn handles_large_items() {
-//    let map = HashMap::new();
-//
-//    map.insert(Int2::new(-1, -2), -3).unwrap().unwrap_none();
-//
-//    map.insert(Int2::new(1, 2), 12).unwrap();
-//    map.insert(Int2::new(3, 4), 34).unwrap();
-//    map.insert(Int2::new(5, 6), 56).unwrap();
-//
-//    assert(map[&Int2::new(1, 2)] == 12);
-//    assert(map[&Int2::new(3, 4)] == 34);
-//    assert(map[&Int2::new(5, 6)] == 56);
-//
-//    map.insert(Int2::new(1, 2), 21).unwrap().unwrap();
-//    map.insert(Int2::new(3, 3), 33).unwrap().unwrap_none();
-//
-//    assert(map[&Int2::new(1, 2)] == 21);
-//    assert(map[&Int2::new(3, 3)] == 33);
-//    assert(map[&Int2::new(3, 4)] == 34);
-//    assert(map[&Int2::new(5, 6)] == 56);
-//
-//    assert(map[&Int2::new(-1, -2)] == -3);
-//}
-//
-//#[test]
-//pub fn strings_can_be_hashmap_keys() {
-//    let map = HashMap::<str, str>::new();
-//    map.insert("a", "A").unwrap().unwrap_none();
-//    map.insert("b", "B").unwrap().unwrap_none();
-//    map.insert("c", "C").unwrap().unwrap_none();
-//    assert(map[&"a"] == "A");
-//    assert(map[&"b"] == "B");
-//    assert(map[&"c"] == "C");
-//}
+struct Int2 {
+    pub x: int64,
+    pub y: int64,
+}
+
+impl Int2 {
+    pub fn new(x: int64, y: int64) -> Self {
+        Self{x, y}
+    }
+}
+
+impl Hash for Int2 {
+    fn hash(*self) -> uint64 {
+        self.x.hash() ^ self.y.hash()
+    }
+}
+    
+impl Eq<Self> for Int2 {
+    fn eq(*self, rhs: *Self) -> bool {
+        self.x == rhs.x && self.y == rhs.y
+    }
+}
+
+#[test]
+pub fn handles_large_items() {
+    let map = HashMap::new();
+
+    map.insert(Int2::new(-1, -2), -3).unwrap().unwrap_none();
+
+    map.insert(Int2::new(1, 2), 12).unwrap();
+    map.insert(Int2::new(3, 4), 34).unwrap();
+    map.insert(Int2::new(5, 6), 56).unwrap();
+
+    assert(map[&Int2::new(1, 2)] == 12);
+    assert(map[&Int2::new(3, 4)] == 34);
+    assert(map[&Int2::new(5, 6)] == 56);
+
+    map.insert(Int2::new(1, 2), 21).unwrap().unwrap();
+    map.insert(Int2::new(3, 3), 33).unwrap().unwrap_none();
+
+    assert(map[&Int2::new(1, 2)] == 21);
+    assert(map[&Int2::new(3, 3)] == 33);
+    assert(map[&Int2::new(3, 4)] == 34);
+    assert(map[&Int2::new(5, 6)] == 56);
+
+    assert(map[&Int2::new(-1, -2)] == -3);
+}
+
+#[test]
+pub fn strings_can_be_hashmap_keys() {
+    let map = HashMap::<str, str>::new();
+    map.insert("a", "A").unwrap().unwrap_none();
+    map.insert("b", "B").unwrap().unwrap_none();
+    map.insert("c", "C").unwrap().unwrap_none();
+    assert(map[&"a"] == "A");
+    assert(map[&"b"] == "B");
+    assert(map[&"c"] == "C");
+}

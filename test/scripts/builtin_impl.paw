@@ -1,45 +1,53 @@
 // builtin_impl.paw
 
+use string::String;
+
 pub trait Repr {
-    fn repr(&self) -> str;
+    fn repr(*self) -> String;
 }
 
 impl Repr for int64 {
-    fn repr(&self) -> str {
-        self.to_str()
+    fn repr(*self) -> String {
+        f"\{*self}".unwrap()
     }
 }
 
 impl Repr for str {
-    fn repr(&self) -> str {
-        "\"\{self}\""
+    fn repr(*self) -> String {
+        f"\"\{*self}\"".unwrap()
+    }
+}
+
+impl Repr for String {
+    fn repr(*self) -> String {
+        f"\"\{self.as_str()}\"".unwrap()
     }
 }
 
 pub trait Combine<R: Repr> {
-    fn combine(&self, r: R);
+    fn combine(*self, r: R);
 }
 
-impl Combine<int64> for str {
-    fn combine(&self, r: int64) {
-        self ++= r.to_str();
+impl Combine<int64> for String {
+    fn combine(*self, r: int64) {
+        *self = f"\{self.as_str()}\{r}".unwrap();
     }
 }
 
 impl<R: Repr> Combine<R> for int64 {
-    fn combine(&self, r: R) {
-        self += #r.repr();
+    fn combine(*self, r: R) {
+        *self += r.repr().len() as int64;
     }
 }
 
-pub fn combine_reprs<R: Repr + Combine<T>, T: Repr>(r: R, t: T) -> str {
+pub fn combine_reprs<R: Repr + Combine<T>, T: Repr>(r: R, t: T) -> String {
     r.combine(t);
     r.repr()
 }
 
 #[test]
 pub fn test() {
-    assert(combine_reprs("abcdef", 123456) == "\"abcdef123456\"");
-    assert(combine_reprs(123456, "abcdef") == "123464");
+    assert(combine_reprs(f"abcdef".unwrap(), 123456).as_str() == "\"abcdef123456\"");
+    assert(combine_reprs(123456, f"abcdef".unwrap()).as_str() == "123464");
 }
 

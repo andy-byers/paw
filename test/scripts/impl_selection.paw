@@ -175,7 +175,7 @@ fn unary_list<T>(t: T) -> List<T> {
 
 #[test]
 pub fn test_polymorphic() {
-    let strings = List::<str>::new();
+    let strings = List::from_array(["100", "20", "3"]).unwrap();
     let k = key(strings);
     assert(k == 123);
 

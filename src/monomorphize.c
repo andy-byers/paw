@@ -235,8 +235,9 @@ static struct MirPlace add_local(struct Mir *mir, char const *name, IrType *type
 static struct Mir *allocate_drop_template(struct MonoCollector *M, IrType *type, IrType *self)
 {
     struct IrFnDef const *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
-    struct Mir *mir = pawMir_new(M->C, 0, (struct SourceSpan){0}, def->name, Annotations_new(M->C),
-            type, self, -1, def->parent, FUNC_METHOD, PAW_TRUE, PAW_FALSE);
+    struct Mir *mir = pawMir_new(M->C, 0, (struct SourceSpan){0}, def->name, IR_TYPE_DID(type),
+            IR_GENERIC_ARGS(type), Annotations_new(M->C), type, self, -1, def->parent, FUNC_METHOD,
+            PAW_TRUE, PAW_FALSE);
     struct MirPlace const result_local = add_local(mir, "(result)", pawIr_new_unit(M->C));
     struct MirPlace const self_local = add_local(mir, "self", pawIr_new_ptr(M->C, self));
 
@@ -346,8 +347,11 @@ static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct Mir
 
 static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, IrType *type, IrType *self)
 {
-    M->base = base;
-    M->mir = pawMir_new(M->C, base->modno, base->span, base->name, base->annotations,
+    IrGenericArgs *args = IrGenericArgs_new(M->C);
+    K_LIST_XFOREACH (base->args, IrGenericArg const, p)
+        IrGenericArgs_push(M->C, args, finalize_arg(M, *p));
+
+    M->mir = pawMir_new(M->C, base->modno, base->span, base->name, base->did, args, base->annotations,
             type, self, base->child_id, base->parent_id, base->fn_kind, base->is_pub, PAW_FALSE);
     return M->mir;
 }
@@ -453,6 +457,7 @@ static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir
 {
     M->subst.params = IR_GENERIC_ARGS(base->type);
     M->subst.args = IR_GENERIC_ARGS(type);
+    M->base = base;
 
     IrType *self = pawIr_get_context(M->C, type);
     struct Mir *inst = new_mir(M, base, type, self);
@@ -472,10 +477,6 @@ static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *
     struct IrImpl *const *impl_ptr = ImplMap_get(M->C, M->C->impl_defs, base->parent_id);
     if (impl_ptr == NULL || (*impl_ptr)->generics == NULL)
         return monomorphize_function_aux(M, base, type);
-
-    // Collect the type parameters from the impl block, as well as the concrete
-    // types they were instantiated with. Substitute the former for the latter
-    // in the context of the function.
 
     IrType *fn = get_assoc_fn(M, self, trait, def->name);
     IrGetSignature(type)->did = IR_TYPE_DID(fn);

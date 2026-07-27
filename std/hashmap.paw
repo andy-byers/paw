@@ -233,6 +233,14 @@ impl<K: Hash + Eq<K>, V> HashMap<K, V> {
         }
     }
 
+    pub fn from_array<const N: usize>(values: [N](K, V)) -> mem::Result<Self> {
+        let result = Self::new();
+        for (k, v) in values {
+            result.insert(k, v)?;
+        }
+        Ok(result)
+    }
+
     pub fn len(*self) -> usize {
         self.length
     }

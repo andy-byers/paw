@@ -782,6 +782,8 @@ struct Mir {
     struct IrType *self;
     struct Compiler *C;
     paw_Env *P;
+    IrGenericArgs *args;
+    DeclId did;
     DeclId parent_id; // TODO: rename to impl_id
     int child_id;
     int mir_count;
@@ -816,7 +818,7 @@ DEFINE_LIST(struct Mir, MirRegisterPtrList, MirRegister *,)
 DEFINE_LIST(struct Mir, MirBlockDataList, struct MirBlockData *,)
 DEFINE_LIST(struct Mir, MirBodyList, struct Mir *,)
 
-struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, Annotations *annotations, struct IrType *type, struct IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
+struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, DeclId did, IrGenericArgs *args, Annotations *annotations, struct IrType *type, struct IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
 
 struct MirBlockData *pawMir_new_block(struct Mir *mir);

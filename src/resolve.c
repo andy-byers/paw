@@ -128,6 +128,12 @@ static paw_Bool is_core_module(struct Resolver *R, struct AstDecl *mod)
     return PAW_FALSE;
 }
 
+static paw_Bool is_math_module(struct Resolver *R, struct AstDecl *mod)
+{
+    struct AstModuleDecl const *d = AstGetModuleDecl(mod);
+    return pawS_eq(d->name, SCAN_STR(R->C, "math"));
+}
+
 static void maybe_store_builtin(struct Resolver *R, NodeId module_id, struct AstIdent ident, NodeId id, DeclId did)
 {
     if (is_core_module(R, pawAst_get_node(R->ast, module_id))) {
@@ -135,6 +141,19 @@ static void maybe_store_builtin(struct Resolver *R, NodeId module_id, struct Ast
         if (pb != NULL) {
             (*pb)->did = did;
             (*pb)->id = id;
+        }
+    }
+}
+
+static void maybe_store_core_item(struct Resolver *R, NodeId module_id, Str const *name, DeclId did)
+{
+    struct AstDecl *m = pawAst_get_node(R->ast, module_id);
+    if (is_core_module(R, m)) {
+    } else if (is_math_module(R, m)) {
+        if (pawS_eq(name, SCAN_STR(R->C, "NAN"))) {
+            R->C->std_math_NAN = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "INFINITY"))) {
+            R->C->std_math_INFINITY = did;
         }
     }
 }
@@ -992,6 +1011,7 @@ static paw_Bool enter_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
     struct Resolver *R = V->ud;
     if (R->fs == NULL)
         enter_fn(R, d->id, INVALID_DECL_ID);
+    maybe_store_core_item(R, R->current->id, d->ident.name, d->did);
     return PAW_TRUE;
 }
 
@@ -1124,6 +1144,7 @@ static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 
     declare_generics(R, d->generics);
     declare_type_aliases(R, d->id);
+    maybe_store_core_item(R, R->current->id, d->ident.name, d->did);
     return PAW_TRUE;
 }
 
@@ -1151,6 +1172,7 @@ static paw_Bool enter_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
     declare_generics(R, d->generics);
     declare_self(R, d->span, d->id, NAMESPACE_TYPE);
 
+    maybe_store_core_item(R, R->current->id, d->ident.name, d->did);
     maybe_store_builtin(R, R->current->id, d->ident, d->id, d->did);
     return PAW_TRUE;
 }
@@ -1187,6 +1209,7 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
         pawAst_visit_decl(V, self);
     }
 
+    maybe_store_core_item(R, R->current->id, d->ident.name, d->did);
     maybe_store_core_trait(R, R->current->id, d->ident.name, d->did, d->id);
     return PAW_TRUE;
 }

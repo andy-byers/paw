@@ -333,6 +333,9 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
         .dirname = dirname,
         .dm = dm,
         .P = P,
+
+        .std_math_NAN = INVALID_DECL_ID,
+        .std_math_INFINITY = INVALID_DECL_ID,
     };
 
     C->searchers = *StrMap_get(NULL, P->registry, CACHED_STRING(P, CSTR_KSEARCHERS));

@@ -264,6 +264,8 @@ A panic can also be caused by calling the `panic` builtin function.
 + [x] associated types (needed especially for iterator ergonomics)
 + [x] minimal const generics (no type expressions involving const generics)
 + [x] reimplement capturing closures
++ [ ] nested modules
++ [ ] decouple filenames from modules
 + [ ] Implement higher RAII (Vale lang concept) to have compiler-enforced resource "closing" (may require per-field drop flags) using `SuppressDrop` trait or similar. May require supporting negative trait bounds and having `T: !SuppressDrop` be the default for generics.
 + [ ] `#[must_use]` or similar annotation on type declarations
 + [ ] allow linking in a custom "panic handler" for platforms where the default panic handler doesn't make sense (no OS to return back to, nowhere for error messages to go, etc.)
@@ -277,6 +279,7 @@ A panic can also be caused by calling the `panic` builtin function.
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
 + In some cases, the compiler can't determine the type of a method without knowing the type of some arguments (happens with `IndexRange` trait)
 + Associated types on supertraits don't work properly
++ If a user-defined module has the same name as builtin module, the compiler will misbehave. Before reading a file f from disk we should check that the path to f is within the expected Paw source tree.
 + Need to add a check to make sure there are not extraneous trait bounds on trait methods (only checking for unsatisfied trait obligations, i.e. the check needs to be performed the "other way" as well)
 + Generic type parameters on type aliases can't be constrained with trait bounds
 + Type aliases need check for cycles. Also, compiler crashes when it encounters type alias in RHS that hasn't been defined yet.

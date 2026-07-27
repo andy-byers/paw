@@ -837,11 +837,11 @@ static void test_impl_error(void)
 
 static void test_deref_pat(void)
 {
-    test_compiler_status(kErrMoveOutOfPointer, "bind_noncopyable_type",
+    test_compiler_status(kErrFalseObligation, "bind_noncopyable_type",
             "struct Resource;",
             "match &Resource {*binding => {}}");
 
-    test_compiler_status(kErrMoveOutOfPointer, "bind_noncopyable_type_in_struct",
+    test_compiler_status(kErrFalseObligation, "bind_noncopyable_type_in_struct",
             "struct Resource; struct Container {pub r: Resource}",
             "let c = Container{r: Resource}; match &c {*Container{r} => {}}");
 
@@ -920,7 +920,7 @@ static void test_definite_assignment(void)
             "if true { let second = first; }"
             "let third = first;");
 
-    TESTCASE(move_out_of_object, kErrMoveOutOfField,
+    TESTCASE(move_out_of_object, kErrFalseObligation,
             "let first = (MoveOnly,);"
             "let second = first.0;");
 
@@ -934,7 +934,7 @@ static void test_definite_assignment(void)
             "}"
             "let third = first;");
 
-    TESTCASE(move_out_of_pointer, kErrMoveOutOfPointer,
+    TESTCASE(move_out_of_pointer, kErrFalseObligation,
             "let value = MoveOnly;"
             "let pointer = &value;"
             "let new_value = *pointer;");

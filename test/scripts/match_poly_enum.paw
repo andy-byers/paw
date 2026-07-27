@@ -84,15 +84,17 @@ pub fn test_nested_fields_poly() {
 
 enum Nat {
     Zero,
-    Succ(Nat),
+    Succ(*Nat),
 }
+
+impl Copy for Nat {}
 
 pub fn eval(nat: Nat) -> int64 {
     match nat {
         Nat::Zero => {
             return 0;
         },
-        Nat::Succ(x) => {
+        Nat::Succ(*x) => {
             return eval(x) + 1;
         },
     }
@@ -105,8 +107,8 @@ fn describe(target: Option<(int64, Nat)>) -> str {
         },
         Some(
             (0, Nat::Zero)
-            | (1, Nat::Succ(Nat::Zero))
-            | (2, Nat::Succ(Nat::Succ(Nat::Zero)))
+            | (1, Nat::Succ(*Nat::Zero))
+            | (2, Nat::Succ(*Nat::Succ(*Nat::Zero)))
         ) => {
             return "b";
         },
@@ -121,9 +123,9 @@ fn describe(target: Option<(int64, Nat)>) -> str {
 
 #[test]
 pub fn test_describe() {
-    let one = Nat::Succ(Nat::Zero);
-    let two = Nat::Succ(one);
-    let three = Nat::Succ(two);
+    let one = Nat::Succ(&Nat::Zero);
+    let two = Nat::Succ(&one);
+    let three = Nat::Succ(&two);
 
     assert(describe(None) == "a");
     assert(describe(Some((1, one))) == "b");

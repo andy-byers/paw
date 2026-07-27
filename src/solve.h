@@ -89,6 +89,8 @@ void pawIr_solver_add_obligations_from(IrSolver *S, DeclId parent_did, struct Ir
 void pawIr_solver_add_obligations_from_type(IrSolver *S, struct IrType *type, struct IrObligationCause cause);
 void pawIr_solver_add_obligations_from_trait(IrSolver *S, struct IrTrait *trait, struct IrObligationCause cause);
 
+void pawIr_solver_add_copy_obligation_for(IrSolver *S, struct IrType *type);
+
 void pawIr_solver_add_predicates_from(IrSolver *S, DeclId did, struct IrGenericArgs *args, struct IrObligationCause cause);
 void pawIr_solver_add_predicates_from_type(IrSolver *S, struct IrType *type, struct IrObligationCause cause);
 void pawIr_solver_add_predicates_from_trait(IrSolver *S, struct IrTrait *trait, struct IrObligationCause cause);
@@ -133,6 +135,15 @@ void pawIr_solver_solve_all_or_error(IrSolver *S);
 static paw_Bool pawIr_solver_solve_all(IrSolver *S)
 {
     return pawIr_solver_solve(S).status == IR_SOLVER_SOLVED;
+}
+
+static paw_Bool pawIr_solver_is_copyable(struct Compiler *C, struct IrType *type)
+{
+    IrSolver *S = pawIr_push_solver(C);
+    pawIr_solver_add_copy_obligation_for(S, type);
+    struct IrSolverResult const r = pawIr_solver_solve(S);
+    pawIr_pop_solver(C);
+    return r.status == IR_SOLVER_SOLVED;
 }
 
 int pawIr_solver_num_obligations(IrSolver const *S);

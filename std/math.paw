@@ -2,14 +2,11 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-//#[extern = "paw_math_PI"] 
-//pub const PI: float64;
-//
-//#[extern = "paw_math_NAN"] 
-//pub const NAN: float64;
-//
-//#[extern = "paw_math_INFINITY"] 
-//pub const INFINITY: float64;
+pub const PI: float64 = 3.14159265358979323846;
+
+// NAN and INFINITY constant values are obtained from the host's C math lib
+pub const NAN: float64;
+pub const INFINITY: float64;
 
 #[extern = "paw_math_sin"] 
 pub fn sin(f: float64) -> float64;

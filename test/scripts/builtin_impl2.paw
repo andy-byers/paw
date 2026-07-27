@@ -1,14 +1,14 @@
 // builtin_impl2.paw
 
 pub trait Sum<T> {
-    fn sum(&self) -> T;
+    fn sum(*self) -> T;
 }
 
-impl Sum<int64> for [int64] {
-    fn sum(&self) -> int64 {
+impl<const N: usize> Sum<int64> for [N]int64 {
+    fn sum(*self) -> int64 {
         let total = 0;
         for i in self {
-            total += i;
+            total += *i;
         }
         total
     }

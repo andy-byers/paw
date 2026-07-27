@@ -1328,6 +1328,7 @@ paw_Bool pawIr_needs_drop(struct Compiler *C, IrType *type)
     return PAW_FALSE;
 }
 
+// TODO: this is wrong because of integer/float inference vars
 paw_Bool pawIr_is_copyable(struct Compiler *C, IrType *type)
 {
     switch (IR_KINDOF(type)) {
@@ -1431,37 +1432,33 @@ IrTrait *pawIr_get_projection_trait(struct Compiler *C, struct IrProjection cons
 }
 
 // Convert all type args into type `!` and all const args to their zero values
-static IrGenericArgs *cannonicalize_args(struct Compiler *C, IrGenericArgs const *params)
+static IrGenericArgs *cannonicalize_args(struct Compiler *C, IrGenericArgs const *args)
 {
     IrGenericArgs *result = IrGenericArgs_new(C);
-    IrGenericArgs_reserve(C, result, params->count);
-    K_LIST_XFOREACH (params, IrGenericArg const, p) {
+    IrGenericArgs_reserve(C, result, args->count);
+    K_LIST_XFOREACH (args, IrGenericArg const, p) {
         IrGenericArg r;
         if (IrGenericArg_is_type(*p)) {
             r = IrGenericArg_from_type(
                     pawIr_new_never(C));
         } else {
             IrConst *k = IrGenericArg_get_const(*p);
-            paw_assert(k->kind == IR_CONST_DECL);
-            IrType *const_type = pawIr_get_def_type(C, k->decl.did);
-            switch (IR_KINDOF(const_type)) {
-                case kIrBool:
-                    k = pawIr_new_const_value(C, (union IrValue){.b = PAW_FALSE}, pawIr_new_bool(C));
-                    break;
-                case kIrChar:
-                    k = pawIr_new_const_value(C, (union IrValue){.c = 0}, pawIr_new_char(C));
-                    break;
-                case kIrInt:
-                    k = pawIr_new_const_value(C, (union IrValue){.i64 = 0.0}, pawIr_new_int(C, IR_INT_KIND(const_type)));
-                    break;
-                case kIrFloat:
-                    k = pawIr_new_const_value(C, (union IrValue){.f64 = 0.0}, pawIr_new_float(C, IR_FLOAT_KIND(const_type)));
-                    break;
-                default:
-                    k = pawIr_new_const_value(C, (union IrValue){.s = SCAN_STR(C, "")}, pawIr_new_string(C));
-                    break;
+            IrType *const_type;
+            if (k->kind == IR_CONST_DECL) {
+                const_type = pawIr_get_def_type(C, k->decl.did);
+            } else if (k->kind == IR_CONST_INFER) {
+                PAW_UNREACHABLE();
+            } else if (k->kind == IR_CONST_PENDING) {
+                PAW_UNREACHABLE();
+            } else {
+                paw_assert(k->kind == IR_CONST_VALUE);
+                const_type = k->value.type;
             }
-            r = IrGenericArg_from_const(k);
+            union IrValue const zero_value = IrIsString(const_type)
+                ? (union IrValue){.s = SCAN_STR(C, "")}
+                : (union IrValue){.u64 = 0};
+            r = IrGenericArg_from_const(
+                    pawIr_new_const_value(C, zero_value, const_type));
         }
         IrGenericArgs_push(C, result, r);
     }
@@ -1472,15 +1469,23 @@ static IrType *cannonicalize_type(struct Compiler *C, IrType *type)
 {
     type = pawIr_remove_indirection(C, type);
     switch (IR_KINDOF(type)) {
-        case kIrAdt:
+        case kIrAdt: {
+            struct IrAdt const *t = IrGetAdt(type);
+            IrGenericArgs const *params = pawIr_get_generic_args(C, t->did);
+            IrGenericArgs *args = cannonicalize_args(C, params);
+            return pawIr_new_adt(C, t->did, args);
+        }
         case kIrSignature: {
-            IrGenericArgs *params = pawIr_get_generic_args(C, IR_TYPE_DID(type));
-            struct Substitution const subst = {
-                .args = cannonicalize_args(C, params),
-                .params = params,
-            };
-            type = pawIr_get_def_type(C, IR_TYPE_DID(type));
-            return pawP_substitute(C, type, subst);
+            struct IrSignature const *t = IrGetSignature(type);
+            IrGenericArgs const *params = pawIr_get_generic_args(C, t->did);
+            IrGenericArgs *args = cannonicalize_args(C, params);
+            return pawIr_new_signature(C, t->did, args);
+        }
+        case kIrProjection: {
+            struct IrProjection const *t = IrGetProjection(type);
+            // TODO: may need to pass `Self ++ Trait.params[1..]` instead of `t->args`. when `type` is `<T as Trait<123>>::Item` the integer inference var messes us up, need the concrete type from def of `Trait`
+            IrGenericArgs *args = cannonicalize_args(C, t->args);
+            return pawIr_new_projection(C, t->did, args);
         }
         case kIrTuple: {
             struct IrTuple const *t = IrGetTuple(type);
@@ -1492,12 +1497,16 @@ static IrType *cannonicalize_type(struct Compiler *C, IrType *type)
         }
         case kIrArray:
             return pawIr_new_array(C, pawIr_new_never(C),
-                    pawIr_new_const_value(C, (union IrValue){.u64 = 0}, pawIr_new_int(C, IR_USIZE)));
+                    pawIr_new_const_value(C,
+                        (union IrValue){.u64 = 0},
+                        pawIr_new_int(C, IR_USIZE)));
         case kIrInfer:
         case kIrGeneric:
             return pawIr_new_never(C);
         case kIrSlice:
             return pawIr_new_slice(C, pawIr_new_never(C));
+        case kIrPtr:
+            return pawIr_new_ptr(C, pawIr_new_never(C));
         default:
             return type;
     }

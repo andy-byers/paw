@@ -5,6 +5,7 @@
 #include "solve.h"
 #include "impl.h"
 #include "ir_type.h"
+#include "resolve.h" // UpvalueList
 #include "type_folder.h"
 #include "unify.h"
 
@@ -779,6 +780,54 @@ void pawIr_solver_add_predicates_from_type(IrSolver *S, IrType *type, struct IrO
 void pawIr_solver_add_predicates_from_trait(IrSolver *S, IrTrait *trait, struct IrObligationCause cause)
 {
     pawIr_solver_add_predicates_from(S, trait->did, trait->args, cause);
+}
+
+void pawIr_solver_add_copy_obligation_for(IrSolver *S, IrType *type)
+{
+    struct Compiler *C = S->C;
+    switch (IR_KINDOF(type)) {
+        case kIrUnit:
+        case kIrBool:
+        case kIrChar:
+        case kIrInt:
+        case kIrFloat:
+        case kIrString:
+        case kIrSlice:
+        case kIrPtr:
+        case kIrSignature:
+        case kIrFnPtr:
+            // values of this type are trivially copyable
+            break;
+        case kIrTuple: {
+            struct IrTuple const *t = IrGetTuple(type);
+            K_LIST_XFOREACH (t->elems, IrType *const, p)
+                pawIr_solver_add_copy_obligation_for(S, *p);
+            break;
+        }
+        case kIrArray: {
+            struct IrArray const *t = IrGetArray(type);
+            pawIr_solver_add_copy_obligation_for(S, t->type);
+            break;
+        }
+        case kIrClosure:
+            if (ir_is_capturing_closure(C, type)) {
+                UpvalueList const *upvalues = *UpvalueTable_get(C, C->upvtab, IR_TYPE_DID(type));
+                K_LIST_XFOREACH (upvalues, struct UpvalueInfo const, u) {
+                    IrType *upvalue = pawIr_get_type(C, u->id);
+                    pawIr_solver_add_copy_obligation_for(S, upvalue);
+                }
+            }
+            break;
+        default: {
+            DeclId const copy_did = C->core_traits[CORE_TRAIT_COPY];
+            IrGenericArgs *copy_args = IrGenericArgs_new(C);
+            IrGenericArgs_push(C, copy_args, IrGenericArg_from_type(type));
+            IrTrait *copy = pawIr_solver_instantiate_trait_with(S, copy_did, copy_args);
+            pawIr_solver_add_impl_trait_obligation(S, type, copy,
+                    (struct IrObligationCause){0});
+            break;
+        }
+    }
 }
 
 Str const *pawIr_print_obligation_cause(struct Compiler *C, struct IrObligationCause cause)

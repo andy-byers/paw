@@ -36,12 +36,12 @@ impl<T> List<T> {
 
     pub fn get(*self, index: usize) -> Option<*T> {
         self.check_bounds(index)?;
-        Some(self.get_element_ptr(index))
+        Some(self.unchecked_gep(index))
     }
 
     pub fn set(*self, index: usize, value: T) -> Option<T> {
         self.check_bounds(index)?;
-        Some(ptr::replace(&self[index], value))
+        Some(ptr::replace(self.unchecked_gep(index), value))
     }
 
     pub fn push(*self, value: T) -> mem::Result<()> {
@@ -78,19 +78,19 @@ impl<T> List<T> {
             return Err((value, InsertError::OutOfBounds));
         }
 
-        ptr::copy(&self[index], 
-            &self[index + 1], 
+        let p = self.unchecked_gep(index);
+        ptr::copy(p, ptr::add(p, 1), 
             self.length - index);
-        ptr::write(&self[index], value);
+        ptr::write(p, value);
         self.length += 1;
         Ok(())
     }
 
     pub fn remove(*self, index: usize) -> T {
         self.ensure_bounds(index);
-        let value = ptr::read(&self[index]);
-        ptr::copy(&self[index + 1], 
-            &self[index], 
+        let p = self.unchecked_gep(index);
+        let value = ptr::read(p);
+        ptr::copy(ptr::add(p, 1), p, 
             self.length - index - 1);
         self.length -= 1;
         value
@@ -101,7 +101,7 @@ impl<T> List<T> {
             panic("pop from empty list\n");
         }
         self.length -= 1;
-        ptr::read(self.get_element_ptr(self.length))
+        ptr::read(self.unchecked_gep(self.length))
     }
 
     pub fn reserve(*self, length: usize) -> mem::Result<()> {
@@ -178,7 +178,7 @@ impl<T> List<T> {
         Ok(())
     }
 
-    fn get_element_ptr(*self, index: usize) -> *T {
+    fn unchecked_gep(*self, index: usize) -> *T {
         ptr::add(self.as_ptr(), index as isize)
     }
 }
@@ -206,7 +206,7 @@ impl<T> Drop for List<T> {
         // drop each element in-place, in reverse order
         for r in 0..self.length {
             let index = self.length - r - 1;
-            mem::drop_in_place(&self[index]);
+            mem::drop_in_place(self.unchecked_gep(index));
         }
 
         mem::dealloc(self.start);
@@ -249,7 +249,7 @@ impl<T: Default> List<T> {
         if length < self.len() {
             for ri in length..self.len() {
                 let index = self.len() - ri - 1;
-                mem::drop_in_place(&self[index]);
+                mem::drop_in_place(self.unchecked_gep(index));
             }
         } else {
             self.reserve(length)?;
@@ -287,7 +287,7 @@ impl<T> IntoIter<T> {
 impl<T> Drop for IntoIter<T> {
     fn drop(*self) {
         for i in self.index..self.inner.len() {
-            mem::drop_in_place(self.inner.get_element_ptr(i));
+            mem::drop_in_place(self.inner.unchecked_gep(i));
         }
 
         // prevent elements from being dropped again
@@ -336,16 +336,15 @@ impl<T> IntoIterator for *List<T> {
 //    }
 //}
 
+use iter;
 
 impl<T: Eq<T>> Eq<Self> for List<T> {
     fn eq(*self, rhs: *Self) -> bool {
         if self.len() != rhs.len() {
             return false;
         }
-        for i in 0..self.len() {
-            if !self[i].eq(&rhs[i]) {
-                return false;
-            }
+        for (x, y) in iter::zip(self, rhs) {
+            if !x.eq(y) { return false }
         }
         true
     }

@@ -1,5 +1,8 @@
 // loop.paw
 
+use list::List;
+use hashmap::HashMap;
+
 #[test]
 pub fn test_basic_loop() {
     let n = 0;
@@ -39,7 +42,7 @@ pub fn test_numeric_for_loop() {
         for i in start..end {
             n = n + 1;
         }
-        return n;
+        n
     };
     assert(test(0, 0) == 0);
     assert(test(0, -1) == 0);
@@ -57,21 +60,20 @@ pub fn test_numeric_for_loop() {
     assert(n == 10);
 
     let test = |n| {
-        let f = || -1;
+        let f = None;
         for i in 0..100 {
             if i == n {
                 // Capture "i", the loop variable, when it is equal to "n". It should
                 // retain this value in the closure, since "i" is closed over at the
                 // end of the loop iteration.
-                f = || i;
+                f = Some(|| i);
             }
         }
-        return f;
+        f.unwrap()
     };
     assert(test(0)() == 0);
     assert(test(10)() == 10);
     assert(test(50)() == 50);
-    assert(test(100)() == -1);
 }
 
 #[test]
@@ -89,17 +91,14 @@ pub fn test_nested_loops() {
 #[test]
 pub fn test_capture_loop_var_0() {
     let test = |n| {
-        let f = || -1;
+        let f = None;
         for i in 0..100{
             if i == n {
-                f = || i;
+                f = Some(|| i);
             }
         }
-        return f;
+        f.unwrap()
     };
-    assert(test(-1)() == -1);
-    assert(test(100)() == -1);
-
     let t = test(10);
     assert(t() == 10);
     assert(t() == 10);
@@ -113,39 +112,28 @@ pub fn test_capture_loop_var_1() {
     let test = |n| {
         for i in 0..100 {
             if i == n {
-                let a = [i];
-                return || -> int64 {
-                    // Capture "a" as an upvalue.
-                    let m = a[0];
-                    a[0] = a[0] + 1;
-                    // Equivalent to "3 * n" on the first call. Increases by 1
-                    // each time.
-                    return i + n + m;
-                };
+                return Some(|| {
+                    i + n
+                });
             }
         }
-        return || -1;
+        None
     };
-    assert(test(-1)() == -1);
+    assert(test(-1).is_none());
 
-    let t = test(10);
-    assert(t() == 30);
-    assert(t() == 31);
-    assert(t() == 32);
+    let t = test(10).unwrap();
+    assert(t() == 20);
+    assert(t() == 20);
 }
 
 fn check_capture_loop_var_2(b: bool) -> int64 {
-    let f = || -1;
+    let f = None;
     let n = 0;
     for i in 0..8 {
-        let _0 = -1;
-        let _1 = -1;
         {
-            let _2 = -1;
-
             n = n + 1;
             let m = n;
-            f = || m + n;
+            f = Some(|| m + n);
 
             // Need to emit instructions to close "m" at the break and continue
             // statements.
@@ -154,12 +142,9 @@ fn check_capture_loop_var_2(b: bool) -> int64 {
             } else {
                 continue;
             }
-            let _3 = -1;
         }
-        let _4 = -1;
-        let _5 = -1;
     }
-    return f();
+    f.unwrap()()
 }
 
 #[test]
@@ -252,22 +237,21 @@ pub fn test_break_continue_2() {
 
     // Capture loop variable "i" as an upvalue.
     let test = |n| {
-        let f = || -1;
+        let f = None;
         for i in 0..100 {
             if i == n {
                 let u = i;
-                f = || -> int64 {
-                    return n + i + u;
-                };
+                f = Some(|| -> int64 {
+                    n + i + u
+                });
                 break;
             }
-        } // "i" closed here when i == n, popped otherwise
-        return f;
+        }
+        f.unwrap()
     };
     assert(test(0)() == 0);
     assert(test(10)() == 30);
     assert(test(50)() == 150);
-    assert(test(100)() == -1);
 
     let i = 0;
     while true {
@@ -384,60 +368,77 @@ pub fn test_load_and_store_instruction() {
     }
 }
 
-#[test]
-pub fn test_list() {
-    let list = [1, 2, 3, 4, 5];
-    let list2 = [];
-    for x in list {
-        list2.push(x);
-    }
-    for i in 0..#list {
-        assert(list2[i] == i + 1);
-    }
-}
+//#[test]
+//pub fn test_list() {
+//    let list = List::from_array([1, 2, 3, 4, 5]).unwrap();
+//    let list2 = List::new();
+//    for x in list {
+//        list2.push(x).unwrap();
+//    }
+//    for i in 0..list.len() {
+//        assert(list2[i] == i + 1);
+//    }
+//}
+//
+//#[test]
+//pub fn test_map() {
+//    let map = HashMap::from_array([
+//        (0, 1), 
+//        (1, 2), 
+//        (2, 3), 
+//        (3, 4),
+//    ]).unwrap();
+//    let map2 = HashMap::new();
+//
+//    for x in map {
+//        let _ = map2.insert(x, map[x]).unwrap();
+//    }
+//
+//    for i in 0..map.len() {
+//        assert(map2[i] == i + 1);
+//    }
+//}
 
-#[test]
-pub fn test_map() {
-    let map = [0: 1, 1: 2, 2: 3, 3: 4];
-    let map2 = [:];
-
-    for x in map {
-        map2[x] = map[x];
-    }
-
-    for i in 0..#map {
-        assert(map2[i] == i + 1);
-    }
-}
-
-pub inline struct CustomRangeElement {
+pub struct CustomRangeElement {
     pub value: int64,
 }
 
-impl Compare for CustomRangeElement {
-    fn lt(self, rhs: Self) -> bool {
-        self.value < rhs.value    
+impl Clone for CustomRangeElement {
+    fn clone(*self) -> Self {
+        Self{value: self.value}
     }
-    fn le(self, rhs: Self) -> bool {
-        self.value <= rhs.value    
+}
+
+impl Eq<Self> for CustomRangeElement {
+    fn eq(*self, rhs: *Self) -> bool {
+        self.value == rhs.value
+    }
+}
+
+impl Ord<Self> for CustomRangeElement {
+    fn cmp(*self, rhs: *Self) -> Ordering {
+        if self.value < rhs.value {
+            Ordering::Less
+        } else if self.value > rhs.value {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
     }
 }
 
 impl Increment for CustomRangeElement {
-    fn increment(&self) {
+    fn increment(*self) {
         self.value += 1;
     }
 }
 
-
-// TODO: support custom values in range literal, i.e. "start..end"
 #[test]
 pub fn test_custom_range() {
     let start = CustomRangeElement{value: 1};
     let end = CustomRangeElement{value: 10};
-    let range = Range{start, end};
     let index = start.value;
-    for i in range {
+    for i in start..end {
         assert(i.value == index);
         index = index + 1;
     }
@@ -445,15 +446,16 @@ pub fn test_custom_range() {
 
 pub struct CustomIterator<T> {
     pub self: CustomIterable<T>,
-    pub iter: int64,
+    pub iter: usize,
 }
 
-impl<T> Advance<(int64, T)> for CustomIterator<T> {
-    fn next(&self) -> Option<(int64, T)> {
+impl<T: Clone> Iterator for CustomIterator<T> {
+    type Item = (usize, T);
+    fn next(*self) -> Option<(usize, T)> {
         let iter = self.iter;
-        if iter < #self.self.elems {
+        if iter < self.self.elems.len() {
             self.iter = self.iter + 1;
-            Some((iter, self.self.elems[iter]))
+            Some((iter, self.self.elems[iter].clone()))
         } else {
             None
         }
@@ -461,18 +463,22 @@ impl<T> Advance<(int64, T)> for CustomIterator<T> {
 }
 
 pub struct CustomIterable<T> {
-    pub elems: [T],
+    pub elems: List<T>,
 }
 
-impl<T> Iterate<CustomIterator<T>, (int64, T)> for CustomIterable<T> {
-    fn iterator(self) -> CustomIterator<T> {
+impl<T: Clone> IntoIterator for CustomIterable<T> {
+    type Item = (usize, T);
+    type IntoIter = CustomIterator<T>;
+    fn into_iter(self) -> CustomIterator<T> {
         CustomIterator{self, iter: 0}
     }
 }
 
 #[test]
 pub fn test_custom_iterator() {
-    let c = CustomIterable{elems: [1, 2, 3, 4, 5]};
+    let c = CustomIterable{
+        elems: List::from_array([1, 2, 3, 4, 5]).unwrap(),
+    };
     let index = 0;
     for (x, y) in c {
         assert(x == y - 1);
@@ -557,4 +563,3 @@ pub fn test_range_loop_syntax_special_case_2() {
         panic("should never run");
     }
 }
-

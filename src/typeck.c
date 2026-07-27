@@ -377,33 +377,9 @@ static IrType *check_operandx(struct TypeChecker *T, struct HirExpr *expr)
 static void ensure_valid_rvalue(struct TypeChecker *T, struct HirExpr *expr)
 {
     IrType *type = GET_TYPE(T, expr->hdr.id);
-    if (IrIsInfer(type) && (HirIsIndex(expr)
-                || HirIsSelector(expr)
-                || HIR_IS_UNOP(expr, UNARY_DEREF))) {
-        IrGenericArgs *copy_args = IrGenericArgs_new(T->C);
-        IrGenericArgs_push(T->C, copy_args, IrGenericArg_from_type(type));
-        DeclId const copy_did = T->C->core_traits[CORE_TRAIT_COPY];
-        IrTrait *copy_trait = pawIr_solver_instantiate_trait_with(T->C->S, copy_did, copy_args);
-        pawIr_solver_add_impl_trait_obligation(T->C->S, type, copy_trait, (struct IrObligationCause){
-                    .kind = IR_OBLIGATION_CAUSE_INSTANTIATION,
-                    .instantiation.type = type,
-                    .span = expr->hdr.span,
-                });
-    } else if (!pawIr_is_copyable(T->C, type)) {
-        if (HirIsIndex(expr)) {
-            TYPECK_ERROR(T, MoveOutOfElement,
-                    .type = pawIr_print_type_v2(T->C, type),
-                    .span = NODE_SPAN(expr));
-        } else if (HirIsSelector(expr)) {
-            TYPECK_ERROR(T, MoveOutOfField,
-                    .type = pawIr_print_type_v2(T->C, type),
-                    .span = NODE_SPAN(expr));
-        } else if (HIR_IS_UNOP(expr, UNARY_DEREF)) {
-            TYPECK_ERROR(T, MoveOutOfPointer,
-                    .type = pawIr_print_type_v2(T->C, type),
-                    .span = NODE_SPAN(expr));
-        }
-    }
+    if (HirIsIndex(expr) || HirIsSelector(expr)
+            || HIR_IS_UNOP(expr, UNARY_DEREF))
+        pawIr_solver_add_copy_obligation_for(T->C->S, type);
 }
 
 static IrType *check_operand(struct TypeChecker *T, struct HirExpr *expr)
@@ -465,12 +441,7 @@ static void leave_fn(struct TypeChecker *T)
     CopyablePatsIterator_init(T->fs->copyable_pats, &iter);
     while (CopyablePatsIterator_is_valid(&iter)) {
         NodeId const id = CopyablePatsIterator_key(&iter);
-        struct HirPat const *pat = pawHir_get_node(T->hir, id);
-        IrType *type = GET_TYPE(T, id);
-        if (!pawIr_is_copyable(T->C, type))
-            TYPECK_ERROR(T, MoveOutOfPointer,
-                    .type = pawIr_print_type_v2(T->C, type),
-                    .span = NODE_SPAN(pat));
+        pawIr_solver_add_copy_obligation_for(T->C->S, GET_TYPE(T, id));
         CopyablePatsIterator_next(&iter);
     }
 
@@ -1038,23 +1009,23 @@ static IrType *check_unop_expr(struct TypeChecker *T, struct HirUnOpExpr *e)
 static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, enum BinaryOp op, IrType *lhs, IrType *rhs)
 {
     static uint8_t const VALID_OPS[][IR_NUM_TYPE_KINDS] = {
-        //     type     = {0, b, c, i, f, s}
-        [BINARY_EQ]     = {0, 1, 1, 1, 1, 1},
-        [BINARY_NE]     = {0, 1, 1, 1, 1, 1},
-        [BINARY_LT]     = {0, 0, 1, 1, 1, 1},
-        [BINARY_LE]     = {0, 0, 1, 1, 1, 1},
-        [BINARY_GT]     = {0, 0, 1, 1, 1, 1},
-        [BINARY_GE]     = {0, 0, 1, 1, 1, 1},
-        [BINARY_ADD]    = {0, 0, 0, 1, 1, 0},
-        [BINARY_SUB]    = {0, 0, 0, 1, 1, 0},
-        [BINARY_MUL]    = {0, 0, 0, 1, 1, 0},
-        [BINARY_DIV]    = {0, 0, 0, 1, 1, 0},
-        [BINARY_MOD]    = {0, 0, 0, 1, 1, 0},
-        [BINARY_BXOR]   = {0, 0, 0, 1, 0, 0},
-        [BINARY_BAND]   = {0, 0, 0, 1, 0, 0},
-        [BINARY_BOR]    = {0, 0, 0, 1, 0, 0},
-        [BINARY_SHL]    = {0, 0, 0, 1, 0, 0},
-        [BINARY_SHR]    = {0, 0, 0, 1, 0, 0},
+        //     type   = {0, b, c, i, f, s}
+        [BINARY_EQ]   = {0, 1, 1, 1, 1, 1},
+        [BINARY_NE]   = {0, 1, 1, 1, 1, 1},
+        [BINARY_LT]   = {0, 0, 1, 1, 1, 1},
+        [BINARY_LE]   = {0, 0, 1, 1, 1, 1},
+        [BINARY_GT]   = {0, 0, 1, 1, 1, 1},
+        [BINARY_GE]   = {0, 0, 1, 1, 1, 1},
+        [BINARY_ADD]  = {0, 0, 0, 1, 1, 0},
+        [BINARY_SUB]  = {0, 0, 0, 1, 1, 0},
+        [BINARY_MUL]  = {0, 0, 0, 1, 1, 0},
+        [BINARY_DIV]  = {0, 0, 0, 1, 1, 0},
+        [BINARY_MOD]  = {0, 0, 0, 1, 1, 0},
+        [BINARY_BXOR] = {0, 0, 0, 1, 0, 0},
+        [BINARY_BAND] = {0, 0, 0, 1, 0, 0},
+        [BINARY_BOR]  = {0, 0, 0, 1, 0, 0},
+        [BINARY_SHL]  = {0, 0, 0, 1, 0, 0},
+        [BINARY_SHR]  = {0, 0, 0, 1, 0, 0},
     };
 
     static char const *BINOP_REPR[] = {
@@ -1290,7 +1261,6 @@ static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name, struct
     return method->inst;
 }
 
-// TODO: what about arrays???
 // Make sure that the target type of the given implementation of the Copy trait
 // contains only copyable fields
 static void check_copy_trait_impl(struct TypeChecker *T, struct SourceSpan span, struct IrImpl const *def)
@@ -1300,27 +1270,30 @@ static void check_copy_trait_impl(struct TypeChecker *T, struct SourceSpan span,
         if (adt->is_struct) {
             IrTypeList *fields = pawP_instantiate_struct_fields(T->C, IrGetAdt(def->type));
             K_LIST_XFOREACH (fields, IrType *const, p) {
-                if (!pawIr_is_copyable(T->C, *p))
-                    pawErr_generic_error(ENV(T), T->pm->name, span,
-                            "struct target of \"Copy\" trait impl is not copyable");
+                pawIr_solver_add_copy_obligation_for(T->C->S, *p);
+//TODO                if (!pawIr_is_copyable(T->C, *p))
+//TODO                    pawErr_generic_error(ENV(T), T->pm->name, span,
+//TODO                            "struct target of \"Copy\" trait impl is not copyable");
             }
         } else {
             for (int discr = 0; discr < adt->variants->count; ++discr) {
                 IrTypeList *fields = pawP_instantiate_variant_fields(T->C, IrGetAdt(def->type), discr);
                 K_LIST_XFOREACH (fields, IrType *const, p) {
-                    if (!pawIr_is_copyable(T->C, *p))
-                        pawErr_generic_error(ENV(T), T->pm->name, span,
-                                "enum target of \"Copy\" trait impl is not copyable "
-                                "(see variant number %d)", discr);
+                    pawIr_solver_add_copy_obligation_for(T->C->S, *p);
+//TODO                    if (!pawIr_is_copyable(T->C, *p))
+//TODO                        pawErr_generic_error(ENV(T), T->pm->name, span,
+//TODO                                "enum target of \"Copy\" trait impl is not copyable "
+//TODO                                "(see variant number %d)", discr);
                 }
             }
         }
     } else if (IrIsTuple(def->type)) {
         struct IrTuple const *t = IrGetTuple(def->type);
         K_LIST_XFOREACH (t->elems, IrType *const, p) {
-            if (!pawIr_is_copyable(T->C, *p))
-                pawErr_generic_error(ENV(T), T->pm->name, span,
-                        "tuple target of \"Copy\" trait impl is not copyable");
+            pawIr_solver_add_copy_obligation_for(T->C->S, *p);
+//TODO            if (!pawIr_is_copyable(T->C, *p))
+//TODO                pawErr_generic_error(ENV(T), T->pm->name, span,
+//TODO                        "tuple target of \"Copy\" trait impl is not copyable");
         }
     }
 }
@@ -1563,9 +1536,9 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
     }
 
     if (method != NULL) {
-        struct IrFnPtr *fn = IrGetFnPtr(IR_SIGNATURE_FN(T->C, method));
-        if (!IrIsPtr(IrTypeList_first(fn->params)))
-            ensure_valid_rvalue(T, select->target);
+//TODO        struct IrFnPtr *fn = IrGetFnPtr(IR_SIGNATURE_FN(T->C, method));
+//TODO        if (!IrIsPtr(IrTypeList_first(fn->params)))
+//TODO            ensure_valid_rvalue(T, select->target);
     } else {
         return select_field(T, self, select);
     }

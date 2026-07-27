@@ -8,6 +8,47 @@
 #include "mir.h"
 
 
+//  Paw construct | mangling format
+// ---------------|-----------------
+//  bool          | "b"
+//  char          | "c"
+//  int8          | "a"
+//  int16         | "s"
+//  int32         | "i"
+//  int64         | "x"
+//  isize         | "j"
+//  uint8         | "h"
+//  uint16        | "t"
+//  uint32        | "u"
+//  uint64        | "y"
+//  usize         | "k"
+//  float32       | "f"
+//  float64       | "d"
+//  str           | "w"
+//  pointer       | "p" Type
+//  ADT           | name "::" name {Arg}
+//  fn            | "F" Type {Type} "E"
+//  tuple         | "T" {Type} "E"
+//  slice         | "S" Type
+//  array         | "A" Const "_" Type
+//
+// Type = Primitive | Pointer | Adt | Fn | Closure | Tuple | Slice | Array .
+// Const = "K" Primitive Value .
+// Value =
+//
+// Pointer = "p" Type .
+// Adt     = Rle "::" Rle {Arg}
+// Fn      = "F" Type {Type} "E"
+// Tuple   = "T" {Type} "E"
+// Slice   = "S" Type
+// Array   = "A" Const "_" Type
+//
+// Rle            = integer name .
+// name           = letter {letter | decimal_digit} .
+// letter         = "A".."Z" | "a".."z" | "_" .
+// integer        = "1".."9" {decimal_digit} .
+// decimal_digit  = "0".."9" .
+
 static void add_rle_string(struct Compiler *C, Buffer *b, Str const *s)
 {
     pawL_add_int(ENV(C), b, (paw_Int)s->length);
@@ -86,27 +127,27 @@ static void add_const(struct Compiler *C, Buffer *b, IrConst *konst)
     pawL_add_char(P, b, 'K');
 
     if (konst->kind == IR_CONST_DECL) {
+        // TODO: this branch should never be hit since we only mangle concrete instantiations of generic constant values
+        PAW_UNREACHABLE();
         struct IrGenericDef const *def = pawIr_get_generic_def(C, konst->decl.did);
         L_ADD_STRING(P, b, def->konst.name);
     } else {
         paw_assert(konst->kind == IR_CONST_VALUE);
-
-        // TODO: Figure out a better encoding for the constant value (currently just using type prefix + binary data)
-        switch (IR_KINDOF(konst->value.type)) {
-            case kIrBool:
-                pawL_add_char(P, b, 'b');
-                break;
-            case kIrChar:
+        add_type(C, b, konst->value.type);
+        if (IrIsString(konst->value.type)) {
+            pawL_add_char(P, b, 'A');
+            Str const *s = konst->value.value.s;
+            for (size_t i = 0; i < s->length; ++i) {
                 pawL_add_char(P, b, 'c');
-                break;
-            case kIrInt:
-                add_int_kind(P, b, IR_INT_KIND(konst->value.type));
-                break;
-            default:
-                add_float_kind(P, b, IR_FLOAT_KIND(konst->value.type));
-                break;
+                unsigned char c = (unsigned char)s->text[i];
+                if (c > 0xF) pawL_add_char(P, b, '0' + (c >> 4));
+                pawL_add_char(P, b, '0' + (c & 0xF));
+                pawL_add_char(P, b, '_');
+            }
+            pawL_add_char(P, b, 'E');
+        } else {
+            pawL_add_hex(P, b, konst->value.value.u64);
         }
-        pawL_add_hex(P, b, (paw_Uint)konst->value.value.i);
     }
 }
 
@@ -140,6 +181,12 @@ static void add_generic_args_omitting_self(struct Compiler *C, Buffer *buf, IrGe
             add_generic_arg(C, buf, IrGenericArgs_get(args, i));
         finish_generic_args(C, buf);
     }
+}
+
+static void add_closure_type(struct Compiler *C, Buffer *b, struct IrClosure const *t)
+{
+    pawL_add_fstring(ENV(C), b, "C%d", t->did.value);
+    add_generic_args(C, b, t->args);
 }
 
 static void add_type(struct Compiler *C, Buffer *b, IrType *type)
@@ -177,7 +224,17 @@ static void add_type(struct Compiler *C, Buffer *b, IrType *type)
             add_generic_args(C, b, t->args);
             break;
         }
-        case kIrClosure:
+        case kIrClosure: {
+            struct IrClosure const *t = IrGetClosure(type);
+            struct IrFnDef const *def = pawIr_get_fn_def(C, t->did);
+            if (def->has_captures) {
+                // closures that capture variables have types that are incompatible with any
+                // other function type
+                add_closure_type(C, b, t);
+                break;
+            }
+            // (fallthrough)
+        }
         case kIrSignature:
         case kIrFnPtr: {
             struct IrFnPtr const *fn = IrGetFnPtr(IR_GET_FN(C, type));
@@ -263,8 +320,7 @@ Str *mangle_type(struct Compiler *C, IrType *type)
         }
     } else if (IrIsClosure(type)) {
         struct IrClosure const *t = IrGetClosure(type);
-        pawL_add_fstring(P, &b, "C%d", t->did.value);
-        add_generic_args(C, &b, t->args);
+        add_closure_type(C, &b, t);
     } else {
         add_type(C, &b, type);
     }

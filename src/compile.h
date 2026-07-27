@@ -122,6 +122,9 @@ struct Compiler {
     DeclId core_traits[NUM_CORE_TRAITS];
     NodeId core_trait_index_id_hack; // TODO
 
+    DeclId std_math_NAN;
+    DeclId std_math_INFINITY;
+
     // callbacks for debugging
     Value on_build_ast;
     Value on_build_hir;

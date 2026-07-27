@@ -251,7 +251,7 @@ static void indicate_variable_def(struct VariableAnalyzer *V, struct Variable co
 
 static void indicate_variable_move(struct VariableAnalyzer *V, struct Variable const *var)
 {
-    if (!pawIr_is_copyable(V->C, var->type))
+    if (!pawIr_solver_is_copyable(V->C, var->type))
         states_set(V->current, var->id, VAR_MOVED);
 }
 
@@ -272,7 +272,7 @@ static void maybe_indicate_move(struct VariableAnalyzer *V, struct MirPlace p)
     maybe_indicate_use(V, p);
 
     IrType *pointee = ir_auto_deref(p.type);
-    if (!pawIr_is_copyable(V->C, pointee)) {
+    if (!pawIr_solver_is_copyable(V->C, pointee)) {
         struct Variable *const *pvar = find_variable(V, p);
         if (pvar != NULL) indicate_variable_move(V, *pvar);
     }
@@ -716,6 +716,14 @@ void pawA_validate(struct Mir *mir)
 {
     pawMir_merge_redundant_blocks(mir);
 
+    IrSolver *S = pawIr_push_solver(mir->C);
+    pawIr_solver_add_predicates_from(S, mir->did, mir->args,
+            (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_PREDICATE,
+                .did = mir->did,
+                .span = mir->span,
+            });
     ensure_variable_initialization_before_use(mir);
+    pawIr_pop_solver(mir->C);
 }
 
