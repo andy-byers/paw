@@ -42,6 +42,7 @@ struct BlockState {
     IrType *result;
     struct BlockState *outer;
     enum BlockKind kind;
+    paw_Bool maybe_breaks;
 };
 
 struct ResultState {
@@ -1827,14 +1828,14 @@ static IrType *check_loop_expr(struct TypeChecker *T, struct HirLoopExpr *e)
 {
     struct BlockState bs;
     enter_block(T, &bs, e->span, BLOCK_LOOP);
-
     IrType *result = check_operand(T, e->block);
+    unify_unit_type(T, e->span, bs.result);
     unify_unit_type(T, e->span, result);
-
     leave_block(T);
 
-    // loops that have no local or nonlocal jumps never complete
-    return unify_never_type(T, e->span, bs.result);
+    return bs.maybe_breaks
+        ? pawIr_new_unit(T->C)
+        : pawIr_new_never(T->C);
 }
 
 static IrType *check_array_index(struct TypeChecker *T, IrType *array, IrType *index)
@@ -2289,11 +2290,12 @@ static struct BlockState *unconditional_jump(struct TypeChecker *T, struct Sourc
 
 static IrType *check_jump_expr(struct TypeChecker *T, struct HirJumpExpr *e)
 {
-    struct BlockState *bs = unconditional_jump(T, e->span);
     if (e->jump_kind == JUMP_BREAK) {
         // "break" leaves the enclosing loop, causing it to evaluate to "()"
-        while (bs->kind != BLOCK_LOOP) bs = bs->outer;
-        unify_unit_type(T, e->span, bs->result);
+        struct BlockState *bs = T->bs;
+        while (bs->kind != BLOCK_LOOP)
+            bs = bs->outer;
+        bs->maybe_breaks = PAW_TRUE;
     }
     return pawIr_new_never(T->C);
 }
