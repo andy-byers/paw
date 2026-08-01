@@ -863,7 +863,7 @@ static void test_definite_assignment(void)
 
     char const *COMMON_TYPES =
         "struct Copyable; impl Copy for Copyable {}\n"
-        "struct MoveOnly;\n";
+        "struct MoveOnly; impl MoveOnly { pub fn take(self) {} }\n";
 
     TESTCASE(SANITY_CHECK_deferred_init, 0,
             "let first: MoveOnly;"
@@ -944,6 +944,10 @@ static void test_definite_assignment(void)
             "let pointer = &pointee;"
             "*pointer = pointee;"
             "*pointer = pointee;");
+
+    TESTCASE(move_out_of_sequence, kErrFalseObligation,
+            "let a = [MoveOnly];"
+            "a[0].take();");
 
 #undef TESTCASE
 }

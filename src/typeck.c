@@ -1272,19 +1272,12 @@ static void check_copy_trait_impl(struct TypeChecker *T, struct SourceSpan span,
             IrTypeList *fields = pawP_instantiate_struct_fields(T->C, IrGetAdt(def->type));
             K_LIST_XFOREACH (fields, IrType *const, p) {
                 pawIr_solver_add_copy_obligation_for(T->C->S, *p);
-//TODO                if (!pawIr_is_copyable(T->C, *p))
-//TODO                    pawErr_generic_error(ENV(T), T->pm->name, span,
-//TODO                            "struct target of \"Copy\" trait impl is not copyable");
             }
         } else {
             for (int discr = 0; discr < adt->variants->count; ++discr) {
                 IrTypeList *fields = pawP_instantiate_variant_fields(T->C, IrGetAdt(def->type), discr);
                 K_LIST_XFOREACH (fields, IrType *const, p) {
                     pawIr_solver_add_copy_obligation_for(T->C->S, *p);
-//TODO                    if (!pawIr_is_copyable(T->C, *p))
-//TODO                        pawErr_generic_error(ENV(T), T->pm->name, span,
-//TODO                                "enum target of \"Copy\" trait impl is not copyable "
-//TODO                                "(see variant number %d)", discr);
                 }
             }
         }
@@ -1292,9 +1285,6 @@ static void check_copy_trait_impl(struct TypeChecker *T, struct SourceSpan span,
         struct IrTuple const *t = IrGetTuple(def->type);
         K_LIST_XFOREACH (t->elems, IrType *const, p) {
             pawIr_solver_add_copy_obligation_for(T->C->S, *p);
-//TODO            if (!pawIr_is_copyable(T->C, *p))
-//TODO                pawErr_generic_error(ENV(T), T->pm->name, span,
-//TODO                        "tuple target of \"Copy\" trait impl is not copyable");
         }
     }
 }
@@ -1537,9 +1527,9 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
     }
 
     if (method != NULL) {
-//TODO        struct IrFnPtr *fn = IrGetFnPtr(IR_SIGNATURE_FN(T->C, method));
-//TODO        if (!IrIsPtr(IrTypeList_first(fn->params)))
-//TODO            ensure_valid_rvalue(T, select->target);
+        struct IrFnPtr *fn = IrGetFnPtr(IR_SIGNATURE_FN(T->C, method));
+        if (!IrIsPtr(IrTypeList_first(fn->params)))
+            ensure_valid_rvalue(T, select->target);
     } else {
         return select_field(T, self, select);
     }
