@@ -5,7 +5,7 @@
 #include "impl.h"
 #include "ir_type.h"
 #include "solve.h"
-#include "type_folder.h"
+#include "trait.h"
 #include "unify.h"
 
 #define LOOKUP_ERROR(C_, Kind_, ...) THROW_ERROR(C_, \

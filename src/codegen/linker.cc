@@ -3,7 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "linker.h"
-#include "util.h"
 
 // TODO: probably should write separate linker abstractions for different linkers
 #if defined(PAW_OS_POSIX)
@@ -94,14 +93,17 @@ void Linker::finalize(std::string path) &&
     // On Linux, both gcc and clang support the "-B" option for
     // specifying linkage. Use "-Wl" to tell clang to forward the
     // rest of the argument string to the linker.
-    for (auto const &v: staticlibs_) {
+    if (!staticlibs_.empty())
         rewrite.push_back("-Wl,-Bstatic");
+    for (auto const &v: staticlibs_)
         rewrite.push_back("-l" + v);
-    }
-    for (auto const &v: dylibs_) {
+    if (!dylibs_.empty())
         rewrite.push_back("-Wl,-Bdynamic");
+    for (auto const &v: dylibs_)
         rewrite.push_back("-l" + v);
-    }
+    if (!staticlibs_.empty() && dylibs_.empty())
+        // switch back to dynamic mode (the default)
+        rewrite.push_back("-Wl,-Bdynamic");
 #endif // !defined(PAW_OS_MACOS)
 
     rewrite.push_back("-o" + path);

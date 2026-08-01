@@ -80,6 +80,10 @@ ABIClass abi_class_for_object(Context &X, llvm::Type *ty)
 
 } // (anonymous namespace)
 
+unsigned Type::get_alignment() const
+{
+    return X->align_of(get_ty()).value();
+}
 
 bool Type::is_signed_int() const
 {
@@ -445,6 +449,7 @@ std::string ArrayType::to_string() const
 
 ObjectType::ObjectType(Context &X, llvm::ArrayRef<ObjectType::FieldTypes> variants, std::string name)
     : Type(X, DEFERRED_INIT, Type::Kind::OBJECT, (ABIClass)0)
+    , min_alignment_(1)
     , name_(std::move(name))
 {
     set_variants(variants);
@@ -461,6 +466,7 @@ void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
         std::vector<llvm::Type *> field_tys;
         llvm::Type *ty;
     } largest_variant;
+    unsigned strictest_alignment = 1;
 
     paw_assert(!variants.empty());
     for (auto i = 0U; i < variants.size(); ++i) {
@@ -485,16 +491,21 @@ void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
             largest_variant.ty = variant_ty;
             largest_variant.size = size;
         }
+        auto const alignment = X->align_of(variant_ty);
+        if (strictest_alignment < alignment.value())
+            strictest_alignment = alignment.value();
     }
 
-    if (ty_ != DEFERRED_INIT) {
-        llvm::cast<llvm::StructType>(ty_)
-            ->setBody(largest_variant.field_tys);
+    if (variants.empty() || largest_variant.size == 0) {
+        ty_ = llvm::StructType::get(*c, {X->get_i8_ty()}, false);
+        abi_class_ = ABIClass::EMPTY;
     } else {
-        ty_ = largest_variant.ty;
+        ty_ =  variants.size() == 1 ? largest_variant.ty
+            : X->get_array_ty(X->get_i8_ty(), largest_variant.size);
+        abi_class_ = abi_class_for_object(*X, ty_);
+        min_alignment_ = strictest_alignment;
     }
 
-    abi_class_ = abi_class_for_object(*X, ty_);
 }
 
 llvm::Type *ObjectType::get_ty() const

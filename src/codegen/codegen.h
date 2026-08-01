@@ -11,7 +11,6 @@ struct Compiler;
 struct TranslationUnit;
 
 struct CodegenOptions {
-    char const *output_path;
     unsigned verify_module : 1;
     unsigned print_ir : 1;
     unsigned enable_asan : 1;

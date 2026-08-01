@@ -39,7 +39,7 @@ enum ConstructorKind {
 struct Constructor {
     enum ConstructorKind kind;
     union {
-        Value value;
+        IrValue value;
 
         struct {
             struct IrTypeList *elems;

@@ -1,32 +1,28 @@
 
 cmake_minimum_required(VERSION 3.14)
-set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 project(paw
-    LANGUAGES C
+    LANGUAGES C CXX
     VERSION 0.0.1)
  
 set(CMAKE_C_STANDARD 11) 
-set(CMAKE_C_STANDARD_REQUIRED On) 
+set(CMAKE_C_STANDARD_REQUIRED ON) 
  
-set(MAIN_PROJECT Off)
+set(MAIN_PROJECT OFF)
 if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    set(MAIN_PROJECT On)
+    set(MAIN_PROJECT ON)
 endif()
 
-set(PAW_LLVM_PATH "" CACHE PATH "Path to LLVM library")
 set(PAW_CLANG_PATH "" CACHE PATH "Path to clang binary")
 set(PAW_BINARY_DIR "" CACHE PATH "Location of compilation artifacts")
 
 # TODO: installation support
-# TODO:   PAW_ROOT_DIR=("paw", "paw_stdc.o", <stdlib sources>)
 set(PAW_ROOT_DIR ${CMAKE_BINARY_DIR}/src/codegen)
 
-find_package(LLVM REQUIRED CONFIG)
-add_definitions(${LLVM_DEFINITIONS})
-llvm_map_components_to_libnames(LLVM_LIBS 
-    native passes)
+#find_package(LLVM REQUIRED CONFIG)
+#add_definitions(${LLVM_DEFINITIONS})
+#llvm_map_components_to_libnames(LLVM_LIBS native passes support)
 
-option(PAW_BuildFuzzers "Build the fuzz targets" Off)
+option(PAW_BuildFuzzers "Build the fuzz targets" OFF)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 
 set(PAW_PRELUDE_PATH "${CMAKE_SOURCE_DIR}/std/prelude.paw" CACHE STRING "Path to prelude module")
@@ -47,110 +43,110 @@ endif()
 
 add_subdirectory(src/codegen)
 
-set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
+set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 
 set(PAW_HEADER_FILES
-    ${PAW_SOURCE_DIR}/analysis.h
-    ${PAW_SOURCE_DIR}/api.h
-    ${PAW_SOURCE_DIR}/ast.h
-    ${PAW_SOURCE_DIR}/auxlib.h
-    ${PAW_SOURCE_DIR}/call.h
-    ${PAW_SOURCE_DIR}/code.h
-    ${PAW_SOURCE_DIR}/compile.h
-    ${PAW_SOURCE_DIR}/debug.h
-    ${PAW_SOURCE_DIR}/env.h
-    ${PAW_SOURCE_DIR}/error.h
-    ${PAW_SOURCE_DIR}/hir.h
-    ${PAW_SOURCE_DIR}/ir_type.h
-    ${PAW_SOURCE_DIR}/impl.h
-    ${PAW_SOURCE_DIR}/layout.h
-    ${PAW_SOURCE_DIR}/lex.h
-    ${PAW_SOURCE_DIR}/lib.h
-    ${PAW_SOURCE_DIR}/mangle.h
-    ${PAW_SOURCE_DIR}/map.h
-    ${PAW_SOURCE_DIR}/match.h
-    ${PAW_SOURCE_DIR}/mem.h
-    ${PAW_SOURCE_DIR}/mir.h
-    ${PAW_SOURCE_DIR}/os.h
-    ${PAW_SOURCE_DIR}/parse.h
-    ${PAW_SOURCE_DIR}/pool.h
-    ${PAW_SOURCE_DIR}/prefix.h
-    ${PAW_SOURCE_DIR}/resolve.h
-    ${PAW_SOURCE_DIR}/solve.h
-    ${PAW_SOURCE_DIR}/source.h
-    ${PAW_SOURCE_DIR}/ssa.h
-    ${PAW_SOURCE_DIR}/stats.h
-    ${PAW_SOURCE_DIR}/str.h
-    ${PAW_SOURCE_DIR}/trait.h
-    ${PAW_SOURCE_DIR}/type_folder.h
-    ${PAW_SOURCE_DIR}/unify.h
-    ${PAW_SOURCE_DIR}/util.h
-    ${PAW_SOURCE_DIR}/value.h)
+    ${PAW_SOURCE_DIR}/src/analysis.h
+    ${PAW_SOURCE_DIR}/src/api.h
+    ${PAW_SOURCE_DIR}/src/ast.h
+    ${PAW_SOURCE_DIR}/src/auxlib.h
+    ${PAW_SOURCE_DIR}/src/call.h
+    ${PAW_SOURCE_DIR}/src/code.h
+    ${PAW_SOURCE_DIR}/src/compile.h
+    ${PAW_SOURCE_DIR}/src/debug.h
+    ${PAW_SOURCE_DIR}/src/env.h
+    ${PAW_SOURCE_DIR}/src/error.h
+    ${PAW_SOURCE_DIR}/src/hir.h
+    ${PAW_SOURCE_DIR}/src/ir_type.h
+    ${PAW_SOURCE_DIR}/src/impl.h
+    ${PAW_SOURCE_DIR}/src/layout.h
+    ${PAW_SOURCE_DIR}/src/lex.h
+    ${PAW_SOURCE_DIR}/src/lib.h
+    ${PAW_SOURCE_DIR}/src/mangle.h
+    ${PAW_SOURCE_DIR}/src/map.h
+    ${PAW_SOURCE_DIR}/src/match.h
+    ${PAW_SOURCE_DIR}/src/mem.h
+    ${PAW_SOURCE_DIR}/src/mir.h
+    ${PAW_SOURCE_DIR}/src/os.h
+    ${PAW_SOURCE_DIR}/src/parse.h
+    ${PAW_SOURCE_DIR}/src/pool.h
+    ${PAW_SOURCE_DIR}/src/prefix.h
+    ${PAW_SOURCE_DIR}/src/resolve.h
+    ${PAW_SOURCE_DIR}/src/solve.h
+    ${PAW_SOURCE_DIR}/src/source.h
+    ${PAW_SOURCE_DIR}/src/ssa.h
+    ${PAW_SOURCE_DIR}/src/stats.h
+    ${PAW_SOURCE_DIR}/src/str.h
+    ${PAW_SOURCE_DIR}/src/trait.h
+    ${PAW_SOURCE_DIR}/src/type_folder.h
+    ${PAW_SOURCE_DIR}/src/unify.h
+    ${PAW_SOURCE_DIR}/src/util.h
+    ${PAW_SOURCE_DIR}/src/value.h)
 
 set(PAW_SOURCE_FILES
-    ${PAW_SOURCE_DIR}/analysis.c
-    ${PAW_SOURCE_DIR}/api.c
-    ${PAW_SOURCE_DIR}/ast.c
-    ${PAW_SOURCE_DIR}/auxlib.c
-    ${PAW_SOURCE_DIR}/call.c
-    ${PAW_SOURCE_DIR}/code.c
-    ${PAW_SOURCE_DIR}/codegen.c
-    ${PAW_SOURCE_DIR}/collect_items.c
-    ${PAW_SOURCE_DIR}/compile.c
-    ${PAW_SOURCE_DIR}/debug.c
-    ${PAW_SOURCE_DIR}/decision.c
-    ${PAW_SOURCE_DIR}/dominance.c
-    ${PAW_SOURCE_DIR}/dropgen.c
-    ${PAW_SOURCE_DIR}/env.c
-    ${PAW_SOURCE_DIR}/error.c
-    ${PAW_SOURCE_DIR}/exhaustiveness.c
-    ${PAW_SOURCE_DIR}/hir.c
-    ${PAW_SOURCE_DIR}/impl.c
-    ${PAW_SOURCE_DIR}/import.c
-    ${PAW_SOURCE_DIR}/instantiate.c
-    ${PAW_SOURCE_DIR}/ir_type.c
-    ${PAW_SOURCE_DIR}/kfold.c
-    ${PAW_SOURCE_DIR}/kprop.c
-    ${PAW_SOURCE_DIR}/layout.c
-    ${PAW_SOURCE_DIR}/lex.c
-    ${PAW_SOURCE_DIR}/list.c
-    ${PAW_SOURCE_DIR}/lib.c
-    ${PAW_SOURCE_DIR}/liveness.c
-    ${PAW_SOURCE_DIR}/lower_ast.c
-    ${PAW_SOURCE_DIR}/lower_hir.c
-    ${PAW_SOURCE_DIR}/lower_type.c
-    ${PAW_SOURCE_DIR}/mangle.c
-    ${PAW_SOURCE_DIR}/map.c
-    ${PAW_SOURCE_DIR}/mem.c
-    ${PAW_SOURCE_DIR}/mir.c
-    ${PAW_SOURCE_DIR}/monomorphize.c
-    ${PAW_SOURCE_DIR}/os.c
-    ${PAW_SOURCE_DIR}/parse.c
-    ${PAW_SOURCE_DIR}/pool.c
-    ${PAW_SOURCE_DIR}/resolve.c
-    ${PAW_SOURCE_DIR}/solve.c
-    ${PAW_SOURCE_DIR}/source.c
-    ${PAW_SOURCE_DIR}/ssa.c
-    ${PAW_SOURCE_DIR}/stats.c
-    ${PAW_SOURCE_DIR}/str.c
-    ${PAW_SOURCE_DIR}/trait.c
-    ${PAW_SOURCE_DIR}/type_folder.c
-    ${PAW_SOURCE_DIR}/typeck.c
-    ${PAW_SOURCE_DIR}/unify.c
-    ${PAW_SOURCE_DIR}/util.c
-    ${PAW_SOURCE_DIR}/value.c)
+    ${PAW_SOURCE_DIR}/src/analysis.c
+    ${PAW_SOURCE_DIR}/src/api.c
+    ${PAW_SOURCE_DIR}/src/ast.c
+    ${PAW_SOURCE_DIR}/src/auxlib.c
+    ${PAW_SOURCE_DIR}/src/call.c
+    ${PAW_SOURCE_DIR}/src/code.c
+    ${PAW_SOURCE_DIR}/src/codegen.c
+    ${PAW_SOURCE_DIR}/src/collect_items.c
+    ${PAW_SOURCE_DIR}/src/compile.c
+    ${PAW_SOURCE_DIR}/src/debug.c
+    ${PAW_SOURCE_DIR}/src/decision.c
+    ${PAW_SOURCE_DIR}/src/dominance.c
+    ${PAW_SOURCE_DIR}/src/dropgen.c
+    ${PAW_SOURCE_DIR}/src/env.c
+    ${PAW_SOURCE_DIR}/src/error.c
+    ${PAW_SOURCE_DIR}/src/exhaustiveness.c
+    ${PAW_SOURCE_DIR}/src/hir.c
+    ${PAW_SOURCE_DIR}/src/impl.c
+    ${PAW_SOURCE_DIR}/src/import.c
+    ${PAW_SOURCE_DIR}/src/instantiate.c
+    ${PAW_SOURCE_DIR}/src/ir_type.c
+    ${PAW_SOURCE_DIR}/src/kfold.c
+    ${PAW_SOURCE_DIR}/src/kprop.c
+    ${PAW_SOURCE_DIR}/src/layout.c
+    ${PAW_SOURCE_DIR}/src/lex.c
+    ${PAW_SOURCE_DIR}/src/list.c
+    ${PAW_SOURCE_DIR}/src/lib.c
+    ${PAW_SOURCE_DIR}/src/liveness.c
+    ${PAW_SOURCE_DIR}/src/lower_ast.c
+    ${PAW_SOURCE_DIR}/src/lower_hir.c
+    ${PAW_SOURCE_DIR}/src/lower_type.c
+    ${PAW_SOURCE_DIR}/src/mangle.c
+    ${PAW_SOURCE_DIR}/src/map.c
+    ${PAW_SOURCE_DIR}/src/mem.c
+    ${PAW_SOURCE_DIR}/src/mir.c
+    ${PAW_SOURCE_DIR}/src/monomorphize.c
+    ${PAW_SOURCE_DIR}/src/os.c
+    ${PAW_SOURCE_DIR}/src/parse.c
+    ${PAW_SOURCE_DIR}/src/pool.c
+    ${PAW_SOURCE_DIR}/src/resolve.c
+    ${PAW_SOURCE_DIR}/src/solve.c
+    ${PAW_SOURCE_DIR}/src/source.c
+    ${PAW_SOURCE_DIR}/src/ssa.c
+    ${PAW_SOURCE_DIR}/src/stats.c
+    ${PAW_SOURCE_DIR}/src/str.c
+    ${PAW_SOURCE_DIR}/src/trait.c
+    ${PAW_SOURCE_DIR}/src/type_folder.c
+    ${PAW_SOURCE_DIR}/src/typeck.c
+    ${PAW_SOURCE_DIR}/src/unify.c
+    ${PAW_SOURCE_DIR}/src/util.c
+    ${PAW_SOURCE_DIR}/src/value.c)
 
 # TODO: Paw really needs better organization. At least split off a "compiler" directory to hold the numerous compiler source files
 add_library(paw STATIC)
-target_include_directories(paw 
-    PRIVATE ${LLVM_INCLUDE_DIRS})
-target_link_libraries(paw 
-    PRIVATE ${LLVM_LIBS})
+#target_include_directories(paw 
+#    PRIVATE ${LLVM_INCLUDE_DIRS})
+#target_link_libraries(paw 
+#    PRIVATE ${LLVM_LIBS})
 target_sources(paw
     PUBLIC  ${PAW_HEADER_FILES}
     PRIVATE ${PAW_SOURCE_FILES})
 target_include_directories(paw
-    PUBLIC ${PAW_SOURCE_DIR})
+    PUBLIC ${PAW_SOURCE_DIR}/src)
 # TODO: use PAW_ROOT_DIR to compute location of stdlib files, need to copy into install dir
 target_compile_definitions(paw
     PUBLIC PAW_PRELUDE_PATH="${PAW_PRELUDE_PATH}"
@@ -162,9 +158,6 @@ target_link_libraries(paw
     PRIVATE paw_context paw_codegen)
 
 if(PAW_BuildTests)
-    # Speed up stack overflow test
-    target_compile_definitions(paw
-        PUBLIC PAW_STACK_MAX=10000) 
     include(CTest)
     enable_testing()
     add_subdirectory(test)

@@ -155,7 +155,7 @@ paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, paw_Usize size)
         : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(paw_Usize alignment, paw_Usize size)
+paw_Result_Ptr_mem_OOM paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size)
 {
     void *ptr = aligned_alloc(alignment, size);
     return ptr != NULL

@@ -232,12 +232,24 @@ static struct MirPlace add_local(struct Mir *mir, char const *name, IrType *type
     return pawMir_get_register(mir, MIR_REG(num_locals));
 }
 
+static struct IrFnPtr const *get_fn_type(struct MonoCollector *M, IrType *type)
+{
+    if (!IrIsFnPtr(type))
+        type = IR_GET_FN(M->C, type);
+    type = pawU_normalize_projections(M->C->U, type);
+    return IrGetFnPtr(type);
+}
+
 static struct Mir *allocate_drop_template(struct MonoCollector *M, IrType *type, IrType *self)
 {
+    IrTypeList *params = IrTypeList_new(M->C);
+    IrTypeList_push(M->C, params, pawIr_new_ptr(M->C, self));
+    IrType *result = pawIr_new_unit(M->C);
+
     struct IrFnDef const *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
     struct Mir *mir = pawMir_new(M->C, 0, (struct SourceSpan){0}, def->name, IR_TYPE_DID(type),
-            IR_GENERIC_ARGS(type), Annotations_new(M->C), type, self, -1, def->parent, FUNC_METHOD,
-            PAW_TRUE, PAW_FALSE);
+            IR_GENERIC_ARGS(type), params, result, Annotations_new(M->C), type, self, -1,
+            def->parent, FUNC_METHOD, PAW_TRUE, PAW_FALSE);
     struct MirPlace const result_local = add_local(mir, "(result)", pawIr_new_unit(M->C));
     struct MirPlace const self_local = add_local(mir, "self", pawIr_new_ptr(M->C, self));
 
@@ -351,8 +363,10 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, IrType *ty
     K_LIST_XFOREACH (base->args, IrGenericArg const, p)
         IrGenericArgs_push(M->C, args, finalize_arg(M, *p));
 
-    M->mir = pawMir_new(M->C, base->modno, base->span, base->name, base->did, args, base->annotations,
-            type, self, base->child_id, base->parent_id, base->fn_kind, base->is_pub, PAW_FALSE);
+    struct IrFnPtr const *fptr = get_fn_type(M, type);
+    M->mir = pawMir_new(M->C, base->modno, base->span, base->name, base->did, args,
+            fptr->params, fptr->result, base->annotations, type, self, base->child_id,
+            base->parent_id, base->fn_kind, base->is_pub, PAW_FALSE);
     return M->mir;
 }
 
@@ -417,21 +431,7 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         }
     }
 
-//TODO    {
-//TODO        struct MirConstantData const *pdata;
-//TODO        K_LIST_FOREACH (base->kcache->data, pdata) {
-//TODO            IrConst *konst = pdata->data->kind == IR_CONST_DECL
-//TODO                ? finalize_const(M, pdata->data) : pdata->data;
 //TODO
-//TODO            if (konst->kind == IR_CONST_VALUE) {
-//TODO                struct IrConstValue const value = konst->value;
-//TODO                pawMir_kcache_add_value(inst, inst->kcache, value.value, value.type);
-//TODO            } else {
-//TODO                paw_assert(konst->kind == IR_CONST_DECL);
-//TODO                pawMir_kcache_add_param(inst, inst->kcache, konst->param.did);
-//TODO            }
-//TODO        }
-//TODO    }
 
     {
         struct MirCaptureInfo const *pci;

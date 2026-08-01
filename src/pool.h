@@ -27,8 +27,8 @@ struct Pool {
     struct PoolStats st;
 };
 
-void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size, struct PoolStats st);
-void pawK_pool_uninit(struct Pool *pool);
-void *pawK_pool_alloc(struct Pool *pool, void *ptr, size_t size0, size_t size);
+EXTERN_C void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size, struct PoolStats st);
+EXTERN_C void pawK_pool_uninit(struct Pool *pool);
+EXTERN_C void *pawK_pool_alloc(struct Pool *pool, void *ptr, size_t size0, size_t size);
 
 #endif // PAW_POOL_H

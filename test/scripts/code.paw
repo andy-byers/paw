@@ -817,5 +817,12 @@
 //}
 
 #[test]
-pub fn test() {
+pub fn test_numeric_for_loop() {
+    let f = None;
+    for i in 0..100 {
+        if i == 50 {
+            f = Some(|| i);
+        }
+    }
+    let f = f.unwrap();
 }

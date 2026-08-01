@@ -770,7 +770,7 @@ enum ErrorKind {
 
 #define THROW_ERROR(C_, Kind_, ...) pawErr_throw(C_, \
         kErr##Kind_, &(struct Kind_##Error) {__VA_ARGS__})
-EXTERN_C _Noreturn void pawErr_throw(struct Compiler *C, enum ErrorKind kind, void *payload);
+EXTERN_C PAW_NORETURN void pawErr_throw(struct Compiler *C, enum ErrorKind kind, void *payload);
 
 enum ErrorCategory pawErr_error_category(enum ErrorKind kind);
 
@@ -794,9 +794,9 @@ void pawErr_set_message(paw_Env *P, char const *fmt, ...);
 void pawErr_set_hint(paw_Env *P, char const *fmt, ...);
 void pawErr_finish(paw_Env *P);
 
-_Noreturn void pawErr_generic_error(paw_Env *P, Str const *modname, struct SourceSpan span, char const *fmt, ...);
+PAW_NORETURN void pawErr_generic_error(paw_Env *P, Str const *modname, struct SourceSpan span, char const *fmt, ...);
 
 // Convenience functions for throwing common errors
-_Noreturn void pawErr_exceeded_limit(paw_Env *P, Str const *modname, struct SourceSpan span, char const *what, paw_Int limit);
+PAW_NORETURN void pawErr_exceeded_limit(paw_Env *P, Str const *modname, struct SourceSpan span, char const *what, paw_Int limit);
 
 #endif // PAW_ERROR_H

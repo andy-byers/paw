@@ -27,16 +27,16 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
-#include <llvm/TargetParser/Host.h>
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #include <llvm/Transforms/Instrumentation/SanitizerCoverage.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 
 #include "codegen.h"
-#include "compile.h"
 #include "type.h"
 #include "value.h"
+
+struct Str;
 
 namespace paw::cg {
 
@@ -54,10 +54,7 @@ using StringView = Span<paw_Char>;
 #define CG_LITERAL(Lit_) StringView(Lit_ "", sizeof(Lit_) - 1)
 #define CG_STRING(Str_) StringView((Str_).data(), (Str_).size())
 
-static inline std::string to_string(::Str const *str)
-{
-    return {str->text, (size_t)str->length};
-}
+std::string to_string(::Str const *str);
 
 
 enum class BuiltinFn {
@@ -316,6 +313,18 @@ public:
     {
         auto *a_gt_b = B->CreateICmpSGT(a, b);
         return B->CreateSelect(a_gt_b, a, b);
+    }
+
+    llvm::AllocaInst *create_alloca(llvm::Type *type)
+    {
+        return B->CreateAlloca(type);
+    }
+
+    llvm::AllocaInst *create_alloca(Type *type)
+    {
+        auto *alloca = B->CreateAlloca(*type);
+        alloca->setAlignment(llvm::Align(type->get_alignment()));
+        return alloca;
     }
 
     llvm::ConstantPointerNull *create_null_ptr() const

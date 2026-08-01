@@ -45,11 +45,13 @@
 # error "unrecognized platform"
 #endif
 
-#if defined(__has_attribute)
-# define PAW_HAS_ATTRIBUTE(X) __has_attribute(X)
-#else
-# define PAW_HAS_ATTRIBUTE(X) 0
-#endif
+#ifdef __cplusplus
+# define PAW_NORETURN [[noreturn]]
+# define PAW_STATIC_ASSERT static_assert
+#else // __cplusplus
+# define PAW_NORETURN _Noreturn
+# define PAW_STATIC_ASSERT _Static_assert
+#endif // !__cplusplus
 
 #if defined(__GNUC__) || defined(__clang__)
 # define PAW_NODISCARD __attribute__((warn_unused_result))
@@ -57,14 +59,18 @@
 #elif defined(_MSC_VER)
 # define PAW_NODISCARD _Check_return_
 # define PAW_UNREACHABLE paw_unreachable_
-_Noreturn static inline void paw_unreachable_(void)
+PAW_NORETURN static inline void paw_unreachable_(void)
 {
     __assume(0);
 }
 #else
-# define PAW_NODISCARD
+# ifdef __cplusplus
+#  define PAW_NODISCARD [[nodiscard]]
+# else // __cplusplus
+#  define PAW_NODISCARD
+# endif // !__cplusplus
 # define PAW_UNREACHABLE paw_unreachable_
-_Noreturn static inline void paw_unreachable_(void) {}
+PAW_NORETURN static inline void paw_unreachable_(void) {}
 #endif
 
 #if !defined(PAW_LIKELY)

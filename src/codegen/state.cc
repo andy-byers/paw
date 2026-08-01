@@ -2,7 +2,6 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "compile.h"
 #include "context.h"
 #include "state.h"
 #include "value.h"
@@ -12,6 +11,17 @@ namespace paw::cg {
 ScratchMap::ScratchMap(Context &X)
     : X(&X)
 {
+}
+
+llvm::Value *ScratchMap::get(Type *type)
+{
+    auto *B = X->get_builder();
+    auto *bb = B->GetInsertBlock();
+    // add a local to the end of the entry block
+    B->SetInsertPointPastAllocas(bb->getParent());
+    auto *temp = X->create_alloca(type);
+    B->SetInsertPoint(bb);
+    return temp;
 }
 
 llvm::Value *ScratchMap::get(llvm::Type *type)
@@ -40,7 +50,7 @@ State::State(Context &X, Fn *fn)
 
     for (auto i = 0U; i < fn_->get_num_args(); ++i) {
         auto *param_type = type->get_param_type(i);
-        auto *stack_slot = B->CreateAlloca(*param_type);
+        auto *stack_slot = X.create_alloca(param_type);
         B->CreateStore(fn_->get_arg(i), stack_slot);
         args_[i] = stack_slot;
     }
@@ -94,12 +104,12 @@ static llvm::Value *into_abi_arg(Context &X, State &state, llvm::Value *arg, Typ
             return arg;
         case ABIClass::SMALL_STRUCT:
         case ABIClass::BINARY_STRUCT: {
-            auto *scratch = state.get_scratch(*type);
+            auto *scratch = state.get_scratch(type);
             B->CreateStore(arg, scratch);
             return B->CreateLoad(type->get_abi_ty(), scratch);
         }
         case ABIClass::LARGE_STRUCT: {
-            auto *scratch = state.get_scratch(*type);
+            auto *scratch = state.get_scratch(type);
             B->CreateStore(arg, scratch);
             return scratch;
         }
@@ -107,6 +117,11 @@ static llvm::Value *into_abi_arg(Context &X, State &state, llvm::Value *arg, Typ
 }
 
 llvm::Value *State::get_scratch(llvm::Type *type)
+{
+    return scratch_.get(type);
+}
+
+llvm::Value *State::get_scratch(Type *type)
 {
     return scratch_.get(type);
 }
@@ -140,14 +155,14 @@ llvm::Value *State::create_call(Callable const &call, llvm::Value *env, llvm::Ar
             llvm::Value *value = B->CreateCall(callee, rewrite);
             if (return_type->is_abi_struct_type()) {
                 // convert from ABI return type to actual type
-                auto *scratch = get_scratch(*type);
+                auto *scratch = get_scratch(type);
                 B->CreateStore(value, scratch);
                 value = B->CreateLoad(return_ty, scratch);
             }
             return value;
         }
         case ReturnKind::SRET: {
-            auto *sret = get_scratch(*type->get_return_type());
+            auto *sret = get_scratch(type->get_return_type());
             rewrite.insert(begin(rewrite), sret);
             auto *c = B->CreateCall(callee, rewrite);
             c->addParamAttr(0, llvm::Attribute::getWithStructRetType(

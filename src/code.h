@@ -5,7 +5,7 @@
 #ifndef PAW_CODE_H
 #define PAW_CODE_H
 
-#include "mem.h"
+#include "core.h"
 
 #define K_ALIGNOF_NODE _Alignof(void *)
 #define K_ALIGNAS_NODE _Alignas(void *)
@@ -134,13 +134,13 @@ enum FnKind {
 };
 
 // From https://stackoverflow.com/questions/8513911
-static inline paw_Uint hash_combine(paw_Uint seed, paw_Uint v)
+static inline paw_Uint64 hash_combine(paw_Uint64 seed, paw_Uint64 v)
 {
-    // TODO: versions for other sizes of paw_Uint
-    paw_Uint const mul = 0x9DDFEA08EB382D69ULL;
-    paw_Uint a = (v ^ seed) * mul;
+    // TODO: versions for other sizes
+    paw_Uint64 const mul = 0x9DDFEA08EB382D69ULL;
+    paw_Uint64 a = (v ^ seed) * mul;
     a ^= (a >> 47);
-    paw_Uint b = (seed ^ a) * mul;
+    paw_Uint64 b = (seed ^ a) * mul;
     b ^= (b >> 47);
     return b * mul;
 }

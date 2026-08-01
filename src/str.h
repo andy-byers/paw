@@ -4,11 +4,9 @@
 #ifndef PAW_STR_H
 #define PAW_STR_H
 
-#include "auxlib.h"
 #include "util.h"
 #include "value.h"
 #include <stdint.h>
-#include <string.h>
 
 #ifndef PAW_INTERN_LIMIT
 #define PAW_INTERN_LIMIT 16384

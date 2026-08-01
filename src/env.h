@@ -6,8 +6,6 @@
 #define PAW_ENV_H
 
 #include "error.h"
-#include "list.h"
-#include "map.h"
 #include "pool.h"
 #include "str.h"
 #include "value.h"
@@ -100,7 +98,6 @@ void pawE_register_callback(paw_Env *P, char const *name, paw_Function cb);
 
 void pawE_init(paw_Env *P);
 void pawE_uninit(paw_Env *P);
-_Noreturn void pawE_error(paw_Env *P, int code, int line, char const *fmt, ...);
 
 #define CACHED_STRING(P, k) CHECK_EXP((k) < NCSTR, (P)->string_cache[k])
 

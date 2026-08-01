@@ -40,7 +40,6 @@
 #include "core.h"
 #include "source.h"
 #include "stats.h"
-#include "trait.h"
 
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
@@ -126,10 +125,10 @@ struct Compiler {
     DeclId std_math_INFINITY;
 
     // callbacks for debugging
-    Value on_build_ast;
-    Value on_build_hir;
-    Value on_build_mir;
-    Value report_stats;
+    IrValue on_build_ast;
+    IrValue on_build_hir;
+    IrValue on_build_mir;
+    IrValue report_stats;
 
     struct Statistics *stats;
     struct PoolStats aux_stats;
@@ -355,13 +354,13 @@ struct Annotation {
     struct SourceSpan span;
     Str *modname;
     Str *name;
-    Value value;
+    IrValue value;
 };
 
 DEFINE_LIST(struct Compiler, Annotations, struct Annotation,)
 
 EXTERN_C paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
-paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, Value *result);
+paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, IrValue *result);
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
 Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
 EXTERN_C Str *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
@@ -387,7 +386,7 @@ DEFINE_MAP(struct Compiler, HirTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, Node
 DEFINE_MAP(struct Compiler, DefTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrType *,)
 DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTrait *,)
 DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *,)
-DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value,)
+DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, IrValue, IrValue,)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *,)
 DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Builtin *,)
 DEFINE_MAP(struct Compiler, SourceSpanRefs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, SpanRef, struct SourceSpan,)

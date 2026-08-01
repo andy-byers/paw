@@ -6,6 +6,7 @@
 #include "impl.h"
 #include "ir_type.h"
 #include "resolve.h" // UpvalueList
+#include "trait.h"
 #include "type_folder.h"
 #include "unify.h"
 
@@ -654,31 +655,6 @@ struct IrImplInstance pawIr_solver_instantiate_impl_with(IrSolver *S, DeclId did
     };
 }
 
-struct Instance {
-    DeclId did;
-    IrGenericArgs *args;
-};
-
-static paw_Uint instance_hash(struct Compiler *C, struct Instance inst)
-{
-    paw_Uint hash = P_ID_HASH(C, inst.did);
-    K_LIST_XFOREACH (inst.args, IrGenericArg const, p)
-        hash = hash_combine(hash, pawIr_arg_hash(C, *p));
-    return hash;
-}
-
-static paw_Bool instance_equals(struct Compiler *C, struct Instance lhs, struct Instance rhs)
-{
-    if (!P_ID_EQUALS(C, lhs.did, rhs.did))
-        return PAW_FALSE;
-    IrGenericArg const *x, *y;
-    K_LIST_ZIP(lhs.args, x, rhs.args, y) {
-        if (!pawIr_arg_equals(C, *x, *y))
-            return PAW_FALSE;
-    }
-    return PAW_TRUE;
-}
-
 static IrGenericArgs *replace_self_in_trait_args(struct Compiler *C, IrGenericArgs *args, IrType *target)
 {
     IrGenericArgs *result = IrGenericArgs_new(C);
@@ -868,6 +844,9 @@ Str const *pawIr_print_obligation_(struct Compiler *C, struct IrObligation oblig
     pawL_init_buffer(P, &buf);
 
     switch (obligation.kind) {
+        case IR_OBLIGATION_CONST_EQUALS:
+            pawL_add_fstring(P, &buf, "ConstEq(...)");
+            break;
         case IR_OBLIGATION_WELL_FORMED: {
             enum IrDefKind const def_kind = pawIr_get_kind(C, obligation.wf.did);
             if (def_kind == IR_TRAIT_DEF) {

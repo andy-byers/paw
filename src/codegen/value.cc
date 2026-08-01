@@ -4,8 +4,6 @@
 
 #include "value.h"
 #include "context.h"
-#include "ir_type.h"
-#include "mir.h"
 #include "state.h"
 #include "type.h"
 

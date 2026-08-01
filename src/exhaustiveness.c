@@ -457,7 +457,7 @@ struct LiteralResult {
     struct Decision *fallback;
 };
 
-DEFINE_MAP(struct Usefulness, CaseMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, int,)
+DEFINE_MAP(struct Usefulness, CaseMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, IrValue, int,)
 
 static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct RowList *rows, struct MatchVar branch_var)
 {
@@ -519,7 +519,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
                 break;
         }
 
-        Value const key = cons.value;
+        IrValue const key = cons.value;
         int *pindex = CaseMap_get(U, tested, key);
         if (pindex != NULL) {
             struct RawCase rc = RawCaseList_get(raw_cases, *pindex);

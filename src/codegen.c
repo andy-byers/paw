@@ -2,23 +2,12 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "api.h"
-#include "auxlib.h"
-#include "code.h"
 #include "compile.h"
-#include "debug.h"
 #include "error.h"
-#include "hir.h"
 #include "impl.h"
 #include "ir_type.h"
 #include "layout.h"
-#include "lib.h"
-#include "map.h"
-#include "match.h"
-#include "mem.h"
 #include "mir.h"
-#include "parse.h"
-#include "ssa.h"
 #include "unify.h"
 
 #include "codegen/codegen.h"
@@ -74,19 +63,16 @@ static void VisitPtr(struct Compiler *C, struct IrPtr *t)
 static void VisitAdt(struct Compiler *C, struct IrAdt *t)
 {
     VisitGenericArgs(C, t->args);
+}
 
-    struct IrAdtDef const *def = pawIr_get_adt_def(C, t->did);
-    for (int discr = 0; discr < def->variants->count; ++discr) {
-        IrTypeList *fields = pawP_instantiate_variant_fields(C, t, discr);
-        VisitTypeList(C, fields);
-    }
+static void VisitClosure(struct Compiler *C, struct IrClosure *t)
+{
+    VisitGenericArgs(C, t->args);
 }
 
 static void VisitSignature(struct Compiler *C, struct IrSignature *t)
 {
     VisitGenericArgs(C, t->args);
-    VisitType(C, pawIr_materialize_fn(C, t->did, t->args));
-    VisitType(C, pawIr_get_context(C, IR_CAST_TYPE(t)));
 }
 
 static void VisitFnPtr(struct Compiler *C, struct IrFnPtr *t)
@@ -135,6 +121,7 @@ static void VisitType(struct Compiler *C, IrType *type)
             VisitFnPtr(C, IrGetFnPtr(type));
             break;
         case kIrClosure:
+            VisitClosure(C, IrGetClosure(type));
             break;
         case kIrSignature:
             VisitSignature(C, IrGetSignature(type));
@@ -146,7 +133,6 @@ static void VisitType(struct Compiler *C, IrType *type)
             C->typesystem.primitives.never_t = type;
             break;
         case kIrProjection:
-            break;
         case kIrInfer:
         case kIrGeneric:
             PAW_UNREACHABLE();

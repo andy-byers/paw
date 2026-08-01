@@ -10,8 +10,8 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Value.h>
 
-#include "mir.h"
 #include "type.h"
+#include "util.h"
 
 namespace paw::cg {
 
@@ -80,8 +80,6 @@ private:
 
 class Value {
 public:
-    using Type = Type;
-
     struct CreationTag { };
 
     explicit Value(State &state, llvm::Value *value, Type *type)

@@ -103,7 +103,7 @@ struct Token {
     struct SourceSpan span;
     unsigned flags;
     TokenKind kind;
-    Value value;
+    IrValue value;
 };
 
 struct Lex {

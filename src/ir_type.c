@@ -7,6 +7,7 @@
 #include "map.h"
 #include "solve.h"
 #include "resolve.h"
+#include "trait.h"
 #include "type_folder.h"
 #include "unify.h"
 

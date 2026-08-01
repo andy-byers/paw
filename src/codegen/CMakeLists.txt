@@ -1,6 +1,5 @@
 
 cmake_minimum_required(VERSION 3.14)
-set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 project(paw_codegen
     LANGUAGES C CXX
     VERSION 0.0.1)
@@ -24,6 +23,11 @@ else()
         PRIVATE m)
 endif()
 
+find_package(LLVM REQUIRED CONFIG)
+llvm_map_components_to_libnames(LLVM_LIBS native passes support)
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+add_definitions(${LLVM_DEFINITIONS_LIST})
+
 target_sources(paw_codegen
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/codegen.h
             ${CMAKE_CURRENT_SOURCE_DIR}/context.h
@@ -38,7 +42,7 @@ target_sources(paw_codegen
             ${CMAKE_CURRENT_SOURCE_DIR}/type.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/value.cc)
 target_include_directories(paw_codegen
-    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR} 
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${LLVM_INCLUDE_DIRS})
 target_link_libraries(paw_codegen
     PRIVATE paw ${LLVM_LIBS})

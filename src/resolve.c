@@ -64,7 +64,6 @@ enum ScopeKind {
     SCOPE_TYPE,
     SCOPE_TRAIT,
     SCOPE_IMPL,
-//TODO    SCOPE_BLOCK,
 };
 
 struct Scope {
@@ -104,7 +103,7 @@ static void set_result(struct Resolver *R, NodeId id, NodeId result, enum Resolv
     SegmentTable_insert(R->C, R->segtab, id, resolved);
 }
 
-_Noreturn static void unknown_path(struct Resolver *R, struct AstPath path, enum Namespace ns)
+PAW_NORETURN static void unknown_path(struct Resolver *R, struct AstPath path, enum Namespace ns)
 {
     RESOLVER_ERROR(R, UnknownPath,
             .path = ns == NAMESPACE_TYPE

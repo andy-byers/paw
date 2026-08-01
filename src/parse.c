@@ -397,7 +397,7 @@ static void semicolon(struct Lex *lex, char const *where)
                 .span = lex->t.span);
 }
 
-static void add_string_part(struct Lex *lex, struct AstStringList *parts, struct SourceSpan span, Value str)
+static void add_string_part(struct Lex *lex, struct AstStringList *parts, struct SourceSpan span, IrValue str)
 {
     AstStringList_push(lex->ast, parts, (struct AstStringPart){
                 .is_str = PAW_TRUE,
@@ -414,7 +414,7 @@ static void add_expr_part(struct Lex *lex, struct AstStringList *parts, struct A
             });
 }
 
-static struct AstExpr *string_expr(struct Lex *lex, struct SourceSpan span, Value str)
+static struct AstExpr *string_expr(struct Lex *lex, struct SourceSpan span, IrValue str)
 {
     struct AstStringList *parts = AstStringList_new(lex->ast);
     add_string_part(lex, parts, span, str);

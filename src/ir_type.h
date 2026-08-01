@@ -5,7 +5,9 @@
 #ifndef PAW_IR_TYPE_H
 #define PAW_IR_TYPE_H
 
-#include "hir.h"
+#include "code.h"
+#include "compile.h"
+#include "value.h"
 
 typedef struct IrType IrType;
 typedef struct IrTrait IrTrait;
@@ -70,7 +72,7 @@ enum IrIntKind {
     IR_UINT16,
     IR_UINT32,
     IR_UINT64,
-    IR_USIZE,
+    IR_USIZE // must be last
 };
 
 struct IrInt {
@@ -99,7 +101,7 @@ struct IrInt {
 
 enum IrFloatKind {
     IR_FLOAT32,
-    IR_FLOAT64,
+    IR_FLOAT64 // must be last
 };
 
 struct IrFloat {
@@ -235,6 +237,8 @@ struct IrType {
 IR_TYPE_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
+DEFINE_LIST(struct Compiler, IrTypeList, IrType *,)
+
 IrType *pawIr_new_unit(struct Compiler *C);
 IrType *pawIr_new_bool(struct Compiler *C);
 IrType *pawIr_new_char(struct Compiler *C);
@@ -262,29 +266,6 @@ struct IrTrait {
 
 IrTrait *pawIr_new_trait(struct Compiler *C, DeclId did, struct IrGenericArgs *args);
 
-
-union IrValue {
-    paw_Uint8 b;
-    paw_Char c;
-    paw_Int8 i8;
-    paw_Int16 i16;
-    paw_Int32 i32;
-    paw_Int64 i64;
-    paw_Isize isize;
-    paw_Uint8 u8;
-    paw_Uint16 u16;
-    paw_Uint32 u32;
-    paw_Uint64 u64;
-    paw_Usize usize;
-    paw_Float32 f32;
-    paw_Float64 f64;
-    Str const *s;
-    void *p;
-    // TODO: remove these and use fixed-width types
-    paw_Int i;
-    paw_Uint u;
-    paw_Float f;
-};
 
 enum IrConstKind {
     IR_CONST_VALUE,
@@ -505,7 +486,6 @@ struct IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did);
         IrIsClosure(Type_) ? IrGetClosure(Type_)->args : NULL)
 #define IR_IS_FUNC_TYPE(p) (IrIsFnPtr(p) || IrIsSignature(p) || IrIsClosure(p))
 
-DEFINE_LIST(struct Compiler, IrTypeList, IrType *,)
 DEFINE_LIST(struct Compiler, IrTraitList, IrTrait *,)
 DEFINE_LIST(struct Compiler, IrGenericArgs, IrGenericArg,)
 DEFINE_LIST(struct Compiler, IrDefs, DeclId,)
@@ -585,9 +565,9 @@ EXTERN_C paw_Bool pawIr_type2_equals(struct Compiler *C, struct IrType2 a, struc
 #define IR_TYPE2_HASH(Ctx_, Type_) pawIr_type2_hash((Ctx_)->C, Type_)
 #define IR_TYPE2_EQUALS(Ctx_, A_, B_) pawIr_type2_equals((Ctx_)->C, A_, B_)
 
-int pawIr_unify(struct Compiler *C, IrGenericArg a, IrGenericArg b);
-IrGenericArg pawIr_normalize(struct Compiler *C, IrGenericArg g);
-IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g);
+EXTERN_C int pawIr_unify(struct Compiler *C, IrGenericArg a, IrGenericArg b);
+EXTERN_C IrGenericArg pawIr_normalize(struct Compiler *C, IrGenericArg g);
+EXTERN_C IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g);
 
 static void pawIr_unify_unchecked(struct Compiler *C, IrGenericArg a, IrGenericArg b)
 {

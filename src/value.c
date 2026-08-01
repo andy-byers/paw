@@ -14,70 +14,71 @@
 #include "value.h"
 
 
-static void int_to_str(paw_Env *P, paw_Int i, Value *out)
+static int int_to_str(paw_Int64 value, char *out, size_t out_len)
 {
-    char temp[32];
-    paw_Bool const negative = i < 0;
-    char *end = temp + PAW_COUNTOF(temp);
-    char *ptr = end - 1;
+    char temp[64];
+    paw_Bool const negative = value < 0;
+    char *ptr = temp + PAW_COUNTOF(temp) - 1;
 
-    // Don't call llabs(INT64_MIN). The result is undefined on 2s complement
-    // systems.
-    uint64_t u = i == INT64_MIN
+    // Don't call llabs(PAW_INT64_MIN). The result is undefined on 2s
+    // complement systems.
+    paw_Uint64 u = value == PAW_INT64_MIN
                      ? UINT64_C(1) << 63
-                     : CAST(uint64_t, llabs(i));
+                     : CAST(paw_Uint64, llabs(value));
+    size_t len = 0;
     do {
-        *ptr-- = CAST(char, u % 10 + '0');
+        *ptr-- = (char)(u % 10) + '0';
         u /= 10;
+        ++len;
     } while (u);
     if (negative) {
         *ptr = '-';
+        ++len;
     } else {
         ++ptr;
     }
-    Str *str = pawS_new_nstr(P, ptr, CAST_SIZE(end - ptr));
-    V_SET_OBJECT(out, str);
-}
-
-static void float_to_str(paw_Env *P, paw_Float f, Value *out)
-{
-    char temp[32];
-    int const n = snprintf(temp, PAW_COUNTOF(temp), "%.*g", 17, f);
-    Str *str = pawS_new_nstr(P, temp, CAST_SIZE(n));
-    V_SET_OBJECT(out, str);
-}
-
-char const *pawV_to_str(paw_Env *P, Value *pv, paw_Type type, size_t *plength)
-{
-    switch (type) {
-        case PAW_TSTR:
-            break;
-        case PAW_TINT:
-            int_to_str(P, V_INT(*pv), pv);
-            break;
-        case PAW_TFLOAT:
-            float_to_str(P, V_FLOAT(*pv), pv);
-            break;
-        default:
-            paw_assert(type == PAW_TBOOL);
-            V_SET_OBJECT(pv, CACHED_STRING(P, V_TRUE(*pv) ? CSTR_TRUE : CSTR_FALSE));
+    if (len < out_len) {
+        for (size_t i = 0; i < len; ++i)
+            out[i] = ptr[i];
+        out[len] = '\0';
+        return (int)len;
     }
-    Str const *s = V_STR(*pv);
-    if (plength != NULL)
-        *plength = s->length;
-    return s->text;
+    return -1;
 }
 
-Tuple *pawV_new_tuple(paw_Env *P, int nelems)
+int pawV_int_to_str(paw_Int64 value, char *out, size_t out_len)
 {
-    Tuple *tuple = pawM_new_flex(P, Tuple, CAST_SIZE(nelems), sizeof(tuple->elems[0]));
-    tuple->objkind = VTUPLE;
-    tuple->nelems = nelems;
-    return tuple;
+    char temp[64];
+    paw_Bool const negative = value < 0;
+    char *ptr = temp + PAW_COUNTOF(temp) - 1;
+
+    // Don't call llabs(PAW_INT64_MIN). The result is undefined on 2s
+    // complement systems.
+    paw_Uint64 u = value == PAW_INT64_MIN
+                     ? UINT64_C(1) << 63
+                     : CAST(paw_Uint64, llabs(value));
+    size_t len = 0;
+    do {
+        *ptr-- = (char)(u % 10) + '0';
+        u /= 10;
+        ++len;
+    } while (u);
+    if (negative) {
+        *ptr = '-';
+        ++len;
+    } else {
+        ++ptr;
+    }
+    if (len < out_len) {
+        for (size_t i = 0; i < len; ++i)
+            out[i] = ptr[i];
+        out[len] = '\0';
+        return (int)len;
+    }
+    return -1;
 }
 
-void pawV_free_tuple(paw_Env *P, Tuple *t)
+int pawV_float_to_str(paw_Float64 value, char *out, size_t out_len)
 {
-    pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
+    return snprintf(out, out_len, "%.*g", 17, value);
 }
-

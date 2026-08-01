@@ -73,18 +73,22 @@ static struct SourceSpan SourceSpan_from_range(struct SourceLoc start, struct So
 {
     struct SourceSpan const span = {
         .kind = SRC_SPAN_RANGE,
-        .range.start = start,
-        .range.end = end,
+        .range = {
+            .start = start,
+            .end = end,
+        },
     };
     return span;
 }
 
 static struct SourceSpan SourceSpan_from_ref(SpanRef ref, enum SpanRefKind kind)
 {
-    struct SourceSpan span = {
+    struct SourceSpan const span = {
         .kind = SRC_SPAN_REF,
-        .ref.value = ref,
-        .ref.kind = kind,
+        .ref = {
+            .kind = kind,
+            .value = ref,
+        },
     };
     return span;
 }

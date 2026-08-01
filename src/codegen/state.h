@@ -5,7 +5,6 @@
 #ifndef PAW_CODEGEN_STATE_H
 #define PAW_CODEGEN_STATE_H
 
-#include "codegen.h"
 #include "context.h"
 
 namespace paw::cg {
@@ -14,6 +13,7 @@ class ScratchMap {
 public:
     explicit ScratchMap(Context &X);
     llvm::Value *get(llvm::Type *type);
+    llvm::Value *get(Type *type);
 
 private:
     struct SizeAlign {
@@ -65,6 +65,7 @@ public:
     llvm::Value *get_arg(unsigned index) const;
 
     llvm::Value *get_scratch(llvm::Type *type);
+    llvm::Value *get_scratch(Type *type);
 
     void create_return(llvm::Value *value = nullptr);
     llvm::Value *create_call(Callable const &call, llvm::Value *env, llvm::ArrayRef<llvm::Value *> args);

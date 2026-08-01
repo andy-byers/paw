@@ -27,8 +27,6 @@
         int count; \
         int alloc; \
     } Name_; \
-    _Static_assert(K_MAP_MAX < PAW_SIZE_MAX / sizeof(struct Name_##Node), \
-                   "maximum map is too large"); \
     static struct Name_ *Name_##_new_from(Context_ *ctx, struct Pool *pool) \
     { \
         PAW_UNUSED(ctx); \

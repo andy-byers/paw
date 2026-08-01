@@ -8,6 +8,6 @@
 #include "core.h"
 
 int pawC_try(paw_Env *P, paw_Function call, void *arg);
-_Noreturn void pawC_throw(paw_Env *P, int error);
+EXTERN_C PAW_NORETURN void pawC_throw(paw_Env *P, int error);
 
 #endif // PAW_CALL_H

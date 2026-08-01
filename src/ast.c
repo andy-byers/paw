@@ -4,9 +4,6 @@
 
 #include "ast.h"
 #include "compile.h"
-#include "map.h"
-#include "mem.h"
-#include "parse.h"
 
 #define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN 32

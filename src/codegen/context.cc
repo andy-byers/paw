@@ -3,18 +3,27 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "context.h"
-#include "ir_type.h"
+#include "../value.h"
 
 namespace paw::cg {
 
+std::string to_string(::Str const *str)
+{
+    return {str->text, str->length};
+}
+
 static constexpr char const *BUILTIN_NAMES[(size_t)BuiltinFn::NUM_BUILTINS] = {
-    [(unsigned)BuiltinFn::PAW_BKPT] = "paw_builtin_bkpt",
-    [(unsigned)BuiltinFn::HASH_BYTES] = "_PN3ops18builtin_hash_bytes",
-    [(unsigned)BuiltinFn::CHECK_BOUNDS] = "paw_builtin_check_bounds",
-    [(unsigned)BuiltinFn::RAWCMP] = "_PN3ops14builtin_rawcmp",
-    [(unsigned)BuiltinFn::PANIC] = "paw_panic_handler",
-    [(unsigned)BuiltinFn::PRINT] = "_PN7prelude5printIScE",
-    [(unsigned)BuiltinFn::PRINTLN] = "_PN7prelude7printlnIScE",
+    "paw_mem_raw_alloc",
+    "paw_mem_raw_realloc",
+    "paw_mem_raw_dealloc",
+    "paw_mem_raw_aligned_alloc",
+    "paw_builtin_bkpt",
+    "_PN3ops18builtin_hash_bytes",
+    "paw_builtin_check_bounds",
+    "_PN3ops14builtin_rawcmp",
+    "paw_panic_handler",
+    "_PN7prelude5printIScE",
+    "_PN7prelude7printlnIScE",
 };
 
 char const *get_builtin_name(BuiltinFn kind)
@@ -27,14 +36,14 @@ char const *get_builtin_name(BuiltinFn kind)
 static std::vector<llvm::DIFile *> create_di_modules(Compiler *C, llvm::DIBuilder &DI)
 {
     std::vector<llvm::DIFile *> difiles;
-    difiles.reserve(unsigned(C->modinfo->count));
-
-    ::Module const *pmod;
-    K_LIST_FOREACH (C->modinfo, pmod) {
-        difiles.push_back(DI.createFile(
-                to_string(pmod->name) + PAW_MODULE_EXT,
-                to_string(pmod->dirname)));
-    }
+//    difiles.reserve(unsigned(C->modinfo->count));
+//
+//    ::Module const *pmod;
+//    K_LIST_FOREACH (C->modinfo, pmod) {
+//        difiles.push_back(DI.createFile(
+//                to_string(pmod->name) + PAW_MODULE_EXT,
+//                to_string(pmod->dirname)));
+//    }
 
     return difiles;
 }

@@ -9,9 +9,6 @@
 #include "compile.h"
 #include "env.h"
 #include "lib.h"
-#include "list.h"
-#include "map.h"
-#include "os.h"
 #include "parse.h"
 #include "core.h"
 #include "str.h"
@@ -41,7 +38,6 @@ size_t paw_bytes_used(paw_Env const *P)
 
 static int open_aux(paw_Env *P, void *arg)
 {
-//TODO    pawC_throw(P, -1);
     PAW_UNUSED(arg);
 
     int const FIRST_ARENA_SIZE = 4096;

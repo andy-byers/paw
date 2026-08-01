@@ -4,20 +4,18 @@
 //
 // typeck.c: Implementation of the type checker.
 
-#include "ast.h"
 #include "code.h"
 #include "compile.h"
-#include "debug.h"
 #include "env.h"
 #include "error.h"
 #include "hir.h"
 #include "impl.h"
 #include "ir_type.h"
 #include "map.h"
-#include "parse.h"
 #include "solve.h"
 #include "resolve.h"
 #include "str.h"
+#include "trait.h"
 #include "type_folder.h"
 #include "unify.h"
 

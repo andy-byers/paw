@@ -79,19 +79,27 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, char const *s, size_t n)
     add_nstring(P, buf, s, n);
 }
 
-void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int i)
+static void add_scalar(paw_Env *P, Buffer *buf, IrValue v, paw_Bool is_float)
 {
-    size_t len;
-    char const *str = pawV_to_str(P, &(Value){.i = i}, PAW_TINT, &len);
-    add_nstring(P, buf, str, len);
+    char buffer[64];
+    int const n = is_float
+        ? pawV_float_to_str(v.f64, buffer, PAW_COUNTOF(buffer))
+        : pawV_int_to_str(v.i64, buffer, PAW_COUNTOF(buffer));
+    paw_assert(n > 0 && n < (int)PAW_COUNTOF(buffer));
+    add_nstring(P, buf, buffer, (size_t)n);
 }
 
-void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
-{
-    size_t len;
-    char const *str = pawV_to_str(P, &(Value){.f = f}, PAW_TFLOAT, &len);
-    add_nstring(P, buf, str, len);
-}
+#define ADD_SCALAR(P_, Buf_, Value_, Kind_) do { \
+        char buffer[64]; \
+        int const n = pawV_##Kind_##_to_str(Value_, buffer, PAW_COUNTOF(buffer)); \
+        paw_assert(n > 0 && n < (int)PAW_COUNTOF(buffer)); \
+        add_nstring(P, Buf_, buffer, (size_t)n); \
+    } while (0)
+
+void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int64 i) { ADD_SCALAR(P, buf, i, int); }
+void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float64 f) { ADD_SCALAR(P, buf, f, float); }
+
+#undef ADD_SCALAR
 
 static void add_pointer(paw_Env *P, Buffer *buf, void *p)
 {
@@ -159,7 +167,7 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, char const *fmt, va_list arg)
                 pawL_add_int(P, buf, va_arg(arg, int));
                 break;
             case 'I':
-                pawL_add_int(P, buf, va_arg(arg, int64_t));
+                pawL_add_int(P, buf, va_arg(arg, paw_Int64));
                 break;
             case 'U': {
                 char temp[64];

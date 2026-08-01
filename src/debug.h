@@ -20,7 +20,7 @@ void pawD_debug_log(paw_Env *P, char const *fmt, ...);
 void pawD_dump_defs(paw_Env *P);
 void paw_dump_stack(paw_Env *P);
 void paw_stacktrace(paw_Env *P);
-void paw_dump_value(Value v, paw_Type type);
+void paw_dump_value(IrValue v, paw_Type type);
 
 char const *paw_unop_name(enum UnaryOp unop);
 char const *paw_binop_name(enum BinaryOp binop);

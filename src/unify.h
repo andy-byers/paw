@@ -22,8 +22,8 @@ EXTERN_C struct IrType *pawU_normalize_projections(struct Unifier *U, struct IrT
 struct IrConst *pawU_normalize_const(struct Unifier *U, IrConst *k);
 
 // Impose the constraint that types 'a' and 'b' are equal
-int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
-int pawU_unify_const(struct Unifier *U, struct IrConst *a, struct IrConst *b);
+EXTERN_C int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
+EXTERN_C int pawU_unify_const(struct Unifier *U, struct IrConst *a, struct IrConst *b);
 
 // Create a new type variable
 struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceSpan span); // TODO: remove

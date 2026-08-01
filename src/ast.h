@@ -781,7 +781,7 @@ struct AstStringPart {
         struct AstExpr *expr;
         struct {
             struct SourceSpan span;
-            Value value;
+            IrValue value;
         } str;
     };
 };

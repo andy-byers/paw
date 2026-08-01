@@ -62,6 +62,7 @@ struct FunctionState {
     struct LowerHir *L;
     struct Compiler *C;
     struct Mir *mir;
+    IrTypeList *params;
     IrType *result;
     MirBlock current;
     MirBlock exit;
@@ -1403,16 +1404,25 @@ static DeclId next_did(struct FunctionState *fs)
     return pawP_next_decl_id(fs->C, fs->mir->modno);
 }
 
+static struct IrFnPtr const *get_fn_type(struct LowerHir *L, IrType *type)
+{
+    if (!IrIsFnPtr(type))
+        type = IR_GET_FN(L->C, type);
+    type = pawU_normalize_projections(L->C->U, type);
+    return IrGetFnPtr(type);
+}
+
 static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *outer = L->fs;
     IrType *type = get_type(L, e->id);
 
+    struct IrFnPtr const *fptr = get_fn_type(L, type);
     struct Mir *result = pawMir_new(L->C, L->pm->modno, e->span,
             SCAN_STR(L->C, PRIVATE("closure")), e->did, IR_GENERIC_ARGS(type),
-            NULL, type, NULL, -1, INVALID_DECL_ID, FUNC_CLOSURE,
-            PAW_FALSE, PAW_FALSE);
+            fptr->params, fptr->result, NULL, type, NULL, -1, INVALID_DECL_ID,
+            FUNC_CLOSURE, PAW_FALSE, PAW_FALSE);
     BodyMap_insert(L->C, L->C->bodies, e->did, result);
 
     {
@@ -1494,7 +1504,7 @@ static struct MirPlace lower_variant_constructor(struct HirVisitor *V, struct Hi
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    // set the discriminant: an "int" residing in the first Value slot of the variant
+    // set the discriminant: an "int" residing in the first IrValue slot of the variant
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
     struct MirPlace const discr = new_const_int(fs, d->span, d->index, IR_INT64);
     MirPlaceList_push(fs->mir, fields, discr);
@@ -1885,9 +1895,6 @@ static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object
         struct MirPlace const local = set_anon_local(fs, object.span, field_ptr);
         map_var_to_reg(fs, *pv, local, pv->deref);
     }
-
-    //TODO not the right place for this...
-//TODO    NEW_INSTR(fs, kill, object.span, object);
 }
 
 static enum BuiltinKind cons_kind(enum ConstructorKind kind)
@@ -2232,9 +2239,11 @@ static paw_Bool is_polymorphic_fn(struct LowerHir *L, struct HirFnDecl *fn)
 static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFnDecl *fn)
 {
     IrType *type = pawIr_get_def_type(L->C, fn->did);
+    struct IrFnPtr const *fptr = get_fn_type(L, type);
     struct Mir *result = pawMir_new(L->C, L->pm->modno, fn->span, fn->ident.name,
-            fn->did, IR_GENERIC_ARGS(type), fn->annos, type, pawIr_get_context(L->C, type),
-            -1, fn->parent_id, fn->fn_kind, fn->is_pub, is_polymorphic_fn(L, fn));
+            fn->did, IR_GENERIC_ARGS(type), fptr->params, fptr->result, fn->annos,
+            type, pawIr_get_context(L->C, type), -1, fn->parent_id, fn->fn_kind,
+            fn->is_pub, is_polymorphic_fn(L, fn));
     if (fn->body != NULL) {
         validate_fn_annotations(L, result);
         lower_hir_body_aux(L, fn, result);
@@ -2286,7 +2295,8 @@ static struct MirConstantData lower_constant_expression(struct LowerHir *L, stru
     IrType *artificial_result = get_type(L, expr->hdr.id);
     IrType *artificial_type = pawIr_new_fn_ptr(L->C, artificial_params, artificial_result);
     struct Mir *artificial = pawMir_new(L->C, L->pm->modno, expr->hdr.span, SCAN_STR(L->C, PRIVATE("toplevel")),
-            INVALID_DECL_ID, NULL, NULL, artificial_type, NULL, -1, INVALID_DECL_ID, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
+            INVALID_DECL_ID, NULL, artificial_params, artificial_result, NULL, artificial_type, NULL, -1,
+            INVALID_DECL_ID, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
 
     struct BlockState bs;
     struct FunctionState fs;

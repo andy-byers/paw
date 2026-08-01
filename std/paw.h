@@ -7,7 +7,7 @@
 
 #include <assert.h>
 #include <stdint.h>
-#include <stdlib.h>
+#include <stddef.h>
 
 #define PAW_MALLOC malloc
 #define PAW_REALLOC realloc
@@ -156,7 +156,7 @@ PAW_DEFINE_RESULT(Ptr, mem_OOM)
 
 paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(paw_Usize size);
 paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, paw_Usize size);
-paw_Result_Ptr_mem_OOM paw_mem_aligned_alloc(paw_Usize alignment, paw_Usize size);
+paw_Result_Ptr_mem_OOM paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size);
 void paw_mem_raw_dealloc(void *ptr);
 
 void *paw_ptr_memcpy(void *dest, void *src, paw_Usize size);

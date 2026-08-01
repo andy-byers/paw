@@ -508,7 +508,7 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
             return pawIr_new_slice(U->C, elem);
         }
         case kIrTuple: {
-            IrTypeList *elems = normalize_list(U, IrGetTuple(type)->elems);
+            IrTypeList *elems = normalize_projections_list(U, IrGetTuple(type)->elems);
             return pawIr_new_tuple(U->C, elems);
         }
         case kIrAdt: {

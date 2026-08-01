@@ -311,7 +311,7 @@ struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st)
     return pool;
 }
 
-static void set_extern_value(struct Compiler *C, char const *name, Value value)
+static void set_extern_value(struct Compiler *C, char const *name, IrValue value)
 {
     StringMap_insert(C, C->symbols, SCAN_STR(C, name), value.p);
 }
@@ -388,7 +388,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->ir_constraints = IrConstraintsMap_new(C);
     C->pending_constants = IrPendingConstants_new(C);
     C->resolved_constants = IrResolvedConstants_new(C);
-    C->const_obligations = IrConstObligations_new(C);
+    C->const_obligations = IrObligations_new(C);
     C->indexes = IrType2Map_new(C);
 
     C->source_span_refs = SourceSpanRefs_new(C);
@@ -574,7 +574,7 @@ paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct
     return PAW_FALSE;
 }
 
-paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, Value *result)
+paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, IrValue *result)
 {
     void *const *pvalue = StringMap_get(C, C->symbols, name);
     if (pvalue == NULL) return PAW_FALSE;

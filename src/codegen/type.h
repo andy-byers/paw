@@ -73,6 +73,8 @@ public:
 
     bool is_signed_int() const;
 
+    virtual unsigned get_alignment() const;
+
     bool is_abi_struct_type() const
     {
         return abi_class_ == ABIClass::SMALL_STRUCT
@@ -367,6 +369,7 @@ public:
 
     std::string const &get_name() const { return name_; }
     unsigned get_num_variants() const { return variants_.size(); }
+    unsigned get_alignment() const override { return min_alignment_; }
 
     llvm::StructType *get_variant_ty(Discriminant discr) const
     {
@@ -396,6 +399,7 @@ private:
         llvm::StructType *ty;
     };
 
+    unsigned min_alignment_;
     std::vector<Variant> variants_;
     std::string name_;
 };

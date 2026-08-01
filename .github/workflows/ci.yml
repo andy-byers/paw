@@ -13,73 +13,76 @@ jobs:
         os: [
           ubuntu-latest, 
           macos-latest, 
-          # windows-latest
+          #windows-latest
         ]
         build_type: [Debug, Release]
-        cc: [
-         // gcc, 
-          clang, 
-         // cl
-          ]
+        include:
+          - cc: clang
+            cxx: clang++
+          #- cc: gcc
+          #  cxx: g++
+          #- cc: cl
+          #  cxx: cl
         stress: [0, 2]
-        exclude:
-#          - os: windows-latest
-#            cc: gcc
-#          - os: windows-latest
-#            cc: clang
-          - os: ubuntu-latest
-            cc: cl
-          - os: macos-latest
-            cc: cl
+        #exclude:
+        #  - os: windows-latest
+        #    cc: gcc
+        #  - os: windows-latest
+        #    cc: clang
+        #  - os: ubuntu-latest
+        #    cc: cl
+        #  - os: macos-latest
+        #    cc: cl
     
     env:
       build_dir: "${{ github.workspace }}/build"
+      LLVM_VERSION: 19
       
     steps:
     - uses: actions/checkout@v3
 
-
-    - name: Install LLVM (Linux)
+    - name: Install dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
-        sudo apt-get update
-        sudo apt-get install -y zlib1g-dev llvm-19 llvm-19-dev clang-19 lld-19
+        sudo apt-get update && \
+        sudo apt-get install -y clang cmake llvm-${LLVM_VERSION}-dev && \
+        sudo apt-get clean && \
+        sudo rm -rf /var/lib/apt/lists/*           
 
-    - name: Install LLVM (macOS)
+    - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
-      run: brew install llvm
+      run: brew install llvm@${{ env.LLVM_VERSION }}
 
-    - name: Install LLVM (Windows)
+    - name: Install dependencies (Windows)
       if: runner.os == 'Windows'
       shell: powershell
       run: choco install llvm --yes
 
     - name: Configure
       shell: bash
+      env:
+        CC: ${{ matrix.cc }}
+        CXX: ${{ matrix.cxx }}
       run: |
         if [[ "$RUNNER_OS" == "Linux" ]]; then
-          LLVM_DIR=/usr/lib/llvm-19/lib/cmake/llvm
+          LLVM_DIR="/usr/lib/llvm-${{ env.LLVM_VERSION }}/lib/cmake/llvm"
         elif [[ "$RUNNER_OS" == "macOS" ]]; then
-          LLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm
+          LLVM_DIR="$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib/cmake/llvm"
         else
           LLVM_DIR="C:/Program Files/LLVM/lib/cmake/llvm"
         fi
+        cmake -B ${{ env.build_dir }} -G Ninja \
+            -DPAW_CLANG_PATH=/usr/bin/clang \
+            -DPAW_STRESS=${{ matrix.stress }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DLLVM_DIR="${LLVM_DIR}"
 
-        cmake -S . -B build -DLLVM_DIR="$LLVM_DIR"
-
-    - name: Configure
-      run: >
-        cmake -S "${{ github.workspace }}" -B "${{ env.build_dir }}"
-        -DCMAKE_C_COMPILER=${{ matrix.cc }}
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DPAW_STRESS=${{ matrix.stress }}
-        
     - name: Build
       working-directory: ${{ env.build_dir }}
-      run: cmake --build . --config ${{ matrix.build_type }} --target paw_test
+      run: |
+        cmake --build . --parallel
 
-#    - name: Test
-#      working-directory: ${{ env.build_dir }}
-#      run: ctest --verbose --build-config ${{ matrix.build_type }}
-
+    - name: Test
+      working-directory: ${{ env.build_dir }}
+      run: ctest --verbose
 

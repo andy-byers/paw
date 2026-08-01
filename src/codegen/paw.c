@@ -15,8 +15,6 @@
 #include "mir.h"
 #include "os.h"
 
-#include "codegen.h"
-
 enum Status {
     STATUS_SUCCESS = 0,
     STATUS_INVALID_ARGUMENT = -1,
@@ -43,7 +41,7 @@ enum Status {
 static struct {
 #define OPT_STRS(Name_, A_, Limit_, B_) char const *Name_[Limit_]; int Name_##_count;
 #define OPT_STR(Name_, A_, B_) char const *Name_;
-#define OPT_INT(Name_, A_, B_) paw_Int Name_;
+#define OPT_INT(Name_, A_, B_) paw_Int64 Name_;
 #define OPT_OPT(Name_, A_) paw_Bool Name_;
     PROGRAM_OPTIONS
 #undef OPT_OPT
@@ -74,7 +72,7 @@ static struct Option {
     const char *name;
     const char *argname;
     const char **string;
-    paw_Int *integer;
+    paw_Int64 *integer;
     paw_Bool *flag;
     const char *description;
     int *arg_count_ptr;
@@ -153,9 +151,9 @@ static char const *consume_prefix(char const *s, char const *p)
     return s;
 }
 
-static paw_Int parse_int(char const *s)
+static paw_Int64 parse_int(char const *s)
 {
-    paw_Int value;
+    paw_Int64 value;
     enum ParseIntStatus const rc = pawX_parse_int(s, 10, &value);
     if (rc == IPARSE_ERR_SYNTAX) {
         error("invalid integer argument (%s)\n", s);
@@ -355,7 +353,7 @@ static int stats_reporter(paw_Env *P, void *arg)
             char const *size = pretty_size(stat->value, buffer);
             pawL_add_fstring(P, &b, ": %s\n", size);
         } else {
-            pawL_add_fstring(P, &b, ": %I\n", (paw_Int)stat->value);
+            pawL_add_fstring(P, &b, ": %I\n", (paw_Int64)stat->value);
         }
     }
 

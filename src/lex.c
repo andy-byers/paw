@@ -995,18 +995,18 @@ static unsigned char_to_digit(char c)
     return LOOKUP[(unsigned)c];
 }
 
-enum ParseIntStatus pawX_parse_uint(char const *text, int base, paw_Uint *out)
+enum ParseIntStatus pawX_parse_uint(char const *text, int base, paw_Uint64 *out)
 {
     paw_assert(text != NULL);
-    paw_Uint const b = (paw_Uint64)base;
+    paw_Uint64 const b = (paw_Uint64)base;
     char const *p = text;
 
     if (b < 2 || b > 36)
         return IPARSE_ERR_INVALID_BASE;
 
-    paw_Uint value = 0;
+    paw_Uint64 value = 0;
     for (; *p; ++p) {
-        paw_Uint const v = char_to_digit(*p);
+        paw_Uint64 const v = char_to_digit(*p);
         if (v >= b) {
             return IPARSE_ERR_SYNTAX;
         } else if (value > (PAW_UINT64_MAX - v) / b) {
@@ -1028,12 +1028,12 @@ static paw_Bool parse_negative(char const **ptext)
     return PAW_FALSE;
 }
 
-enum ParseIntStatus pawX_parse_int(char const *text, int base, paw_Int *out)
+enum ParseIntStatus pawX_parse_int(char const *text, int base, paw_Int64 *out)
 {
     paw_assert(text != NULL && *text != 0 && out != NULL);
     paw_Bool const negative = parse_negative(&text);
 
-    paw_Uint u;
+    paw_Uint64 u;
     enum ParseIntStatus const status = pawX_parse_uint(text, base, &u);
     if (status != IPARSE_OK) return status;
 

@@ -5,8 +5,6 @@
 // TODO: Prevent reference arguments from being captured in closures
 // TODO: For enum, use strictest alignment among all variants
 
-#include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -51,7 +49,6 @@
 #include "mangle.h"
 #include "state.h"
 #include "type.h"
-#include "unify.h"
 
 
 namespace paw::cg {
@@ -199,7 +196,7 @@ public:
     Type *get_or_create_type(IrType *irtype);
 
 private:
-    Type *create_env_type(IrType *irtype);
+    ObjectType *create_env_type(IrType *irtype);
 
     Type *create_type(IrType *irtype)
     {
@@ -253,12 +250,6 @@ private:
                 return create_array_type(irtype);
             case kIrAdt:
                 return create_adt(irtype);
-            case kIrProjection: {
-                // TODO: normalize away projections earlier, after monomorphization
-                irtype = pawU_normalize_projections(C->U, irtype);
-                paw_assert(!IrIsProjection(irtype));
-                return create_type(irtype);
-            }
             default:
                 paw_assert(IR_IS_FUNC_TYPE(irtype));
                 return create_fn_type(irtype);
@@ -384,9 +375,9 @@ private:
 class CodeGenerator;
 
 struct PhiInput {
-    llvm::PHINode *phi;
-    llvm::BasicBlock *from;
     MirPlace r;
+    llvm::BasicBlock *from;
+    llvm::PHINode *phi;
 };
 
 class PawState final: public State {
@@ -627,18 +618,22 @@ public:
 
         auto *m = X.get_module()->get_module();
         llvm::Triple const target_triple(llvm::sys::getDefaultTargetTriple());
-        m->setTargetTriple(target_triple);
+        m->setTargetTriple(target_triple.getTriple());
 
         std::string error;
-        const auto *target = llvm::TargetRegistry::lookupTarget(target_triple, error);
+        const auto *target = llvm::TargetRegistry::lookupTarget(target_triple.getTriple(), error);
         if (target == nullptr) {
             llvm::errs() << error;
             std::exit(EXIT_FAILURE);
         }
 
         llvm::TargetOptions target_opts;
-        auto rm = std::optional<llvm::Reloc::Model>();
-        machine_ = target->createTargetMachine(target_triple, "generic", "", target_opts, rm);
+        machine_ = target->createTargetMachine(
+                target_triple.getTriple(),
+                "generic",
+                "",
+                target_opts,
+                llvm::Reloc::PIC_);
         m->setDataLayout(machine_->createDataLayout());
     }
 
@@ -1197,8 +1192,9 @@ private:
             auto *len = B->CreateExtractValue(fn->getArg(0), 1ULL);
             B->CreateCall(write, {ptr, X.create_isize(1), len, stream});
 
-            auto *trap = llvm::Intrinsic::getOrInsertDeclaration(*M, llvm::Intrinsic::trap);
-            B->CreateCall(trap);
+            auto abort = m->getOrInsertFunction("abort",
+                    llvm::FunctionType::get(B->getVoidTy(), false));
+            B->CreateCall(abort);
 
             B->CreateUnreachable();
         }
@@ -1260,9 +1256,9 @@ private:
             if (fn->params->count > 0) {
                 IncorrectArityError const error = {
                     .modname = SCAN_STR(C, modname_.c_str()),
+                    .span = mir->span,
                     .have = fn->params->count,
                     .want = 0,
-                    .span = mir->span,
                 };
                 pawErr_throw(C, kErrIncorrectArity, (void *)&error);
             }
@@ -1484,7 +1480,7 @@ private:
         llvm::Value *object = llvm::UndefValue::get(variant_ty);
         for (auto i = 0U; i < unsigned(x.fields->count); ++i) {
             auto *element = operand(x.fields->data[i]);
-            object = B->CreateInsertValue(object, element, i);
+            object = B->CreateInsertValue(object, element, i, "agg.init." + std::to_string(i));
         }
         set_result(x.output, object);
     }
@@ -1495,7 +1491,8 @@ private:
             case MIR_PLACE_REGISTER:
                 if (ir_is_capturing_closure(C, place.type)) {
                     auto const *mir = *mirs_.lookup(place.type);
-                    llvm::Type *env_ty = *create_env_type(mir->upvalues);
+                    llvm::Type *env_ty = create_env_type(mir->upvalues)
+                        ->get_variant_ty(Discriminant::base());
                     return B->CreateLoad(env_ty, state_->get_raw_value(place.r));
                 }
                 return B->CreateLoad(*get_type(place.type),
@@ -1685,7 +1682,7 @@ private:
         set_result(x.output, result);
     }
 
-    Type *create_env_type(MirUpvalueList const *upvalues) const
+    ObjectType *create_env_type(MirUpvalueList const *upvalues) const
     {
         std::vector<Type *> fields;
         fields.reserve(unsigned(upvalues->count));
@@ -1701,7 +1698,8 @@ private:
             set_result(x.output, fn->get_value());
         } else {
             auto *child = *mirs_.lookup(x.output.type); // must exist
-            llvm::Type *env_ty = *create_env_type(child->upvalues);
+            llvm::Type *env_ty = create_env_type(child->upvalues)
+                ->get_variant_ty(Discriminant::base());
             llvm::Value *env = llvm::UndefValue::get(env_ty);
 
             // initialize upvalues from parent locals or environment
@@ -2079,7 +2077,7 @@ TypeTranslator::TypeTranslator(CodeGenerator &G, IrTypeHashMap<Type *> &types)
 {
 }
 
-Type *TypeTranslator::create_env_type(IrType *irtype)
+ObjectType *TypeTranslator::create_env_type(IrType *irtype)
 {
     auto const *upvalues = G->mirs_.lookup(irtype)[0]->upvalues;
     std::vector<Type *> fields;
@@ -2110,13 +2108,18 @@ Type *TypeTranslator::create_fn_type(IrType *irtype)
     Type *env_type = NULL;
     if (ir_is_capturing_closure(C, irtype))
         env_type = create_env_type(irtype);
-
-    auto *params = ir_fn_params(C, irtype);
-    auto *result = ir_fn_result(C, irtype);
-    auto *return_type = get_or_create_type(result);
-    return X->get_fn_type(return_type,
-            get_or_create_types(params),
-            env_type, IrIsNever(result));
+    if (IrIsFnPtr(irtype)) {
+        struct IrFnPtr const *t = IrGetFnPtr(irtype);
+        return X->get_fn_type(
+                get_or_create_type(t->result),
+                get_or_create_types(t->params),
+                env_type, IrIsNever(t->result));
+    }
+    auto const *mir = G->mirs_.lookup(irtype)[0];
+    return X->get_fn_type(
+            get_or_create_type(mir->result_type),
+            get_or_create_types(mir->param_types),
+            env_type, IrIsNever(mir->result_type));
 }
 
 PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
@@ -2172,7 +2175,7 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
         auto *type = fn->get_type();
         if (type->get_return_kind() != ReturnKind::SRET) {
             auto *return_type = type->get_return_type();
-            values_.front() = B->CreateAlloca(*return_type);
+            values_.front() = X->create_alloca(return_type);
         } else {
             values_.front() = fn->get_fn()->getArg(0);
         }
@@ -2185,17 +2188,19 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
         for (auto i = 1 + num_args; i < mir->registers->count; ++i) {
             auto const data = MirRegisterDataList_get(mir->registers, i);
             auto *type = G.get_type(data.type);
-            values_[i] = B->CreateAlloca(*type);
+            values_[i] = X->create_alloca(type);
         }
     }
 
     if (is_capturing_closure) {
-        llvm::Type *env_ty = *G.create_env_type(mir->upvalues);
-        env_ = B->CreateAlloca(env_ty);
+        auto *env_type = G.create_env_type(mir->upvalues);
+        env_ = X->create_alloca(env_type);
 
         B->CreateStore(fn->load_env(), env_);
-        for (auto i = 0U; i < upvalues_.size(); ++i)
-            upvalues_[i] = B->CreateStructGEP(env_ty, env_, i);
+        for (auto i = 0U; i < upvalues_.size(); ++i) {
+            auto *p = env_type->get_variant_ty(Discriminant::base());
+            upvalues_[i] = B->CreateStructGEP(p, env_, i);
+        }
     }
 
     // There should be no alloca instructions after this point. alloca can
@@ -2267,6 +2272,11 @@ static void link_compilation_artifact(paw_Env *P, std::string prefix)
         }
     }
 
+#if defined(PAW_OS_LINUX)
+    // TODO: only link if `math` module imported
+    linker.link_dylib("m");
+#endif // defined(PAW_OS_LINUX)
+
     // invoke the linker
     std::move(linker)
         .finalize(prefix);
@@ -2280,11 +2290,12 @@ void pawCodegen_generate(Compiler *C, TranslationUnit const *tu)
     auto *P = ENV(C);
 
     CodegenOptions const cgopt = {
-        .compile_only = P->options.compile_only,
-        .build_tests = P->options.build_tests,
         .verify_module = P->options.verify_ir,
         .print_ir = P->options.dump_ir,
         .enable_asan = P->options.enable_asan,
+        .build_tests = P->options.build_tests,
+        .compile_only = P->options.compile_only,
+        .add_debug_info = false,
         .opt_suffix = P->options.opt_suffix,
     };
     std::string prefix, filename;
@@ -2305,9 +2316,10 @@ void pawCodegen_generate(Compiler *C, TranslationUnit const *tu)
     cg.compile_module(prefix, filename);
     cg.teardown_module();
 
-    if (!cgopt.compile_only)
-        link_compilation_artifact(P, prefix + filename);
-    if (cgopt.build_tests)
+    if (cgopt.build_tests) {
         link_compilation_artifact(P, prefix + "test_" + filename);
+    } else if (!cgopt.compile_only) {
+        link_compilation_artifact(P, prefix + filename);
+    }
 }
 

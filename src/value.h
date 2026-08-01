@@ -57,22 +57,36 @@ typedef struct Object {
     OBJECT_HEADER;
 } Object;
 
-// TODO: a lot of this code needs to be removed
-typedef union Value {
-    void *p;
+typedef union IrValue {
+    paw_Uint8 b;
     paw_Char c;
-    paw_Bool b;
+    paw_Int8 i8;
+    paw_Int16 i16;
+    paw_Int32 i32;
+    paw_Int64 i64;
+    paw_Isize isize;
+    paw_Uint8 u8;
+    paw_Uint16 u16;
+    paw_Uint32 u32;
+    paw_Uint64 u64;
+    paw_Usize usize;
+    paw_Float32 f32;
+    paw_Float64 f64;
+    struct Str const *s;
+    Object *o;
+    void *p;
+
+    // TODO: remove these and use fixed-width types
     paw_Int i;
     paw_Uint u;
     paw_Float f;
-    struct Str const *s;
-    Object *o;
-} Value;
+} IrValue;
 
-#define P2V(Ptr_) (union IrValue) { .p = (void *)(Ptr_) }
-#define C2V(Char_) (union IrValue) { .i = (paw_Char)(Char_) }
-#define I2V(Int_) (union IrValue) { .i = (paw_Int)(Int_) }
-#define F2V(Float_) (union IrValue) { .f = (paw_Float)(Float_) }
+
+#define P2V(Ptr_) (IrValue){ .p = (void *)(Ptr_) }
+#define C2V(Char_) (IrValue){ .u64 = (paw_Uint8)(Char_) }
+#define I2V(Int_) (IrValue){ .i64 = (paw_Int64)(Int_) }
+#define F2V(Float_) (IrValue){ .f64 = (paw_Float64)(Float_) }
 
 
 typedef struct Str {
@@ -84,16 +98,7 @@ typedef struct Str {
     char text[];
 } Str;
 
-char const *pawV_to_str(paw_Env *P, Value *pv, paw_Type type, size_t *nout);
-
-
-typedef struct Tuple {
-    OBJECT_HEADER;
-    int nelems;
-    Value elems[];
-} Tuple;
-
-Tuple *pawV_new_tuple(paw_Env *P, int nelems);
-void pawV_free_tuple(paw_Env *P, Tuple *t);
+int pawV_int_to_str(paw_Int64 i, char *out, size_t out_len);
+int pawV_float_to_str(paw_Float64 f, char *out, size_t out_len);
 
 #endif // PAW_VALUE_H

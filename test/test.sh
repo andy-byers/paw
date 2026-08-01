@@ -1,7 +1,13 @@
-#!/bin/sh
+#!/bin/bash
 
-BUILD_PATH=$1
-TEST_PATH=$2
+DRIVER_PATH=$1
+OUTPUT_DIR=$2
+TEST_DIR=$3
+
+echo "Running test scripts..."
+echo "DRIVER_PATH: $DRIVER_PATH"
+echo "OUTPUT_DIR: $OUTPUT_DIR"
+echo "TEST_DIR: $TEST_DIR"
 
 TESTS=(
     "basic"
@@ -125,16 +131,15 @@ TESTS=(
 #    "ebnf"
 )
 
-# TODO: hardcoded paths won't work on other platforms...
-CLANG_PATH="/usr/bin/clang"
-ROOT_DIR=$BUILD_PATH/src/codegen
-DRIVER_PATH=$ROOT_DIR/pawc
 FAILURES=()
 
 for TESTNAME in "${TESTS[@]}"; do
-    SCRIPT_PATH="$TEST_PATH/scripts/$TESTNAME.paw"
-    OBJECT_PATH="$BUILD_PATH/test_$TESTNAME.o"
-    EXEC_PATH="$BUILD_PATH/test_$TESTNAME"
+    rm -f "$OUTPUT_DIR/test_$TESTNAME"
+done
+
+for TESTNAME in "${TESTS[@]}"; do
+    SCRIPT_PATH="$TEST_DIR/scripts/$TESTNAME.paw"
+    EXEC_PATH="$OUTPUT_DIR/test_$TESTNAME"
     echo "Building $SCRIPT_PATH"
 
     "$DRIVER_PATH" -c -t "$SCRIPT_PATH"
