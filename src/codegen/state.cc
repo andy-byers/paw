@@ -155,7 +155,7 @@ llvm::Value *State::create_call(Callable const &call, llvm::Value *env, llvm::Ar
             llvm::Value *value = B->CreateCall(callee, rewrite);
             if (return_type->is_abi_struct_type()) {
                 // convert from ABI return type to actual type
-                auto *scratch = get_scratch(type);
+                auto *scratch = get_scratch(return_type);
                 B->CreateStore(value, scratch);
                 value = B->CreateLoad(return_ty, scratch);
             }
