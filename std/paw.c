@@ -79,14 +79,9 @@ static int parse_float(paw_Char const *text, double *result_ptr)
 }
 
 // fn parse_float(self) -> Option<float64>
-paw_Option_Float64 paw_internal_parse_float(paw_Str self)
+paw_Int32 paw_internal_parse_float(paw_Str self, paw_Float64 *out)
 {
-    double result;
-    if (parse_float(self.text, &result) == 0) {
-        return paw_Option_Float64_some(result);
-    } else {
-        return paw_Option_Float64_none();
-    }
+    return parse_float(self.text, out);
 }
 
 static paw_Char const *find_substr(paw_Char const *str, paw_Usize nstr, paw_Char const *sub, paw_Usize nsub)

@@ -79,9 +79,11 @@ impl str {
         if self.is_empty() {
             return Err(ParseFloatError::Empty);
         }
-        match internal_parse_float(self) {
-            Some(f) => Ok(f),
-            None => Err(ParseFloatError::InvalidChar),
+        let f = 0.0;
+        if internal_parse_float(self, &f) == -1 {
+            Err(ParseFloatError::InvalidChar)
+        } else {
+            Ok(f)
         }
     }
 
@@ -196,5 +198,5 @@ fn parse_uint_radix_nonempty(text: str, base: int64) -> Result<uint64, ParseIntE
 }
 
 #[extern = "paw_internal_parse_float"] 
-fn internal_parse_float(text: str) -> Option<float64>;
+fn internal_parse_float(text: str, out: *float64) -> int32;
 

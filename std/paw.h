@@ -39,6 +39,7 @@ typedef struct {
 
 typedef uint8_t paw_Bool;
 typedef char paw_Char;
+typedef int32_t paw_Int32;
 typedef int64_t paw_Int64;
 typedef size_t paw_Usize;
 typedef double paw_Float64;
@@ -139,7 +140,7 @@ paw_Usize paw_str_len(paw_Str self);
 char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self);
 paw_Option_Int64 paw_str_find(paw_Str, paw_Str self);
 
-paw_Option_Float64 paw_internal_parse_float(paw_Str self);
+paw_Int32 paw_internal_parse_float(paw_Str self, paw_Float64 *out);
 
 void paw_builtin_check_bounds(paw_Usize index, paw_Usize length);
 
