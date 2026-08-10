@@ -2,6 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "abi.h"
 #include "context.h"
 
 // TODO: remove DEFERRED_INIT thing, not necessary now that reference types don't exist
@@ -31,58 +32,21 @@ T hash_combine(T x, T y) {
     return splitmix64(t);
 }
 
-struct FieldCounter {
-    int floats;
-    int total;
-};
-
-FieldCounter count_fields(llvm::Type *ty)
-{
-    if (ty->isDoubleTy()) return FieldCounter{1, 1};
-    if (!ty->isStructTy()) return FieldCounter{0, 1};
-
-    struct FieldCounter counter = {};
-    auto *st = llvm::cast<llvm::StructType>(ty);
-    for (auto i = 0U; i < st->getNumElements(); ++i) {
-        auto *field_ty = st->getElementType(i);
-        auto const [floats, total] = count_fields(field_ty);
-        counter.floats += floats;
-        counter.total += total;
-    }
-    return counter;
-}
-
-// Return true if the given type is a homogeneous floating-point aggregate (HFA)
-// or a homogeneous short vector aggregate (HVA), false otherwise
-// TODO: only works for HFA
-bool is_hxa_struct_ty(llvm::Type *ty)
-{
-    if (!ty->isStructTy()) return false;
-    auto const [floats, total] = count_fields(ty);
-    return 0 < total && total == floats && total <= 4;
-}
-
-// TODO: modify to handle any llvm::Type and call in constructor of Type
-ABIClass abi_class_for_object(Context &X, llvm::Type *ty)
-{
-    if (is_hxa_struct_ty(ty)) {
-        return ABIClass::HXA_STRUCT;
-    } else if (X.size_of(ty) == 0) {
-        return ABIClass::EMPTY;
-    } else if (X.size_of(ty) <= 8) {
-        return ABIClass::SMALL_STRUCT;
-    } else if (X.size_of(ty) <= 16) {
-        return ABIClass::BINARY_STRUCT;
-    } else {
-        return ABIClass::LARGE_STRUCT;
-    }
-}
-
 } // (anonymous namespace)
 
 unsigned Type::get_alignment() const
 {
     return X->align_of(get_ty()).value();
+}
+
+uint64_t Type::get_size() const
+{
+    return X->size_of(get_ty());
+}
+
+uint64_t Type::get_bitsize() const
+{
+    return X->bitsize_of(get_ty());
 }
 
 bool Type::is_signed_int() const
@@ -92,19 +56,19 @@ bool Type::is_signed_int() const
 
 
 UnitType::UnitType(Context &X)
-    : PrimitiveType(X, X.get_unit_ty(), Kind::UNIT, ABIClass::EMPTY)
+    : PrimitiveType(X, X.get_unit_ty(), Kind::UNIT)
 {
 }
 
 
 BoolType::BoolType(Context &X)
-    : PrimitiveType(X, X.get_i1_ty(), Kind::BOOL, ABIClass::SCALAR)
+    : PrimitiveType(X, X.get_i1_ty(), Kind::BOOL)
 {
 }
 
 
 CharType::CharType(Context &X)
-    : PrimitiveType(X, X.get_i8_ty(), Kind::CHAR, ABIClass::SCALAR)
+    : PrimitiveType(X, X.get_i8_ty(), Kind::CHAR)
 {
 }
 
@@ -146,7 +110,7 @@ llvm::Type *float_kind_to_llvm_type(Context &X, FloatKind kind)
 
 
 IntType::IntType(Context &X, IntKind kind)
-    : PrimitiveType(X, int_kind_to_llvm_type(X, kind), Kind::INT, ABIClass::SCALAR)
+    : PrimitiveType(X, int_kind_to_llvm_type(X, kind), Kind::INT)
     , ikind_(kind)
 {
 }
@@ -164,7 +128,7 @@ bool IntType::equals(Type const *rhs) const
 
 
 FloatType::FloatType(Context &X, FloatKind kind)
-    : PrimitiveType(X, float_kind_to_llvm_type(X, kind), Kind::FLOAT, ABIClass::SCALAR)
+    : PrimitiveType(X, float_kind_to_llvm_type(X, kind), Kind::FLOAT)
     , fkind_(kind)
 {
 }
@@ -183,7 +147,7 @@ bool FloatType::equals(Type const *rhs) const
 
 
 SliceType::SliceType(Context &X, Type *element_type)
-    : Type(X, X.get_slice_ty(), Kind::SLICE, ABIClass::BINARY_STRUCT)
+    : Type(X, X.get_slice_ty(), Kind::SLICE)
     , element_type_(element_type)
 {
 }
@@ -191,11 +155,6 @@ SliceType::SliceType(Context &X, Type *element_type)
 llvm::StructType *SliceType::get_struct_ty() const
 {
     return X->get_slice_ty();
-}
-
-llvm::Type *SliceType::get_abi_ty() const
-{
-    return X->get_array_ty(X->get_isize_ty(), 2);
 }
 
 unsigned long SliceType::hash() const
@@ -213,18 +172,13 @@ bool SliceType::equals(Type const *rhs) const
 
 
 StrType::StrType(Context &X)
-    : Type(X, X.get_str_ty(), Kind::STR, ABIClass::BINARY_STRUCT)
+    : Type(X, X.get_str_ty(), Kind::STR)
 {
 }
 
 llvm::StructType *StrType::get_struct_ty() const
 {
     return X->get_str_ty();
-}
-
-llvm::Type *StrType::get_abi_ty() const
-{
-    return X->get_array_ty(X->get_isize_ty(), 2);
 }
 
 unsigned long StrType::hash() const
@@ -249,56 +203,51 @@ bool PrimitiveType::equals(Type const *rhs) const
 }
 
 
+static void add_abi_params(Context &X, Type *type, std::vector<llvm::Type *> &out)
+{
+    auto const info = get_abi_info(X, *type);
+    if (info.kind == AbiInfo::Kind::EXPAND) {
+        auto *struct_ty = llvm::cast<llvm::StructType>(info.param_ty);
+        for (auto const e: struct_ty->elements())
+            out.push_back(e);
+    } else if (info.kind != AbiInfo::Kind::EMPTY) {
+        out.push_back(info.param_ty);
+    }
+}
+
 FnType::FnType(Context &X, Type *return_type,
         llvm::ArrayRef<Type *> param_types,
         Type *env_type, bool never_returns)
-    : Type(X, DEFERRED_INIT, Kind::FN, env_type != nullptr
-            ? env_type->get_abi_class()
-            : ABIClass::SCALAR)
+    : Type(X, DEFERRED_INIT, Kind::FN)
     , return_kind_(ReturnKind::NORMAL)
     , param_types_(param_types)
     , return_type_(return_type)
     , env_type_(env_type)
     , never_returns_(never_returns)
 {
-    auto *B = X.get_builder();
-    std::vector<llvm::Type *> param_tys((env_type != nullptr) + param_types.size());
-    auto param = begin(param_tys);
+    std::vector<llvm::Type *> param_tys;
+    param_tys.reserve(!!env_type + param_types.size());
 
     if (env_type != nullptr)
-        *param++ = env_type->get_abi_ty();
+        add_abi_params(X, env_type, param_tys);
 
     for (auto *type: param_types)
-        *param++ = type->get_abi_ty();
+        add_abi_params(X, type, param_tys);
 
-    llvm::Type *return_ty;
-    switch (return_type->get_abi_class()) {
-        case ABIClass::EMPTY:
+    auto const return_info = get_abi_info(X, *return_type);
+    auto *return_ty = return_info.return_ty;
+    switch (return_info.kind) {
+        case AbiInfo::Kind::EMPTY:
             return_kind_ = ReturnKind::VOID;
-            return_ty = X.get_void_ty();
             break;
-        case ABIClass::SCALAR:
-            // TODO: i1 is a special case, should be rounded up to i8
-//            if (return_type->is_bool_type()) {
-//                return_ty = X.get_i8_ty();
-//                break;
-//            }
-            // (fallthrough)
-        case ABIClass::HXA_STRUCT:
-            return_ty = *return_type;
+        case AbiInfo::Kind::VALUE:
+        case AbiInfo::Kind::EXPAND:
+            return_kind_ = ReturnKind::NORMAL;
             break;
-        case ABIClass::SMALL_STRUCT:
-            return_ty = B->getIntNTy(X.bitsize_of(*return_type));
-            break;
-        case ABIClass::BINARY_STRUCT:
-            return_ty = X.get_array_ty(X.get_i64_ty(), 2);
-            break;
-        case ABIClass::LARGE_STRUCT:
+        case AbiInfo::Kind::MEMORY:
             return_kind_ = ReturnKind::SRET;
-            // large structure is written to output pointer
-            return_ty = X.get_void_ty();
             // add return pointer parameter
-            param_tys.insert(begin(param_tys), X.get_ptr_ty());
+            param_tys.insert(begin(param_tys), return_info.param_ty);
             break;
     }
 
@@ -308,29 +257,6 @@ FnType::FnType(Context &X, Type *return_type,
 llvm::Type *FnType::get_ty() const
 {
     return X->get_ptr_ty();
-}
-
-static llvm::Type *object_to_abi(Context &X, llvm::Type *ty, ABIClass abi_class)
-{
-    switch (abi_class) {
-        case ABIClass::EMPTY:
-        case ABIClass::SCALAR:
-        case ABIClass::HXA_STRUCT:
-            return ty;
-        case ABIClass::SMALL_STRUCT:
-            // NOTE: "Context::size_of" rounds up to the nearest byte
-            return X.get_sized_int_ty(X.size_of(ty) * 8);
-        case ABIClass::BINARY_STRUCT:
-            return X.get_array_ty(X.get_i64_ty(), 2);
-        case ABIClass::LARGE_STRUCT:
-            return X.get_ptr_ty();
-    }
-}
-
-llvm::Type *FnType::get_abi_ty() const
-{
-    return env_type_ != NULL
-        ? *env_type_ : X->get_ptr_ty();
 }
 
 unsigned long FnType::hash() const
@@ -380,7 +306,7 @@ std::string FnType::to_string() const
 
 
 PtrType::PtrType(Context &X, Type *pointee_type)
-    : Type(X, X.get_ptr_ty(), Kind::PTR, ABIClass::SCALAR)
+    : Type(X, X.get_ptr_ty(), Kind::PTR)
     , pointee_type_(pointee_type)
 {
 }
@@ -404,14 +330,8 @@ std::string PtrType::to_string() const
 }
 
 
-static ABIClass abi_class_for_array(Context &X, Type *element_type, uint64_t length)
-{
-    return abi_class_for_object(X, X.get_array_ty(element_type->get_ty(), length));
-}
-
 ArrayType::ArrayType(Context &X, Type *element_type, uint64_t length)
-    : Type(X, X.get_array_ty(element_type->get_ty(), length),
-            Kind::ARRAY, abi_class_for_array(X, element_type, length))
+    : Type(X, X.get_array_ty(element_type->get_ty(), length), Kind::ARRAY)
     , element_type_(element_type)
     , length_(length)
 {
@@ -434,12 +354,6 @@ bool ArrayType::equals(Type const *rhs) const
     return false;
 }
 
-// TODO: Functionality of object_to_abi() should be performed in default version of this function
-llvm::Type *ArrayType::get_abi_ty() const
-{
-    return object_to_abi(*X, get_ty(), get_abi_class());
-}
-
 std::string ArrayType::to_string() const
 {
     return "[" + std::to_string(length_) + "]"
@@ -448,13 +362,24 @@ std::string ArrayType::to_string() const
 
 
 ObjectType::ObjectType(Context &X, llvm::ArrayRef<ObjectType::FieldTypes> variants, std::string name)
-    : Type(X, DEFERRED_INIT, Type::Kind::OBJECT, (ABIClass)0)
+    : Type(X, DEFERRED_INIT, Type::Kind::OBJECT)
     , min_alignment_(1)
     , name_(std::move(name))
 {
     set_variants(variants);
 }
 
+
+static llvm::Type *create_underlying_ty(Context &X, size_t size, unsigned alignment)
+{
+    if (alignment == 8)
+        return X.get_array_ty(X.get_i64_ty(), size / 8);
+    if (alignment == 4)
+        return X.get_array_ty(X.get_i32_ty(), size / 4);
+    if (alignment == 2)
+        return X.get_array_ty(X.get_i16_ty(), size / 2);
+    return X.get_array_ty(X.get_i8_ty(), size);
+}
 
 void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
 {
@@ -497,25 +422,17 @@ void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
     }
 
     if (variants.empty() || largest_variant.size == 0) {
-        ty_ = llvm::StructType::get(*c, {X->get_i8_ty()}, false);
-        abi_class_ = ABIClass::EMPTY;
+        ty_ = llvm::StructType::get(*c, {}, false);
     } else {
-        ty_ =  variants.size() == 1 ? largest_variant.ty
-            : X->get_array_ty(X->get_i8_ty(), largest_variant.size);
-        abi_class_ = abi_class_for_object(*X, ty_);
+        ty_ = variants.size() == 1 ? largest_variant.ty
+            : create_underlying_ty(*X, largest_variant.size, strictest_alignment);
         min_alignment_ = strictest_alignment;
     }
-
 }
 
 llvm::Type *ObjectType::get_ty() const
 {
     return ty_;
-}
-
-llvm::Type *ObjectType::get_abi_ty() const
-{
-    return object_to_abi(*X, get_ty(), get_abi_class());
 }
 
 unsigned long ObjectType::hash() const

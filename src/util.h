@@ -19,7 +19,7 @@
 #define PAW_MIN(x, y) ((x) < (y) ? (x) : (y))
 #define PAW_MAX(x, y) ((x) > (y) ? (x) : (y))
 #define PAW_CLAMP(v, x, y) PAW_MIN(PAW_MAX(v, x), y)
-#define PAW_ROUND_UP(n) ((n) + (-(n) & (PAW_ALIGN - 1)))
+#define PAW_ROUND_UP(Value_, Pow2) ((Value_) + (-(Value_) & ((Pow2) - 1)))
 #define PAW_IS_ALIGNED(p) (!(CAST_UPTR(p) & (PAW_ALIGN - 1)))
 
 #define CHECK_EXP(c, e) (paw_assert(c), e)

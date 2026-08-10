@@ -23,7 +23,7 @@ typedef struct Arena {
     _Alignas(sizeof(void *)) char data[];
 } Arena;
 
-#define ROUND_SIZE(Size_) PAW_ROUND_UP(PAW_MAX(Size_, sizeof(struct FreeBlock)))
+#define ROUND_SIZE(Size_) PAW_ROUND_UP(PAW_MAX(Size_, sizeof(struct FreeBlock)), sizeof(void *))
 #define ARENA_CUTOFF (sizeof(void *) << 2)
 #define ALLOC_ALIGN K_ALIGNOF_NODE
 #define ARENA_MIN 512

@@ -60,7 +60,8 @@ public:
 
     unsigned get_num_args() const
     {
-        return get_type()->get_num_params();
+        return get_type()->get_fn_ty()
+            ->getFunctionNumParams();
     }
 
     bool has_env() const

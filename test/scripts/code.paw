@@ -816,13 +816,142 @@
 //    }
 //}
 
+//struct Empty;
+//
+//struct Small {
+//    a: int8,
+//    b: float32,
+//}
+//
+//struct Small_i {
+//    a: int8,
+//    b: int8,
+//    c: int8,
+//}
+//
+//struct Small_f {
+//    a: float32,
+//}
+//
+//struct Medium {
+//    a: float32,
+//    b: int64,
+//}
+//
+//struct Medium_i {
+//    a: int16,
+//    b: bool,
+//    c: int64,
+//}
+//
+//struct Medium_f {
+//    a: float64,
+//    b: float32,
+//}
+//
+//struct Large {
+//    a: int64,
+//    b: int64,
+//    c: float64,
+//}
+//
+//impl Copy for Empty {}
+//impl Copy for Small {}
+//impl Copy for Small_i {}
+//impl Copy for Small_f {}
+//impl Copy for Medium {}
+//impl Copy for Medium_i {}
+//impl Copy for Medium_f {}
+//impl Copy for Large {}
+//
+//fn func_empty(value: Empty) -> Empty { value }
+//fn func_small(value: Small) -> Small { value }
+//fn func_small_i(value: Small_i) -> Small_i { value }
+//fn func_small_f(value: Small_f) -> Small_f { value }
+//fn func_medium(value: Medium) -> Medium { value }
+//fn func_medium_i(value: Medium_i) -> Medium_i { value }
+//fn func_medium_f(value: Medium_f) -> Medium_f { value }
+//fn func_large(value: Large) -> Large { value }
+//
+//fn func_medium_empty_small(a: Medium, b: Empty, c: Small) -> (Medium, Empty, Small) { (a, b, c) }
+//
+//#[test]
+//pub fn test() {
+//    let empty = Empty;
+//    let small = Small{
+//        a: 1,
+//        b: 2.0,
+//    };
+//    let small_i = Small_i{
+//        a: 3,
+//        b: 4,
+//        c: 5,
+//    };
+//    let small_f = Small_f{
+//        a: 6.0,
+//    };
+//    let medium = Medium{
+//        a: 7.0,
+//        b: 8,
+//    };
+//    let medium_i = Medium_i{
+//        a: 9,
+//        b: true,
+//        c: 11,
+//    };
+//    let medium_f = Medium_f{
+//        a: 12.0,
+//        b: 13.0,
+//    };
+//    let large = Large{
+//        a: 14,
+//        b: 15,
+//        c: 16.0,
+//    };
+//
+//    let empty_2 = func_empty(empty);
+//    let small_2 = func_small(small);
+//    let small_i_2 = func_small_i(small_i);
+//    let small_f_2 = func_small_f(small_f);
+//    let medium_2 = func_medium(medium);
+//    let medium_i_2 = func_medium_i(medium_i);
+//    let medium_f_2 = func_medium_f(medium_f);
+//    let large_2 = func_large(large);
+//
+//    assert(small.a == 1);
+//    assert(small.b == 2.0);
+//    assert(small_i.a == 3);
+//    assert(small_i.b == 4);
+//    assert(small_i.c == 5);
+//    assert(small_f.a == 6.0);
+//    assert(medium.a == 7.0);
+//    assert(medium.b == 8);
+//    assert(medium_i.a == 9);
+//    assert(medium_i.b == true);
+//    assert(medium_i.c == 11);
+//    assert(medium_f.a == 12.0);
+//    assert(medium_f.b == 13.0);
+//    assert(large.a == 14);
+//    assert(large.b == 15);
+//    assert(large.c == 16.0);
+//
+//    let (a, b, c) = func_medium_empty_small(medium_2, empty_2, small_2);
+//    assert(a.a == 7.0);
+//    assert(a.b == 8);
+//    assert(c.a == 1);
+//    assert(c.b == 2.0);
+//
+//    let x = Some(123);
+//    let f = |o| o;
+//    assert(f(x).unwrap() == 123);
+//}
+
 #[test]
-pub fn test_numeric_for_loop() {
-    let f = None;
-    for i in 0..100 {
-        if i == 50 {
-            f = Some(|| i);
-        }
-    }
-    let f = f.unwrap();
+pub fn test() {
+    let value = (1, 2, 3);
+    let f = || value;
+    let value2 = f();
+    assert(value.0 == value2.0);
+    assert(value.1 == value2.1);
+    assert(value.2 == value2.2);
 }

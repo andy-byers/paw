@@ -19,11 +19,7 @@ const MAX_ELEMENTS: usize = ISIZE_MAX as usize;
 
 impl<T> List<T> {
     pub fn new() -> Self {
-        Self{
-            start: ptr::null(), 
-            length: 0, 
-            capacity: 0,
-        }
+        Self::from_raw_parts(ptr::null(), 0, 0)
     }
 
     pub fn len(*self) -> usize {
@@ -112,7 +108,11 @@ impl<T> List<T> {
     }
 
     pub fn from_raw_parts(start: *T, length: usize, capacity: usize) -> Self {
-        Self{start, length, capacity}
+        Self{start, length, capacity: if mem::sizeof::<T>() == 0 {
+            USIZE_MAX
+        } else {
+            capacity
+        }}
     }
 
     pub fn into_raw_parts(self) -> (*T, usize, usize) {

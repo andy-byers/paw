@@ -32,3 +32,4 @@ add_test(NAME test_scripts
 add_test(NAME test_error
     COMMAND test_error)
 
+add_subdirectory(abi)

@@ -13,18 +13,6 @@ namespace paw::cg {
 
 class Context;
 
-
-// Describes how an object of this type is handled at function
-// call boundaries
-enum class ABIClass {
-    EMPTY,
-    SCALAR,
-    SMALL_STRUCT,
-    BINARY_STRUCT,
-    LARGE_STRUCT,
-    HXA_STRUCT,
-};
-
 enum class ReturnKind {
     VOID,
     NORMAL,
@@ -47,10 +35,9 @@ public:
         PTR,
     };
 
-    explicit Type(Context &X, llvm::Type *ty, Kind kind, ABIClass abi_class)
+    explicit Type(Context &X, llvm::Type *ty, Kind kind)
         : X(&X)
         , ty_(ty)
-        , abi_class_(abi_class)
         , kind_(kind)
     {
     }
@@ -58,7 +45,6 @@ public:
     virtual ~Type() = default;
 
     Kind get_kind() const { return kind_; }
-    ABIClass get_abi_class() const { return abi_class_; }
     bool is_unit_type() const { return kind_ == Kind::UNIT; }
     bool is_bool_type() const { return kind_ == Kind::BOOL; }
     bool is_char_type() const { return kind_ == Kind::CHAR; }
@@ -73,15 +59,10 @@ public:
 
     bool is_signed_int() const;
 
-    virtual unsigned get_alignment() const;
+    uint64_t get_size() const;
+    uint64_t get_bitsize() const;
 
-    bool is_abi_struct_type() const
-    {
-        return abi_class_ == ABIClass::SMALL_STRUCT
-            || abi_class_ == ABIClass::BINARY_STRUCT
-            || abi_class_ == ABIClass::LARGE_STRUCT
-            || abi_class_ == ABIClass::HXA_STRUCT;
-    }
+    virtual unsigned get_alignment() const;
 
     llvm::DIType *get_dity() const
     {
@@ -109,11 +90,6 @@ public:
         return ty_;
     }
 
-    virtual llvm::Type *get_abi_ty() const
-    {
-        return get_ty();
-    }
-
     // Implicit conversion to "llvm::Type *" for convenience
     operator llvm::Type *() const { return get_ty(); }
 
@@ -123,7 +99,6 @@ protected:
     Context *X;
     llvm::Type *ty_;
     llvm::DIType *dity_;
-    ABIClass abi_class_;
     Kind kind_;
 };
 
@@ -135,8 +110,8 @@ static inline std::ostream &operator<<(std::ostream &os, Type const &v)
 
 class PrimitiveType: public Type {
 public:
-    explicit PrimitiveType(Context &X, llvm::Type *ty, Kind kind, ABIClass abi_class)
-        : Type(X, ty, kind, abi_class)
+    explicit PrimitiveType(Context &X, llvm::Type *ty, Kind kind)
+        : Type(X, ty, kind)
     {
     }
 
@@ -318,7 +293,6 @@ public:
 
     explicit ArrayType(Context &X, Type *element_type, uint64_t length);
     ~ArrayType() override = default;
-    llvm::Type *get_abi_ty() const override;
 
     llvm::ArrayType *get_array_ty() const
     {
@@ -361,7 +335,6 @@ public:
     ~ObjectType() override = default;
 
     llvm::Type *get_ty() const override;
-    llvm::Type *get_abi_ty() const override;
     llvm::StructType *get_struct_ty() const
     {
         return llvm::cast<llvm::StructType>(ty_);
@@ -412,7 +385,6 @@ public:
     ~SliceType() override = default;
 
     llvm::StructType *get_struct_ty() const;
-    llvm::Type *get_abi_ty() const override;
 
     Type *get_element_type() const
     {
@@ -440,7 +412,6 @@ public:
     ~StrType() override = default;
 
     llvm::StructType *get_struct_ty() const;
-    llvm::Type *get_abi_ty() const override;
 
     std::string to_string() const override
     {
@@ -461,7 +432,6 @@ public:
     ~FnType() override = default;
 
     llvm::Type *get_ty() const override;
-    llvm::Type *get_abi_ty() const override;
     llvm::FunctionType *get_fn_ty() const
     {
         return llvm::cast<llvm::FunctionType>(ty_);

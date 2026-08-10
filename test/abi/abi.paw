@@ -1,0 +1,69 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+struct ThreeInt8 {
+    a: int8,
+    b: int8,
+    c: int8,
+}
+
+struct Int64 {
+    a: int64,
+}
+
+struct TwoInt64 {
+    a: int64,
+    b: int64,
+}
+
+struct ThreeInt64 {
+    a: int64,
+    b: int64,
+    c: int64,
+}
+
+struct Float32 {
+    a: int32,
+}
+
+struct Int32Float32 {
+    a: int32,
+    b: float32,
+}
+
+struct Float32Int64 {
+    a: float32,
+    b: int64,
+}
+
+struct ThreeFloat64 {
+    a: float64,
+    b: float64,
+    c: float64,
+}
+
+struct Int8Float64 {
+    a: int8,
+    b: float64,
+}
+
+#[extern = "c_ThreeInt8"] pub fn c_ThreeInt8(value: ThreeInt8) -> ThreeInt8;
+#[extern = "c_Int64"] pub fn c_Int64(value: Int64) -> Int64;
+#[extern = "c_TwoInt64"] pub fn c_TwoInt64(value: TwoInt64) -> TwoInt64;
+#[extern = "c_ThreeInt64"] pub fn c_ThreeInt64(value: ThreeInt64) -> ThreeInt64;
+#[extern = "c_Float32"] pub fn c_Float32(value: Float32) -> Float32;
+#[extern = "c_Int32Float32"] pub fn c_Int32Float32(value: Int32Float32) -> Int32Float32;
+#[extern = "c_Float32Int64"] pub fn c_Float32Int64(value: Float32Int64) -> Float32Int64;
+#[extern = "c_ThreeFloat64"] pub fn c_ThreeFloat64(value: ThreeFloat64) -> ThreeFloat64;
+#[extern = "c_Int8Float64"] pub fn c_Int8Float64(value: Int8Float64) -> Int8Float64;
+
+pub fn paw_ThreeInt8(value: ThreeInt8) -> ThreeInt8 { c_ThreeInt8(value) }
+pub fn paw_Int64(value: Int64) -> Int64 { c_Int64(value) }
+pub fn paw_TwoInt64(value: TwoInt64) -> TwoInt64 { c_TwoInt64(value) }
+pub fn paw_ThreeInt64(value: ThreeInt64) -> ThreeInt64 { c_ThreeInt64(value) }
+pub fn paw_Float32(value: Float32) -> Float32 { c_Float32(value) }
+pub fn paw_Int32Float32(value: Int32Float32) -> Int32Float32 { c_Int32Float32(value) }
+pub fn paw_Float32Int64(value: Float32Int64) -> Float32Int64 { c_Float32Int64(value) }
+pub fn paw_ThreeFloat64(value: ThreeFloat64) -> ThreeFloat64 { c_ThreeFloat64(value) }
+pub fn paw_Int8Float64(value: Int8Float64) -> Int8Float64 { c_Int8Float64(value) }

@@ -62,6 +62,7 @@ struct paw_Options {
     char const *include_paths;
     char const **linker_specs;
     char const **linker_paths;
+    char const *target;
     int num_linker_specs;
     int num_linker_paths;
     paw_Bool compile_only : 1;

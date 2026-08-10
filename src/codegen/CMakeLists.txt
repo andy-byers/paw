@@ -29,13 +29,15 @@ separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
 target_sources(paw_codegen
-    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/codegen.h
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/abi.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/codegen.h
             ${CMAKE_CURRENT_SOURCE_DIR}/context.h
             ${CMAKE_CURRENT_SOURCE_DIR}/linker.h
             ${CMAKE_CURRENT_SOURCE_DIR}/state.h
             ${CMAKE_CURRENT_SOURCE_DIR}/type.h
             ${CMAKE_CURRENT_SOURCE_DIR}/value.h
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/codegen.cc
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/abi.cc
+            ${CMAKE_CURRENT_SOURCE_DIR}/codegen.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/context.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/linker.cc
             ${CMAKE_CURRENT_SOURCE_DIR}/state.cc

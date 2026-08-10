@@ -168,68 +168,6 @@ static enum BuiltinKind builtin_kind(struct LowerHir *L, IrType *type)
     return pawP_type2code(L->C, type);
 }
 
-static void fix_upvalue_accessors(struct Mir *mir, DeclId did)
-{
-    struct IrFnDef const *def = pawIr_get_fn_def(mir->C, did);
-
-    if (def->has_captures)
-        __builtin_trap();
-
-#if 0
-    UpvalueList *const *pupvalues = UpvalueTable_get(mir->C, mir->C->upvtab, id);
-    if (pupvalues == NULL) return; // no upvalues
-
-    K_LIST_XFOREACH (mir->blocks, struct MirBlockData *const, pbb) {
-        MirInstructionList *rewrite = MirInstructionList_new(mir);
-        MirInstructionList_reserve(mir, rewrite, (*pbb)->instructions->count);
-        K_LIST_XFOREACH ((*pbb)->instructions, struct MirInstruction *const, pinstr) {
-            if (MirIsAddrOf(*pinstr)) {
-                struct MirAddrOf const *p = MirGetAddrOf(*pinstr);
-                if (p->input.kind == MIR_PLACE_UPVALUE) {
-                }
-                if (p->output.kind == MIR_PLACE_UPVALUE) {
-                }
-            } else if (MirIsMove(*pinstr)){
-                struct MirMove const *p = MirGetMove(*pinstr);
-                if (p->target.kind == MIR_PLACE_UPVALUE) {
-                }
-                if (p->output.kind == MIR_PLACE_UPVALUE) {
-                }
-            } else if (MirIsLoad(*pinstr)){
-                struct MirLoad const *p = MirGetLoad(*pinstr);
-                if (p->pointer.kind == MIR_PLACE_UPVALUE) {
-                }
-                if (p->output.kind == MIR_PLACE_UPVALUE) {
-                }
-            } else if (MirIsStore(*pinstr)){
-                struct MirStore const *p = MirGetStore(*pinstr);
-                if (p->pointer.kind == MIR_PLACE_UPVALUE) {
-                }
-                if (p->value.kind == MIR_PLACE_UPVALUE) {
-                }
-            } else {
-                struct MirPlacePtrList const *loads = pawMir_get_loads(mir, *pinstr);
-                struct MirPlacePtrList const *stores = pawMir_get_stores(mir, *pinstr);
-                K_LIST_XFOREACH (loads, struct MirPlace *const, pp) {
-                    struct MirPlace const place = **pp;
-                    if (place.kind == MIR_PLACE_UPVALUE) {
-                    }
-                }
-
-                MirInstructionList_push(mir, rewrite, *pinstr);
-
-                K_LIST_XFOREACH (stores, struct MirPlace *const, pp) {
-                    struct MirPlace const place = **pp;
-                    if (place.kind == MIR_PLACE_UPVALUE) {
-                    }
-                }
-            }
-        }
-        (*pbb)->instructions = rewrite;
-    }
-#endif // 0
-}
-
 static void postprocess(struct Mir *mir)
 {
     // put basic blocks in reverse postorder
@@ -851,7 +789,6 @@ static paw_Bool visit_param_decl(struct HirVisitor *V, struct HirParamDecl *d)
     IrType *type = get_type(L, d->id);
     fs->mir->is_method |= d->is_self;
     struct MirPlace const local = alloc_local(L->fs, d->ident, d->id, type);
-    // TODO: this prevents arguments from being copy propagated or made into SSA variables. remove this once args are made into SSA variables (when addr not used)
     mir_reg_data(fs->mir, local.r)->is_nontrivial = PAW_TRUE;
     return PAW_FALSE;
 }
@@ -2206,13 +2143,6 @@ static struct MirPlace lower_rvalue(struct HirVisitor *V, struct HirExpr *expr)
 
 #undef GENERATE_COMMON_CASES
 
-static void insert_upvalue_accessors(struct FunctionState *fs)
-{
-    for (int i = 0; i < fs->mir->upvalues->count; ++i) {
-
-    }
-}
-
 static void lower_hir_body_aux(struct LowerHir *L, struct HirFnDecl *fn, struct Mir *mir)
 {
     struct BlockState bs;
@@ -2227,7 +2157,6 @@ static void lower_hir_body_aux(struct LowerHir *L, struct HirFnDecl *fn, struct 
     set_current_bb(&fs, first);
 
     lower_function_block(L, fn->body);
-    insert_upvalue_accessors(&fs);
 
     leave_function(L);
 }

@@ -26,6 +26,7 @@ enum Status {
 #define PROGRAM_OPTIONS \
     OPT_STR(e, source, "accept source code from string argument") \
     OPT_STR(d, phase, "dump debug info for compilation phase(s)") \
+    OPT_STR(T, target, "triple specifying compilation target") \
     OPT_STR(O, level, "optimization level") \
     OPT_STR(o, path, "path to compiler output") \
     OPT_STR(I, include, "list of import paths") \
@@ -437,6 +438,7 @@ int main(int argc, char const *argv[])
                 .output_dirname = output_dirname,
                 .include_paths = s_opt.I,
                 .compile_only = s_opt.c,
+                .target = s_opt.T,
                 .no_std = s_opt.n,
                 .build_tests = s_opt.t,
                 .enable_asan = PAW_FALSE,

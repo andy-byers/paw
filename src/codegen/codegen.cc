@@ -44,6 +44,7 @@
 #include "ir_type.h"
 #include "mir.h"
 
+#include "abi.h"
 #include "context.h"
 #include "linker.h"
 #include "mangle.h"
@@ -76,21 +77,6 @@ static Ty *cast(Type *type)
         paw_assert(type->is_object_type());
     }
     return (Ty *)type;
-}
-
-static bool is_empty_irtype(Compiler *C, IrType *irtype)
-{
-    if (!IrIsAdt(irtype)) return false;
-    auto const kind = pawP_type2code(C, irtype);
-    if (kind == BUILTIN_UNIT) return true;
-    if (IS_BUILTIN_TYPE(kind)) return false;
-
-    auto const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
-    if (!def->is_struct) return false;
-
-    paw_assert(def->variants->count == 1);
-    auto const *variant = def->variants->data[0];
-    return variant->fields->count == 0;
 }
 
 static std::string mangle_mir_name(Mir const *mir)
@@ -609,7 +595,9 @@ public:
         llvm::InitializeNativeTargetAsmPrinter();
 
         auto *m = X.get_module()->get_module();
-        llvm::Triple const target_triple(llvm::sys::getDefaultTargetTriple());
+        llvm::Triple const target_triple(
+                options_.target != NULL ? options_.target
+                : llvm::sys::getDefaultTargetTriple());
         m->setTargetTriple(target_triple.getTriple());
 
         std::string error;
@@ -655,6 +643,8 @@ public:
             && pawS_eq(mir->name, SCAN_STR(C, name));
     }
 
+#define READ_ARG(State_, Ty_, Index_) B->CreateLoad(Ty_, (State_).get_arg(Index_))
+
     void generate_array_uninit(Mir const *mir, Fn *fn)
     {
         auto const *irargs = IR_GENERIC_ARGS(mir->type);
@@ -699,10 +689,13 @@ public:
 
         State state(X, fn);
 
-        auto *array_ty = X.get_array_ty(*get_type(irtype), N);
+        auto *element_type = get_type(irtype);
+        auto *array_ty = X.get_array_ty(*element_type, N);
         llvm::Value *array = llvm::UndefValue::get(array_ty);
-        for (auto i = 0U; i < N; ++i)
-            array = B->CreateInsertValue(array, fn->get_arg(0), i);
+        auto *element = READ_ARG(state, *element_type, 0);
+        for (auto i = 0U; i < N; ++i) {
+            array = B->CreateInsertValue(array, element, i);
+        }
 
         state.create_return(array);
     }
@@ -716,7 +709,8 @@ public:
         // type `T` in the Paw signature.
         if (pawIr_needs_drop(C, irtype)) {
             auto *irdrop = pawIr_get_custom_drop_type(C, irtype);
-            B->CreateCall(get_fn(irdrop)->get_fn(), fn->get_arg(0));
+            auto *arg = READ_ARG(state, X.get_ptr_ty(), 0);
+            B->CreateCall(get_fn(irdrop)->get_fn(), arg);
         }
         state.create_return();
     }
@@ -728,15 +722,21 @@ public:
                     IR_FIRST_GENERIC_ARG(mir->type)));
 
         State state(X, fn);
-        auto *result = B->CreateLoad(pointee_type->get_ty(), fn->get_arg(0));
+        auto *pointer = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *result = B->CreateLoad(*pointee_type, pointer);
         state.create_return(result);
     }
 
     // fn ptr::write<T>(p: *T, value: T)
     void generate_ptr_write(Mir const *mir, Fn *fn)
     {
+        auto *pointee_type = get_type(IrGenericArg_get_type(
+                    IR_FIRST_GENERIC_ARG(mir->type)));
+
         State state(X, fn);
-        B->CreateStore(fn->get_arg(1), fn->get_arg(0));
+        auto *pointer = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *value = READ_ARG(state, *pointee_type, 1);
+        B->CreateStore(value, pointer);
         state.create_return();
     }
 
@@ -748,10 +748,10 @@ public:
 
         State state(X, fn);
 
+        auto *pointer = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *offset = READ_ARG(state, X.get_isize_ty(), 1);
         auto *result = B->CreateInBoundsGEP(
-                pointee_type->get_ty(),
-                fn->get_arg(0),
-                fn->get_arg(1));
+                *pointee_type, pointer, offset);
 
         state.create_return(result);
     }
@@ -766,7 +766,8 @@ public:
     void generate_ptr_strlen(Mir const *mir, Fn *fn)
     {
         State state(X, fn);
-        auto *result = X.call_strlen(fn->get_arg(0));
+        auto *string = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *result = X.call_strlen(string);
         state.create_return(result);
     }
 
@@ -804,6 +805,95 @@ public:
 
         state.create_return(args);
     }
+
+    void generate_builtins()
+    {
+        auto *c = X.get_context();
+        auto *m = M->get_module();
+
+        // TODO: Define a minimal panic handler to be shipped with the core and a more informative one to be
+        //   linked in when using the standard library. Just trap or enter an infinite loop in the minimal
+        //   version. Write the message to stderr and exit(1) in the stdlib version.
+
+        // define default panic handler
+        {
+            static constexpr char const *const STDERR_NAME =
+#if defined(PAW_OS_MACOS)
+                "__stderrp"
+#else
+                "stderr"
+#endif
+                ;
+
+            // extern FILE *stderr;
+            auto *stream_ptr = new llvm::GlobalVariable(
+                *m, B->getPtrTy(), false,
+                llvm::GlobalValue::ExternalLinkage,
+                nullptr, STDERR_NAME);
+
+            // size_t fwrite(const void* restrict buffer, size_t size, size_t count, FILE* restrict stream);
+            auto *write = llvm::cast<llvm::Function>(
+                    m->getOrInsertFunction("fwrite",
+                        llvm::FunctionType::get(X.get_isize_ty(),
+                        {X.get_ptr_ty(), X.get_isize_ty(),
+                         X.get_isize_ty(), X.get_ptr_ty()}, false))
+                    .getCallee());
+
+            auto *message_type = X.get_slice_type(X.get_char_type());
+            FnType fn_type(X, X.get_unit_type(), { message_type });
+            Fn fn(X, "paw_panic_handler", llvm::Function::ExternalLinkage, &fn_type);
+            fn.get_fn()->setDoesNotThrow();
+            fn.get_fn()->setDoesNotReturn();
+
+            State state(X, &fn);
+
+            auto *stream = B->CreateLoad(
+                B->getPtrTy(),
+                stream_ptr,
+                "stream");
+
+            auto *message = READ_ARG(state, *message_type, 0);
+            auto *ptr = B->CreateExtractValue(message, 0ULL);
+            auto *len = B->CreateExtractValue(message, 1ULL);
+            B->CreateCall(write, {ptr, X.create_isize(1), len, stream});
+
+            auto abort = m->getOrInsertFunction("abort",
+                    llvm::FunctionType::get(B->getVoidTy(), false));
+            B->CreateCall(abort);
+
+            B->CreateUnreachable();
+        }
+
+        // generate "void @paw_bkpt(ptr)" builtin
+        {
+            auto *fn = llvm::Function::Create(
+                    llvm::FunctionType::get(X.get_void_ty(),
+                        {X.get_ptr_ty()}, false),
+                    llvm::GlobalValue::ExternalLinkage,
+                    get_builtin_name(BuiltinFn::PAW_BKPT),
+                    *M);
+            fn->setDoesNotThrow();
+
+            auto *block = llvm::BasicBlock::Create(*c, "", fn);
+            B->SetInsertPoint(block);
+            B->CreateRetVoid();
+        }
+
+        // declare "void @paw_builtin_check_bounds(i64, i64)" builtin
+        {
+            auto *fn = llvm::Function::Create(
+                    llvm::FunctionType::get(X.get_void_ty(), {
+                        X.get_isize_ty(),
+                        X.get_isize_ty(),
+                    }, false),
+                    llvm::GlobalValue::ExternalLinkage,
+                    get_builtin_name(BuiltinFn::CHECK_BOUNDS),
+                    *M);
+            fn->setDoesNotThrow();
+        }
+    }
+
+#undef READ_ARG
 
     void define_fn(Mir const *mir)
     {
@@ -1122,97 +1212,29 @@ private:
         };
     }
 
-    void generate_builtins()
+    std::vector<llvm::Type *> expand_abi_params(llvm::ArrayRef<Type *> params)
     {
-        auto *c = X.get_context();
-        auto *m = M->get_module();
-
-        // TODO: Define a minimal panic handler to be shipped with the core and a more informative one to be
-        //   linked in when using the standard library. Just trap or enter an infinite loop in the minimal
-        //   version. Write the message to stderr and exit(1) in the stdlib version.
-
-        // define default panic handler
-        {
-            static constexpr char const *const STDERR_NAME =
-#if defined(PAW_OS_MACOS)
-                "__stderrp"
-#else
-                "stderr"
-#endif
-                ;
-
-            // extern FILE *stderr;
-            auto *stream_ptr = new llvm::GlobalVariable(
-                *m, B->getPtrTy(), false,
-                llvm::GlobalValue::ExternalLinkage,
-                nullptr, STDERR_NAME);
-
-            // size_t fwrite(const void* restrict buffer, size_t size, size_t count, FILE* restrict stream);
-            auto *write = llvm::cast<llvm::Function>(
-                    m->getOrInsertFunction("fwrite",
-                        llvm::FunctionType::get(X.get_isize_ty(),
-                        {X.get_ptr_ty(), X.get_isize_ty(),
-                         X.get_isize_ty(), X.get_ptr_ty()}, false))
-                    .getCallee());
-
-            // ABI type of "[]char" in argument position
-            auto *message_type = X.get_slice_type(
-                    X.get_char_type());
-            auto callee = M->get_module()
-                ->getOrInsertFunction("paw_panic_handler",
-                    llvm::FunctionType::get(X.get_void_ty(),
-                        {message_type->get_abi_ty()}, false));
-            auto *fn = llvm::cast<llvm::Function>(callee.getCallee());
-            fn->setDoesNotThrow();
-            fn->setDoesNotReturn();
-
-            auto *block = llvm::BasicBlock::Create(*c, "block", fn);
-            B->SetInsertPoint(block);
-
-            auto *stream = B->CreateLoad(
-                B->getPtrTy(),
-                stream_ptr,
-                "stream");
-
-            auto *ptr_as_int = B->CreateExtractValue(fn->getArg(0), 0ULL);
-            auto *ptr = B->CreateIntToPtr(ptr_as_int, X.get_ptr_ty());
-            auto *len = B->CreateExtractValue(fn->getArg(0), 1ULL);
-            B->CreateCall(write, {ptr, X.create_isize(1), len, stream});
-
-            auto abort = m->getOrInsertFunction("abort",
-                    llvm::FunctionType::get(B->getVoidTy(), false));
-            B->CreateCall(abort);
-
-            B->CreateUnreachable();
+        std::vector<llvm::Type *> expanded;
+        for (auto const *type: params) {
+            auto const info = get_abi_info(X, *type);
+            switch (info.kind) {
+                case AbiInfo::Kind::EMPTY:
+                    break;
+                case AbiInfo::Kind::VALUE:
+                    expanded.push_back(type->get_ty());
+                    break;
+                case AbiInfo::Kind::EXPAND: {
+                    auto *fields = llvm::cast<llvm::StructType>(info.param_ty);
+                    for (unsigned i = 0; i < fields->getNumElements(); ++i)
+                        expanded.push_back(fields->getElementType(i));
+                    break;
+                }
+                case AbiInfo::Kind::MEMORY:
+                    expanded.push_back(X.get_ptr_ty());
+                    break;
+            }
         }
-
-        // generate "void @paw_bkpt(ptr)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_void_ty(),
-                        {X.get_ptr_ty()}, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::PAW_BKPT),
-                    *M);
-            fn->setDoesNotThrow();
-
-            auto *block = llvm::BasicBlock::Create(*c, "", fn);
-            B->SetInsertPoint(block);
-            B->CreateRetVoid();
-        }
-
-        // declare "void @paw_builtin_check_bounds(i64, i64)" builtin
-        {
-            auto *fn = llvm::Function::Create(
-                    llvm::FunctionType::get(X.get_void_ty(), {
-                        X.get_isize_ty(),
-                        X.get_isize_ty(),
-                    }, false),
-                    llvm::GlobalValue::ExternalLinkage,
-                    get_builtin_name(BuiltinFn::CHECK_BOUNDS),
-                    *M);
-            fn->setDoesNotThrow();
-        }
+        return expanded;
     }
 
     void register_mir(Mir const *mir)
@@ -1546,27 +1568,6 @@ private:
         set_result(x.output, result);
     }
 
-    unsigned sizeof_int(enum IrIntKind const kind)
-    {
-        switch (kind) {
-            case IR_INT8:
-            case IR_UINT8:
-                return 1;
-            case IR_INT16:
-            case IR_UINT16:
-                return 2;
-            case IR_INT32:
-            case IR_UINT32:
-                return 4;
-            case IR_INT64:
-            case IR_UINT64:
-                return 8;
-            case IR_ISIZE:
-            case IR_USIZE:
-                return X.size_of(X.get_isize_ty());
-        }
-    }
-
     llvm::Value *create_cast(llvm::Value *target, IrType *from, IrType *to)
     {
         auto const from_type = get_type(from);
@@ -1865,8 +1866,7 @@ private:
     void create_return(MirReturn const &)
     {
         auto const result = pawMir_get_register(state_->mir_, MirRegister{0});
-        state_->create_return(is_empty_irtype(C, result.type)
-                ? nullptr : operand(result));
+        state_->create_return(IrIsUnit(result.type) ? nullptr : operand(result));
     }
 
     void create_branch(MirBranch const &x)
@@ -2146,14 +2146,9 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
     {
         // allocate memory for local variables
         auto *type = fn->get_type();
-        if (type->get_return_kind() != ReturnKind::SRET) {
-            auto *return_type = type->get_return_type();
-            values_.front() = X->create_alloca(return_type);
-        } else {
-            values_.front() = fn->get_fn()->getArg(0);
-        }
-        // copy arguments from base class, accounting for the `env` argument on
-        // capturing closures
+        // first local is the return value
+        values_.front() = X->create_alloca(type->get_return_type());
+        // copy arguments from base class
         auto const num_args = unsigned(fptr->params->count);
         for (auto i = 0U; i < num_args; ++i)
             values_[1 + i] = get_arg(i);
@@ -2263,6 +2258,7 @@ void pawCodegen_generate(Compiler *C, TranslationUnit const *tu)
     auto *P = ENV(C);
 
     CodegenOptions const cgopt = {
+        .target = P->options.target,
         .verify_module = P->options.verify_ir,
         .print_ir = P->options.dump_ir,
         .enable_asan = P->options.enable_asan,

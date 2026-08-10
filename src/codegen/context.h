@@ -334,9 +334,9 @@ public:
 
     llvm::Value *create_unit() const
     {
-        // TODO: ZSTs
-        return create_i8(0);
-//        return llvm::ConstantStruct::get(get_unit_ty(), {});
+        return llvm::ConstantStruct::get(
+                llvm::StructType::get(*ctx_, {}, false),
+                {});
     }
 
     llvm::ConstantInt *create_bool(paw_Bool value) const
@@ -408,9 +408,7 @@ public:
 
     llvm::Type *get_unit_ty() const
     {
-        // TODO: ZSTs
-        return get_i8_ty();
-//        return llvm::StructType::get(*ctx_, {}, false);
+        return llvm::StructType::get(*ctx_, {}, false);
     }
 
     llvm::IntegerType *get_bool_ty() const
