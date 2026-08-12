@@ -2,8 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#ifndef PAW_PAW_H
-#define PAW_PAW_H
+#ifndef PAW_CORE_H
+#define PAW_CORE_H
 
 #include "config.h"
 #include <stdarg.h>
@@ -101,4 +101,4 @@ int paw_load(paw_Env *P, paw_Reader input, char const *modname, char const *dirn
 
 size_t paw_bytes_used(paw_Env const *P);
 
-#endif // PAW_PAW_H
+#endif // PAW_CORE_H

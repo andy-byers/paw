@@ -15,8 +15,6 @@
 
 #include "impl.h"
 #include "ir_type.h"
-#include "lib.h"
-#include "map.h"
 #include "mir.h"
 #include "solve.h"
 #include "type_folder.h"
@@ -160,11 +158,6 @@ static MirPlaceList *copy_places(struct MonoCollector *M, struct MirPlaceList *l
     return result;
 }
 
-static void copy_phi(struct MonoCollector *M, struct MirPhi *x, struct MirPhi *r)
-{
-    r->inputs = copy_places(M, x->inputs);
-}
-
 static void copy_array(struct MonoCollector *M, struct MirArray *x, struct MirArray *r)
 {
     r->elems = copy_places(M, x->elems);
@@ -300,9 +293,6 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
     *r = *instr; // copy trivial fields
 
     switch (MIR_KINDOF(instr)) {
-        case kMirPhi:
-            copy_phi(M, MirGetPhi(instr), MirGetPhi(r));
-            break;
         case kMirArray:
             copy_array(M, MirGetArray(instr), MirGetArray(r));
             break;

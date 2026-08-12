@@ -7,17 +7,16 @@
 //
 // MIR is a control-flow graph (CFG) of basic blocks.
 
-#include "api.h"
+#include "analysis.h"
 #include "error.h"
+#include "eval.h"
 #include "hir.h"
 #include "impl.h"
 #include "ir_type.h"
-#include "lib.h"
 #include "match.h"
 #include "mir.h"
 #include "resolve.h"
 #include "solve.h"
-#include "ssa.h"
 #include "unify.h"
 
 #include <math.h>
@@ -233,8 +232,11 @@ static void fix_upvalue_accessors(struct Mir *mir, DeclId did)
 
 static void postprocess(struct Mir *mir)
 {
-    pawSsa_construct(mir);
-    pawMir_propagate_constants(mir);
+    // put basic blocks in reverse postorder
+    pawMir_renumber_basic_blocks(mir);
+
+    // make sure all locals are initialized before they are used
+    pawA_validate(mir);
 }
 
 static void enter_constant_ctx(struct LowerHir *L, struct ConstantContext *cctx, struct HirConstDecl *d)
@@ -1341,10 +1343,30 @@ static struct MirPlace lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr 
     if (e->op == UNARY_DEREF)
         return load_from(fs, value.span, value);
 
+    enum MirUnaryOpKind const op = as_mir_unop(e->op);
+    if (e->op == UNARY_NEG && value.kind == MIR_PLACE_CONSTANT) {
+        struct MirConstantData const *kdata = mir_const_data(fs->mir, value.k);
+        // NOTE: In the case of `-K`, where `K` is a named constant, the evaluation of the `K`
+        //   path should have created an instruction to place the value of the (not yet evaluated)
+        //   constant K into a fresh register R, which is used in place of K. This branch is only
+        //   hit when a literal is negated.
+        paw_assert(kdata->data->kind == IR_CONST_VALUE);
+        IrValue const kvalue = kdata->data->value.value;
+        IrType *ktype = kdata->data->value.type;
+
+        IrValue koutput;
+        switch (pawMir_fold_unary_op(op, ktype, kvalue, &koutput)) {
+            case MIR_FOLD_FOLDED:
+                return new_const_value(fs, e->span, koutput, ktype);
+            default:
+                LOWERING_ERROR(L, ConstantOverflow, e->span);
+        }
+    }
+
     struct MirPlace const output = new_register(fs, get_type(L, e->id));
     if (IrIsNever(value.type)) return output;
 
-    NEW_INSTR(fs, unary_op, e->span, as_mir_unop(e->op), value, output);
+    NEW_INSTR(fs, unary_op, e->span, op, value, output);
     return output;
 }
 
@@ -2286,7 +2308,6 @@ static struct MirConstantData find_constant_result(struct Mir *mir)
     PAW_UNREACHABLE();
 }
 
-// TODO: consider reusing the same Mir object for each constant expression
 static struct MirConstantData lower_constant_expression(struct LowerHir *L, struct HirExpr *expr)
 {
     // artificial MIR body so that toplevel constants can be lowered normally, i.e. using
@@ -2311,15 +2332,28 @@ static struct MirConstantData lower_constant_expression(struct LowerHir *L, stru
 
     leave_function(L);
 
-    // Perform constant folding (and maybe propagation) on the initializer expression. The
-    // goal is to transform it into a single literal, which should always be possible, due
-    // to the constantness checks performed in an earlier compilation phase.
     postprocess(artificial);
-
-    struct MirConstantData kdata = find_constant_result(artificial);
+    struct MirEvalResult const r = pawMir_eval(artificial);
     pawMir_free(artificial);
-
-    return kdata;
+    switch (r.status) {
+        case MES_EVALUATED:
+            return (struct MirConstantData){
+                .data = pawIr_new_const_value(L->C, r.value, result.type),
+                .type = result.type,
+            };
+        case MES_PANICKED:
+            PAW_UNREACHABLE(); // TODO
+        case MES_NONCONSTANT:
+            LOWERING_ERROR(L, NonprimitiveConstant,
+                    .type = pawIr_print_type_v2(L->C, result.type),
+                    .span = NODE_SPAN(expr));
+        case MES_OVERFLOW:
+            LOWERING_ERROR(L, ConstantOverflow,
+                    .span = NODE_SPAN(expr));
+        case MES_DIVIDE0:
+            LOWERING_ERROR(L, ConstantDivideByZero,
+                    .span = NODE_SPAN(expr));
+    }
 }
 
 static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)

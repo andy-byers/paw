@@ -123,20 +123,6 @@ struct MirInstruction *pawMir_new_noop(struct Mir *mir, struct SourceSpan span)
     return instr;
 }
 
-struct MirInstruction *pawMir_new_phi(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *inputs, struct MirPlace output, int var_id)
-{
-    struct MirInstruction *instr = pawMir_new_instruction(mir);
-    instr->Phi_ = (struct MirPhi){
-        .mid = pawMir_next_id(mir),
-        .kind = kMirPhi,
-        .span = span,
-        .inputs = inputs,
-        .output = output,
-        .var_id = var_id,
-    };
-    return instr;
-}
-
 struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, struct SourceSpan span, Str *name, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
@@ -529,12 +515,6 @@ static void AcceptNoop(struct MirVisitor *V, struct MirNoop *t)
     PAW_UNUSED(t);
 }
 
-static void AcceptPhi(struct MirVisitor *V, struct MirPhi *t)
-{
-    pawMir_visit_place(V, t->output);
-    pawMir_visit_place_list(V, t->inputs);
-}
-
 static void AcceptMove(struct MirVisitor *V, struct MirMove *t)
 {
     pawMir_visit_place(V, t->output);
@@ -922,6 +902,7 @@ static void renumber_or_clear_ref(struct Traversal *X, BlockMap *map, MirBlock *
 
 static void prune_joins(struct Mir *mir, struct MirInstructionList *joins, struct MirInstructionList *instrs, int index)
 {
+#if 0
     int ijoin;
     struct MirInstruction **pinstr;
     K_LIST_ENUMERATE (joins, ijoin, pinstr) {
@@ -941,6 +922,7 @@ static void prune_joins(struct Mir *mir, struct MirInstructionList *joins, struc
             --ijoin;
         }
     }
+#endif // 0
 }
 
 static void rename_and_filter(struct Traversal *X, BlockMap *map, struct MirBlockList *blocks, struct MirBlockData *bb)
@@ -1013,11 +995,6 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
     struct MirPlacePtrList *inputs = MirPlacePtrList_new(mir);
 
     switch (MIR_KINDOF(instr)) {
-        case kMirPhi: {
-            struct MirPhi *x = MirGetPhi(instr);
-            ADD_INPUTS(x->inputs);
-            break;
-        }
         case kMirMove: {
             struct MirMove *x = MirGetMove(instr);
             ADD_INPUT(x->target);
@@ -1152,9 +1129,6 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
     struct MirPlacePtrList *outputs = MirPlacePtrList_new(mir);
 
     switch (MIR_KINDOF(instr)) {
-        case kMirPhi:
-            ADD_OUTPUT(MirGetPhi(instr)->output);
-            break;
         case kMirMove:
             ADD_OUTPUT(MirGetMove(instr)->output);
             break;
@@ -1689,14 +1663,6 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             print_place(P, t->output);
             PRINT_LITERAL(P, " = &");
             print_place(P, t->input);
-            break;
-        }
-        case kMirPhi: {
-            struct MirPhi *t = MirGetPhi(instr);
-            print_place(P, t->output);
-            PRINT_FORMAT(P, " = phi [", t->output.r.value);
-            print_place_list(P, t->inputs);
-            PRINT_LITERAL(P, "]");
             break;
         }
         case kMirMove: {

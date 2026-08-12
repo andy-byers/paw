@@ -15,7 +15,6 @@ struct Mir;
 
 #define MIR_INSTRUCTION_LIST(X) \
     X(Noop)                     \
-    X(Phi)                      \
     X(Move)                     \
     X(Load)                     \
     X(Store)                    \
@@ -126,13 +125,6 @@ struct MirInstructionHeader {
 
 struct MirNoop {
     MIR_INSTRUCTION_HEADER;
-};
-
-struct MirPhi {
-    MIR_INSTRUCTION_HEADER;
-    struct MirPlaceList *inputs;
-    struct MirPlace output;
-    int var_id;
 };
 
 struct MirMove {

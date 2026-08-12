@@ -29,11 +29,6 @@ typedef union IrValue KValue;
 #define CREATE_SWITCH(Kind_, Cases_) \
         switch (Kind_) { Cases_ }
 
-#define KFOLD_ERROR(C_, Kind_, Modname_, ...) THROW_ERROR(C_, Kind_, .modname = Modname_, __VA_ARGS__)
-#define DIVIDE_BY_0(C_, Modname_, Span_) KFOLD_ERROR(C_, ConstantDivideByZero, Modname_, Span_);
-#define SHIFT_BY_NEGATIVE(C_, Modname_, Span_) KFOLD_ERROR(C_, ConstantNegativeShiftCount, Modname_, Span_);
-#define IDIVMOD_OVERFLOWS(Left_, Right_) (V_INT(Left_) == PAW_INT_MIN && V_INT(Right_) == PAW_INT_C(-1))
-
 // TODO: replace with integer info table in Compiler for particular target to handle usize/isize, or just pretend usize is 64-bit and throw error on all overflows (even unsigned) so pointer size doesn't affect const eval
 static paw_Int64 int_lower_bound_(enum IrIntKind kind)
 {

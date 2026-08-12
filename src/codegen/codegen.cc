@@ -374,12 +374,6 @@ private:
 
 class CodeGenerator;
 
-struct PhiInput {
-    MirPlace r;
-    llvm::BasicBlock *from;
-    llvm::PHINode *phi;
-};
-
 class PawState final: public State {
 public:
     friend class CodeGenerator;
@@ -411,8 +405,6 @@ private:
 
     llvm::BasicBlock *before_block_;
     PawState *outer_;
-
-    std::vector<PhiInput> phi_inputs_;
 
     std::vector<llvm::BasicBlock *> blocks_;
     std::vector<llvm::Value *> values_;
@@ -1042,34 +1034,34 @@ public:
         return itr->get();
     }
 
-    llvm::Value *create_constant_int(paw_Int64 value, IrIntKind kind)
+    llvm::Value *create_constant_int(IrValue value, IrIntKind kind)
     {
         switch (kind) {
             case IR_INT8:
             case IR_UINT8:
-                return X.create_i8((paw_Int8)value);
+                return X.create_i8(value.i8);
             case IR_INT16:
             case IR_UINT16:
-                return X.create_i16((paw_Int16)value);
+                return X.create_i16(value.i16);
             case IR_INT32:
             case IR_UINT32:
-                return X.create_i32((paw_Int32)value);
+                return X.create_i32(value.i32);
             case IR_INT64:
             case IR_UINT64:
-                return X.create_i64(value);
+                return X.create_i64(value.i64);
             case IR_ISIZE:
             case IR_USIZE:
-                return X.create_isize((paw_Usize)value);
+                return X.create_isize(value.usize);
         }
     }
 
-    llvm::Value *create_constant_float(paw_Float64 value, IrFloatKind kind)
+    llvm::Value *create_constant_float(IrValue value, IrFloatKind kind)
     {
         switch (kind) {
             case IR_FLOAT32:
-                return X.create_f32((paw_Float32)value);
+                return X.create_f32(value.f32);
             case IR_FLOAT64:
-                return X.create_f64(value);
+                return X.create_f64(value.f64);
         }
     }
 
@@ -1079,13 +1071,13 @@ public:
             case kIrUnit:
                 return X.create_unit();
             case kIrBool:
-                return X.create_bool(value.i);
+                return X.create_bool(value.b);
             case kIrChar:
                 return X.create_char(value.c);
             case kIrInt:
-                return create_constant_int(value.i, IR_INT_KIND(type));
+                return create_constant_int(value, IR_INT_KIND(type));
             case kIrFloat:
-                return create_constant_float(value.f, IR_FLOAT_KIND(type));
+                return create_constant_float(value, IR_FLOAT_KIND(type));
             default:
                 paw_assert(IrIsString(type));
                 return get_constant_str((::Str const *)value.p);
@@ -1108,11 +1100,6 @@ private:
 
     void leave_fn()
     {
-        for (auto const &p: state_->phi_inputs_) {
-            B->SetInsertPoint(p.from->getTerminator());
-            p.phi->addIncoming(operand(p.r), p.from);
-        }
-
         auto *before = state_->before_block_;
         state_ = state_->outer_;
 
@@ -1279,9 +1266,6 @@ private:
             case kMirNoop:
             case kMirKill:
                 return;
-            case kMirPhi:
-                create_phi(instr->Phi_);
-                break;
             case kMirDrop:
                 create_drop(instr->Drop_);
                 break;
@@ -1394,24 +1378,6 @@ private:
         str = B->CreateInsertValue(str, text, 0);
         str = B->CreateInsertValue(str, len, 1);
         return str;
-    }
-
-    void create_phi(MirPhi const &x)
-    {
-        auto *block = get_current_block();
-        B->SetInsertPoint(block, block->begin());
-
-        auto *phi = B->CreatePHI(*get_type(x.output.type),
-                unsigned(x.inputs->count));
-
-        B->SetInsertPoint(block);
-        for (auto i = 0; i < x.inputs->count; ++i)
-            state_->phi_inputs_.push_back(PhiInput{
-                .r = MirPlaceList_get(x.inputs, i),
-                .from = get_predecessor_block(i),
-                .phi = phi,
-            });
-        set_result(x.output, phi);
     }
 
     // TODO: locals that became SSA registers need their drops removed, then use ir_deref instead of ir_auto_deref
@@ -1619,7 +1585,7 @@ private:
                 } else if (IrIsInt(to)) {
                     return B->CreateZExt(target, *to_type);
                 } else if (IrIsFloat(to)) {
-                    return B->CreateSIToFP(target, *to_type);
+                    return B->CreateUIToFP(target, *to_type);
                 } else {
                     paw_assert(IrIsBool(to));
                     return target;
@@ -1639,14 +1605,16 @@ private:
             case kIrInt:
                 if (IrIsBool(to)) {
                     return B->CreateCmp(llvm::CmpInst::ICMP_NE, target,
-                            create_constant_int(0, IR_INT_KIND(from)));
+                            create_constant_int(IrValue{.i64 = 0}, IR_INT_KIND(from)));
                 } else if (IrIsChar(to)) {
                     if (X.size_of(*from_type) == 1) return target;
                     return B->CreateTrunc(target, X.get_i8_ty());
                 } else if (IrIsPtr(to)) {
                     return B->CreateIntToPtr(target, X.get_ptr_ty());
                 } else if (IrIsFloat(to)) {
-                    return B->CreateSIToFP(target, *to_type);
+                    return ((IntType *)from_type)->is_signed()
+                        ? B->CreateSIToFP(target, *to_type)
+                        : B->CreateUIToFP(target, *to_type);
                 } else {
                     paw_assert(IrIsInt(to));
                     auto const from_size = X.size_of(*from_type);
@@ -1665,11 +1633,16 @@ private:
                 paw_assert(IrIsFloat(from));
                 if (IrIsBool(to)) {
                     return B->CreateCmp(llvm::CmpInst::FCMP_ONE, target,
-                            create_constant_float(0.0, IR_FLOAT_KIND(from)));
+                            create_constant_float(IrValue{.i64 = 0}, IR_FLOAT_KIND(from)));
                 } else if (IrIsInt(to)) {
                     return B->CreateFPToSI(target, *to_type);
                 } else {
                     paw_assert(IrIsFloat(to));
+                    if (IR_FLOAT_KIND(from) == IR_FLOAT32 && IR_FLOAT_KIND(to) == IR_FLOAT64) {
+                        return B->CreateFPExt(target, to_type->get_ty());
+                    } else if (IR_FLOAT_KIND(from) == IR_FLOAT64 && IR_FLOAT_KIND(to) == IR_FLOAT32) {
+                        return B->CreateFPTrunc(target, to_type->get_ty());
+                    }
                     return target;
                 }
         }

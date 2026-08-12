@@ -56,6 +56,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/src/debug.h
     ${PAW_SOURCE_DIR}/src/env.h
     ${PAW_SOURCE_DIR}/src/error.h
+    ${PAW_SOURCE_DIR}/src/eval.h
     ${PAW_SOURCE_DIR}/src/hir.h
     ${PAW_SOURCE_DIR}/src/ir_type.h
     ${PAW_SOURCE_DIR}/src/impl.h
@@ -74,7 +75,6 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/src/resolve.h
     ${PAW_SOURCE_DIR}/src/solve.h
     ${PAW_SOURCE_DIR}/src/source.h
-    ${PAW_SOURCE_DIR}/src/ssa.h
     ${PAW_SOURCE_DIR}/src/stats.h
     ${PAW_SOURCE_DIR}/src/str.h
     ${PAW_SOURCE_DIR}/src/trait.h
@@ -99,6 +99,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/src/dropgen.c
     ${PAW_SOURCE_DIR}/src/env.c
     ${PAW_SOURCE_DIR}/src/error.c
+    ${PAW_SOURCE_DIR}/src/eval.c
     ${PAW_SOURCE_DIR}/src/exhaustiveness.c
     ${PAW_SOURCE_DIR}/src/hir.c
     ${PAW_SOURCE_DIR}/src/impl.c
@@ -126,7 +127,6 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/src/resolve.c
     ${PAW_SOURCE_DIR}/src/solve.c
     ${PAW_SOURCE_DIR}/src/source.c
-    ${PAW_SOURCE_DIR}/src/ssa.c
     ${PAW_SOURCE_DIR}/src/stats.c
     ${PAW_SOURCE_DIR}/src/str.c
     ${PAW_SOURCE_DIR}/src/trait.c

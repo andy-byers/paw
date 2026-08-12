@@ -15,6 +15,8 @@
 // TODO: Consider moving this pass after monomorphization so instantiated generics
 //       can be folded.
 
+#if 0
+
 #include "error.h"
 #include "ir_type.h"
 #include "map.h"
@@ -1113,3 +1115,4 @@ void pawMir_propagate_constants(struct Mir *mir)
     propagate(mir);
 }
 
+#endif // 0
