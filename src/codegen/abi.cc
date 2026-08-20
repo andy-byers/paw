@@ -348,20 +348,25 @@ AbiInfo arg_info(Context &X, Type const &type, RegisterInfo &regs)
 
 AbiFnInfo abi_info(Context &X, FnType const &type)
 {
-    RegisterInfo regs = {
-        .num_int_regs = 6,
-        .num_sse_regs = 8,
-    };
-
     AbiFnInfo info;
+    RegisterInfo regs;
+
+    // `regs` not relevant for return value
+    regs.num_int_regs = regs.num_sse_regs = UINT_MAX;
+    info.return_info = arg_info(X, *type.get_return_type(), regs);
+
+    regs.num_int_regs = 6; // %rdi, %rsi, %rdx, %rcx, %r8, %r9
+    regs.num_sse_regs = 8; // %xmm0, %xmm1, ..., %xmm7
+
+    // `sret` pointer is passed in `%rdi`
+    if (info.return_info.is_memory())
+        --regs.num_int_regs;
+
     if ((info.has_env = type.has_env()))
         info.env_info = arg_info(X, *type.get_env_type(), regs);
     info.param_info.reserve(type.get_num_params());
     for (auto i = 0U; i < type.get_num_params(); ++i)
         info.param_info.push_back(arg_info(X, *type.get_param_type(i), regs));
-    // `regs` not relevant when determining return info
-    regs.num_int_regs = regs.num_sse_regs = UINT_MAX;
-    info.return_info = arg_info(X, *type.get_return_type(), regs);
     return info;
 }
 

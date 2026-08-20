@@ -154,3 +154,27 @@ pub fn paw_x86_64_many_args_11(
         f7, f8,
         value) 
 }
+<<<<<<< HEAD
+=======
+
+// int_missing = 1
+// sse_missing = 0
+#[extern = "c_x86_64_many_args_10_sret"]
+pub fn c_x86_64_many_args_10_sret(
+    i1: int32, i2: int32,
+    i3: int32, i4: int32,
+    i5: int32, 
+    value: Int8Float64) -> ThreeInt64;
+pub fn paw_x86_64_many_args_10_sret(
+    i1: int32, i2: int32,
+    i3: int32, i4: int32,
+    i5: int32, 
+    value: Int8Float64) -> ThreeInt64 
+{ 
+    c_x86_64_many_args_10_sret(
+        i1, i2,
+        i3, i4,
+        i5,
+        value) 
+}
+>>>>>>> 93b5fea (fix: C interop issue when function has large number of arguments)

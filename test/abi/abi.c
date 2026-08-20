@@ -54,3 +54,18 @@ struct Float32Int64 c_x86_64_many_args_11(
 {
     return value;
 }
+
+// int_missing = 1
+// sse_missing = 0
+struct ThreeInt64 c_x86_64_many_args_10_sret(
+    int32_t i1, int32_t i2,
+    int32_t i3, int32_t i4,
+    int32_t i5,
+    struct Int8Float64 value)
+{
+    return (struct ThreeInt64){
+        .a = value.a,
+        .b = value.a + 1,
+        .c = value.a + 2,
+    };
+}
