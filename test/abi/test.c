@@ -16,6 +16,31 @@
 #define paw_ThreeFloat64 _PN3abi16paw_ThreeFloat64
 #define paw_Int8Float64 _PN3abi15paw_Int8Float64
 
+#define X86_64_MANY_ARGS(Id_) _PN3abi23paw_x86_64_many_args_##Id_
+struct Float32Int64 X86_64_MANY_ARGS(00)(
+        int32_t i1, int32_t i2,
+        int32_t i3, int32_t i4,
+        int32_t i5,
+        float f1, float f2,
+        float f3, float f4,
+        float f5, float f6,
+        float f7,
+        struct Float32Int64 value);
+struct Int8Float64 X86_64_MANY_ARGS(10)(
+        int32_t i1, int32_t i2,
+        int32_t i3, int32_t i4,
+        int32_t i5, int32_t i6,
+        struct Int8Float64 value);
+struct Float32Int64 X86_64_MANY_ARGS(11)(
+        int32_t i1, int32_t i2,
+        int32_t i3, int32_t i4,
+        int32_t i5, int32_t i6,
+        float f1, float f2,
+        float f3, float f4,
+        float f5, float f6,
+        float f7, float f8,
+        struct Float32Int64 value);
+
 struct ThreeInt8 paw_ThreeInt8(struct ThreeInt8 value);
 struct Int64 paw_Int64(struct Int64 value);
 struct TwoInt64 paw_TwoInt64(struct TwoInt64 value);
@@ -109,11 +134,58 @@ int main(void)
     }
     {
         struct Int8Float64 const a = (struct Int8Float64){
-            .a = -1,
-            .b = 2.3,
+            .a = -3,
+            .b = 1.2,
         };
         struct Int8Float64 const b = paw_Int8Float64(a);
         assert(a.a == b.a);
         assert(a.b == b.b);
     }
+//    {
+//        struct Float32Int64 const a = (struct Float32Int64){
+//            .a = 999.9,
+//            .b = 11111,
+//        };
+//        struct Float32Int64 const b = X86_64_MANY_ARGS(00)(
+//                1, 2,
+//                3, 4,
+//                5,
+//                1.1, 2.2,
+//                3.3, 4.4,
+//                5.5, 6.6,
+//                7.7,
+//                a);
+//        assert(a.a == b.a);
+//        assert(a.b == b.b);
+//    }
+//    {
+//        struct Int8Float64 const a = (struct Int8Float64){
+//            .a = 100,
+//            .b = 2.0,
+//        };
+//        struct Int8Float64 const b = X86_64_MANY_ARGS(10)(
+//                1, 2,
+//                3, 4,
+//                5, 6,
+//                a);
+//        assert(a.a == b.a);
+//        assert(a.b == b.b);
+//    }
+//    {
+//        struct Float32Int64 const a = (struct Float32Int64){
+//            .a = 1.23,
+//            .b = 10000,
+//        };
+//        struct Float32Int64 const b = X86_64_MANY_ARGS(11)(
+//                1, 2,
+//                3, 4,
+//                5, 6,
+//                1.1, 2.2,
+//                3.3, 4.4,
+//                5.5, 6.6,
+//                7.7, 8.8,
+//                a);
+//        assert(a.a == b.a);
+//        assert(a.b == b.b);
+//    }
 }

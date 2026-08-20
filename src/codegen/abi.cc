@@ -40,6 +40,7 @@ AbiInfo create_abi_info(AbiInfo::Kind kind, llvm::Type *return_ty, llvm::Type *p
         .kind = kind,
         .return_ty = return_ty,
         .param_ty = param_ty != nullptr ? param_ty : return_ty,
+        .m = {0},
     };
 }
 
@@ -107,7 +108,7 @@ bool check_hfa(Context &X, llvm::Type *ty, HfaInfo *out)
     return false;
 }
 
-AbiInfo abi_info(Context &X, Type const &type)
+AbiInfo arg_info(Context &X, Type const &type)
 {
     switch (type.get_kind()) {
         case Type::Kind::UNIT:
@@ -125,11 +126,15 @@ AbiInfo abi_info(Context &X, Type const &type)
                     // use `[i64 x 2]` since bitsize is 128
                     X.get_array_ty(X.get_i64_ty(), 2));
         case Type::Kind::ARRAY:
+            if (type.get_bitsize() == 0)
+                return CREATE_EMPTY(X);
             if (type.get_bitsize() > 128)
                 return CREATE_MEMORY(X);
             return create_value(type.get_ty());
         case Type::Kind::OBJECT: {
             ObjectType const &t = (ObjectType &)type;
+            if (t.get_bitsize() == 0)
+                return CREATE_EMPTY(X);
             if (t.get_num_variants() > 1) {
                 // NOTE: enums are represented as `[N x i8]`
                 if (type.get_bitsize() > 128)
@@ -149,10 +154,22 @@ AbiInfo abi_info(Context &X, Type const &type)
         case Type::Kind::FN: {
             FnType const *fn = static_cast<FnType const *>(&type);
             if (fn->has_env())
-                return abi_info(X, *fn->get_env_type());
+                return arg_info(X, *fn->get_env_type());
             return create_value(X.get_ptr_ty());
         }
     }
+}
+
+AbiFnInfo abi_info(Context &X, FnType const &type)
+{
+    AbiFnInfo info;
+    if ((info.has_env = type.has_env()))
+        info.env_info = arg_info(X, *type.get_env_type());
+    info.param_info.reserve(type.get_num_params());
+    for (auto i = 0U; i < type.get_num_params(); ++i)
+        info.param_info.push_back(arg_info(X, *type.get_param_type(i)));
+    info.return_info = arg_info(X, *type.get_return_type());
+    return info;
 }
 
 } // namespace aarch64
@@ -219,7 +236,14 @@ llvm::Type *translate_field(Context &X, Class cls)
     }
 }
 
-AbiInfo composite_info(Context &X, llvm::Type *ty)
+struct RegisterInfo {
+    unsigned num_int_regs;
+    unsigned num_sse_regs;
+};
+
+#define DECREMENT_IF_NONZERO(Reg_) ((Reg_) -= (Reg_) > 0)
+
+AbiInfo composite_info(Context &X, llvm::Type *ty, RegisterInfo &regs)
 {
     if (X.bitsize_of(ty) == 0)
         return CREATE_EMPTY(X);
@@ -248,70 +272,131 @@ AbiInfo composite_info(Context &X, llvm::Type *ty)
                 classify_field(ty));
     }
 
+#define DECREMENT_BY_CLASS(Regs_, Class_) do { \
+            if ((Class_) == Class::INTEGER) { \
+                (Regs_).num_int_regs -= 1; \
+            } else { \
+                (Regs_).num_sse_regs -= 1; \
+            } \
+        } while (0)
+
     if (info[1] == Class::EMPTY) {
         paw_assert(X.bitsize_of(ty) <= 64 // upper eightbyte unused
                 && (info[0] == Class::INTEGER || info[0] == Class::SSE));
         auto *abi_ty = info[0] == Class::INTEGER
             ? X.get_sized_int_ty(PAW_ROUND_UP(X.bitsize_of(ty), 8U))
             : X.bitsize_of(ty) == 32 ? X.get_f32_ty() : X.get_f64_ty();
+        DECREMENT_BY_CLASS(regs, info[0]);
         return create_abi_info(AbiInfo::Kind::VALUE, abi_ty);
-    } else {
-        auto *abi_ty = llvm::StructType::get(*c, {
-            translate_field(X, info[0]),
-            translate_field(X, info[1]),
-        });
+    }
+
+#undef DECREMENT_BY_CLASS
+
+    std::vector const field_tys = {
+        translate_field(X, info[0]),
+        translate_field(X, info[1]),
+    };
+    unsigned const int_regs_needed = (info[0] == Class::INTEGER) + (info[1] == Class::INTEGER);
+    unsigned const sse_regs_needed = (info[0] == Class::SSE) + (info[1] == Class::SSE);
+    if (regs.num_int_regs >= int_regs_needed && regs.num_sse_regs >= sse_regs_needed) {
+        regs.num_int_regs -= int_regs_needed;
+        regs.num_sse_regs -= sse_regs_needed;
+        auto *abi_ty = llvm::StructType::get(*c, field_tys);
         return create_abi_info(AbiInfo::Kind::EXPAND, abi_ty);
     }
+
+    // not enough registers for this argument: pass it on the stack
+    auto m = CREATE_MEMORY(X);
+    m.m.requires_byval = true;
+    m.m.alignment = X.align_of(ty);
+    return m;
 }
 
-AbiInfo abi_info(Context &X, Type const &type)
+AbiInfo arg_info(Context &X, Type const &type, RegisterInfo &regs)
 {
     auto *ty = type.get_ty();
     switch (type.get_kind()) {
         case Type::Kind::UNIT:
             return CREATE_EMPTY(X);
         case Type::Kind::BOOL:
+            DECREMENT_IF_NONZERO(regs.num_int_regs);
             return create_value(X.get_i8_ty());
         case Type::Kind::CHAR:
         case Type::Kind::INT:
-        case Type::Kind::FLOAT:
         case Type::Kind::PTR:
+            DECREMENT_IF_NONZERO(regs.num_int_regs);
+            return create_value(ty);
+        case Type::Kind::FLOAT:
+            DECREMENT_IF_NONZERO(regs.num_sse_regs);
             return create_value(ty);
         case Type::Kind::STR:
         case Type::Kind::SLICE:
         case Type::Kind::ARRAY:
         case Type::Kind::OBJECT:
-            return composite_info(X, type.get_ty());
+            if (type.get_bitsize() == 0)
+                return CREATE_EMPTY(X);
+            return composite_info(X, type.get_ty(), regs);
         case Type::Kind::FN: {
             FnType const *fn = static_cast<FnType const *>(&type);
             if (fn->has_env())
-                return abi_info(X, *fn->get_env_type());
+                return arg_info(X, *fn->get_env_type(), regs);
+            DECREMENT_IF_NONZERO(regs.num_int_regs);
             return create_value(X.get_ptr_ty());
         }
     }
+}
+
+AbiFnInfo abi_info(Context &X, FnType const &type)
+{
+    RegisterInfo regs = {
+        .num_int_regs = 6,
+        .num_sse_regs = 8,
+    };
+
+    AbiFnInfo info;
+    if ((info.has_env = type.has_env()))
+        info.env_info = arg_info(X, *type.get_env_type(), regs);
+    info.param_info.reserve(type.get_num_params());
+    for (auto i = 0U; i < type.get_num_params(); ++i)
+        info.param_info.push_back(arg_info(X, *type.get_param_type(i), regs));
+    // `regs` not relevant when determining return info
+    regs.num_int_regs = regs.num_sse_regs = UINT_MAX;
+    info.return_info = arg_info(X, *type.get_return_type(), regs);
+    return info;
 }
 
 } // namespace x86_64
 
 namespace unknown {
 
-AbiInfo abi_info(Context &X, Type const &type)
+AbiInfo arg_info(Context &X, Type const &type)
 {
+    if (type.get_bitsize() == 0)
+        return CREATE_EMPTY(X);
     auto const two_pointers = X.bitsize_of(X.get_ptr_ty()) * 2;
     if (type.get_bitsize() > two_pointers)
         return CREATE_MEMORY(X);
     return create_value(type.get_ty());
 }
 
+AbiFnInfo abi_info(Context &X, FnType const &type)
+{
+    AbiFnInfo info;
+    if ((info.has_env = type.has_env()))
+        info.env_info = arg_info(X, *type.get_env_type());
+    info.param_info.reserve(type.get_num_params());
+    for (auto i = 0U; i < type.get_num_params(); ++i)
+        info.param_info.push_back(arg_info(X, *type.get_param_type(i)));
+    info.return_info = arg_info(X, *type.get_return_type());
+    return info;
+}
+
 } // namespace unknown
 
 } // namespace
 
-AbiInfo get_abi_info(Context &X, Type const &type)
+AbiFnInfo get_abi_info_(Context &X, FnType const &type)
 {
-    if (type.get_bitsize() == 0)
-        return CREATE_EMPTY(X);
-
     auto *m = X.get_module()->get_module();
     llvm::Triple const triple(m->getTargetTriple());
     switch (triple.getArch()) {

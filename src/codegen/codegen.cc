@@ -1212,31 +1212,6 @@ private:
         };
     }
 
-    std::vector<llvm::Type *> expand_abi_params(llvm::ArrayRef<Type *> params)
-    {
-        std::vector<llvm::Type *> expanded;
-        for (auto const *type: params) {
-            auto const info = get_abi_info(X, *type);
-            switch (info.kind) {
-                case AbiInfo::Kind::EMPTY:
-                    break;
-                case AbiInfo::Kind::VALUE:
-                    expanded.push_back(type->get_ty());
-                    break;
-                case AbiInfo::Kind::EXPAND: {
-                    auto *fields = llvm::cast<llvm::StructType>(info.param_ty);
-                    for (unsigned i = 0; i < fields->getNumElements(); ++i)
-                        expanded.push_back(fields->getElementType(i));
-                    break;
-                }
-                case AbiInfo::Kind::MEMORY:
-                    expanded.push_back(X.get_ptr_ty());
-                    break;
-            }
-        }
-        return expanded;
-    }
-
     void register_mir(Mir const *mir)
     {
         mirs_.insert(mir->type, mir);
