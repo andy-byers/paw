@@ -203,9 +203,8 @@ bool PrimitiveType::equals(Type const *rhs) const
 }
 
 
-static void add_abi_params(Context &X, Type *type, std::vector<llvm::Type *> &out)
+static void add_abi_params(AbiInfo info, std::vector<llvm::Type *> &out)
 {
-    auto const info = get_abi_info(X, *type);
     if (info.kind == AbiInfo::Kind::EXPAND) {
         auto *struct_ty = llvm::cast<llvm::StructType>(info.param_ty);
         for (auto const e: struct_ty->elements())
@@ -227,14 +226,15 @@ FnType::FnType(Context &X, Type *return_type,
 {
     std::vector<llvm::Type *> param_tys;
     param_tys.reserve(!!env_type + param_types.size());
+    auto const info = get_abi_info_(X, *this);
 
-    if (env_type != nullptr)
-        add_abi_params(X, env_type, param_tys);
+    if (info.has_env)
+        add_abi_params(info.env_info, param_tys);
 
-    for (auto *type: param_types)
-        add_abi_params(X, type, param_tys);
+    for (auto param: info.param_info)
+        add_abi_params(param, param_tys);
 
-    auto const return_info = get_abi_info(X, *return_type);
+    auto const return_info = info.return_info;
     auto *return_ty = return_info.return_ty;
     switch (return_info.kind) {
         case AbiInfo::Kind::EMPTY:

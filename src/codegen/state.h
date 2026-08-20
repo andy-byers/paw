@@ -47,6 +47,7 @@ private:
     > call_temp_{0, hash_type, type_equals};
 };
 
+
 // Object representing a function in the process of being generated
 class State {
 public:

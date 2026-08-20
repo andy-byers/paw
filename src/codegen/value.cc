@@ -24,11 +24,10 @@ static unsigned env_args_count(Context &X, FnType const *type)
     if (!type->has_env())
         return 0;
 
-    auto *env_type = type->get_env_type();
-    auto const env_info = get_abi_info(X, *env_type);
-    if (env_info.kind != AbiInfo::Kind::EXPAND)
+    auto const info = get_abi_info_(X, *type);
+    if (info.env_info.kind != AbiInfo::Kind::EXPAND)
         return 1;
-    return llvm::cast<llvm::StructType>(env_info.param_ty)
+    return llvm::cast<llvm::StructType>(info.env_info.param_ty)
         ->getNumElements();
 }
 
@@ -54,10 +53,9 @@ llvm::Value *Callable::get_value() const
 }
 
 
-static unsigned add_attr(Context &X, llvm::Function *fn, unsigned base_arg, Type &param_type, unsigned iarg)
+static unsigned add_attr(Context &X, llvm::Function *fn, Type &param_type, AbiInfo param_info, unsigned &iarg)
 {
     auto *c = X.get_context();
-    auto const param_info = get_abi_info(X, param_type);
     switch (param_info.kind) {
         case AbiInfo::Kind::EMPTY:
             break;
@@ -70,7 +68,7 @@ static unsigned add_attr(Context &X, llvm::Function *fn, unsigned base_arg, Type
             break;
         }
         case AbiInfo::Kind::MEMORY: {
-            auto *arg = fn->getArg(base_arg + iarg);
+            auto *arg = fn->getArg(iarg);
             if (param_info.m.requires_byval) {
                 auto attr = llvm::Attribute::getWithByValType(*c, param_type.get_ty());
                 arg->addAttr(attr);
@@ -119,38 +117,14 @@ Fn::Fn(Context &X, std::string name,
         sret->addAttr(llvm::Attribute::get(*c, llvm::Attribute::NoAlias));
     }
 
+    unsigned iarg = env_arg_offset(type);
+    auto const fn_info = get_abi_info_(X, *type);
     if (type->has_env())
-        add_attr(X, fn, env_arg_offset(type), *type->get_env_type(), 0);
-
-    auto const offset = user_args_offset(X, type);
-    for (auto iparam = 0U, iarg = 0U; iparam < type->get_num_params(); ++iparam) {
+        add_attr(X, fn, *type->get_env_type(), fn_info.env_info, iarg);
+    for (auto iparam = 0U; iparam < type->get_num_params(); ++iparam) {
+        auto const param_info = fn_info.param_info[iparam];
         auto *param_type = type->get_param_type(iparam);
-        auto const param_info = get_abi_info(X, *param_type);
-        switch (param_info.kind) {
-            case AbiInfo::Kind::EMPTY:
-                break;
-            case AbiInfo::Kind::VALUE:
-                ++iarg;
-                break;
-            case AbiInfo::Kind::EXPAND: {
-                auto *fields = llvm::cast<llvm::StructType>(param_info.param_ty);
-                iarg += fields->getNumElements();
-                break;
-            }
-            case AbiInfo::Kind::MEMORY: {
-                auto *arg = fn->getArg(offset + iarg);
-                if (param_info.m.requires_byval) {
-                    auto attr = llvm::Attribute::getWithByValType(*c, *param_type);
-                    arg->addAttr(attr);
-                }
-                if (param_info.m.alignment.has_value()) {
-                    auto attr = llvm::Attribute::getWithAlignment(*c, param_info.m.alignment.value());
-                    arg->addAttr(attr);
-                }
-                ++iarg;
-                break;
-            }
-        }
+        add_attr(X, fn, *param_type, param_info, iarg);
     }
 }
 
@@ -174,18 +148,18 @@ llvm::Value *Fn::load_env() const
     auto *B = X->get_builder();
     auto *fn_type = get_type();
     auto *env_type = fn_type->get_env_type();
-    auto const env_info = get_abi_info(*X, *env_type);
+    auto const info = get_abi_info_(*X, *fn_type);
     auto const offset = env_arg_offset(fn_type);
-    switch (env_info.kind) {
+    switch (info.env_info.kind) {
         case AbiInfo::Kind::EMPTY:
             return X->create_unit();
         case AbiInfo::Kind::VALUE:
             return get_fn()->getArg(offset);
         case AbiInfo::Kind::EXPAND: {
             auto *scratch = B->CreateAlloca(*env_type);
-            auto *fields = llvm::cast<llvm::StructType>(env_info.param_ty);
+            auto *fields = llvm::cast<llvm::StructType>(info.env_info.param_ty);
             for (unsigned i = 0; i < fields->getNumElements(); ++i) {
-                auto *ptr = B->CreateStructGEP(env_info.param_ty, scratch, i);
+                auto *ptr = B->CreateStructGEP(info.env_info.param_ty, scratch, i);
                 auto *arg = get_fn()->getArg(offset + i);
                 B->CreateStore(arg, ptr);
             }

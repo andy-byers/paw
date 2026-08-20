@@ -65,9 +65,10 @@ State::State(Context &X, Fn *fn)
     B->SetInsertPoint(entry_);
 
     args_.reserve(fn->get_num_args());
+    auto const fn_info = get_abi_info_(X, *fn_type);
     for (auto iparam = 0U, iarg = 0U; iparam < fn_type->get_num_params(); ++iparam) {
         auto *type = fn_type->get_param_type(iparam);
-        auto const info = get_abi_info(X, *type);
+        auto const info = fn_info.param_info[iparam];
         switch (info.kind) {
             case AbiInfo::Kind::EMPTY: {
                 auto *alloca = X.create_alloca(type);
@@ -119,8 +120,7 @@ void State::create_return(llvm::Value *value)
 {
     auto *B = X->get_builder();
     auto *fn_type = fn_->get_type();
-    auto *return_type = fn_type->get_return_type();
-    auto const return_info = get_abi_info(*X, *return_type);
+    auto const return_info = get_abi_info_(*X, *fn_type).return_info;
     switch (return_info.kind) {
         case AbiInfo::Kind::EMPTY:
             B->CreateRetVoid();
@@ -158,11 +158,10 @@ llvm::Value *State::get_arg(unsigned index) const
     return args_.at(index);
 }
 
-static void add_abi_args(Context &X, State &state, llvm::Value *value, Type &type, std::vector<llvm::Value *> &out, std::vector<llvm::AttributeSet> &attrs)
+static void add_abi_args(Context &X, State &state, llvm::Value *value, Type &type, AbiInfo info, std::vector<llvm::Value *> &out, std::vector<llvm::AttributeSet> &attrs)
 {
     auto *B = X.get_builder();
     auto *c = X.get_context();
-    auto const info = get_abi_info(X, type);
     switch (info.kind) {
         case AbiInfo::Kind::EMPTY:
             break;
@@ -218,13 +217,15 @@ llvm::Value *State::create_call(Callable const &call, llvm::Value *env, llvm::Ar
     std::vector<llvm::AttributeSet> attrs;
     rewrite.reserve((env != nullptr) + args.size());
 
-    if (env != nullptr)
-        add_abi_args(*X, *this, env, *type->get_env_type(), rewrite, attrs);
+    auto const fn_info = get_abi_info_(*X, *type);
+    if (fn_info.has_env)
+        add_abi_args(*X, *this, env, *type->get_env_type(), fn_info.env_info, rewrite, attrs);
+    auto param_info = begin(fn_info.param_info);
     for (auto i = 0U; i < args.size(); ++i)
-        add_abi_args(*X, *this, args[i], *type->get_param_type(i), rewrite, attrs);
+        add_abi_args(*X, *this, args[i], *type->get_param_type(i), *param_info++, rewrite, attrs);
 
+    auto const return_info = fn_info.return_info;
     auto *return_type = type->get_return_type();
-    auto const return_info = get_abi_info(*X, *return_type);
     auto *return_ty = return_type->get_ty();
     switch (return_info.kind) {
         case AbiInfo::Kind::EMPTY: {

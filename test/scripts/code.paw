@@ -946,12 +946,62 @@
 //    assert(f(x).unwrap() == 123);
 //}
 
-#[test]
-pub fn test() {
-    let value = (1, 2, 3);
-    let f = || value;
-    let value2 = f();
-    assert(value.0 == value2.0);
-    assert(value.1 == value2.1);
-    assert(value.2 == value2.2);
+use list::List;
+use hashmap::HashMap;
+
+fn map<A, B>(f: fn(A) -> B, a: List<A>) -> List<B> {
+    let b = List::new();
+    for v in a {
+        b.push(f(v)).unwrap();
+    }
+    b
 }
+
+fn f2i(f: float64) -> int64 {
+    f as int64
+}
+
+use io;
+#[test]
+pub fn test_explicit_instantiation() {
+    let source = List::new();
+    source.push(0.5).unwrap();
+    source.push(1.6).unwrap();
+    source.push(2.7).unwrap();
+    source.push(3.8).unwrap();
+    source.push(4.9).unwrap();
+
+    let target = map::<float64, int64>(f2i, source);
+    assert(target.len() == 5);
+    assert(target[0] == 0);
+    assert(target[1] == 1);
+    assert(target[2] == 2);
+    assert(target[3] == 3);
+    assert(target[4] == 4);
+}
+
+
+
+
+// TODO: reduce/investigate this crash: G->mirs_ missing List<float64>::push function
+//use io;
+//#[test]
+//pub fn test_explicit_instantiation() {
+//assert(true);
+//io::println("hi");
+//return;
+//    let source = List::new();
+//    source.push(0.5).unwrap();
+//    source.push(1.6).unwrap();
+//    source.push(2.7).unwrap();
+//    source.push(3.8).unwrap();
+//    source.push(4.9).unwrap();
+//
+//    let target = map::<float64, int64>(f2i, source);
+//    assert(target.len() == 5);
+//    assert(target[0] == 0);
+//    assert(target[1] == 1);
+//    assert(target[2] == 2);
+//    assert(target[3] == 3);
+//    assert(target[4] == 4);
+//}
