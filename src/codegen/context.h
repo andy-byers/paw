@@ -104,13 +104,10 @@ public:
     }
 
 private:
-    explicit Module(Context &ctx, std::unique_ptr<llvm::Module> m);
+    explicit Module(std::unique_ptr<llvm::Module> m);
 
-    Context *X;
     std::string name_;
     std::unique_ptr<llvm::Module> M;
-
-    char const *builtin_names_[(size_t)BuiltinFn::NUM_BUILTINS];
 };
 
 

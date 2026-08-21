@@ -5,7 +5,6 @@
 #include "mangle.h"
 #include "auxlib.h"
 #include "ir_type.h"
-#include "mir.h"
 
 
 //  Paw construct | mangling format
@@ -289,7 +288,7 @@ static void add_fn_part(struct Compiler *C, Buffer *b, IrType *type)
     add_generic_args(C, b, IR_GENERIC_ARGS(type));
 }
 
-Str *mangle_type(struct Compiler *C, IrType *type)
+Str const *mangle_type(struct Compiler *C, IrType *type)
 {
     Buffer b;
     paw_Env *P = ENV(C);

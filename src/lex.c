@@ -218,7 +218,7 @@ static struct Token make_string(struct Lex *X, struct SourceLoc start, TokenKind
         .span = span_from(X, start),
         .kind = kind,
     };
-    Str *str = pawP_scan_nstr(X->C, b->data, CAST_SIZE(b->count));
+    Str const *str = pawP_scan_nstr(X->C, b->data, CAST_SIZE(b->count));
     V_SET_OBJECT(&t.value, str);
     return t;
 }

@@ -14,14 +14,12 @@
 // instantiate `Trait` with `Self` type equal to `Type`. ...talk about adding constraints from assoc. items
 
 #include "compile.h"
-#include "debug.h"
 #include "error.h"
 #include "hir.h"
 #include "ir_type.h"
 #include "map.h"
 #include "resolve.h"
 #include "solve.h"
-#include "type_folder.h"
 #include "unify.h"
 
 #define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))

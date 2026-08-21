@@ -147,14 +147,9 @@ public:
 
 class Str: public Value {
 public:
-    struct Methods {
-        Fn *hash;
-        Fn *to_str;
-    };
-
     using Type = StrType;
 
-    explicit Str(State &state, llvm::Value *str, Methods const *methods);
+    explicit Str(State &state, llvm::Value *str);
 
     StrType *get_type() const override
     {
@@ -168,14 +163,11 @@ public:
 
 private:
     llvm::Value *value_;
-    Methods const *methods_;
 };
 
 
 class Object: public Value {
 public:
-    struct Methods { };
-
     using Type = ObjectType;
 
     explicit Object(State &state, ObjectType *type, CreationTag);
@@ -190,9 +182,6 @@ public:
     llvm::Value *get_field_ptr(Discriminant discr, unsigned index);
     llvm::Value *get_field(Discriminant discr, unsigned index);
     void set_field(Discriminant discr, unsigned index, llvm::Value *value);
-
-private:
-    Methods const *methods_;
 };
 
 } // namespace paw::cg

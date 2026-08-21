@@ -314,7 +314,7 @@ private:
 
 
 struct Discriminant {
-    explicit Discriminant(int value) : value(value) { }
+    explicit Discriminant(int value) : value(unsigned(value)) { }
     static Discriminant base() { return Discriminant(0); }
     unsigned value;
 };

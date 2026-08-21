@@ -154,8 +154,6 @@ pub fn paw_x86_64_many_args_11(
         f7, f8,
         value) 
 }
-<<<<<<< HEAD
-=======
 
 // int_missing = 1
 // sse_missing = 0
@@ -177,4 +175,3 @@ pub fn paw_x86_64_many_args_10_sret(
         i5,
         value) 
 }
->>>>>>> 93b5fea (fix: C interop issue when function has large number of arguments)

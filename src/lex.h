@@ -112,7 +112,7 @@ struct Lex {
     paw_Env *P;
 
     int modno;
-    Str *modname;
+    Str const *modname;
     struct Ast *ast;
 
     paw_Reader input;
@@ -151,7 +151,7 @@ enum StringState {
 DEFINE_LIST(struct Lex, StateStack, enum StringState,)
 DEFINE_LIST(struct Lex, IntStack, int,)
 
-Str *pawX_scan_str(struct Lex *lex, char const *s, size_t n);
+Str const *pawX_scan_str(struct Lex *lex, char const *s, size_t n);
 void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
 TokenKind pawX_next(struct Lex *lex);
 TokenKind pawX_peek(struct Lex *lex);

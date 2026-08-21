@@ -477,7 +477,7 @@ static void leave_match_ctx(struct TypeChecker *T)
     T->ms = T->ms->outer;
 }
 
-static int find_field(struct HirDeclList *fields, Str *name)
+static int find_field(struct HirDeclList *fields, Str const *name)
 {
     if (fields == NULL)
         return -1;
@@ -720,7 +720,7 @@ static void unify_segment_types(struct TypeChecker *T, struct HirSegment segment
     }
 }
 
-static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name, struct SourceSpan span);
+static IrType *lookup_method(struct Compiler *C, IrType *self, Str const *name, struct SourceSpan span);
 
 static IrTrait *get_containing_bound(struct Compiler *C, IrType *base, DeclId did)
 {
@@ -1248,7 +1248,7 @@ static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjection
     return inst->inst;
 }
 
-static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name, struct SourceSpan span)
+static IrType *lookup_method(struct Compiler *C, IrType *self, Str const *name, struct SourceSpan span)
 {
     struct Instantiation *method = pawP_find_method(C, self, name, (struct IrObligationCause){
                 .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
@@ -1948,7 +1948,7 @@ static void account_for_binding(struct TypeChecker *T, struct HirIdent ident)
         TYPECK_ERROR(T, DuplicateBinding,
                 .name = ident.name,
                 .span = ident.span);
-    StringMap_insert(T->C, ps->bound, ident.name, ident.name);
+    StringMap_insert(T->C, ps->bound, ident.name, (void *)ident.name);
 }
 
 static void locate_binding(struct HirVisitor *V, struct HirBindingPat *p)

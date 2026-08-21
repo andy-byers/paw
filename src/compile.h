@@ -94,20 +94,20 @@ struct BodyMap;
 EXTERN_C void *pawP_alloc(struct Pool *pool, void *ptr, size_t size0, size_t size);
 #define P_ALLOC(C, ptr, size0, size) pawP_alloc((C)->pool, ptr, size0, size)
 
-EXTERN_C Str *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n);
-inline static Str *pawP_scan_str(struct Compiler *C, char const *s)
+EXTERN_C Str const *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n);
+inline static Str const *pawP_scan_str(struct Compiler *C, char const *s)
 {
     return pawP_scan_nstr(C, s, strlen(s));
 }
 
-EXTERN_C Str *pawP_format_string(struct Compiler *C, char const *fmt, ...);
+EXTERN_C Str const *pawP_format_string(struct Compiler *C, char const *fmt, ...);
 
 #define IS_SCALAR_TYPE(code) ((code) < BUILTIN_STR)
 #define IS_BASIC_TYPE(code) ((code) <= BUILTIN_STR)
 #define IS_BUILTIN_TYPE(code) ((code) < NBUILTINS)
 
 struct Builtin {
-    Str *name;
+    Str const *name;
     DeclId did;
     NodeId id;
 };
@@ -330,7 +330,7 @@ void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, s
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str const *modname, Str const *pathname, Str const *dirname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
-struct AstDecl *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader input, void *ud);
+struct AstDecl *pawP_parse_module(struct Compiler *C, Str const *modname, paw_Reader input, void *ud);
 
 struct MonoResult {
     struct BodyList *bodies;
@@ -352,8 +352,8 @@ struct Annotation {
     enum BuiltinKind kind : 7;
     paw_Bool has_value : 1;
     struct SourceSpan span;
-    Str *modname;
-    Str *name;
+    Str const *modname;
+    Str const *name;
     IrValue value;
 };
 
@@ -362,9 +362,9 @@ DEFINE_LIST(struct Compiler, Annotations, struct Annotation,)
 EXTERN_C paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
 paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, IrValue *result);
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
-Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
-EXTERN_C Str *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
-EXTERN_C Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types);
+Str const *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
+EXTERN_C Str const *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
+EXTERN_C Str const *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types);
 
 // Generate code for data structures used during compilation
 
@@ -388,7 +388,7 @@ DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId
 DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *,)
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, IrValue, IrValue,)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *,)
-DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Builtin *,)
+DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct Builtin *,)
 DEFINE_MAP(struct Compiler, SourceSpanRefs, pawP_alloc, P_ID_HASH, P_ID_EQUALS, SpanRef, struct SourceSpan,)
 
 DEFINE_MAP_ITERATOR(StringMap, Str const *, void *)

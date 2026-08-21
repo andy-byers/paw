@@ -2,9 +2,12 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "error.h"
 #include "auxlib.h"
-#include "ir_type.h"
+#include "call.h"
+#include "compile.h"
+#include "error.h"
+#include "env.h"
+#include "value.h"
 
 #include <stdio.h> // snprintf
 #include <inttypes.h> // PRIu64

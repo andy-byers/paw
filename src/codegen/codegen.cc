@@ -1692,8 +1692,8 @@ private:
     //       contain embedded null characters.
     llvm::Value *create_strcmp(llvm::Value *lhs, llvm::Value *rhs)
     {
-        Str a(*state_, lhs, &str_methods_);
-        Str b(*state_, rhs, &str_methods_);
+        Str a(*state_, lhs);
+        Str b(*state_, rhs);
         return B->CreateCall(X.get_rawcmp_callee(), {
                 a.get_text(), a.get_length(),
                 b.get_text(), b.get_length()});
@@ -2013,7 +2013,6 @@ private:
     IrTypeHashMap<Mir const *> mirs_;
 
     std::unique_ptr<Str::Type> str_type_;
-    Str::Methods str_methods_;
 };
 
 
@@ -2128,8 +2127,8 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
         for (auto i = 0U; i < num_args; ++i)
             values_[1 + i] = get_arg(i);
         // allocate stack memory for the rest of the locals
-        for (auto i = 1 + num_args; i < mir->registers->count; ++i) {
-            auto const data = MirRegisterDataList_get(mir->registers, i);
+        for (auto i = 1 + num_args; i < unsigned(mir->registers->count); ++i) {
+            auto const data = MirRegisterDataList_get(mir->registers, int(i));
             auto *type = G.get_type(data.type);
             values_[i] = X->create_alloca(type);
         }
@@ -2154,11 +2153,11 @@ PawState::PawState(CodeGenerator &G, Fn *fn, Mir const *mir, PawState *outer)
 
     for (int i = 0; i < mir->blocks->count; ++i) {
         auto const name = "bb" + std::to_string(i);
-        blocks_[i] = llvm::BasicBlock::Create(*c, name, *fn);
+        blocks_[unsigned(i)] = llvm::BasicBlock::Create(*c, name, *fn);
     }
 
     for (int i = 0; i < mir->kcache->data->count; ++i)
-        constants_[i] = G.create_constant(mir->kcache->data->data[i]);
+        constants_[unsigned(i)] = G.create_constant(mir->kcache->data->data[i]);
 
     B->CreateBr(blocks_.front());
     G.state_ = this;

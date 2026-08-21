@@ -454,7 +454,7 @@ static struct AstIdent parse_ident(struct Lex *lex)
 {
     check(lex, TK_NAME);
     struct Token const t = lex->t;
-    Str *name = V_STR(t.value);
+    Str const *name = V_STR(t.value);
     skip(lex);
 
     return (struct AstIdent){
@@ -2610,7 +2610,7 @@ static struct AstDecl *parse_module(struct Lex *lex, paw_Reader input, void *ud)
     return decl;
 }
 
-static void init_lexer(struct Compiler *C, Str *modname, struct Lex *lex)
+static void init_lexer(struct Compiler *C, Str const *modname, struct Lex *lex)
 {
     *lex = (struct Lex){
         .pool = pawP_pool_new(C, C->aux_stats),
@@ -2623,7 +2623,7 @@ static void init_lexer(struct Compiler *C, Str *modname, struct Lex *lex)
     };
 }
 
-struct AstDecl *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader input, void *ud)
+struct AstDecl *pawP_parse_module(struct Compiler *C, Str const *modname, paw_Reader input, void *ud)
 {
     struct Lex lex;
     init_lexer(C, modname, &lex);

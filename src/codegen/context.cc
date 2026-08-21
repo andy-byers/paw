@@ -100,7 +100,7 @@ Context::Context(llvm::LLVMContext &ctx, Compiler &compiler, std::string name, C
 Context::Context(Context const &rhs, std::unique_ptr<llvm::Module> mod)
     : ctx_(rhs.ctx_)
     , B(std::make_unique<llvm::IRBuilder<>>(*ctx_))
-    , M(std::unique_ptr<Module>(new Module(*this, std::move(mod))))
+    , M(std::unique_ptr<Module>(new Module(std::move(mod))))
     , C(rhs.C)
     , options_(rhs.options_)
     , scalar_types_{
@@ -174,15 +174,13 @@ PtrType *Context::get_ptr_type(Type *pointee_type)
 
 
 Module::Module(Context &X, std::string name)
-    : X(&X)
-    , name_(name)
+    : name_(name)
     , M(std::make_unique<llvm::Module>(name, *X.get_context()))
 {
 }
 
-Module::Module(Context &X, std::unique_ptr<llvm::Module> m)
-    : X(&X)
-    , name_(m->getName())
+Module::Module(std::unique_ptr<llvm::Module> m)
+    : name_(m->getName())
     , M(std::move(m))
 {
 }

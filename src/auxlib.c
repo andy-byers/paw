@@ -4,7 +4,6 @@
 
 #include "auxlib.h"
 #include "compile.h"
-#include "map.h"
 #include "mem.h"
 #include "util.h"
 #include <stdio.h>
@@ -38,7 +37,7 @@ void pawL_init_buffer(paw_Env *P, Buffer *buf)
     *buf = (Buffer){.data = buf->stack, .alloc = BUFFER_LIMIT};
 }
 
-Str *pawL_buffer_finish(paw_Env *P, Buffer *buf)
+Str const *pawL_buffer_finish(paw_Env *P, Buffer *buf)
 {
     return pawP_scan_nstr(P->C, buf->data, buf->size);
 }

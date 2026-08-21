@@ -4,9 +4,6 @@
 
 #include "compile.h"
 #include "env.h"
-#include "api.h"
-#include "map.h"
-#include "mem.h"
 
 #include <limits.h>
 

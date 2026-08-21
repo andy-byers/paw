@@ -745,7 +745,7 @@ static void declare_type_aliases(struct Resolver *R, NodeId parent_id)
         struct ImportName const *iname = *ImportNamesIterator_valuep(&iter);
         paw_assert(iname->symbols->count == 1);
         struct ImportSymbol symbol = K_LIST_FIRST(iname->symbols);
-        struct AstIdent TODO = {.name = (Str *)ImportNamesIterator_key(&iter)};
+        struct AstIdent TODO = {.name = (Str const *)ImportNamesIterator_key(&iter)};
         new_local_type(R, TODO, symbol.id, SYMBOL_DECL);
         ImportNamesIterator_next(&iter);
     }
@@ -787,7 +787,7 @@ static void resolve_trait_args(struct AstVisitor *V, NodeId trait_id, struct Ast
                 pawAst_visit_generic_arg(V, *arg);
                 if (arg->item != NULL) {
                     AstSegments *segments = AstSegments_new(R->ast);
-                    struct AstIdent const ident = {.span = segment->span, .name = (Str *)arg->item};
+                    struct AstIdent const ident = {.span = segment->span, .name = (Str const *)arg->item};
                     pawAst_add_segment(R->ast, segments, segment->span, next_id(R), ident, NULL);
                     struct AstPath const path = {.span = segment->span, .segments = segments};
                     struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, pc_create(path), NAMESPACE_TYPE);

@@ -18,10 +18,6 @@ set(PAW_BINARY_DIR "" CACHE PATH "Location of compilation artifacts")
 # TODO: installation support
 set(PAW_ROOT_DIR ${CMAKE_BINARY_DIR}/src/codegen)
 
-#find_package(LLVM REQUIRED CONFIG)
-#add_definitions(${LLVM_DEFINITIONS})
-#llvm_map_components_to_libnames(LLVM_LIBS native passes support)
-
 option(PAW_BuildFuzzers "Build the fuzz targets" OFF)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 
@@ -36,7 +32,8 @@ if(${CMAKE_C_COMPILER_ID} STREQUAL MSVC)
 else()
     target_compile_options(paw_context
             INTERFACE -Wall -Wextra -Wpedantic -Wsign-conversion
-                      -Wno-unused-function)
+                      -Wno-unused-function -Wno-unused-parameter
+                      -Wno-unused-variable)
     target_link_libraries(paw_context
             INTERFACE m)
 endif()
@@ -138,10 +135,6 @@ set(PAW_SOURCE_FILES
 
 # TODO: Paw really needs better organization. At least split off a "compiler" directory to hold the numerous compiler source files
 add_library(paw STATIC)
-#target_include_directories(paw 
-#    PRIVATE ${LLVM_INCLUDE_DIRS})
-#target_link_libraries(paw 
-#    PRIVATE ${LLVM_LIBS})
 target_sources(paw
     PUBLIC  ${PAW_HEADER_FILES}
     PRIVATE ${PAW_SOURCE_FILES})
@@ -155,7 +148,8 @@ target_compile_definitions(paw
            PAW_ROOT_DIR="${PAW_ROOT_DIR}"
            PAW_STRESS=${PAW_STRESS})
 target_link_libraries(paw
-    PRIVATE paw_context paw_codegen)
+    PUBLIC paw_context 
+    PRIVATE paw_codegen)
 
 if(PAW_BuildTests)
     include(CTest)

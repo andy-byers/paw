@@ -1116,3 +1116,5 @@ void pawMir_propagate_constants(struct Mir *mir)
 }
 
 #endif // 0
+
+int const FIX_WEMPTY_TRANSLATION_UNIT = 42;

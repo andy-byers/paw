@@ -28,7 +28,7 @@
 #define TODO (struct SourceSpan){0}
 
 struct GlobalInfo {
-    Str *name;
+    Str const *name;
     struct IrConst *value;
     struct IrType *type;
     int modno;
@@ -78,7 +78,7 @@ struct ConstantContext {
 struct LocalVar {
     struct FunctionState *fs;
     struct MirPlace r;
-    Str *name;
+    Str const *name;
     int depth;
     int index;
 };
@@ -1760,8 +1760,7 @@ static void declare_match_bindings(struct FunctionState *fs, struct BindingList 
             .name = pb->name,
         };
 
-        struct MirPlace const local = set_local(fs, ident, pb->id, place);
-//        move_to(fs, ident.span, place, local.r);
+        set_local(fs, ident, pb->id, place);
     }
 }
 

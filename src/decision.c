@@ -2,13 +2,13 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#if defined(PAW_DEBUG_EXTRA)
+
 #include "auxlib.h"
 #include "compile.h"
 #include "hir.h"
 #include "ir_type.h"
 #include "match.h"
-
-#if defined(PAW_DEBUG_EXTRA)
 
 struct Printer {
     struct Compiler *C;

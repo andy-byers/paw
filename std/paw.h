@@ -31,7 +31,6 @@
         ? SIZE_MAX : (paw_Usize)PAW_INT64_MAX)
 
 typedef struct {
-    // NOTE: Paw currently requires `sizeof(T) > 0` for all `T`
     char _;
 } paw_Unit;
 
@@ -126,6 +125,35 @@ PAW_DEFINE_OPTION(Float64)
         }; \
     }
 
+#define PAW_DEFINE_MEM_RESULT(T) \
+    typedef struct { \
+        paw_Int64 discr; \
+        paw_##T value; \
+    } paw_mem_ResultOk_##T; \
+    typedef struct { \
+        paw_Int64 discr; \
+    } paw_mem_ResultErr_##T; \
+    typedef struct { \
+        union { \
+            paw_mem_ResultOk_##T ok; \
+            paw_mem_ResultErr_##T err; \
+        }; \
+    } paw_mem_Result_##T; \
+    static inline paw_mem_Result_##T paw_mem_Result_##T##_ok(paw_##T value) \
+    { \
+        return (paw_mem_Result_##T){ \
+            .ok.discr = PAW_RESULT_OK, \
+            .ok.value = value, \
+        }; \
+    } \
+    static inline paw_mem_Result_##T paw_mem_Result_##T##_err(void) \
+    { \
+        return (paw_mem_Result_##T){ \
+            .err.discr = PAW_RESULT_ERR, \
+        }; \
+    }
+
+
 typedef struct {
     void *start;
     paw_Usize length;
@@ -153,11 +181,11 @@ typedef struct paw_mem_OOM {
 } paw_mem_OOM;
 
 typedef void *paw_Ptr;
-PAW_DEFINE_RESULT(Ptr, mem_OOM)
+PAW_DEFINE_MEM_RESULT(Ptr)
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(paw_Usize size);
-paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, paw_Usize size);
-paw_Result_Ptr_mem_OOM paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size);
+paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size);
+paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size);
+paw_mem_Result_Ptr paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size);
 void paw_mem_raw_dealloc(void *ptr);
 
 void *paw_ptr_memcpy(void *dest, void *src, paw_Usize size);

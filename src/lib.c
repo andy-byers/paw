@@ -2,20 +2,15 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "prefix.h"
-
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "api.h"
 #include "auxlib.h"
 #include "call.h"
 #include "compile.h"
 #include "lib.h"
 #include "list.h"
-#include "map.h"
-#include "mem.h"
 #include "os.h"
 
 struct SearcherState {

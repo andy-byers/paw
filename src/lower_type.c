@@ -7,7 +7,6 @@
 #include "hir.h"
 #include "impl.h"
 #include "ir_type.h"
-#include "resolve.h"
 #include "solve.h"
 #include "unify.h"
 

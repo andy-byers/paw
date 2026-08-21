@@ -2,11 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "error.h"
-#include "map.h"
 #include "solve.h"
-#include "type_folder.h"
-#include "unify.h"
+#include "ir_type.h"
 
 static int equals_adaptor(struct Compiler *C, IrGenericArg a, IrGenericArg b)
 {

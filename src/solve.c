@@ -10,7 +10,7 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#include"stdio.h"
+#include <stdio.h>
 
 #define TODO ((struct SourceSpan){0})
 
@@ -64,6 +64,9 @@ static void dump_obligations(IrSolver const *S)
                 }
                 case IR_OBLIGATION_TYPE_EQUALS:
                     printf("  %s := %s\n", pawIr_print_type(S->C, p->eq.lhs), pawIr_print_type(S->C, p->eq.rhs));
+                    break;
+                case IR_OBLIGATION_CONST_EQUALS:
+                    printf("  %s := %s\n", pawIr_print_const(S->C, p->keq.lhs)->text, pawIr_print_const(S->C, p->keq.rhs)->text);
                     break;
             }
         }
@@ -916,6 +919,12 @@ static void print_obligation(IrSolver *S, Buffer *buf, struct IrObligation o)
             pawL_add_fstring(P, buf, "  %s = %s\n",
                     pawIr_print_type_v2(S->C, lhs)->text,
                     pawIr_print_type_v2(S->C, rhs)->text);
+            break;
+        }
+        case IR_OBLIGATION_CONST_EQUALS: {
+            pawL_add_fstring(P, buf, "  %s = %s\n",
+                    pawIr_print_const(S->C, o.keq.lhs)->text,
+                    pawIr_print_const(S->C, o.keq.rhs)->text);
             break;
         }
     }
