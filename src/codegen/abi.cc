@@ -358,9 +358,9 @@ AbiFnInfo abi_info(Context &X, FnType const &type)
     regs.num_int_regs = 6; // %rdi, %rsi, %rdx, %rcx, %r8, %r9
     regs.num_sse_regs = 8; // %xmm0, %xmm1, ..., %xmm7
 
-    // `sret` pointer is passed in `%rdi`
-    if (info.return_info.is_memory())
-        --regs.num_int_regs;
+//    // `sret` pointer is passed in `%rdi`
+//    if (info.return_info.is_memory())
+//        --regs.num_int_regs;
 
     if ((info.has_env = type.has_env()))
         info.env_info = arg_info(X, *type.get_env_type(), regs);
