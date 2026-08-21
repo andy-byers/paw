@@ -1,0 +1,242 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+use fmt;
+use hashmap::HashMap;
+use io;
+use iter;
+use list::List;
+use ptr;
+
+fn make_list<const N: usize, T>(values: [N]T) -> List<T> {
+    List::from_array(values).unwrap()
+}
+
+enum IntKind {
+    I8,
+    I16,
+    I32,
+    I64,
+}
+
+enum FloatKind {
+    F32,
+    F64,
+}
+
+struct StructId {
+    value: uint32,
+}
+
+impl Copy for IntKind {}
+impl Copy for FloatKind {}
+impl Copy for StructId {}
+
+enum Ty {
+    Unit,
+    Int(IntKind),
+    Float(FloatKind),
+    Struct(StructId),
+}
+
+enum Value {
+    Unit,
+    I8(int8),
+    I16(int16),
+    I32(int32),
+    I64(int64),
+    F32(float32),
+    F64(float64),
+    Struct(StructId, List<Value>),
+}
+
+impl Value {
+    fn fmt_paw(*self, ctx: *Context, f: *fmt::Formatter) -> fmt::Result<()> {
+        match self {
+            *Self::Unit => Ok(()),
+            *Self::I8(v) => v.fmt(f),
+            *Self::I16(v) => v.fmt(f),
+            *Self::I32(v) => v.fmt(f),
+            *Self::I64(v) => v.fmt(f),
+            *Self::F32(v) => v.fmt(f),
+            *Self::F64(v) => v.fmt(f),
+            *Self::Struct(id, &vs) => {
+                f"S\{id.value}{"?.fmt(f)?;
+                for (i, v) in iter::zip(0i64.., vs) {
+                    if i > 0 { ", ".fmt(f)?; } 
+                    f"v\{i}: "?.fmt(f)?;
+                    v.fmt_paw(ctx, f)?;
+                }
+                "}".fmt(f)
+            },
+        }
+    }
+
+    fn fmt_c(*self, ctx: *Context, f: *fmt::Formatter) -> fmt::Result<()> {
+        match self {
+            *Self::Unit => Ok(()),
+            *Self::I8(v) => v.fmt(f),
+            *Self::I16(v) => v.fmt(f),
+            *Self::I32(v) => v.fmt(f),
+            *Self::I64(v) => v.fmt(f),
+            *Self::F32(v) => v.fmt(f),
+            *Self::F64(v) => v.fmt(f),
+            *Self::Struct(id, &vs) => {
+                f"(struct S\{id.value}){"?.fmt(f)?;
+                for (i, v) in iter::zip(0i64.., vs) {
+                    if i > 0 { ", ".fmt(f)?; } 
+                    f".v\{i} = "?.fmt(f)?;
+                    v.fmt_c(ctx, f)?;
+                }
+                "}".fmt(f)
+            },
+        }
+        Ok(())
+    }
+}
+
+impl Ty {
+    fn fmt_paw(*self, ctx: *Context, f: *fmt::Formatter) -> fmt::Result<()> {
+        match self {
+            *Self::Unit => (),
+            *Self::Int(kind) => match kind {
+                IntKind::I8 => "int8".fmt(f)?,
+                IntKind::I16 => "int16".fmt(f)?,
+                IntKind::I32 => "int32".fmt(f)?,
+                IntKind::I64 => "int64".fmt(f)?,
+            },
+            *Self::Float(kind) => match kind {
+                FloatKind::F32 => "float32".fmt(f)?,
+                FloatKind::F64 => "float64".fmt(f)?,
+            },
+            *Self::Struct(id) => {
+                "S".fmt(f)?;
+                id.value.fmt(f)?;
+            },
+        }
+        Ok(())
+    }
+
+    fn fmt_c(*self, ctx: *Context, f: *fmt::Formatter) -> fmt::Result<()> {
+        match self {
+            *Self::Unit => (),
+            *Self::Int(kind) => match kind {
+                IntKind::I8 => "int8_t".fmt(f)?,
+                IntKind::I16 => "int16_t".fmt(f)?,
+                IntKind::I32 => "int32_t".fmt(f)?,
+                IntKind::I64 => "int64_t".fmt(f)?,
+            },
+            *Self::Float(kind) => match kind {
+                FloatKind::F32 => "float".fmt(f)?,
+                FloatKind::F64 => "double".fmt(f)?,
+            },
+            *Self::Struct(id) => {
+                "struct S".fmt(f)?;
+                id.value.fmt(f)?;
+            },
+        }
+        Ok(())
+    }
+}
+
+struct Context {
+    struct_defs: List<List<Ty>>,
+    union_defs: List<List<List<Ty>>>,
+    abi_paw: fmt::Formatter,
+    abi_c: fmt::Formatter,
+    driver_c: fmt::Formatter,
+}
+
+pub fn write_identity_name(ctx: *Context, prefix: str, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
+    prefix.fmt(f)?;
+    "_identity_".fmt(f)?;
+    ty.fmt_paw(ctx, f)
+}
+
+pub fn write_identity_decl_c(ctx: *Context, prefix: str, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
+    ty.fmt_c(ctx, f)?;
+    " ".fmt(f)?;
+    write_identity_name(ctx, prefix, ty, f)?;
+    "(".fmt(f)?;
+    ty.fmt_c(ctx, f)?;
+    " value)".fmt(f)
+}
+
+pub fn write_identity_decl_paw(ctx: *Context, prefix: str, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
+    "pub fn ".fmt(f)?;
+    write_identity_name(ctx, prefix, ty, f)?;
+    "(value: ".fmt(f)?;
+    ty.fmt_paw(ctx, f)?;
+    ") -> ".fmt(f)?;
+    ty.fmt_paw(ctx, f)?;
+    "".fmt(f)
+}
+
+impl Context {
+    pub fn new() -> Self {
+        Self{
+            struct_defs: List::new(),
+            union_defs: List::new(),
+            abi_paw: fmt::Formatter::new(),
+            abi_c: fmt::Formatter::new(),
+            driver_c: fmt::Formatter::new(),
+        }
+    }
+
+    pub fn define_struct(*self, fields: List<Ty>) -> StructId {
+        let value = self.struct_defs.len() as uint32;
+        self.struct_defs.push(fields).unwrap();
+        StructId{value}
+    }
+
+    fn write_identity_defs_paw(*self, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
+        // write `extern` declaration of C function defined in "abi.c"
+        "#[extern = \"".fmt(f)?;
+        write_identity_name(self, "c", ty, f)?;
+        "\"]\n".fmt(f)?;
+        write_identity_decl_paw(self, "c", ty, f)?;
+        ";\n".fmt(f)?;
+
+        // write definition of Paw function (calls C function)
+        write_identity_decl_paw(self, "paw", ty, f)?;
+        " {\n    ".fmt(f)?;
+        write_identity_name(self, "c", ty, f)?;
+        "(value)\n}\n".fmt(f)
+    }
+
+    fn write_identity_defs_c(*self, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
+        // write definition of C function
+        write_identity_decl_c(self, "c", ty, f)?;
+        " {\n    return value;\n}\n".fmt(f)
+    }
+
+    pub fn write_identity_test(*self, tys: List<Ty>) -> fmt::Result<()> {
+        let abi_c = &self.abi_c;
+        let abi_paw = &self.abi_paw;
+        let driver_c = &self.driver_c;
+
+        for ty in &tys {
+            self.write_identity_defs_c(ty, abi_c)?;
+            self.write_identity_defs_paw(ty, abi_paw)?;
+        }
+
+        for ty in &tys {
+        }
+        let abi_c = ptr::replace(&self.abi_c, fmt::Formatter::new());
+        let abi_paw = ptr::replace(&self.abi_paw, fmt::Formatter::new());
+        let driver_c = ptr::replace(&self.driver_c, fmt::Formatter::new());
+        io::println(abi_c.string());
+        io::println(abi_paw.string());
+
+        Ok(())
+    }
+}
+
+pub fn main() {
+    let ctx = Context::new();
+    ctx.write_identity_test(make_list([
+        Ty::Int(IntKind::I32),
+        Ty::Int(IntKind::I8),
+    ])).unwrap();
+}
