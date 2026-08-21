@@ -2,7 +2,6 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "error.h"
 #include "layout.h"
 
 // TODO: module name for error messages, or error return value for pawIr_compute_layout

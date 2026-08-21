@@ -177,10 +177,9 @@ llvm::Value *Fn::get_arg(unsigned index) const
     return get_fn()->getArg(user_args_offset(*X, get_type()) + index);
 }
 
-Str::Str(State &state, llvm::Value *str, Str::Methods const *methods)
+Str::Str(State &state, llvm::Value *str)
     : Value(state, str, state.get_context()->get_str_type())
     , value_(str)
-    , methods_(methods)
 {
 }
 

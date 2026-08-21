@@ -92,7 +92,7 @@ struct HirGenericArg {
 };
 
 struct HirIdent {
-    Str *name;
+    Str const *name;
     struct SourceSpan span;
 };
 
@@ -1792,7 +1792,7 @@ struct HirGenericArgs *pawHir_fold_generic_args(struct HirFolder *F, struct HirG
 struct HirModule {
     int modno;
     struct HirDeclList *items;
-    Str *name;
+    Str const *name;
 };
 
 struct Hir {

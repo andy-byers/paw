@@ -7,8 +7,6 @@
 #include "unify.h"
 #include "compile.h"
 #include "error.h"
-#include "env.h"
-#include "hir.h"
 #include "impl.h"
 #include "ir_type.h"
 #include "solve.h"

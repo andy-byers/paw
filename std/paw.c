@@ -91,7 +91,7 @@ static paw_Char const *find_substr(paw_Char const *str, paw_Usize nstr, paw_Char
 
     paw_Char const *end = str + nstr;
     while ((str = strchr(str, sub[0]))) {
-        if (nsub <= end - str
+        if ((ptrdiff_t)nsub <= end - str
                 && memcmp(str, sub, (paw_Usize)nsub) == 0)
             return str;
         str += nsub;
@@ -134,28 +134,28 @@ paw_Usize paw_slice_Slice_len(paw_Slice self)
     return self.length;
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_alloc(paw_Usize size)
+paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size)
 {
     void *ptr = malloc(size);
     return ptr != NULL
-        ? paw_Result_Ptr_mem_OOM_ok(ptr)
-        : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
+        ? paw_mem_Result_Ptr_ok(ptr)
+        : paw_mem_Result_Ptr_err();
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_realloc(void *ptr, paw_Usize size)
+paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size)
 {
     ptr = realloc(ptr, size);
     return ptr != NULL
-        ? paw_Result_Ptr_mem_OOM_ok(ptr)
-        : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
+        ? paw_mem_Result_Ptr_ok(ptr)
+        : paw_mem_Result_Ptr_err();
 }
 
-paw_Result_Ptr_mem_OOM paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size)
+paw_mem_Result_Ptr paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size)
 {
     void *ptr = aligned_alloc(alignment, size);
     return ptr != NULL
-        ? paw_Result_Ptr_mem_OOM_ok(ptr)
-        : paw_Result_Ptr_mem_OOM_err((paw_mem_OOM){{}});
+        ? paw_mem_Result_Ptr_ok(ptr)
+        : paw_mem_Result_Ptr_err();
 }
 
 void paw_mem_raw_dealloc(void *ptr)

@@ -5,25 +5,26 @@
 #ifndef PAW_API_H
 #define PAW_API_H
 
-#include "core.h"
-#include "util.h"
+#include <stdio.h>
 
-// Public API checks based off those in Lua
-
-#if defined(PAW_USE_API_CHECK)
-#include <assert.h>
-#define API_CHECK(P, e, msg) assert(e)
+#if defined(PAW_OMIT_API_CHECK)
+# include "util.h"
+# define API_CHECK(P_, Expr_, Msg_) ((void)(P_), paw_assert((Expr_) && Msg_))
 #else
-#define API_CHECK(P, e, msg) ((void)(P), paw_assert((e) && msg))
+# include <stdio.h>
+# include <stdlib.h>
+# define API_CHECK(P_, Expr_, Msg_) do { \
+            if (!(Expr_)) { \
+                (void)(P_); \
+                fputs("error: " Msg_ " (" #Expr_ " was 0)", stderr); \
+                abort(); \
+            } \
+        } while (0)
 #endif
 
-#define API_INCR_TOP(P, n) \
-    ((P)->top.p += (n), API_CHECK(P, (P)->top.p <= (P)->cf->top.p, "stack overflow"))
-
-#define API_CHECK_PUSH(P, n) \
-    API_CHECK(P, (n) <= ((P)->cf->top.p - (P)->top.p), "not enough space for push")
-
-#define API_CHECK_POP(P, n) \
-    API_CHECK(P, (n) < (P)->top.p - (P)->cf->base.p, "not enough values to pop")
+int main(void)
+{
+    API_CHECK(NULL, 1, "");
+}
 
 #endif // PAW_API_H

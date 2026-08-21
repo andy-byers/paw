@@ -5,16 +5,11 @@
 #include "ast.h"
 #include "code.h"
 #include "compile.h"
-#include "debug.h"
 #include "env.h"
 #include "error.h"
 #include "hir.h"
-#include "map.h"
-#include "mem.h"
-#include "parse.h"
 #include "resolve.h"
 #include "str.h"
-#include "unify.h"
 
 #define LOWERING_ERROR(L_, Kind_, ...) THROW_ERROR((L_)->C, \
         Kind_, .modname = (L_)->m->name, __VA_ARGS__)
@@ -121,7 +116,7 @@ static DeclId next_decl_id(struct LowerAst *L)
     };
 }
 
-static struct HirIdent make_ident(Str *name, struct SourceSpan span)
+static struct HirIdent make_ident(Str const *name, struct SourceSpan span)
 {
     return (struct HirIdent){
         .name = name,

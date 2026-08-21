@@ -89,7 +89,7 @@ struct AstGenericArg {
     paw_Bool is_type;
     NodeId id;
     NodeId target;
-    Str const *item;
+    struct Str const *item;
     union {
         struct AstType *t;
         struct AstExpr *k;
@@ -102,7 +102,7 @@ struct AstPath {
 };
 
 struct AstIdent {
-    Str *name;
+    struct Str const *name;
     struct SourceSpan span;
 };
 
@@ -138,7 +138,7 @@ struct AstDeclHeader {
 struct AstModuleDecl {
     AST_DECL_HEADER;
     int modno;
-    Str *name;
+    struct Str const *name;
     struct AstDeclList *items;
 };
 
@@ -274,7 +274,7 @@ AST_DECL_LIST(X)
 
 struct AstDecl *pawAst_new_decl(struct Ast *ast);
 
-static struct AstDecl *pawAst_new_module_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, Str *name, int modno, struct AstDeclList *items)
+static struct AstDecl *pawAst_new_module_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct Str const *name, int modno, struct AstDeclList *items)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ModuleDecl_ = (struct AstModuleDecl){
@@ -552,7 +552,7 @@ struct AstProjectionType {
     AST_TYPE_HEADER;
     struct AstType *type;
     struct AstPath trait;
-    Str const *name;
+    struct Str const *name;
 };
 
 struct AstNeverType {
@@ -668,7 +668,7 @@ inline static struct AstType *pawAst_new_fn_type(struct Ast *ast, struct SourceS
     return t;
 }
 
-inline static struct AstType *pawAst_new_projection_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstPath trait, Str const *name)
+inline static struct AstType *pawAst_new_projection_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstPath trait, struct Str const *name)
 {
     struct AstType *t = pawAst_new_type(ast);
     t->ProjectionType_ = (struct AstProjectionType){
@@ -748,7 +748,7 @@ struct AstLiteralExpr {
     union {
         paw_Bool b;
         paw_Char c;
-        Str const *s;
+        struct Str const *s;
 
         struct AstIntLit {
             paw_Int64 value;
@@ -883,7 +883,7 @@ struct AstProjectionExpr {
     AST_EXPR_HEADER;
     struct AstType *type;
     struct AstPath trait;
-    Str const *name;
+    struct Str const *name;
 };
 
 struct AstAssignExpr {
@@ -1048,7 +1048,7 @@ static struct AstExpr *pawAst_new_float_lit(struct Ast *ast, struct SourceSpan s
     return e;
 }
 
-static struct AstExpr *pawAst_new_str_lit(struct Ast *ast, struct SourceSpan span, NodeId id, Str const *value)
+static struct AstExpr *pawAst_new_str_lit(struct Ast *ast, struct SourceSpan span, NodeId id, struct Str const *value)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->LiteralExpr_ = (struct AstLiteralExpr){
@@ -1220,7 +1220,7 @@ inline static struct AstExpr *pawAst_new_closure_expr(struct Ast *ast, struct So
     return e;
 }
 
-inline static struct AstExpr *pawAst_new_projection_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstPath trait, Str const *name)
+inline static struct AstExpr *pawAst_new_projection_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstPath trait, struct Str const *name)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->ProjectionExpr_ = (struct AstProjectionExpr){
@@ -1943,8 +1943,8 @@ void pawAst_visit_generic_arg(struct AstVisitor *V, struct AstGenericArg arg);
 void pawAst_visit_generic_args(struct AstVisitor *V, struct AstGenericArgs *list);
 
 
-Str const *pawAst_print_type_path(struct Ast *ast, struct AstPath path);
-Str const *pawAst_print_value_path(struct Ast *ast, struct AstPath path);
+struct Str const *pawAst_print_type_path(struct Ast *ast, struct AstPath path);
+struct Str const *pawAst_print_value_path(struct Ast *ast, struct AstPath path);
 
 char const *pawAst_print_path(struct Ast *ast, struct AstPath path);
 char const *pawAst_dump(struct Ast *ast);

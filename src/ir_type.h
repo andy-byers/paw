@@ -351,7 +351,7 @@ void pawIr_set_def_kind(struct Compiler *C, DeclId did, enum IrDefKind kind);
 
 
 struct IrParam {
-    Str *name;
+    Str const *name;
     IrType *type;
 };
 
@@ -378,7 +378,7 @@ struct IrConstraint {
 };
 
 struct IrFieldDef {
-    Str *name;
+    Str const *name;
     DeclId did;
     paw_Bool is_pub : 1;
 };
@@ -389,11 +389,11 @@ struct IrGenericDef {
     union {
         struct {
             struct IrTraitList *bounds;
-            Str *name;
+            Str const *name;
         } type;
 
         struct {
-            Str *name;
+            Str const *name;
             IrType *type;
         } konst;
     };
@@ -409,7 +409,7 @@ struct IrVariantDef {
 };
 
 struct IrFnDef {
-    Str *name;
+    Str const *name;
     struct Annotations *annos;
     struct IrGenericDefs *generics;
     struct IrParams *params;
@@ -423,7 +423,7 @@ struct IrFnDef {
 };
 
 struct IrAdtDef {
-    Str *name;
+    Str const *name;
     struct IrGenericDefs *generics;
     struct IrVariantDefs *variants;
     DeclId did;
@@ -439,7 +439,7 @@ struct IrAssocItem {
 };
 
 struct IrTraitDef {
-    Str *name;
+    Str const *name;
     struct IrGenericDefs *generics;
     struct IrTypeList *methods;
     struct IrAssocItems *items;
@@ -456,14 +456,14 @@ struct IrImpl {
     DeclId did;
 };
 
-struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str *name, struct IrTraitList *bounds);
-struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str *name);
-struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str *name, paw_Bool is_pub);
+struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str const *name, struct IrTraitList *bounds);
+struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str const *name);
+struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str const *name, paw_Bool is_pub);
 struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str const *name, struct IrFieldDefs *fields);
-struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub);
-struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct);
+struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub);
+struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct);
 struct IrAssocItem *pawIr_new_assoc_item(struct Compiler *C, DeclId did, Str const *name, DeclId parent, paw_Bool is_pub);
-struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrTypeList *methods, struct IrAssocItems *items, paw_Bool is_pub);
+struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, struct IrTypeList *methods, struct IrAssocItems *items, paw_Bool is_pub);
 struct IrImpl *pawIr_new_impl(struct Compiler *C, DeclId did, IrType *type, IrTrait *trait, struct IrGenericDefs *generics, struct IrTypeList *methods, struct IrAssocItems *items);
 
 struct IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did);
@@ -496,7 +496,7 @@ DEFINE_LIST(struct Compiler, IrConstraints, struct IrConstraint,)
 DEFINE_LIST(struct Compiler, IrFieldDefs, struct IrFieldDef *,)
 DEFINE_LIST(struct Compiler, IrParams, struct IrParam,)
 
-IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name);
+IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str const *name);
 
 EXTERN_C IrType *pawIr_get_type(struct Compiler *C, NodeId id);
 void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type);

@@ -45,7 +45,7 @@ target_sources(paw_codegen
             ${CMAKE_CURRENT_SOURCE_DIR}/value.cc)
 target_include_directories(paw_codegen
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE ${LLVM_INCLUDE_DIRS})
+    SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 target_link_libraries(paw_codegen
     PRIVATE paw ${LLVM_LIBS})
 

@@ -18,7 +18,6 @@
 #include "compile.h"
 #include "error.h"
 #include "ir_type.h"
-#include "map.h"
 #include "solve.h"
 #include "type_folder.h"
 #include "unify.h"

@@ -6,9 +6,7 @@
 #include "compile.h"
 #include "debug.h"
 #include "ir_type.h"
-#include "map.h"
 #include "mem.h"
-#include "type_folder.h"
 
 #define NEW_NODE(C, T) P_ALLOC(C, NULL, 0, sizeof(T))
 
@@ -50,7 +48,7 @@ void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, NodeId id, struc
     PAW_UNUSED(hir);
     *r = (struct HirSegment){
         .id = id,
-        .target = target,
+        .target.id = target,
         .ident = ident,
         .args = args,
     };

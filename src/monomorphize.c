@@ -360,7 +360,7 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, IrType *ty
     return M->mir;
 }
 
-static IrType *get_assoc_fn(struct MonoCollector *M, IrType *self, IrTrait *trait, Str *name)
+static IrType *get_assoc_fn(struct MonoCollector *M, IrType *self, IrTrait *trait, Str const *name)
 {
     // associated fn will always be found unless there is a bug in the compiler
     struct IrObligationCause const INFALLIBLE = {0};

@@ -7,7 +7,6 @@
 
 #include "core.h"
 #include "util.h"
-#include "value.h"
 #include <string.h>
 
 #define BUFFER_LIMIT 512
@@ -24,7 +23,7 @@ typedef struct Buffer {
 
 void pawL_init_buffer(paw_Env *P, Buffer *buf);
 void pawL_buffer_discard(paw_Env *P, Buffer *buf);
-Str *pawL_buffer_finish(paw_Env *P, Buffer *buf);
+struct Str const *pawL_buffer_finish(paw_Env *P, Buffer *buf);
 void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n);
 
 #define L_ADD_LITERAL(P, buf, s) pawL_add_nstring(P, buf, s "", PAW_LENGTHOF(s))

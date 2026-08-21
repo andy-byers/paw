@@ -77,7 +77,7 @@ typedef struct paw_Env {
     Str const *modname;
 
     // Array of commonly-used strings.
-    Str *string_cache[NCSTR];
+    Str const *string_cache[NCSTR];
 
     Str const *current_errmsg;
 

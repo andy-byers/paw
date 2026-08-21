@@ -2,22 +2,13 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include <math.h>
 #include "compile.h"
-#include "api.h"
 #include "ast.h"
-#include "debug.h"
-#include "error.h"
-#include "hir.h"
 #include "ir_type.h"
 #include "layout.h"
 #include "lex.h"
-#include "lib.h"
-#include "map.h"
-#include "os.h"
 #include "resolve.h"
 #include "solve.h"
-#include "type_folder.h"
 #include "unify.h"
 
 #define COMPILER_ERROR(C_, Kind_, Modname_, ...) pawErr_##Kind_(C_, Modname_, __VA_ARGS__)
@@ -53,7 +44,7 @@ static char const *kKeywords[] = {
     "_",
 };
 
-static Str *basic_type_name(paw_Env *P, char const *name, enum BuiltinKind kind)
+static Str const *basic_type_name(paw_Env *P, char const *name, enum BuiltinKind kind)
 {
     Str *s = pawS_new_fixed(P, name);
     s->flag = FLAG2CODE(kind); // works either direction
@@ -120,7 +111,7 @@ void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     void pawP_lower_hir(struct Compiler *C);
     void pawP_generate_code(struct Compiler *C);
 
-    pawP_parse_module(C, (Str *)C->modname, input, ud);
+    pawP_parse_module(C, (Str const *)C->modname, input, ud);
 
     pawP_resolve_names(C);
     pawP_lower_ast(C);
@@ -243,7 +234,7 @@ IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind kind)
     }
 }
 
-Str *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n)
+Str const *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n)
 {
     paw_Env *P = ENV(C);
     Str *str = pawS_new_nstr(P, s, n);
@@ -251,7 +242,7 @@ Str *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n)
     return str;
 }
 
-Str *pawP_format_string(struct Compiler *C, char const *fmt, ...)
+Str const *pawP_format_string(struct Compiler *C, char const *fmt, ...)
 {
     Buffer buf;
     paw_Env *P = ENV(C);
@@ -267,7 +258,7 @@ Str *pawP_format_string(struct Compiler *C, char const *fmt, ...)
 
 static void register_builtin(struct Compiler *C, unsigned cstr, enum BuiltinKind kind)
 {
-    Str *s = CACHED_STRING(ENV(C), cstr);
+    Str const *s = CACHED_STRING(ENV(C), cstr);
     C->builtins[kind] = (struct Builtin){
         .did = INVALID_DECL_ID,
         .name = s,
@@ -760,14 +751,14 @@ void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *C)
     mangle_start(C, buf);
 }
 
-Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *C)
+Str const *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *C)
 {
-    Str *result = pawL_buffer_finish(P, buf);
-    StringMap_insert(C, C->strings, result, result);
+    Str const *result = pawL_buffer_finish(P, buf);
+    StringMap_insert(C, C->strings, result, (void *)result);
     return result;
 }
 
-Str *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, IrTypeList *types)
+Str const *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, IrTypeList *types)
 {
     Buffer buf;
     paw_Env *P = ENV(C);
@@ -779,7 +770,7 @@ Str *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, I
     return pawP_mangle_finish(P, &buf, C);
 }
 
-Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, IrTypeList const *base_types, Str const *attr, IrTypeList const *attr_types)
+Str const *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, IrTypeList const *base_types, Str const *attr, IrTypeList const *attr_types)
 {
     Buffer buf;
     paw_Env *P = ENV(C);

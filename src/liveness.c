@@ -3,10 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "compile.h"
-#include "ir_type.h"
-#include "map.h"
 #include "mir.h"
-#include <stdlib.h>
 
 static paw_Bool block_set_contains(struct MirBlockList *set, MirBlock b)
 {

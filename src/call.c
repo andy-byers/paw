@@ -2,17 +2,12 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "prefix.h"
 #include <setjmp.h>
 #include <stdlib.h>
 
-
 #include "call.h"
 #include "env.h"
-#include "map.h"
-#include "mem.h"
 #include "core.h"
-#include "str.h"
 #include "util.h"
 
 // Lua-style error handling

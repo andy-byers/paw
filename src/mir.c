@@ -6,7 +6,7 @@
 #include "ir_type.h"
 #include "map.h"
 
-struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, DeclId did, IrGenericArgs *args, IrTypeList *param_types, IrType *result_type, Annotations *annotations, IrType *type, IrType *self, int child_id, DeclId impl_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
+struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str const *name, DeclId did, IrGenericArgs *args, IrTypeList *param_types, IrType *result_type, Annotations *annotations, IrType *type, IrType *self, int child_id, DeclId impl_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = P_ALLOC(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
@@ -123,7 +123,7 @@ struct MirInstruction *pawMir_new_noop(struct Mir *mir, struct SourceSpan span)
     return instr;
 }
 
-struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, struct SourceSpan span, Str *name, struct MirPlace output)
+struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, struct SourceSpan span, Str const *name, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->AllocLocal_ = (struct MirAllocLocal){

@@ -3,7 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "str.h"
-#include "auxlib.h"
 #include "env.h"
 #include "mem.h"
 
@@ -142,4 +141,29 @@ void pawS_register(paw_Env *P, Str **pinit)
     ++st->count;
     str->next = *plist;
     *plist = str;
+}
+
+uint32_t pawS_hash(void const *data, size_t size, uint32_t hash)
+{
+    uint8_t const *ptr = (uint8_t const *)data;
+    for (size_t i = 0; i < size; ++i) {
+        hash = ptr[i] + (hash << 6) + (hash << 16) - hash;
+    }
+    return hash;
+}
+
+int pawS_cmp(Str const *lhs, Str const *rhs)
+{
+    return paw_raw_cmp((void *)lhs->text, lhs->length, (void *)rhs->text,
+                       rhs->length);
+}
+
+char const *pawS_text(Str const *s)
+{
+    return s->text;
+}
+
+size_t pawS_length(Str const *s)
+{
+    return s->length;
 }

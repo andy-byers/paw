@@ -5,8 +5,6 @@
 // kfold.c: Perform constant folding
 //
 
-#include "compile.h"
-#include "error.h"
 #include "mir.h"
 #include <math.h>
 

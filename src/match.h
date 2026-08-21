@@ -17,7 +17,7 @@ struct MatchVar {
 
 struct Binding {
     struct MatchVar var;
-    Str *name;
+    Str const *name;
     NodeId id;
 
     paw_Bool ref : 1;

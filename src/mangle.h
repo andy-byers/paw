@@ -10,7 +10,7 @@
 struct Compiler;
 struct IrType;
 
-EXTERN_C struct Str *mangle_type(struct Compiler *C, struct IrType *type);
+EXTERN_C struct Str const *mangle_type(struct Compiler *C, struct IrType *type);
 
 #endif // PAW_MANGLE_H
 

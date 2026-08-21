@@ -442,7 +442,7 @@ IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g)
 }
 
 
-struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str *name, struct IrTraitList *bounds)
+struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str const *name, struct IrTraitList *bounds)
 {
     struct IrGenericDef *def = (struct IrGenericDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrGenericDef){
@@ -455,7 +455,7 @@ struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, 
     return def;
 }
 
-struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str *name)
+struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str const *name)
 {
     struct IrGenericDef *def = (struct IrGenericDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrGenericDef){
@@ -468,7 +468,7 @@ struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did,
     return def;
 }
 
-struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str *name, paw_Bool is_pub)
+struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str const *name, paw_Bool is_pub)
 {
     struct IrFieldDef *def = (struct IrFieldDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrFieldDef){
@@ -495,7 +495,7 @@ struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclI
     return def;
 }
 
-struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub)
+struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str const *name, IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub)
 {
     struct IrFnDef *def = (struct IrFnDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrFnDef){
@@ -512,7 +512,7 @@ struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, IrGe
     return def;
 }
 
-struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, IrGenericDefs *generics, IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct)
+struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str const *name, IrGenericDefs *generics, IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct)
 {
     struct IrAdtDef *def = (struct IrAdtDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrAdtDef){
@@ -539,7 +539,7 @@ struct IrAssocItem *pawIr_new_assoc_item(struct Compiler *C, DeclId did, Str con
     return item;
 }
 
-struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str *name, IrGenericDefs *generics, IrTypeList *methods, IrAssocItems *items, paw_Bool is_pub)
+struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str const *name, IrGenericDefs *generics, IrTypeList *methods, IrAssocItems *items, paw_Bool is_pub)
 {
     struct IrTraitDef *def = (struct IrTraitDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrTraitDef){
@@ -653,7 +653,7 @@ static IrGenericArgs *replace_self_in_trait_args(struct Compiler *C, IrGenericAr
 }
 
 // TODO: handle ambiguous method calls (there are multiple trait bounds on a single generic that declare a method with the same name)
-IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name)
+IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str const *name)
 {
     IrTraitList *bounds = pawIr_get_trait_bounds(C, target->did);
 

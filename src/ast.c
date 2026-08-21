@@ -1025,6 +1025,15 @@ static void dump_type(Printer *P, struct AstType *type)
     ++P->indent;
     add_span(P, type->hdr.span);
     switch (AST_KINDOF(type)) {
+        case kAstProjectionType: {
+            struct AstProjectionType *t = AstGetProjectionType(type);
+            DUMP_CSTR(P, "type: ");
+            dump_type(P, t->type);
+            DUMP_CSTR(P, "trait: ");
+            dump_path(P, &t->trait);
+            DUMP_FMT(P, "name: \"%s\"", t->name->text);
+            break;
+        }
         case kAstRefType: {
             struct AstRefType *t = AstGetRefType(type);
             DUMP_CSTR(P, "type: ");
@@ -1083,46 +1092,57 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
     switch (AST_KINDOF(expr)) {
         case kAstParenExpr: {
             struct AstParenExpr *e = AstGetParenExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstLogicalExpr: {
             struct AstLogicalExpr *e = AstGetLogicalExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstPathExpr: {
             struct AstPathExpr *e = AstGetPathExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstTryExpr: {
             struct AstTryExpr *e = AstGetTryExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstMatchExpr: {
             struct AstMatchExpr *e = AstGetMatchExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstMatchArm: {
             struct AstMatchArm *e = AstGetMatchArm(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstClosureExpr: {
             struct AstClosureExpr *e = AstGetClosureExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstProjectionExpr: {
             struct AstProjectionExpr *e = AstGetProjectionExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstConversionExpr: {
             struct AstConversionExpr *e = AstGetConversionExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstFieldExpr: {
             struct AstFieldExpr *e = AstGetFieldExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstJumpExpr: {
             struct AstJumpExpr *e = AstGetJumpExpr(expr);
+            PAW_UNUSED(e);
             break;
         }
         case kAstLiteralExpr: {
@@ -1169,6 +1189,7 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
         }
         case kAstStringExpr: {
             struct AstStringExpr *e = AstGetStringExpr(expr);
+            PAW_UNUSED(e);
             // TODO
             break;
         }

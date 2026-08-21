@@ -5,9 +5,6 @@
 #include "eval.h"
 #include "mir.h"
 
-#warning
-#include"stdio.h"
-
 struct EvalCtx {
     struct ValueTable *values;
     struct Compiler *C;

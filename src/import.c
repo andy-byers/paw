@@ -2,13 +2,10 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "api.h"
 #include "ast.h"
 #include "compile.h"
-#include "debug.h"
 #include "error.h"
 #include "lib.h"
-#include "map.h"
 #include "resolve.h"
 
 #define IMPORTER_ERROR(R_, Kind_, ...) THROW_ERROR((R_)->C, \
@@ -68,7 +65,7 @@ static struct ImportScope *iscope_new(struct Resolver *R, NodeId id, enum Import
 
 static struct ImportScope *collect_items(struct Resolver *R, struct AstDecl *mod, ImportBindings *bindings);
 
-static struct AstDecl *import_module(struct Resolver *R, Str *name, ImportBindings *bindings)
+static struct AstDecl *import_module(struct Resolver *R, Str const *name, ImportBindings *bindings)
 {
     int const *pmodno = ImportModules_get(R, R->modules, name);
     if (pmodno != NULL) return K_LIST_AT(R->ast->modules, *pmodno);
@@ -459,7 +456,7 @@ static struct ImportScope *collect_items(struct Resolver *R, struct AstDecl *mod
 static paw_Bool resolve_module_prefix(struct Resolver *R, struct ImportScope *target, struct ImportBinding *pb, ImportBindings *bindings)
 {
     // only the first segment can refer to a not-yet-seen module
-    Str *name = K_LIST_FIRST(pb->path.segments).ident.name;
+    Str const *name = K_LIST_FIRST(pb->path.segments).ident.name;
     struct AstDecl *mod = get_module_by_name(R, name);
     if (mod != NULL) return PAW_FALSE; // already imported
     mod = import_module(R, name, bindings);
@@ -491,7 +488,7 @@ static paw_Bool resolve_module_prefixes(struct Resolver *R, struct ImportBinding
 
 static paw_Bool resolve_base_import(struct Resolver *R, struct ImportScope *target, struct ImportBinding *pb, ImportBindings *bindings)
 {
-    Str *name = K_LIST_FIRST(pb->path.segments).ident.name;
+    Str const *name = K_LIST_FIRST(pb->path.segments).ident.name;
     struct AstDecl *mod = get_module_by_name(R, name);
     if (mod == NULL) mod = import_module(R, name, bindings);
     if (mod == NULL) return PAW_FALSE; // not a module

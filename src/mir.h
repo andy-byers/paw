@@ -159,7 +159,7 @@ struct MirGlobal {
 struct MirAllocLocal {
     MIR_INSTRUCTION_HEADER;
     struct MirPlace output;
-    Str *name;
+    struct Str const *name;
 };
 
 struct MirArray {
@@ -363,7 +363,7 @@ struct MirInstruction *pawMir_new_noop(struct Mir *mir, struct SourceSpan span);
 
 struct MirInstruction *pawMir_new_phi(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *inputs, struct MirPlace output, int var_id);
 
-struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, struct SourceSpan span, Str *name, struct MirPlace output);
+struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, struct SourceSpan span, struct Str const *name, struct MirPlace output);
 
 struct MirInstruction *pawMir_new_array(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *elems, struct MirPlace output);
 
@@ -415,7 +415,7 @@ struct MirRegisterData {
     paw_Bool is_nontrivial : 1;
     struct SourceSpan span;
     struct IrType *type;
-    Str const *name;
+    struct Str const *name;
 };
 
 struct MirBlockData {
@@ -471,7 +471,7 @@ struct Mir {
     int child_id;
     int mir_count;
     int modno;
-    Str *name;
+    struct Str const *name;
     enum FnKind fn_kind : 8;
     paw_Bool is_method : 1;
     paw_Bool is_poly : 1;
@@ -501,7 +501,7 @@ DEFINE_LIST(struct Mir, MirRegisterPtrList, MirRegister *,)
 DEFINE_LIST(struct Mir, MirBlockDataList, struct MirBlockData *,)
 DEFINE_LIST(struct Mir, MirBodyList, struct Mir *,)
 
-struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, DeclId did, IrGenericArgs *args, IrTypeList *param_types, IrType *result_type, Annotations *annotations, struct IrType *type, struct IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
+struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, struct Str const *name, DeclId did, IrGenericArgs *args, IrTypeList *param_types, IrType *result_type, Annotations *annotations, struct IrType *type, struct IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
 
 struct MirBlockData *pawMir_new_block(struct Mir *mir);

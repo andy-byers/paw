@@ -95,7 +95,7 @@ static struct SourceSpan SourceSpan_from_ref(SpanRef ref, enum SpanRefKind kind)
 
 static inline void pawSrc_init_location(struct SourceLoc *ploc)
 {
-    *ploc = (struct SourceLoc){1, 1};
+    ploc->line = ploc->column = 1;
 }
 
 void pawSrc_add_location(paw_Env *P, struct Buffer *b, struct SourceLoc loc);

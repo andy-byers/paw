@@ -3,10 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "debug.h"
-#include "auxlib.h"
-#include "call.h"
-#include "compile.h"
-#include "map.h"
 
 #include <inttypes.h>
 #include <stdio.h>
