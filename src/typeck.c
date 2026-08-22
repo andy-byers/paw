@@ -1526,7 +1526,7 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
 
     if (method != NULL) {
         struct IrFnPtr *fn = IrGetFnPtr(IR_SIGNATURE_FN(T->C, method));
-        if (!IrIsPtr(IrTypeList_first(fn->params)))
+        if (fn->params->count > 0 && !IrIsPtr(IrTypeList_first(fn->params)))
             ensure_valid_rvalue(T, select->target);
     } else {
         return select_field(T, self, select);
