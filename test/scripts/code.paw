@@ -946,62 +946,30 @@
 //    assert(f(x).unwrap() == 123);
 //}
 
-use list::List;
-use hashmap::HashMap;
+pub struct Wrap<T> {
+    value: T,
+}
 
-fn map<A, B>(f: fn(A) -> B, a: List<A>) -> List<B> {
-    let b = List::new();
-    for v in a {
-        b.push(f(v)).unwrap();
+impl<T> Wrap<T> {
+    pub fn new(value: T) -> Self {
+        Self{value}
     }
-    b
 }
 
-fn f2i(f: float64) -> int64 {
-    f as int64
+impl<T: Iterator> Iterator for Wrap<T> {
+    type Item = T::Item;
+
+    fn next(*self) -> Option<Self::Item> {
+        self.value.next()
+    }
 }
 
-use io;
+pub fn wrap<T: IntoIterator>(value: T) -> Wrap<T::IntoIter> {
+    Wrap::new(value.into_iter())
+}
+
 #[test]
-pub fn test_explicit_instantiation() {
-    let source = List::new();
-    source.push(0.5).unwrap();
-    source.push(1.6).unwrap();
-    source.push(2.7).unwrap();
-    source.push(3.8).unwrap();
-    source.push(4.9).unwrap();
-
-    let target = map::<float64, int64>(f2i, source);
-    assert(target.len() == 5);
-    assert(target[0] == 0);
-    assert(target[1] == 1);
-    assert(target[2] == 2);
-    assert(target[3] == 3);
-    assert(target[4] == 4);
+pub fn test() {
+    for value in wrap(wrap(0..100)) {}
 }
 
-
-
-
-// TODO: reduce/investigate this crash: G->mirs_ missing List<float64>::push function
-//use io;
-//#[test]
-//pub fn test_explicit_instantiation() {
-//assert(true);
-//io::println("hi");
-//return;
-//    let source = List::new();
-//    source.push(0.5).unwrap();
-//    source.push(1.6).unwrap();
-//    source.push(2.7).unwrap();
-//    source.push(3.8).unwrap();
-//    source.push(4.9).unwrap();
-//
-//    let target = map::<float64, int64>(f2i, source);
-//    assert(target.len() == 5);
-//    assert(target[0] == 0);
-//    assert(target[1] == 1);
-//    assert(target[2] == 2);
-//    assert(target[3] == 3);
-//    assert(target[4] == 4);
-//}

@@ -9,8 +9,8 @@ use iter;
 use list::List;
 use ptr;
 
-fn make_list<const N: usize, T>(values: [N]T) -> List<T> {
-    List::from_array(values).unwrap()
+fn L<const N: usize, T>(values: [N]T) -> mem::Result<List<T>> {
+    List::from_array(values)
 }
 
 enum IntKind {
@@ -37,46 +37,45 @@ enum Ty {
     Unit,
     Int(IntKind),
     Float(FloatKind),
-    Struct(StructId),
 }
 
 enum Value {
     Unit,
-    Int(int64),
-    Float(float64),
-    Struct(List<Value>),
+    I8(int8),
+    I16(int16),
+    I32(int32),
+    I64(int64),
+    F32(float32),
+    F64(float64),
 }
 
 impl Value {
-    pub fn generate(*self, ctx: *Context, ty: *Ty) -> Self {
+    pub fn generate(ctx: *Context, ty: *Ty) -> Self {
         match ty {
-            *Ty::Unit => self.generate_unit(ctx),
-            *Ty::Int(kind) => self.generate_int(ctx, kind),
-            *Ty::Float(kind) => self.generate_float(ctx, kind),
-            *Ty::Struct(id) => self.generate_struct(ctx, id),
+            *Ty::Unit => Self::generate_unit(ctx),
+            *Ty::Int(kind) => Self::generate_int(ctx, kind),
+            *Ty::Float(kind) => Self::generate_float(ctx, kind),
         }
     }
 
-    fn generate_unit(*self, ctx: *Context) -> Self {
+    fn generate_unit(ctx: *Context) -> Self {
         Self::Unit
     }
 
-    fn generate_int(*self, ctx: *Context, kind: IntKind) -> Self {
-        Self::Int(1)
-    }
-
-    fn generate_float(*self, ctx: *Context, kind: FloatKind) -> Self {
-        Self::Float(1.0)
-    }
-
-    fn generate_struct(*self, ctx: *Context, id: StructId) -> Self {
-        let fields = List::new();
-        let tys = ctx.lookup_struct(id);
-        fields.reserve(tys.len()).unwrap();
-        for ty in tys {
-            fields.push(self.generate(ty)).unwrap();
+    fn generate_int(ctx: *Context, kind: IntKind) -> Self {
+        match kind {
+            IntKind::I8 => Self::I8(1),
+            IntKind::I16 => Self::I16(2),
+            IntKind::I32 => Self::I32(3),
+            IntKind::I64 => Self::I64(4),
         }
-        Self::Struct(fields)
+    }
+
+    fn generate_float(ctx: *Context, kind: FloatKind) -> Self {
+        match kind {
+            FloatKind::F32 => Self::F32(1.0),
+            FloatKind::F64 => Self::F64(2.0),
+        }
     }
 
 //    fn fmt_paw(*self, ctx: *Context, f: *fmt::Formatter) -> fmt::Result<()> {
@@ -123,6 +122,46 @@ impl Value {
 //    }
 }
 
+struct StructLayout {
+    fields: List<Ty>,
+}
+
+impl StructLayout {
+    pub fn new<const N: usize>(fields: [N]Ty) -> mem::Result<Self> {
+        Ok(Self{fields: L(fields)?})
+    }
+
+    pub fn write_name(*self, f: *fmt::Formatter) -> fmt::Result<()> {
+        for ty in &self.fields {
+            match ty {
+                *Ty::Unit => panic("Paw type `()` cannot be represented in standard C"),
+                *Ty::Int(IntKind::I8) => f.write("I8")?,
+                *Ty::Int(IntKind::I16) => f.write("I16")?,
+                *Ty::Int(IntKind::I32) => f.write("I32")?,
+                *Ty::Int(IntKind::I64) => f.write("I64")?,
+                *Ty::Float(FloatKind::F32) => f.write("F32")?,
+                *Ty::Float(FloatKind::F64) => f.write("F64")?,
+            }
+        }
+        Ok(())
+    }
+}
+
+struct Struct {
+    fields: List<Value>,
+}
+
+impl Struct {
+    pub fn generate(ctx: *Context, layout: *StructLayout) -> Self {
+        let fields = List::new();
+        for ty in &layout.fields {
+            let field = Value::generate(ctx, ty);
+            fields.push(field).unwrap();
+        }
+        Struct{fields}
+    }
+}
+
 impl Ty {
     fn fmt_paw(*self, ctx: *Context, f: *fmt::Formatter) -> fmt::Result<()> {
         match self {
@@ -136,10 +175,6 @@ impl Ty {
             *Self::Float(kind) => match kind {
                 FloatKind::F32 => "float32".fmt(f)?,
                 FloatKind::F64 => "float64".fmt(f)?,
-            },
-            *Self::Struct(id) => {
-                "S".fmt(f)?;
-                id.value.fmt(f)?;
             },
         }
         Ok(())
@@ -158,18 +193,13 @@ impl Ty {
                 FloatKind::F32 => "float".fmt(f)?,
                 FloatKind::F64 => "double".fmt(f)?,
             },
-            *Self::Struct(id) => {
-                "struct S".fmt(f)?;
-                id.value.fmt(f)?;
-            },
         }
         Ok(())
     }
 }
 
 struct Context {
-    struct_defs: List<List<Ty>>,
-    union_defs: List<List<List<Ty>>>,
+    struct_defs: List<StructLayout>,
     abi_paw: fmt::Formatter,
     abi_c: fmt::Formatter,
     abi_h: fmt::Formatter,
@@ -177,45 +207,10 @@ struct Context {
     indent: int64,
 }
 
-pub fn write_identity_fn_name(ctx: *Context, prefix: str, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
-    prefix.fmt(f)?;
-    "_identity_".fmt(f)?;
-    ty.fmt_paw(ctx, f)
-}
-
-pub fn write_identity_struct_type_c(ctx: *Context, id: StructId, f: *fmt::Formatter) -> fmt::Result<()> {
-    "struct ".fmt(f)?;
-    write_identity_struct_type_paw(ctx, id, f)
-}
-
-pub fn write_identity_struct_type_paw(ctx: *Context, id: StructId, f: *fmt::Formatter) -> fmt::Result<()> {
-    f"S\{id.value}"?.fmt(f)
-}
-
-pub fn write_identity_fn_decl_c(ctx: *Context, prefix: str, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
-    ty.fmt_c(ctx, f)?;
-    " ".fmt(f)?;
-    write_identity_fn_name(ctx, prefix, ty, f)?;
-    "(".fmt(f)?;
-    ty.fmt_c(ctx, f)?;
-    " value)".fmt(f)
-}
-
-pub fn write_identity_fn_decl_paw(ctx: *Context, prefix: str, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
-    "pub fn ".fmt(f)?;
-    write_identity_fn_name(ctx, prefix, ty, f)?;
-    "(value: ".fmt(f)?;
-    ty.fmt_paw(ctx, f)?;
-    ") -> ".fmt(f)?;
-    ty.fmt_paw(ctx, f)?;
-    "".fmt(f)
-}
-
 impl Context {
     pub fn new() -> Self {
         Self{
             struct_defs: List::new(),
-            union_defs: List::new(),
             abi_paw: fmt::Formatter::new(),
             abi_c: fmt::Formatter::new(),
             abi_h: fmt::Formatter::new(),
@@ -224,40 +219,66 @@ impl Context {
         }
     }
 
-    pub fn lookup_struct(*self, id: StructId) -> *List<Ty> {
+    pub fn lookup_struct(*self, id: StructId) -> *StructLayout {
         &self.struct_defs[id.value as usize]
     }
 
-    pub fn define_struct(*self, fields: List<Ty>) -> StructId {
-        let value = self.struct_defs.len() as uint32;
-        self.struct_defs.push(fields).unwrap();
-        StructId{value}
+    pub fn define_struct(*self, layout: StructLayout) -> mem::Result<()> {
+        self.struct_defs.push(layout)
     }
 
-    fn write_identity_fn_defs_paw(*self, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
+    pub fn write_fn_name(*self, prefix: str, layout: *StructLayout, f: *fmt::Formatter) -> fmt::Result<()> {
+        prefix.fmt(f)?;
+        "_abi_".fmt(f)?;
+        layout.write_name(f)
+    }
+
+    pub fn write_fn_decl_c(*self, prefix: str, layout: *StructLayout, f: *fmt::Formatter) -> fmt::Result<()> {
+        "struct ".fmt(f)?;
+        layout.write_name(f)?;
+        " ".fmt(f)?;
+        self.write_fn_name(prefix, layout, f)?;
+        "(struct ".fmt(f)?;
+        layout.write_name(f)?;
+        " value)".fmt(f)
+    }
+
+    pub fn write_fn_decl_paw(*self, prefix: str, layout: *StructLayout, f: *fmt::Formatter) -> fmt::Result<()> {
+        "pub fn ".fmt(f)?;
+        self.write_fn_name(prefix, layout, f)?;
+        "(value: ".fmt(f)?;
+        layout.write_name(f)?;
+        ") -> ".fmt(f)?;
+        layout.write_name(f)?;
+        "".fmt(f)
+    }
+
+    fn write_fn_defs_paw(*self, layout: *StructLayout, f: *fmt::Formatter) -> fmt::Result<()> {
         // write `extern` declaration of C function defined in "abi.c"
         "#[extern = \"".fmt(f)?;
-        write_identity_fn_name(self, "c", ty, f)?;
+        self.write_fn_name("c", layout, f)?;
         "\"]\n".fmt(f)?;
-        write_identity_fn_decl_paw(self, "c", ty, f)?;
+        self.write_fn_decl_paw("c", layout, f)?;
         ";\n".fmt(f)?;
 
         // write definition of Paw function (calls C function)
-        write_identity_fn_decl_paw(self, "paw", ty, f)?;
+        self.write_fn_decl_paw("paw", layout, f)?;
         " {\n    ".fmt(f)?;
-        write_identity_fn_name(self, "c", ty, f)?;
+        self.write_fn_name("c", layout, f)?;
         "(value)\n}\n".fmt(f)
     }
 
-    fn write_identity_fn_defs_c(*self, ty: *Ty, f: *fmt::Formatter) -> fmt::Result<()> {
+    fn write_fn_defs_c(*self, layout: *StructLayout, f: *fmt::Formatter) -> fmt::Result<()> {
         // write definition of C function
-        write_identity_fn_decl_c(self, "c", ty, f)?;
+        self.write_fn_decl_c("c", layout, f)?;
         " {\n    return value;\n}\n".fmt(f)
     }
 
-    fn write_identity_struct_def_c(*self, id: StructId, field_tys: *List<Ty>, f: *fmt::Formatter) -> fmt::Result<()> {
-        f"struct S\{id.value} {\n"?.fmt(f)?;
-        for (i, ty) in iter::zip(0usize.., field_tys) {
+    fn write_struct_def_c(*self, layout: *StructLayout, f: *fmt::Formatter) -> fmt::Result<()> {
+        "struct ".fmt(f)?;
+        layout.write_name(f)?;
+        " {\n".fmt(f)?;
+        for (i, ty) in iter::zip(0usize.., &layout.fields) {
             "    ".fmt(f)?;
             ty.fmt_paw(self, f)?;
             f" v\{i};\n"?.fmt(f)?;
@@ -265,9 +286,11 @@ impl Context {
         "}\n".fmt(f)
     }
 
-    fn write_identity_struct_def_paw(*self, id: StructId, field_tys: *List<Ty>, f: *fmt::Formatter) -> fmt::Result<()> {
-        f"struct S\{id.value} {\n"?.fmt(f)?;
-        for (i, ty) in iter::zip(0usize.., field_tys) {
+    fn write_struct_def_paw(*self, layout: *StructLayout, f: *fmt::Formatter) -> fmt::Result<()> {
+        "struct ".fmt(f)?;
+        layout.write_name(f)?;
+        " {\n".fmt(f)?;
+        for (i, ty) in iter::zip(0usize.., &layout.fields) {
             f"    v\{i}: "?.fmt(f)?;
             ty.fmt_paw(self, f)?;
             ",\n".fmt(f)?;
@@ -275,33 +298,31 @@ impl Context {
         "}\n".fmt(f)
     }
 
-    pub fn write_identity_abi_paw(*self, tys: *List<Ty>, f: *fmt::Formatter) -> fmt::Result<()> {
+    pub fn write_abi_paw(*self, f: *fmt::Formatter) -> fmt::Result<()> {
         self.write_line("// abi.paw", f)?;
-        for (i, field_tys) in iter::zip(0u32.., &self.struct_defs) {
-            self.write_identity_struct_def_paw(StructId{value: i}, field_tys, f)?;
-        }
-        for ty in &tys {
-            self.write_identity_fn_defs_paw(ty, &self.abi_paw)?;
+        for (i, layout) in iter::zip(0u32.., &self.struct_defs) {
+            self.write_struct_def_paw(layout, f)?;
+            self.write_fn_defs_paw(layout, f)?;
         }
         Ok(())
     }
 
-    pub fn write_identity_abi_h(*self, tys: *List<Ty>, f: *fmt::Formatter) -> fmt::Result<()> {
+    pub fn write_abi_h(*self, f: *fmt::Formatter) -> fmt::Result<()> {
         self.write_line("// abi.h", f)?;
-        self.write_line("#ifndef PAW_TEST_ABI_H\n", f)?;
-        self.write_line("#define PAW_TEST_ABI_H\n", f)?;
-        self.write_line("#include <stdint.h>\n", f)?;
-        for (i, field_tys) in iter::zip(0u32.., &self.struct_defs) {
-            self.write_identity_struct_def_c(StructId{value: i}, field_tys, f)?;
+        self.write_line("#ifndef PAW_TEST_ABI_H", f)?;
+        self.write_line("#define PAW_TEST_ABI_H", f)?;
+        self.write_line("#include <stdint.h>", f)?;
+        for (i, layout) in iter::zip(0u32.., &self.struct_defs) {
+            self.write_struct_def_c(layout, f)?;
         }
-        self.write_line("#endif // PAW_TEST_ABI_H\n", f)
+        self.write_line("#endif // PAW_TEST_ABI_H", f)
     }
 
-    pub fn write_identity_abi_c(*self, tys: *List<Ty>, f: *fmt::Formatter) -> fmt::Result<()> {
+    pub fn write_abi_c(*self, f: *fmt::Formatter) -> fmt::Result<()> {
         self.write_line("// abi.c", f)?;
-        self.write_line("#include \"abi.h\"\n", f);
-        for ty in &tys {
-            self.write_identity_fn_defs_c(ty, f)?;
+        self.write_line("#include \"abi.h\"", f);
+        for (i, layout) in iter::zip(0u32.., &self.struct_defs) {
+            self.write_fn_defs_c(layout, f)?;
         }
         Ok(())
     }
@@ -326,23 +347,64 @@ impl Context {
         f.write_char('\n')
     }
 
-    pub fn write_identity_driver_c(*self, tys: *List<Ty>, f: *fmt::Formatter) -> fmt::Result<()> {
+    pub fn write_value(*self, value: *Value, f: *fmt::Formatter) -> fmt::Result<()> {
+        match value {
+            *Value::Unit => panic("Paw type `()` cannot be represented in standard C"),
+            *Value::I8(v) => v.fmt(f),
+            *Value::I16(v) => v.fmt(f),
+            *Value::I32(v) => v.fmt(f),
+            *Value::I64(v) => v.fmt(f),
+            *Value::F32(v) => v.fmt(f),
+            *Value::F64(v) => v.fmt(f),
+        }
+    }
+
+    pub fn write_struct_initializer_c(*self, name: str, value: *Struct, layout: *StructLayout, f: *fmt::Formatter) -> fmt::Result<()> {
+        "struct ".fmt(f)?;
+        layout.write_name(f)?;
+        f" \{name} const = {\n"?.fmt(f)?;
+        self.increase_indentation_level();
+
+        for (index, field) in iter::zip(0usize.., &value.fields) {
+            self.write_indent(f)?;
+            f".v\{index} = "?.fmt(f)?;
+            self.write_value(field, f)?;
+            ",\n".fmt(f)?;
+        } 
+
+        self.decrease_indentation_level();
+        self.write_line("}", f)
+    }
+
+    pub fn write_driver_c(*self, f: *fmt::Formatter) -> fmt::Result<()> {
         self.write_line("// driver.c", f)?;
         self.write_line("#include \"abi.h\"", f)?;
         self.write_line("int main(void) {", f)?;
         self.increase_indentation_level();
 
-        for ty in &tys {
+        for layout in &self.struct_defs {
             // write each testcase in a different scoping block
             self.write_line("{", f)?;
             self.increase_indentation_level();
-            self.write_indent(f)?;
-            ty.fmt_c(self, f)?;
-            " a;".fmt(f)?;
-            let a = Value::generate(ty);
 
-            ty.fmt_c(self, f)?;
+            // struct T const a = { ... };
+            self.write_indent(f)?;
+            let a = Struct::generate(self, layout);
+            self.write_struct_initializer_c("a", &a, layout, f);
+
+            // struct T b const = paw_abi_T(a);
+            self.write_indent(f)?;
+            "struct ".fmt(f)?;
+            layout.write_name(f)?;
             " b = ".fmt(f)?;
+            self.write_fn_name("paw", layout, f)?;
+            "(a);\n".fmt(f)?;
+
+// assert(a.v0 == b.v0);
+// ...
+// assert(a.vN == b.vN);
+for (index, (value, ty)) in iter::zip(0usize.., iter::zip(&a.fields, &layout.fields)) {
+}
             
             self.decrease_indentation_level();
             self.write_line("}", f)?;
@@ -352,11 +414,11 @@ impl Context {
         self.write_line("}", f)
     }
 
-    pub fn write_identity_test(*self, tys: List<Ty>) -> fmt::Result<()> {
-        self.write_identity_abi_h(&tys, &self.abi_h)?;
-        self.write_identity_abi_c(&tys, &self.abi_c)?;
-        self.write_identity_abi_paw(&tys, &self.abi_paw)?;
-        self.write_identity_driver_c(&tys, &self.driver_c);
+    pub fn generate(*self) -> fmt::Result<()> {
+        self.write_abi_h(&self.abi_h)?;
+        self.write_abi_c(&self.abi_c)?;
+        self.write_abi_paw(&self.abi_paw)?;
+        self.write_driver_c(&self.driver_c);
 
         let abi_c = ptr::replace(&self.abi_c, fmt::Formatter::new());
         let abi_h = ptr::replace(&self.abi_h, fmt::Formatter::new());
@@ -372,10 +434,58 @@ impl Context {
     }
 }
 
-pub fn main() {
+fn main_() -> fmt::Result<()> {
     let ctx = Context::new();
-    ctx.write_identity_test(make_list([
-        Ty::Int(IntKind::I32),
+
+    ctx.define_struct(StructLayout::new([
         Ty::Int(IntKind::I8),
-    ])).unwrap();
+        Ty::Int(IntKind::I8),
+        Ty::Int(IntKind::I8),
+    ])?)?;
+
+    ctx.define_struct(StructLayout::new([
+        Ty::Int(IntKind::I64),
+    ])?)?;
+
+    ctx.define_struct(StructLayout::new([
+        Ty::Int(IntKind::I64),
+        Ty::Int(IntKind::I64),
+    ])?)?;
+
+    ctx.define_struct(StructLayout::new([
+        Ty::Int(IntKind::I64),
+        Ty::Int(IntKind::I64),
+        Ty::Int(IntKind::I64),
+    ])?)?;
+
+    ctx.define_struct(StructLayout::new([
+        Ty::Float(FloatKind::F32),
+    ])?)?;
+
+    ctx.define_struct(StructLayout::new([
+        Ty::Int(IntKind::I32),
+        Ty::Float(FloatKind::F32),
+    ])?)?;
+
+    ctx.define_struct(StructLayout::new([
+        Ty::Float(FloatKind::F32),
+        Ty::Int(IntKind::I64),
+    ])?)?;
+
+    ctx.define_struct(StructLayout::new([
+        Ty::Float(FloatKind::F64),
+        Ty::Float(FloatKind::F64),
+        Ty::Float(FloatKind::F64),
+    ])?)?;
+
+    ctx.define_struct(StructLayout::new([
+        Ty::Int(IntKind::I8),
+        Ty::Float(FloatKind::F64),
+    ])?)?;
+
+    ctx.generate()
+}
+
+pub fn main() {
+    main_().unwrap();
 }
