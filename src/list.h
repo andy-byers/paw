@@ -132,3 +132,4 @@ EXTERN_C void *pawK_list_reserve(struct Pool *pool, void *data, size_t zelem, in
 EXTERN_C void *pawK_list_ensure_one(struct Pool *pool, void *data, size_t zelem, int count, int *palloc);
 
 #endif // PAW_LIST_H
+

@@ -661,7 +661,10 @@ static IrType *materialize_fn(struct Unifier *U, IrType *type)
         if (def->has_captures) return type;
     }
 
-    return pawIr_materialize_fn(U->C, IR_TYPE_DID(type), IR_GENERIC_ARGS(type));
+    return pawU_normalize_projections(U,
+            pawIr_materialize_fn(U->C,
+                IR_TYPE_DID(type),
+                IR_GENERIC_ARGS(type)));
 }
 
 static int unify_types(struct Unifier *U, IrType *a, IrType *b)

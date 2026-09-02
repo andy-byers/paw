@@ -1,0 +1,33 @@
+// wrap.paw
+
+pub struct Wrap<T> {
+    value: T,
+}
+
+impl<T> Wrap<T> {
+    pub fn new(value: T) -> Self {
+        Self{value}
+    }
+}
+
+impl<T: Iterator> Iterator for Wrap<T> {
+    type Item = T::Item;
+
+    fn next(*self) -> Option<Self::Item> {
+        self.value.next()
+    }
+}
+
+pub fn wrap<T: IntoIterator>(value: T) -> Wrap<T::IntoIter> {
+    Wrap::new(value.into_iter())
+}
+
+#[test]
+pub fn test() {
+    let iter = wrap(wrap(1..4)).into_iter();
+    assert(iter.next().unwrap() == 1);
+    assert(iter.next().unwrap() == 2);
+    assert(iter.next().unwrap() == 3);
+    assert(iter.next().is_none());
+}
+

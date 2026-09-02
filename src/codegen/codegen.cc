@@ -1448,20 +1448,33 @@ private:
         set_result(x.output, object);
     }
 
-    llvm::Value *operand(MirPlace const place)
+    IrType *get_place_irtype(MirPlace const place)
     {
         switch (place.kind) {
             case MIR_PLACE_REGISTER:
-                if (ir_is_capturing_closure(C, place.type)) {
-                    auto const *mir = *mirs_.lookup(place.type);
+                return mir_reg_data((Mir *)state_->mir_, place.r)->type;
+            case MIR_PLACE_UPVALUE:
+                return MirUpvalueList_get(state_->mir_->upvalues, place.up).type;
+            case MIR_PLACE_CONSTANT:
+                return mir_const_data((Mir *)state_->mir_, place.k)->type;
+        }
+    }
+
+    llvm::Value *operand(MirPlace const place)
+    {
+        auto *irtype = get_place_irtype(place);
+        switch (place.kind) {
+            case MIR_PLACE_REGISTER:
+                if (ir_is_capturing_closure(C, irtype)) {
+                    auto const *mir = *mirs_.lookup(irtype);
                     llvm::Type *env_ty = create_env_type(mir->upvalues)
                         ->get_variant_ty(Discriminant::base());
                     return B->CreateLoad(env_ty, state_->get_raw_value(place.r));
                 }
-                return B->CreateLoad(*get_type(place.type),
+                return B->CreateLoad(*get_type(irtype),
                         state_->get_raw_value(place.r));
             case MIR_PLACE_UPVALUE:
-                return B->CreateLoad(*get_type(place.type),
+                return B->CreateLoad(*get_type(irtype),
                         state_->get_upvalue_ptr(unsigned(place.up)));
             case MIR_PLACE_CONSTANT:
                 return state_->constants_.at(unsigned(place.k.value));

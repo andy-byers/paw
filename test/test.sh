@@ -120,6 +120,7 @@ TESTS=(
     "trait_impl2"
     "blanket_impl"
     "impl_selection"
+    "wrap"
     "sort"
     "example"
     "example_2"

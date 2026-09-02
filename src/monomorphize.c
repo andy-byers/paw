@@ -373,14 +373,16 @@ static IrType *copy_type(struct MonoCollector *M, IrType *type)
 {
     type = finalize_type(M, type);
     if (IrIsSignature(type)) {
-        IrType *self = pawIr_get_context(M->C, type);
-        IrTrait *trait = pawIr_get_trait_context(M->C, type);
-        if (trait != NULL)
-            trait = finalize_trait(M, trait);
-        if (self != NULL) {
-            struct IrFnDef *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
-            IrType *method = get_assoc_fn(M, self, trait, def->name);
-            if (method != NULL) {
+        struct IrFnDef const *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
+        if (DECL_ID_EXISTS(def->parent)) {
+            enum IrDefKind const parent_kind = pawIr_get_kind(M->C, def->parent);
+            if (parent_kind == IR_TRAIT_DEF) {
+                // DeclId belongs to a trait associated function, meaning the receiver was a bound
+                // generic type. Now that a concrete receiver has been determined, get the DeclId of
+                // the associated function from the trait impl block.
+                IrType *self = pawIr_get_context(M->C, type);
+                IrTrait *trait = finalize_trait(M, pawIr_get_trait_context(M->C, type));
+                IrType *method = get_assoc_fn(M, self, trait, def->name);
                 pawU_unify_unchecked(M->C->U, method, type);
                 return pawU_normalize_projections(M->C->U, method);
             }
