@@ -27,32 +27,33 @@ Paw is a statically-typed, ahead-of-time compiled, general-purpose programming l
 use io;
 
 pub fn main() {
-    io::println("Hello, world!");
+    io::println("Hello, world!").unwrap();
 }
 ```
 
 ### FizzBuzz
 ```paw
+use fmt;
 use io;
 
-pub fn main() -> Result<(), mem::OutOfMemory> {
+pub fn main() -> fmt::Result<()> {
     // Create a closure. The type of "n" is inferred as "int64" and the 
     // return type as "String".
     let fizzbuzz = |n| {
         if n % 15 == 0 { 
-            "FizzBuzz".to_string() 
+            f"FizzBuzz"?
         } else if n % 3 == 0 {
-            "Fizz".to_string()
+            f"Fizz"?
         } else if n % 5 == 0 {
-            "Buzz".to_string() 
+            f"Buzz"?
         } else { 
-            n.to_string() 
+            f"\{n}"?
         }
     };
 
     // Call the closure for each integer 1 to 100, exclusive.
     for i in 1..100 {
-        io::println(f"fizzbuzz(\{i}) = \{fizzbuzz(i)?}"?);
+        io::println(f"fizzbuzz(\{i}) = \{fizzbuzz(i)?}"?)?;
     }
 }
 ```
@@ -78,7 +79,7 @@ fn example() -> Result<(), mem::OutOfMemory> {
     map.insert('c', "(C)")?;
 
     match map.get('a') {
-        Some(v) => io::println(v),
+        Some(v) => io::println(v).unwrap(),
         None => panic("not found"),
     }
 
@@ -176,7 +177,7 @@ pub fn main() {
         total = total + value;
     }
 
-    io::println(f"total = \{total}".unwrap()); // total = 35
+    io::println(f"total = \{total}".unwrap()).unwrap(); // total = 35
 }
 ```
 
@@ -216,7 +217,7 @@ pub fn main() {
     let outer = Outer{value: inner};
     let value = get(outer);
 
-    io::println(f"value = \{value}".unwrap()); // value = 123
+    io::println(f"value = \{value}".unwrap()).unwrap(); // value = 123
 }
 ```
 
