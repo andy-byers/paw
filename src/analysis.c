@@ -271,7 +271,7 @@ static void maybe_indicate_move(struct VariableAnalyzer *V, struct MirPlace p)
 {
     maybe_indicate_use(V, p);
 
-    IrType *pointee = ir_auto_deref(p.type);
+    IrType *pointee = ir_auto_deref(mir_place_type(V->mir, p));
     if (!pawIr_solver_is_copyable(V->C, pointee)) {
         struct Variable *const *pvar = find_variable(V, p);
         if (pvar != NULL) indicate_variable_move(V, *pvar);
@@ -322,9 +322,6 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
             }
         }
     }
-
-    // must run before SSA conversion
-    paw_assert(bb->joins->count == 0);
 
     K_LIST_XFOREACH (bb->instructions, struct MirInstruction *, pinstr) {
         switch (MIR_KINDOF(*pinstr)) {
@@ -377,8 +374,8 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
                 break;
             }
 
-            case kMirArrayGep: {
-                struct MirArrayGep const *x = MirGetArrayGep(*pinstr);
+            case kMirArrayGEP: {
+                struct MirArrayGEP const *x = MirGetArrayGEP(*pinstr);
                 maybe_indicate_use(V, x->array);
                 maybe_indicate_use(V, x->index);
                 maybe_indicate_def(V, x->output);
@@ -420,7 +417,6 @@ static struct MirPlace add_drop_flag(struct Mir *mir, MirRegister r)
     IrType *bool_type = pawP_builtin_type(mir->C, BUILTIN_BOOL);
     Str const *name = pawP_format_string(mir->C, "(%%drop_flag_%d)", r.value);
     MirRegisterDataList_push(mir, mir->registers, (struct MirRegisterData){
-                .is_nontrivial = PAW_FALSE,
                 .is_captured = PAW_FALSE,
                 .type = bool_type,
                 .name = name,
@@ -449,7 +445,6 @@ static void determine_cmoves_aux(struct VariableAnalyzer *V, VariableStates cons
 static struct MirInstruction *drop_flag_setter(struct VariableAnalyzer *V, int id, paw_Bool value)
 {
     struct MirPlace const kbool = {
-        .type = pawP_builtin_type(V->C, BUILTIN_BOOL),
         .k = V->mir->kcache->boolk[value],
         .kind = MIR_PLACE_CONSTANT,
     };
@@ -466,7 +461,6 @@ static struct MirPlace new_register(struct Mir *mir, IrType *type)
     return (struct MirPlace){
         .r.value = mir->registers->count - 1,
         .kind = MIR_PLACE_REGISTER,
-        .type = type,
     };
 }
 
@@ -506,9 +500,10 @@ static void terminate_branch(struct Mir *mir, struct MirBlockData const *data, s
 
 static struct MirPlace push_move(struct Mir *mir, struct MirBlockData const *data, struct MirPlace pointer)
 {
-    struct MirPlace const value = new_register(mir, ir_deref(pointer.type));
+    IrType *pointer_type = mir_place_type(mir, pointer);
+    struct MirPlace const value = new_register(mir, ir_deref(pointer_type));
     push_instruction(mir, data,
-            pawMir_new_move(mir, (struct SourceSpan){0}, pointer, value));
+            pawMir_new_move(mir, pointer.span, pointer, value));
     return value;
 }
 

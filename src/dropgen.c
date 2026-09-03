@@ -15,21 +15,11 @@ static struct MirPlace new_register(struct Mir *mir, IrType *type)
 {
     MirRegisterDataList_push(mir, mir->registers,
             (struct MirRegisterData){
-                .is_nontrivial = PAW_TRUE,
                 .type = type,
             });
     return (struct MirPlace){
         .r.value = mir->registers->count - 1,
         .kind = MIR_PLACE_REGISTER,
-        .type = type,
-    };
-}
-static struct MirPlace new_constant(MirConstant k, IrType *type)
-{
-    return (struct MirPlace){
-        .kind = MIR_PLACE_CONSTANT,
-        .type = type,
-        .k = k,
     };
 }
 
@@ -47,7 +37,8 @@ static struct MirInstruction *select_element(struct Mir *mir, struct MirPlace ob
 {
     IrType *usize = pawIr_new_int(mir->C, IR_USIZE);
     MirConstant const k = pawMir_kcache_add_value(mir, mir->kcache, (union IrValue){.u = index}, usize);
-    return pawMir_new_array_gep(mir, TODO, output, object, new_constant(k, usize));
+    struct MirPlace const place = { .kind = MIR_PLACE_CONSTANT, .k = k };
+    return pawMir_new_array_gep(mir, TODO, output, object, place);
 }
 
 static void pushi(struct Mir *mir, struct MirBlockData const *data, struct MirInstruction *instr)
@@ -87,7 +78,8 @@ static struct MirInstruction *popi(struct MirBlockData const *data)
 
 static struct MirPlace push_deref(struct Mir *mir, struct MirBlockData const *data, struct MirPlace pointer)
 {
-    struct MirPlace pointee = new_register(mir, ir_deref(pointer.type));
+    IrType *type = mir_place_type(mir, pointer);
+    struct MirPlace const pointee = new_register(mir, ir_deref(type));
     struct MirInstruction *deref = pawMir_new_load(mir, TODO, pointer, pointee);
     MirInstructionList_push(mir, data->instructions, deref);
     return pointee;
@@ -98,7 +90,7 @@ static void drop_tuple_fields(struct DropGenerator *G, struct Mir *mir, struct M
     struct MirBlockData const *data = MirBlockDataList_last(mir->blocks);
     struct MirInstruction *terminator = popi(data);
 
-    struct IrTuple *t = IrGetTuple(ir_deref(local.type));
+    struct IrTuple *t = IrGetTuple(ir_deref(mir_place_type(mir, local)));
     drop_fields_in_reverse(G, mir, data, local, 0, t->elems, 0);
 
     MirInstructionList_push(mir, data->instructions, terminator);
@@ -109,7 +101,7 @@ static void drop_array_elements(struct DropGenerator *G, struct Mir *mir, struct
     struct MirBlockData const *data = MirBlockDataList_last(mir->blocks);
     struct MirInstruction *terminator = popi(data);
 
-    struct IrArray const *t = IrGetArray(ir_deref(local.type));
+    struct IrArray const *t = IrGetArray(ir_deref(mir_place_type(mir, local)));
 
     paw_assert(t->length->kind == IR_CONST_VALUE);
     struct IrConstValue const len = t->length->value;
@@ -124,7 +116,7 @@ static void drop_struct_fields(struct DropGenerator *G, struct Mir *mir, struct 
     struct MirBlockData const *data = MirBlockDataList_last(mir->blocks);
     struct MirInstruction *terminator = popi(data);
 
-    struct IrAdt *t = IrGetAdt(ir_deref(local.type));
+    struct IrAdt *t = IrGetAdt(ir_deref(mir_place_type(mir, local)));
     IrTypeList *fields = pawP_instantiate_struct_fields(G->C, t);
     drop_fields_in_reverse(G, mir, data, local, 0, fields, 0);
 
@@ -160,7 +152,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
     {
         // transform the return into a switch on the discriminant
         struct MirPlace const discr_addr = new_register(mir, new_ptr(G, pawIr_new_int(G->C, IR_INT64)));
-        struct MirPlace const discr_value = new_register(mir, ir_deref(discr_addr.type));
+        struct MirPlace const discr_value = new_register(mir, ir_deref(mir_place_type(mir, discr_addr)));
         pushi(mir, last_data, select_field(mir, local, 0, 0, discr_addr));
         pushi(mir, last_data, pawMir_new_load(mir, TODO, discr_addr, discr_value));
         terminator->Switch_ = (struct MirSwitch){
@@ -177,7 +169,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
     pushi(mir, exit_data, store_ret);
     push_return(mir, exit_data);
 
-    struct IrAdt *t = IrGetAdt(ir_deref(local.type));
+    struct IrAdt *t = IrGetAdt(ir_deref(mir_place_type(mir, local)));
     struct IrAdtDef const *def = pawIr_get_adt_def(G->C, t->did);
     K_LIST_XFOREACH (def->variants, struct IrVariantDef *const, v) {
         int const discr = (*v)->discr;

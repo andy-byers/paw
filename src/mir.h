@@ -1,9 +1,6 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-//
-// TODO: Rename *GEP to *Gep (*GEP is not camel case)
-//       Remove `.type` field from `MirPlace` to make monomorphization easier
 
 #ifndef PAW_MIR_H
 #define PAW_MIR_H
@@ -14,38 +11,37 @@
 struct Mir;
 
 #define MIR_INSTRUCTION_LIST(X) \
-    X(Noop)                     \
-    X(Move)                     \
-    X(Load)                     \
-    X(Store)                    \
-    X(AddrOf)                   \
-    X(Global)                   \
-    X(AllocLocal)               \
-    X(Aggregate)                \
-    X(Array)                    \
-    X(ArrayGep)                 \
-    X(StructGEP)                \
-    X(SetRange)                 \
-    X(GetRange)                 \
-    X(Kill)                     \
-    X(Drop)                     \
-    X(Call)                     \
-    X(Cast)                     \
-    X(Capture)                  \
-    X(Close)                    \
-    X(Closure)                  \
-    X(UnaryOp)                  \
-    X(BinaryOp)                 \
-    X(Unreachable)              \
-    X(Return)                   \
-    X(Branch)                   \
-    X(Switch)                   \
+    X(Noop) \
+    X(Move) \
+    X(Load) \
+    X(Store) \
+    X(AddrOf) \
+    X(Global) \
+    X(AllocLocal) \
+    X(Aggregate) \
+    X(Array) \
+    X(ArrayGEP) \
+    X(StructGEP) \
+    X(SetRange) \
+    X(GetRange) \
+    X(Kill) \
+    X(Drop) \
+    X(Call) \
+    X(Cast) \
+    X(Capture) \
+    X(Closure) \
+    X(UnaryOp) \
+    X(BinaryOp) \
+    X(Unreachable) \
+    X(Return) \
+    X(Branch) \
+    X(Switch) \
     X(Goto)
 
 #define MIR_PROJECTION_LIST(X) \
-    X(Deref)                   \
-    X(Field)                   \
-    X(Index)                   \
+    X(Deref) \
+    X(Field) \
+    X(Index) \
     X(Range)
 
 #define MIR_ID_EQUALS(X_, Y_) ((X_).value == (Y_).value)
@@ -104,7 +100,6 @@ struct MirPlace {
         int up;
     };
     struct SourceSpan span;
-    struct IrType *type;
 };
 
 
@@ -170,7 +165,6 @@ struct MirArray {
 
 struct MirAggregate {
     MIR_INSTRUCTION_HEADER;
-    paw_Bool is_boxed : 1;
     int discr;
     struct MirPlaceList *fields;
     struct MirPlace output;
@@ -181,14 +175,8 @@ struct MirCapture {
     struct MirPlace target;
 };
 
-struct MirClose {
-    MIR_INSTRUCTION_HEADER;
-    struct MirPlace target;
-};
-
 struct MirClosure {
     MIR_INSTRUCTION_HEADER;
-    int child_id;
     struct MirPlace output;
 };
 
@@ -200,7 +188,7 @@ struct MirStructGEP {
     int discr;
 };
 
-struct MirArrayGep {
+struct MirArrayGEP {
     MIR_INSTRUCTION_HEADER;
     struct MirPlace output;
     struct MirPlace array;
@@ -328,15 +316,15 @@ typedef struct MirInstruction {
     };
 } MirInstruction;
 
-#define DEFINE_ACCESS(X)                                                \
-    static inline paw_Bool MirIs##X(struct MirInstruction const *node)  \
-    {                                                                   \
-        return node->hdr.kind == kMir##X;                               \
-    }                                                                   \
+#define DEFINE_ACCESS(X) \
+    static inline paw_Bool MirIs##X(struct MirInstruction const *node) \
+    { \
+        return node->hdr.kind == kMir##X; \
+    } \
     static inline struct Mir##X *MirGet##X(struct MirInstruction *node) \
-    {                                                                   \
-        paw_assert(MirIs##X(node));                                     \
-        return &node->X##_;                                             \
+    { \
+        paw_assert(MirIs##X(node)); \
+        return &node->X##_; \
     }
 MIR_INSTRUCTION_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
@@ -361,19 +349,17 @@ struct MirInstruction *pawMir_new_global(struct Mir *mir, struct SourceSpan span
 
 struct MirInstruction *pawMir_new_noop(struct Mir *mir, struct SourceSpan span);
 
-struct MirInstruction *pawMir_new_phi(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *inputs, struct MirPlace output, int var_id);
-
 struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, struct SourceSpan span, struct Str const *name, struct MirPlace output);
 
 struct MirInstruction *pawMir_new_array(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *elems, struct MirPlace output);
 
-struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *fields, struct MirPlace output, int discr, paw_Bool is_boxed);
+struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *fields, struct MirPlace output, int discr);
 
 struct MirInstruction *pawMir_new_capture(struct Mir *mir, struct SourceSpan span, struct MirPlace target);
 
 struct MirInstruction *pawMir_new_close(struct Mir *mir, struct SourceSpan span, struct MirPlace target);
 
-struct MirInstruction *pawMir_new_closure(struct Mir *mir, struct SourceSpan span, int child_id, struct MirPlace output);
+struct MirInstruction *pawMir_new_closure(struct Mir *mir, struct SourceSpan span, struct MirPlace output);
 
 struct MirInstruction *pawMir_new_struct_gep(struct Mir *mir, struct SourceSpan span, struct MirPlace output, struct MirPlace object, int field, int discr);
 
@@ -412,7 +398,6 @@ struct MirConstantData {
 
 struct MirRegisterData {
     paw_Bool is_captured : 1;
-    paw_Bool is_nontrivial : 1;
     struct SourceSpan span;
     struct IrType *type;
     struct Str const *name;
@@ -421,7 +406,6 @@ struct MirRegisterData {
 struct MirBlockData {
     struct MirBlockList *predecessors;
     struct MirBlockList *successors;
-    struct MirInstructionList *joins;
     struct MirInstructionList *instructions;
     MirId mid;
 };
@@ -467,8 +451,7 @@ struct Mir {
     paw_Env *P;
     IrGenericArgs *args;
     DeclId did;
-    DeclId parent_id; // TODO: rename to impl_id
-    int child_id;
+    DeclId parent_id;
     int mir_count;
     int modno;
     struct Str const *name;
@@ -501,7 +484,7 @@ DEFINE_LIST(struct Mir, MirRegisterPtrList, MirRegister *,)
 DEFINE_LIST(struct Mir, MirBlockDataList, struct MirBlockData *,)
 DEFINE_LIST(struct Mir, MirBodyList, struct Mir *,)
 
-struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, struct Str const *name, DeclId did, IrGenericArgs *args, IrTypeList *param_types, IrType *result_type, Annotations *annotations, struct IrType *type, struct IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
+struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, struct Str const *name, DeclId did, IrGenericArgs *args, IrTypeList *param_types, IrType *result_type, Annotations *annotations, struct IrType *type, struct IrType *self, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
 
 struct MirBlockData *pawMir_new_block(struct Mir *mir);
@@ -585,7 +568,7 @@ struct MirVisitor {
     void (*PostVisitBlock)(struct MirVisitor *V, MirBlock node);
     void (*PostVisitPlace)(struct MirVisitor *V, struct MirPlace node);
 
-#define DEFINE_CALLBACK(X)                                             \
+#define DEFINE_CALLBACK(X) \
     paw_Bool (*Visit##X)(struct MirVisitor * V, struct Mir##X * node); \
     void (*PostVisit##X)(struct MirVisitor * V, struct Mir##X * node);
     MIR_INSTRUCTION_LIST(DEFINE_CALLBACK)
@@ -651,6 +634,18 @@ static int pawMir_get_location(struct MirLocationList *locations, MirId mid)
 
 struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
 struct MirIntervalMap *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
+
+static IrType *mir_place_type(struct Mir *mir, struct MirPlace place)
+{
+    switch (place.kind) {
+        case MIR_PLACE_REGISTER:
+            return mir_reg_data(mir, place.r)->type;
+        case MIR_PLACE_CONSTANT:
+            return mir_const_data(mir, place.k)->type;
+        case MIR_PLACE_UPVALUE:
+            return MirUpvalueList_get(mir->upvalues, place.up).type;
+    }
+}
 
 static paw_Bool mir_is_lvalue(struct MirPlace place)
 {

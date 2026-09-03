@@ -114,15 +114,18 @@ static struct EvalStep evaluate_basic_block(struct EvalCtx *E, struct MirBlockDa
 //            }
             case kMirCast: {
                 struct MirCast const *x = MirGetCast(*pinstr);
-                pawMir_fold_cast(RVALUE(x->target), x->target.type,
-                        x->output.type, LVALUE(x->output));
+                pawMir_fold_cast(RVALUE(x->target),
+                        mir_place_type(E->mir, x->target),
+                        mir_place_type(E->mir, x->output),
+                        LVALUE(x->output));
                 break;
             }
             case kMirUnaryOp: {
                 struct MirUnaryOp const *x = MirGetUnaryOp(*pinstr);
+                IrType *type = mir_place_type(E->mir, x->val);
                 IrValue const val = RVALUE(x->val);
                 enum MirFoldResult const r = pawMir_fold_unary_op(x->op,
-                        x->val.type, val, LVALUE(x->output));
+                        type, val, LVALUE(x->output));
                 switch (r) {
                     case MIR_FOLD_FOLDED:
                         break;
@@ -135,10 +138,11 @@ static struct EvalStep evaluate_basic_block(struct EvalCtx *E, struct MirBlockDa
             }
             case kMirBinaryOp: {
                 struct MirBinaryOp const *x = MirGetBinaryOp(*pinstr);
+                IrType *type = mir_place_type(E->mir, x->lhs);
                 IrValue const lhs = RVALUE(x->lhs);
                 IrValue const rhs = RVALUE(x->rhs);
                 enum MirFoldResult const r = pawMir_fold_binary_op(x->op,
-                        x->lhs.type, lhs, rhs, LVALUE(x->output));
+                        type, lhs, rhs, LVALUE(x->output));
                 switch (r) {
                     case MIR_FOLD_FOLDED:
                         break;

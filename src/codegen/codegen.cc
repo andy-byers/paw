@@ -952,10 +952,6 @@ public:
             B->SetInsertPoint(block);
 
             auto *bb = mir->blocks->data[b];
-            for (int i = 0; i < bb->joins->count; ++i)
-                create_instruction(bb->joins->data[i]);
-            B->SetInsertPoint(block);
-
             for (int i = 0; i < bb->instructions->count; ++i)
                 create_instruction(bb->instructions->data[i]);
         }
@@ -1287,8 +1283,8 @@ private:
             case kMirArray:
                 create_array(instr->Array_);
                 break;
-            case kMirArrayGep:
-                create_arraygep(instr->ArrayGep_);
+            case kMirArrayGEP:
+                create_arraygep(instr->ArrayGEP_);
                 break;
             case kMirStructGEP:
                 create_structgep(instr->StructGEP_);
@@ -1325,7 +1321,6 @@ private:
                 break;
             case kMirAllocLocal:
             case kMirCapture:
-            case kMirClose:
                 break;
             case kMirGetRange:
             case kMirSetRange:
@@ -1381,17 +1376,17 @@ private:
     // TODO: also remove check for pawIr_needs_drop
     void create_drop(MirDrop const &x)
     {
-        auto *target_type = x.target.type;
+        auto *target_irtype = get_place_irtype(x.target);
         llvm::Value *target;
-        if (is_thin_ptr(target_type)) {
+        if (is_thin_ptr(target_irtype)) {
             // must be dropping a field
-            target_type = ir_deref(target_type);
+            target_irtype = ir_deref(target_irtype);
             target = operand(x.target);
         } else {
             target = state_->get_raw_value(x.target.r);
         }
-        if (pawIr_needs_drop(C, target_type)) {
-            auto *irtype = pawIr_get_custom_drop_type(C, target_type);
+        if (pawIr_needs_drop(C, target_irtype)) {
+            auto *irtype = pawIr_get_custom_drop_type(C, target_irtype);
             auto *fn = get_fn(irtype)->get_fn();
             B->CreateCall(fn, target);
         }
@@ -1411,7 +1406,7 @@ private:
     void create_load(MirLoad const &x)
     {
         auto *pointer = operand(x.pointer);
-        auto *output_type = get_type(x.output.type);
+        auto *output_type = get_place_type(x.output);
         auto *output = B->CreateLoad(*output_type, pointer);
         set_result(x.output, output);
     }
@@ -1425,7 +1420,8 @@ private:
 
     void create_global(MirGlobal const &x)
     {
-        auto *itr = fns_.lookup(x.output.type);
+        auto *irtype = get_place_irtype(x.output);
+        auto *itr = fns_.lookup(irtype);
         paw_assert(itr != nullptr);
 
         auto *fn = (*itr)->get_value();
@@ -1434,11 +1430,11 @@ private:
 
     void create_aggregate(MirAggregate const &x)
     {
-        if (IrIsUnit(x.output.type)) {
+        if (IrIsUnit(get_place_irtype(x.output))) {
             set_result(x.output, X.create_unit());
             return;
         }
-        auto *object_type = cast<ObjectType>(get_type(x.output.type));
+        auto *object_type = cast<ObjectType>(get_place_type(x.output));
         auto *variant_ty = object_type->get_variant_ty(Discriminant(x.discr));
         llvm::Value *object = llvm::UndefValue::get(variant_ty);
         for (auto i = 0U; i < unsigned(x.fields->count); ++i) {
@@ -1458,6 +1454,11 @@ private:
             case MIR_PLACE_CONSTANT:
                 return mir_const_data((Mir *)state_->mir_, place.k)->type;
         }
+    }
+
+    Type *get_place_type(MirPlace const place)
+    {
+        return get_type(get_place_irtype(place));
     }
 
     llvm::Value *operand(MirPlace const place)
@@ -1483,7 +1484,7 @@ private:
 
     void create_array(MirArray const &x)
     {
-        auto *array_type = cast<ArrayType>(get_type(x.output.type));
+        auto *array_type = cast<ArrayType>(get_place_type(x.output));
         llvm::Value *array = llvm::UndefValue::get(array_type->get_ty());
         for (unsigned i = 0; i < (unsigned)x.elems->count; ++i) {
             auto *elem = operand(x.elems->data[i]);
@@ -1499,10 +1500,11 @@ private:
 
     void create_structgep(struct MirStructGEP const &x)
     {
-        auto *value = !is_thin_ptr(x.object.type)
+        auto *irtype = get_place_irtype(x.object);
+        auto *value = !is_thin_ptr(irtype)
             ? state_->get_raw_value(x.object.r)
             : operand(x.object);
-        auto *obj_type = (ObjectType *)get_deref_type(x.object.type);
+        auto *obj_type = (ObjectType *)get_deref_type(irtype);
         Object obj(*state_, value, obj_type);
 
         Discriminant const discr(x.discr);
@@ -1510,19 +1512,21 @@ private:
         set_result(x.output, field_ptr);
     }
 
-    void create_arraygep(MirArrayGep const &x)
+    void create_arraygep(MirArrayGEP const &x)
     {
+        auto *array_irtype = get_place_irtype(x.array);
+        auto *output_irtype = get_place_irtype(x.output);
         auto *array = operand(x.array);
         auto *index = operand(x.index);
 
         {
-            auto *konst = IrGetArray(ir_deref(x.array.type))->length;
+            auto *konst = IrGetArray(ir_deref(array_irtype))->length;
             paw_assert(konst->kind == IR_CONST_VALUE);
             auto const length = (size_t)konst->value.value.i;
             X.create_check_bounds(index, X.create_isize(length));
         }
 
-        auto *element_type = get_type(ir_deref(x.output.type));
+        auto *element_type = get_type(ir_deref(output_irtype));
         auto *element_ptr = B->CreateInBoundsGEP(element_type->get_ty(), array, index);
         set_result(x.output, element_ptr);
     }
@@ -1535,6 +1539,7 @@ private:
     // Generate code for performing a function call
     void create_call(MirCall const &x)
     {
+        auto *irtype = get_place_irtype(x.target);
         auto *value = operand(x.target);
 
         std::vector<llvm::Value *> args;
@@ -1544,12 +1549,12 @@ private:
 
         auto *fn = value;
         llvm::Value *env = nullptr;
-        if (ir_is_capturing_closure(C, x.target.type)) {
-            fn = get_fn(x.target.type)->get_value();
+        if (ir_is_capturing_closure(C, irtype)) {
+            fn = get_fn(irtype)->get_value();
             env = value;
         }
 
-        auto *fn_type = cast<FnType>(get_raw_type(x.target.type));
+        auto *fn_type = cast<FnType>(get_raw_type(irtype));
         Callable callable(*state_, fn, fn_type);
 
         auto *result = state_->create_call(callable, env, args);
@@ -1639,9 +1644,11 @@ private:
 
     void create_cast_instr(MirCast const &x)
     {
-        auto *target = operand(x.target);
-        auto *result = create_cast(target, x.target.type, x.output.type);
-        set_result(x.output, result);
+        auto *from = operand(x.target);
+        auto *to = create_cast(from,
+                get_place_irtype(x.target),
+                get_place_irtype(x.output));
+        set_result(x.output, to);
     }
 
     ObjectType *create_env_type(MirUpvalueList const *upvalues) const
@@ -1655,11 +1662,12 @@ private:
 
     void create_closure(MirClosure const &x)
     {
-        auto *fn = get_fn(x.output.type);
+        auto *irtype = get_place_irtype(x.output);
+        auto *fn = get_fn(irtype);
         if (!fn->has_env()) {
             set_result(x.output, fn->get_value());
         } else {
-            auto *child = *mirs_.lookup(x.output.type); // must exist
+            auto *child = *mirs_.lookup(irtype); // must exist
             llvm::Type *env_ty = create_env_type(child->upvalues)
                 ->get_variant_ty(Discriminant::base());
             llvm::Value *env = llvm::UndefValue::get(env_ty);
@@ -1842,7 +1850,7 @@ private:
     {
         auto *lhs = operand(x.lhs);
         auto *rhs = operand(x.rhs);
-        auto *result = new_binary_op(x.op, lhs, rhs, x.lhs.type);
+        auto *result = new_binary_op(x.op, lhs, rhs, get_place_irtype(x.lhs));
         set_result(x.output, result);
     }
 
@@ -1854,7 +1862,8 @@ private:
     void create_return(MirReturn const &)
     {
         auto const result = pawMir_get_register(state_->mir_, MirRegister{0});
-        state_->create_return(IrIsUnit(result.type) ? nullptr : operand(result));
+        auto *result_irtype = get_place_irtype(result);
+        state_->create_return(IrIsUnit(result_irtype) ? nullptr : operand(result));
     }
 
     void create_branch(MirBranch const &x)
@@ -1923,8 +1932,9 @@ private:
 
     void create_direct_switch(MirSwitch const &x)
     {
+        auto *irtype = get_place_irtype(x.discr);
         auto *discr = operand(x.discr);
-        if (IrIsFloat(x.discr.type))
+        if (IrIsFloat(irtype))
             discr = B->CreateBitCast(discr, X.get_i64_ty());
         auto *node = B->CreateSwitch(discr, x.has_otherwise
                     ? get_successor_block(x.arms->count)
@@ -1974,7 +1984,8 @@ private:
 
     void create_switch(MirSwitch const &x)
     {
-        if (can_switch_directly(x.discr.type))
+        auto *irtype = get_place_irtype(x.discr);
+        if (can_switch_directly(irtype))
             return create_direct_switch(x);
         return create_indirect_switch(x);
     }

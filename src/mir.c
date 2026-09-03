@@ -6,7 +6,7 @@
 #include "ir_type.h"
 #include "map.h"
 
-struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str const *name, DeclId did, IrGenericArgs *args, IrTypeList *param_types, IrType *result_type, Annotations *annotations, IrType *type, IrType *self, int child_id, DeclId impl_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
+struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str const *name, DeclId did, IrGenericArgs *args, IrTypeList *param_types, IrType *result_type, Annotations *annotations, IrType *type, IrType *self, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = P_ALLOC(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
@@ -14,8 +14,7 @@ struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, St
         .is_poly = is_poly,
         .is_pub = is_pub,
         .fn_kind = fn_kind,
-        .child_id = child_id,
-        .parent_id = impl_id,
+        .parent_id = parent_id,
         .annotations = annotations,
         .param_types = param_types,
         .result_type = result_type,
@@ -149,7 +148,7 @@ struct MirInstruction *pawMir_new_array(struct Mir *mir, struct SourceSpan span,
     return instr;
 }
 
-struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *fields, struct MirPlace output, int discr, paw_Bool is_boxed)
+struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, struct SourceSpan span, struct MirPlaceList *fields, struct MirPlace output, int discr)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Aggregate_ = (struct MirAggregate){
@@ -159,7 +158,6 @@ struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, struct SourceSpan s
         .discr = discr,
         .fields = fields,
         .output = output,
-        .is_boxed = is_boxed,
     };
     return instr;
 }
@@ -176,26 +174,13 @@ struct MirInstruction *pawMir_new_capture(struct Mir *mir, struct SourceSpan spa
     return instr;
 }
 
-struct MirInstruction *pawMir_new_close(struct Mir *mir, struct SourceSpan span, struct MirPlace target)
-{
-    struct MirInstruction *instr = pawMir_new_instruction(mir);
-    instr->Close_ = (struct MirClose){
-        .mid = pawMir_next_id(mir),
-        .kind = kMirClose,
-        .span = span,
-        .target = target,
-    };
-    return instr;
-}
-
-struct MirInstruction *pawMir_new_closure(struct Mir *mir, struct SourceSpan span, int child_id, struct MirPlace output)
+struct MirInstruction *pawMir_new_closure(struct Mir *mir, struct SourceSpan span, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Closure_ = (struct MirClosure){
         .mid = pawMir_next_id(mir),
         .kind = kMirClosure,
         .span = span,
-        .child_id = child_id,
         .output = output,
     };
     return instr;
@@ -219,9 +204,9 @@ struct MirInstruction *pawMir_new_struct_gep(struct Mir *mir, struct SourceSpan 
 struct MirInstruction *pawMir_new_array_gep(struct Mir *mir, struct SourceSpan span, struct MirPlace output, struct MirPlace array, struct MirPlace index)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
-    instr->ArrayGep_ = (struct MirArrayGep){
+    instr->ArrayGEP_ = (struct MirArrayGEP){
         .mid = pawMir_next_id(mir),
-        .kind = kMirArrayGep,
+        .kind = kMirArrayGEP,
         .span = span,
         .output = output,
         .array = array,
@@ -410,7 +395,6 @@ struct MirPlace pawMir_get_register(struct Mir const *mir, MirRegister r)
     struct MirRegisterData const *rdata = mir_reg_data((struct Mir *)mir, r);
     return (struct MirPlace){
         .kind = MIR_PLACE_REGISTER,
-        .type = rdata->type,
         .span = rdata->span,
         .r = r,
     };
@@ -502,7 +486,6 @@ struct MirBlockData *pawMir_new_block(struct Mir *mir)
     *block = (struct MirBlockData){
         .predecessors = MirBlockList_new(mir),
         .successors = MirBlockList_new(mir),
-        .joins = MirInstructionList_new(mir),
         .instructions = MirInstructionList_new(mir),
         .mid = pawMir_next_id(mir),
     };
@@ -588,11 +571,6 @@ static void AcceptCapture(struct MirVisitor *V, struct MirCapture *t)
     pawMir_visit_place(V, t->target);
 }
 
-static void AcceptClose(struct MirVisitor *V, struct MirClose *t)
-{
-    pawMir_visit_place(V, t->target);
-}
-
 static void AcceptClosure(struct MirVisitor *V, struct MirClosure *t)
 {
     pawMir_visit_place(V, t->output);
@@ -604,7 +582,7 @@ static void AcceptStructGEP(struct MirVisitor *V, struct MirStructGEP *t)
     pawMir_visit_place(V, t->object);
 }
 
-static void AcceptArrayGep(struct MirVisitor *V, struct MirArrayGep *t)
+static void AcceptArrayGEP(struct MirVisitor *V, struct MirArrayGEP *t)
 {
     pawMir_visit_place(V, t->output);
     pawMir_visit_place(V, t->array);
@@ -900,43 +878,14 @@ static void renumber_or_clear_ref(struct Traversal *X, BlockMap *map, MirBlock *
     }
 }
 
-static void prune_joins(struct Mir *mir, struct MirInstructionList *joins, struct MirInstructionList *instrs, int index)
-{
-#if 0
-    int ijoin;
-    struct MirInstruction **pinstr;
-    K_LIST_ENUMERATE (joins, ijoin, pinstr) {
-        struct MirPhi *phi = MirGetPhi(*pinstr);
-        paw_assert(phi->inputs->count > 1);
-        // remove phi node input corresponding to unreachable basic block,
-        // maintaining the 1-to-1 correspondence between phi node inputs and
-        // predecessor basic blocks
-        MirPlaceList_remove(phi->inputs, index);
-        if (phi->inputs->count == 1) {
-            // a phi node with a single input is really just a move: transfer
-            // to the ".instructions" list
-            *pinstr = pawMir_new_move(mir, phi->span,
-                                      phi->output, K_LIST_FIRST(phi->inputs));
-            MirInstructionList_insert(mir, instrs, 0, *pinstr);
-            MirInstructionList_swap_remove(joins, ijoin);
-            --ijoin;
-        }
-    }
-#endif // 0
-}
-
 static void rename_and_filter(struct Traversal *X, BlockMap *map, struct MirBlockList *blocks, struct MirBlockData *bb)
 {
-    struct Mir *mir = X->mir;
-
     int index;
     int removed = 0;
     MirBlock const *pfrom;
     K_LIST_ENUMERATE (blocks, index, pfrom) {
         MirBlock const *pto = BlockMap_get(X, map, *pfrom);
         if (pto == NULL) {
-            if (bb != NULL)
-                prune_joins(mir, bb->joins, bb->instructions, index - removed);
             ++removed;
             continue;
         }
@@ -1042,8 +991,8 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
             ADD_INPUT(x->target);
             break;
         }
-        case kMirArrayGep: {
-            struct MirArrayGep *x = MirGetArrayGep(instr);
+        case kMirArrayGEP: {
+            struct MirArrayGEP *x = MirGetArrayGEP(instr);
             ADD_INPUT(x->array);
             ADD_INPUT(x->index);
             break;
@@ -1086,11 +1035,6 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
         }
         case kMirCapture: {
             struct MirCapture *x = MirGetCapture(instr);
-            ADD_INPUT(x->target);
-            break;
-        }
-        case kMirClose: {
-            struct MirClose *x = MirGetClose(instr);
             ADD_INPUT(x->target);
             break;
         }
@@ -1163,8 +1107,8 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
         case kMirStructGEP:
             ADD_OUTPUT(MirGetStructGEP(instr)->output);
             break;
-        case kMirArrayGep:
-            ADD_OUTPUT(MirGetArrayGep(instr)->output);
+        case kMirArrayGEP:
+            ADD_OUTPUT(MirGetArrayGEP(instr)->output);
             break;
         case kMirGetRange:
             ADD_OUTPUT(MirGetGetRange(instr)->output);
@@ -1185,7 +1129,6 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
         case kMirCapture:
         case kMirDrop:
         case kMirKill:
-        case kMirClose:
         case kMirStore:
         case kMirBranch:
         case kMirSwitch:
@@ -1244,8 +1187,6 @@ static void collect_accesses(struct Mir *mir, AccessMap *map, AccountForAccesses
         MirBlock const b = MIR_BB(index);
 
         struct MirInstruction *const *pinstr;
-        K_LIST_FOREACH (block->joins, pinstr)
-            cb(mir, *pinstr, map, b);
         K_LIST_FOREACH (block->instructions, pinstr)
             cb(mir, *pinstr, map, b);
     }
@@ -1305,8 +1246,6 @@ void pawMir_collect_per_block_usedefs(struct Mir *mir, UseDefMap *uses, UseDefMa
             MirBlock const b = MIR_BB(index++);
 
             struct MirInstruction **pinstr;
-            K_LIST_FOREACH (block->joins, pinstr)
-                indicate_usedefs(mir, *pinstr, uses, defs, b);
             K_LIST_FOREACH (block->instructions, pinstr)
                 indicate_usedefs(mir, *pinstr, uses, defs, b);
         }
@@ -1331,12 +1270,6 @@ struct MirLocationList *pawMir_compute_locations(struct Mir *mir)
     K_LIST_FOREACH (mir->blocks, pblock) {
         struct MirBlockData *block = *pblock;
         pawMir_set_location(mir, locations, block->mid, location);
-
-        // phi functions have the same location as the containing block
-        K_LIST_FOREACH (block->joins, pinstr) {
-            struct MirInstruction *instr = *pinstr;
-            pawMir_set_location(mir, locations, instr->hdr.mid, location);
-        }
 
         // each instruction bumps the location by 2 to allow insertion of new instructions
         // without breaking the ordering
@@ -1364,7 +1297,7 @@ static MirBlock get_common_block(MirBlockList *blocks)
 
 static void detach_unused_block(struct MirBlockData *bb)
 {
-    paw_assert(bb->joins->count == 0 && bb->instructions->count > 0);
+    paw_assert(bb->instructions->count > 0);
     K_LIST_FIRST(bb->instructions) = K_LIST_LAST(bb->instructions);
     K_LIST_FIRST(bb->instructions)->hdr.kind = kMirUnreachable;
     bb->instructions->count = 1;
@@ -1379,7 +1312,6 @@ static void merge_adjacent_blocks(struct Mir *mir, MirBlock bfrom, struct MirBlo
 
     // remove goto and merge instruction lists
     --from->instructions->count;
-    paw_assert(to->joins->count == 0);
     struct MirInstruction *const *pinstr;
     K_LIST_FOREACH (to->instructions, pinstr)
         MirInstructionList_push(mir, from->instructions, *pinstr);
@@ -1436,7 +1368,6 @@ static void thread_jump_through(struct Mir *mir, MirBlock bfrom, struct MirBlock
     MIR_VALIDATE_GRAPH(mir);
 }
 
-// FIXME: sometimes breaks SSA constraints
 void pawMir_merge_redundant_blocks(struct Mir *mir)
 {
     return; // TODO maybe missing transfer of phi nodes from removed block to other block
@@ -1450,7 +1381,7 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
             struct MirBlockData *pred = mir_bb_data(mir, p);
             if (pred->predecessors->count == 0) continue; // disconnected
 #define CHECK_TERMINATOR(Kind_) \
-        MirIs##Kind_(K_LIST_LAST(pred->instructions))
+        MirIs##Kind_(MirInstructionList_last(pred->instructions))
 
             if (CHECK_TERMINATOR(Branch) || CHECK_TERMINATOR(Switch)) {
                 // Attempt to convert a branch into a jump. This is possible when all cases
@@ -1458,30 +1389,27 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
                 MirBlock const common = get_common_block(pred->successors);
                 if (MIR_ID_EXISTS(common)) {
                     struct MirBlockData *succ = mir_bb_data(mir, common);
-                    if (succ->joins->count == 0) {
-                        K_LIST_LAST(pred->instructions)->hdr.kind = kMirGoto;
-                        K_LIST_FIRST(pred->successors) = common;
-                        pred->successors->count = 1;
-                        changed = PAW_TRUE;
-                        // remove redundant copies of "common"
-                        int count = 0;
-                        MirBlock const *pp;
-                        MirBlockList *predecessors = MirBlockList_new(mir);
-                        K_LIST_FOREACH (succ->predecessors, pp) {
-                            if (!MIR_ID_EQUALS(p, *pp) || count++ == 0)
-                                MirBlockList_push(mir, predecessors, *pp);
-                        }
-                        MirBlockList_delete(mir, succ->predecessors);
-                        succ->predecessors = predecessors;
+                    K_LIST_LAST(pred->instructions)->hdr.kind = kMirGoto;
+                    K_LIST_FIRST(pred->successors) = common;
+                    pred->successors->count = 1;
+                    changed = PAW_TRUE;
+                    // remove redundant copies of "common"
+                    int count = 0;
+                    MirBlock const *pp;
+                    MirBlockList *predecessors = MirBlockList_new(mir);
+                    K_LIST_FOREACH (succ->predecessors, pp) {
+                        if (!MIR_ID_EQUALS(p, *pp) || count++ == 0)
+                            MirBlockList_push(mir, predecessors, *pp);
                     }
+                    MirBlockList_delete(mir, succ->predecessors);
+                    succ->predecessors = predecessors;
                 }
             }
 
             if (CHECK_TERMINATOR(Goto)) {
                 MirBlock const s = K_LIST_LAST(pred->successors);
                 struct MirBlockData *succ = mir_bb_data(mir, s);
-                if (pred->joins->count == 0 && succ->joins->count == 0
-                        && pred->instructions->count == 1) {
+                if (pred->instructions->count == 1) {
                    // predecessor is empty except for the jump
                    thread_jump_through(mir, p, pred, s, succ);
                    changed = PAW_TRUE;
@@ -1492,7 +1420,6 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
                 MirBlock const s = K_LIST_LAST(pred->successors);
                 struct MirBlockData *succ = mir_bb_data(mir, s);
                 if (succ->predecessors->count == 1) {
-                    paw_assert(succ->joins->count == 0);
                    // "p" and "s" can be trivially merged
                    merge_adjacent_blocks(mir, p, pred, s, succ);
                    changed = PAW_TRUE;
@@ -1502,9 +1429,7 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
             if (CHECK_TERMINATOR(Goto)) {
                 MirBlock const s = K_LIST_LAST(pred->successors);
                 struct MirBlockData *succ = mir_bb_data(mir, s);
-                // TODO: Maybe could remove "succ->joins->count == 0" check but would need to fix phi node input lists.
-                if (succ->joins->count == 0 && succ->instructions->count == 1
-                        && succ->successors->count > 1) {
+                if (succ->instructions->count == 1 && succ->successors->count > 1) {
                     // overwrite jump with other terminator
                     K_LIST_LAST(pred->instructions) = K_LIST_LAST(succ->instructions);
                     pred->successors = copy_blocks(mir, succ->successors);
@@ -1649,9 +1574,10 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
     switch (MIR_KINDOF(instr)) {
         case kMirAllocLocal: {
             struct MirAllocLocal *t = MirGetAllocLocal(instr);
+            IrType *output_type = mir_place_type(P->mir, t->output);
             PRINT_LITERAL(P, "alloc ");
             print_place(P, t->output);
-            PRINT_FORMAT(P, " (\"%s\")", pawIr_print_type(P->C, t->output.type));
+            PRINT_FORMAT(P, " (\"%s\")", pawIr_print_type(P->C, output_type));
             break;
         }
         case kMirNoop: {
@@ -1690,10 +1616,11 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirGlobal: {
             struct MirGlobal *t = MirGetGlobal(instr);
-            char const *type = pawIr_print_type(P->C, t->output.type);
+            IrType *output_type = mir_place_type(P->mir, t->output);
+            char const *type = pawIr_print_type(P->C, output_type);
             print_place(P, t->output);
             PRINT_LITERAL(P, " = global ");
-            DeclId const did = IR_TYPE_DID(t->output.type);
+            DeclId const did = IR_TYPE_DID(output_type);
             struct IrFnDef const *fn_def = pawIr_get_fn_def(P->C, did);
             PRINT_STRING(P, fn_def->name);
             PRINT_FORMAT(P, " (%s)", type);
@@ -1742,7 +1669,8 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             struct MirCast *t = MirGetCast(instr);
             print_place(P, t->output);
             PRINT_LITERAL(P, " = (");
-            PRINT_STRING(P, pawIr_print_type_v2(P->C, t->output.type));
+            IrType *to_type = mir_place_type(P->mir, t->output);
+            PRINT_STRING(P, pawIr_print_type_v2(P->C, to_type));
             PRINT_CHAR(P, ')');
             print_place(P, t->target);
             break;
@@ -1750,12 +1678,6 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         case kMirCapture: {
             struct MirCapture *t = MirGetCapture(instr);
             PRINT_LITERAL(P, "capture ");
-            print_place(P, t->target);
-            break;
-        }
-        case kMirClose: {
-            struct MirClose *t = MirGetClose(instr);
-            PRINT_LITERAL(P, "close ");
             print_place(P, t->target);
             break;
         }
@@ -1773,8 +1695,8 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_FORMAT(P, ".%d", t->field);
             break;
         }
-        case kMirArrayGep: {
-            struct MirArrayGep *t = MirGetArrayGep(instr);
+        case kMirArrayGEP: {
+            struct MirArrayGEP *t = MirGetArrayGEP(instr);
             print_place(P, t->output);
             PRINT_LITERAL(P, " = &");
             print_place(P, t->array);
@@ -1882,7 +1804,6 @@ static void dump_block(struct Printer *P, MirBlock bb)
     ++P->indent;
 
     P->bb = block;
-    dump_instruction_list(P, block->joins);
     dump_instruction_list(P, block->instructions);
 
     --P->indent;

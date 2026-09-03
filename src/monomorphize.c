@@ -143,7 +143,6 @@ static MirConstant refresh_constant(struct MonoCollector *M, MirConstant k)
 
 static struct MirPlace finalize_place(struct MonoCollector *M, struct MirPlace place)
 {
-    place.type = copy_type(M, place.type);
     if (place.kind == MIR_PLACE_CONSTANT)
         place.k = refresh_constant(M, place.k);
     return place;
@@ -216,7 +215,6 @@ static struct MirPlace add_local(struct Mir *mir, char const *name, IrType *type
 {
     int const num_locals = mir->registers->count;
     MirRegisterDataList_push(mir, mir->registers, (struct MirRegisterData){
-            .is_nontrivial = PAW_TRUE,
             .is_captured = PAW_FALSE,
             .type = type,
             .name = SCAN_STR(mir->C, name),
@@ -241,7 +239,7 @@ static struct Mir *allocate_drop_template(struct MonoCollector *M, IrType *type,
 
     struct IrFnDef const *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
     struct Mir *mir = pawMir_new(M->C, 0, (struct SourceSpan){0}, def->name, IR_TYPE_DID(type),
-            IR_GENERIC_ARGS(type), params, result, Annotations_new(M->C), type, self, -1,
+            IR_GENERIC_ARGS(type), params, result, Annotations_new(M->C), type, self,
             def->parent, FUNC_METHOD, PAW_TRUE, PAW_FALSE);
     struct MirPlace const result_local = add_local(mir, "(result)", pawIr_new_unit(M->C));
     struct MirPlace const self_local = add_local(mir, "self", pawIr_new_ptr(M->C, self));
@@ -323,7 +321,6 @@ static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct Mir
     struct MirBlockData *result = pawMir_new_block(M->mir);
     MirBlockList_reserve(M->mir, result->predecessors, block->predecessors->count);
     MirBlockList_reserve(M->mir, result->successors, block->successors->count);
-    MirInstructionList_reserve(M->mir, result->joins, block->joins->count);
     MirInstructionList_reserve(M->mir, result->instructions, block->instructions->count);
     result->mid = block->mid;
 
@@ -336,10 +333,6 @@ static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct Mir
     }
 
     struct MirInstruction **pinstr;
-    K_LIST_FOREACH (block->joins, pinstr) {
-        struct MirInstruction *r = copy_instruction(M, *pinstr);
-        MirInstructionList_push(M->mir, result->joins, r);
-    }
     K_LIST_FOREACH (block->instructions, pinstr) {
         struct MirInstruction *r = copy_instruction(M, *pinstr);
         MirInstructionList_push(M->mir, result->instructions, r);
@@ -355,7 +348,7 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, IrType *ty
 
     struct IrFnPtr const *fptr = get_fn_type(M, type);
     M->mir = pawMir_new(M->C, base->modno, base->span, base->name, base->did, args,
-            fptr->params, fptr->result, base->annotations, type, self, base->child_id,
+            fptr->params, fptr->result, base->annotations, type, self,
             base->parent_id, base->fn_kind, base->is_pub, PAW_FALSE);
     return M->mir;
 }

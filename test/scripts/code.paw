@@ -946,5 +946,13 @@
 //    assert(f(x).unwrap() == 123);
 //}
 
+use array;
+
 #[test]
-pub fn test() {}
+pub fn xyz() {
+    let i = 0;
+    let x = [1, 2, 3];
+    for y in x { i += 1; assert(y == i) }
+    assert(i == 3);
+}
+
