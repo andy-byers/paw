@@ -179,7 +179,6 @@ struct IrInfer {
     int index;
 };
 
-// TODO: use this to represent only type schemes, i.e. the T in fn f<T>(). create a new type to represent instantiated generics, i.e. the T in "f::<T>()"
 struct IrGeneric {
     IR_TYPE_HEADER;
     DeclId did;
@@ -414,7 +413,6 @@ struct IrFnDef {
     struct IrGenericDefs *generics;
     struct IrParams *params;
     IrType *result;
-    IrType *context; // TODO: remove
     DeclId did;
     DeclId parent;
     paw_Bool is_pub : 1;
@@ -460,7 +458,7 @@ struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, 
 struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str const *name);
 struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str const *name, paw_Bool is_pub);
 struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str const *name, struct IrFieldDefs *fields);
-struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub);
+struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, IrType *result, struct IrParams *params, DeclId parent, paw_Bool is_pub);
 struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct);
 struct IrAssocItem *pawIr_new_assoc_item(struct Compiler *C, DeclId did, Str const *name, DeclId parent, paw_Bool is_pub);
 struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, struct IrTypeList *methods, struct IrAssocItems *items, paw_Bool is_pub);

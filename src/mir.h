@@ -553,8 +553,6 @@ static int mir_which_succ(struct Mir *mir, MirBlock x, MirBlock y)
     PAW_UNREACHABLE();
 }
 
-MirRegister pawMir_output_reg(struct MirInstruction *instr);
-
 struct MirVisitor {
     struct Compiler *C;
     struct Mir *mir;

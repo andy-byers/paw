@@ -1199,7 +1199,7 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
         }
 
         struct IrFnDef *r = pawIr_new_fn_def(T->C, e->did, SCAN_STR(T->C, "(closure)"),
-                IrGenericDefs_new(T->C), ret, ir_params, NULL, INVALID_DECL_ID, PAW_FALSE);
+                IrGenericDefs_new(T->C), ret, ir_params, INVALID_DECL_ID, PAW_FALSE);
         FnDefMap_insert(T->C, T->C->fn_defs, e->did, r);
 
         UpvalueList *const *pupvalues = UpvalueTable_get(T->C, T->C->upvtab, e->did);

@@ -495,14 +495,13 @@ struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclI
     return def;
 }
 
-struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str const *name, IrGenericDefs *generics, IrType *result, struct IrParams *params, IrType *context, DeclId parent, paw_Bool is_pub)
+struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str const *name, IrGenericDefs *generics, IrType *result, struct IrParams *params, DeclId parent, paw_Bool is_pub)
 {
     struct IrFnDef *def = (struct IrFnDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrFnDef){
         .did = did,
         .parent = parent,
         .generics = generics,
-        .context = context,
         .result = result,
         .params = params,
         .is_pub = is_pub,
@@ -1252,7 +1251,7 @@ IrType *pawIr_materialize_drop_type(struct Compiler *C, IrType *type)
             });
     struct IrFnDef *fn = pawIr_new_fn_def(C, next_did(C),
             SCAN_STR(C, "drop"), IrGenericDefs_new(C),
-            pawIr_new_unit(C), params, type, impl->did,
+            pawIr_new_unit(C), params, impl->did,
             PAW_TRUE);
     FnDefMap_insert(C, C->fn_defs, fn->did, fn);
     IrGenericArgs *args = IrGenericArgs_new(C);

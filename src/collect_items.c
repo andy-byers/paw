@@ -572,7 +572,7 @@ static void collect_fn_def(struct ItemCollector *X, struct HirFnDecl const *d)
 {
     IrGenericDefs *generics = get_generic_defs(X, d->did);
     struct IrFnDef *r = pawIr_new_fn_def(X->C, d->did, d->ident.name,
-            generics, NULL, NULL, NULL, INVALID_DECL_ID, d->is_pub);
+            generics, NULL, NULL, INVALID_DECL_ID, d->is_pub);
     FnDefMap_insert(X->C, X->C->fn_defs, d->did, r);
 }
 
@@ -1124,7 +1124,6 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
         IrParams *params = collect_parameters(X, d->params);
         fn_def->result = result;
         fn_def->params = params;
-        fn_def->context = X->ctx;
         fn_def->parent = d->parent_id;
         transfer_fn_annotations(X, d, fn_def);
         set_def_type(X, d->did, type);
