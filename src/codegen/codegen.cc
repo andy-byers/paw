@@ -715,6 +715,37 @@ public:
         state.create_return();
     }
 
+    llvm::Value *create_empty_struct() const
+    {
+        return llvm::ConstantStruct::get(
+                llvm::StructType::get(*X.get_context(), {}, false),
+                {});
+    }
+
+    llvm::Value *read_value(Type const &type, llvm::Value *pointer)
+    {
+        if (type.get_bitsize() > 0)
+            return B->CreateLoad(type.get_ty(), pointer);
+        return create_empty_struct();
+    }
+
+    void write_value(Type const &type, llvm::Value *value, llvm::Value *pointer)
+    {
+        if (type.get_bitsize() > 0)
+            B->CreateStore(value, pointer);
+    }
+
+    // fn ptr::needs_drop<T>() -> bool
+    void generate_ptr_needs_drop(Mir const *mir, Fn *fn)
+    {
+        auto *pointee_irtype = IrGenericArg_get_type(
+                    IR_FIRST_GENERIC_ARG(mir->type));
+
+        State state(X, fn);
+        auto *result = X.create_i1(pawIr_needs_drop(C, pointee_irtype));
+        state.create_return(result);
+    }
+
     // fn ptr::read<T>(p: *T) -> T
     void generate_ptr_read(Mir const *mir, Fn *fn)
     {
@@ -723,7 +754,7 @@ public:
 
         State state(X, fn);
         auto *pointer = READ_ARG(state, X.get_ptr_ty(), 0);
-        auto *result = B->CreateLoad(*pointee_type, pointer);
+        auto *result = read_value(*pointee_type, pointer);
         state.create_return(result);
     }
 
@@ -736,7 +767,7 @@ public:
         State state(X, fn);
         auto *pointer = READ_ARG(state, X.get_ptr_ty(), 0);
         auto *value = READ_ARG(state, *pointee_type, 1);
-        B->CreateStore(value, pointer);
+        write_value(*pointee_type, value, pointer);
         state.create_return();
     }
 
@@ -762,6 +793,37 @@ public:
         State state(X, fn);
         state.create_return();
     }
+
+    void generate_ptr_memcpy(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *dest = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *src = READ_ARG(state, X.get_ptr_ty(), 1);
+        auto *size = READ_ARG(state, X.get_isize_ty(), 2);
+        X.create_memcpy(dest, src, size, false);
+        state.create_return(dest);
+    }
+
+    void generate_ptr_memmove(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *dest = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *src = READ_ARG(state, X.get_ptr_ty(), 1);
+        auto *size = READ_ARG(state, X.get_isize_ty(), 2);
+        X.create_memmove(dest, src, size, false);
+        state.create_return(dest);
+    }
+
+    void generate_ptr_memset(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *ptr = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *value = READ_ARG(state, X.get_i8_ty(), 1);
+        auto *size = READ_ARG(state, X.get_isize_ty(), 2);
+        X.create_memset(ptr, value, size);
+        state.create_return(ptr);
+    }
+
 
     void generate_ptr_strlen(Mir const *mir, Fn *fn)
     {
@@ -912,6 +974,18 @@ public:
 
         if (is_core_op(mir, "array", "zeros"))
             return generate_array_zeros(mir, fn);
+
+        if (is_core_op(mir, "ptr", "needs_drop"))
+            return generate_ptr_needs_drop(mir, fn);
+
+        if (is_core_op(mir, "ptr", "memcpy"))
+            return generate_ptr_memcpy(mir, fn);
+
+        if (is_core_op(mir, "ptr", "memmove"))
+            return generate_ptr_memmove(mir, fn);
+
+        if (is_core_op(mir, "ptr", "memset"))
+            return generate_ptr_memset(mir, fn);
 
         if (is_core_op(mir, "ptr", "read"))
             return generate_ptr_read(mir, fn);

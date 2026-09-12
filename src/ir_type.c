@@ -786,6 +786,20 @@ IrType *pawIr_get_context(struct Compiler *C, IrType *fn)
 // TODO: wrong, only works in some situations...
 IrTrait *pawIr_get_trait_context(struct Compiler *C, IrType *fn)
 {
+    if (IrIsProjection(fn)) {
+        struct IrProjection const *t = IrGetProjection(fn);
+        struct IrAssocItem const *item = pawIr_get_assoc_item(C, t->did);
+        enum IrDefKind const parent_kind = pawIr_get_kind(C, item->parent);
+        IrGenericArgs *args = t->args;
+        if (parent_kind == IR_IMPL_DEF) {
+            args = IrGenericArgs_new(C);
+            IrGenericArgs_reserve(C, args, t->args->count);
+            struct IrImpl const *def = pawIr_get_impl_def(C, item->parent);
+            for (int i = 0; i < def->generics->count; ++i)
+                IrGenericArgs_push(C, args, IrGenericArgs_get(t->args, i));
+        }
+        return pawIr_new_trait(C, item->parent, args);
+    }
     struct IrFnDef const *fn_def = pawIr_get_fn_def(C, IR_TYPE_DID(fn));
     if (!DECL_ID_EXISTS(fn_def->parent)) return NULL;
     enum IrDefKind const kind = pawIr_get_kind(C, fn_def->parent);

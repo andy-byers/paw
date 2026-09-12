@@ -2481,11 +2481,10 @@ static void contains_const_param_callback(struct HirVisitor *V, struct HirPathEx
     }
 }
 
-static paw_Bool is_const_generic(struct TypeChecker *T, struct HirExpr *expr, DeclId *param_did)
+static paw_Bool is_const_generic(struct TypeChecker *T, struct HirExpr *expr, DeclId *param_out)
 {
     switch (HIR_KINDOF(expr)) {
         case kHirPathExpr: {
-            paw_assert(!DECL_ID_EXISTS(*param_did));
             struct HirPathExpr const *e = HirGetPathExpr(expr);
             if (e->path.kind == HIR_PATH_ITEM) {
                 struct HirSegment const segment = HirSegments_last(e->path.segments);
@@ -2493,7 +2492,7 @@ static paw_Bool is_const_generic(struct TypeChecker *T, struct HirExpr *expr, De
                 if (HirIsGenericDecl(item)) {
                     struct HirGenericDecl const *d = HirGetGenericDecl(item);
                     paw_assert(!d->is_type);
-                    *param_did = d->did;
+                    *param_out = d->did;
                     return PAW_TRUE;
                 }
             }
@@ -2502,7 +2501,7 @@ static paw_Bool is_const_generic(struct TypeChecker *T, struct HirExpr *expr, De
         case kHirBlock: {
             struct HirBlock const *e = HirGetBlock(expr);
             if (e->stmts->count == 0)
-                return is_const_generic(T, e->result, param_did);
+                return is_const_generic(T, e->result, param_out);
             break;
         }
         default:
@@ -2552,8 +2551,6 @@ static void check_constant_types(struct TypeChecker *T)
 
 static void check_types(struct TypeChecker *T)
 {
-    check_constant_types(T);
-
     struct HirModule const *pm;
     K_LIST_FOREACH (T->hir->modules, pm) {
         use_module(T, pm);
@@ -2561,6 +2558,8 @@ static void check_types(struct TypeChecker *T)
         check_module_types(T, *pm);
         leave_inference_ctx(T);
     }
+
+    check_constant_types(T);
 }
 
 void pawP_check_types(struct Compiler *C)

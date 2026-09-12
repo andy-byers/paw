@@ -5,6 +5,7 @@
 use io;
 use iter;
 use list::List;
+use ptr;
 use string::String;
 use string_builder;
 
@@ -231,4 +232,18 @@ pub fn temporaries_are_dropped() {
         test.create_droppable();
     }
     test.assert_order([1]);
+}
+
+struct NoDrop;
+
+struct Container<T> {
+    inner: T,
+}
+
+#[test]
+pub fn test_needs_drop() {
+    assert(ptr::needs_drop::<Droppable>());
+    assert(ptr::needs_drop::<Struct>());
+    assert(ptr::needs_drop::<Container<Container<Struct>>>());
+    assert(!ptr::needs_drop::<Container<NoDrop>>());
 }

@@ -18,7 +18,8 @@ pub fn test_io() {
     let n = file.write(test.to_slice()).unwrap();
     assert(n == test.len());
 
-    let data = List::<char>::with_length(test.len()).unwrap();
+    let data = List::new();
+    data.resize(test.len(), '\0').unwrap();
     file.seek(0, io::Seek::Begin);
     assert(file.read(data.to_slice()).unwrap() == test.len());
     assert(file.tell().unwrap() as usize == n);

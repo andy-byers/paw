@@ -1,3 +1,4 @@
+use io;
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
@@ -14,9 +15,12 @@
 // key hash for that entry. Each item entry consists of an instance of 
 // the `Item<K, V>` structure.
 
-
 use ptr;
 use slice;
+
+fn is_zst<T>() -> bool {
+    mem::sizeof::<T>() == 0
+}
 
 const GROWTH_EXPONENT: usize = 1;
 const LOAD_LENGTH: usize = 7;
@@ -148,14 +152,17 @@ impl<K, V> Cursor<K, V> {
     }
 
     pub fn prefix(*self) -> Fingerprint {
+        assert(self.is_occupied());
         self.metadata().fingerprint()
     }
 
     pub fn key(*self) -> *K {
+        assert(self.is_occupied());
         &self.items[self.index].key
     }
 
     pub fn value(*self) -> *V {
+        assert(self.is_occupied());
         &self.items[self.index].value
     }
 
@@ -322,14 +329,15 @@ impl<K: Hash + Eq<K>, V> HashMap<K, V> {
         align_up(capacity, mem::alignof::<Item<K, V>>())
     }
 
-    fn item_at_index(items: *Item<K, V>, index: usize) -> *Item<K, V> {
-        ptr::add(items, index as isize) 
-    }
-
     fn compute_buffer_size(capacity: usize) -> mem::Result<usize> {
         let ITEM_ALIGNMENT: usize = mem::alignof::<Item<K, V>>();
         let ITEM_STRIDE: usize = mem::strideof::<Item<K, V>>();
 
+        if is_zst::<Item<K, V>>() {
+            // Payload is 0 bytes so we only need space for metadata. Return early
+            // to avoid division by 0 below.
+            return Ok(capacity);
+        } 
         if capacity > USIZE_MAX - ITEM_ALIGNMENT {
             return Err(mem::OutOfMemory);
         }

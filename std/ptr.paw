@@ -2,6 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+use mem::sizeof;
+
 #[extern]
 pub fn read<T>(ptr: *T) -> T;
 
@@ -15,9 +17,18 @@ pub fn null<T>() -> *T {
     0 as *T
 }
 
+// Return an address that is both nonnull and suitably aligned for the given type T
+pub fn dangling<T>() -> *T {
+    16 as *T    
+}
+
 
 pub fn difference<T>(lhs: *T, rhs: *T) -> isize {
     rhs as isize - lhs as isize
+}
+
+pub fn equals<T>(lhs: *T, rhs: *T) -> bool {
+    lhs as usize == rhs as usize
 }
 
 pub fn replace<T>(pointer: *T, value: T) -> T {
@@ -30,25 +41,32 @@ pub fn swap<T>(first: *T, second: *T) {
     write(second, replace(first, read(second)));
 }
 
-use mem::sizeof;
+fn api_check_extents(count: usize, element_size: usize) {
+    if element_size != 0 && count > USIZE_MAX / element_size {
+        panic("count is too large");
+    }
+}
 
 pub fn copy<T>(src: *T, dest: *T, count: usize) -> *T {
-    assert(count <= USIZE_MAX / sizeof::<T>());
+    api_check_extents(count, sizeof::<T>());
     memmove(dest as *char, src as *char, 
         count * sizeof::<T>()) as *T
 }
 
 pub fn copy_nonoverlapping<T>(src: *T, dest: *T, count: usize) -> *T {
-    assert(count <= USIZE_MAX / sizeof::<T>());
+    api_check_extents(count, sizeof::<T>());
     memcpy(dest as *char, src as *char, 
         count * sizeof::<T>()) as *T
 }
 
 pub fn write_bytes<T>(ptr: *T, value: char, count: usize) -> *T {
-    assert(count <= USIZE_MAX / sizeof::<T>());
+   api_check_extents(count, sizeof::<T>());
     memset(ptr as *char, value, 
         count * sizeof::<T>()) as *T
 }
+
+#[extern]
+pub fn needs_drop<T>() -> bool;
 
 
 #[extern = "paw_ptr_memcpy"] 

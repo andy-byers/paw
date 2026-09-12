@@ -10,6 +10,7 @@ echo "OUTPUT_DIR: $OUTPUT_DIR"
 echo "TEST_DIR: $TEST_DIR"
 
 TESTS=(
+    "test_string_builder"
     "basic"
     "cfg"
     "kprop"

@@ -10,6 +10,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define API_CHECK(Expr_, Message_) \
+    do { if (!(Expr_)) { \
+        paw_panic_((paw_Slice){ \
+                .start = Message_, \
+                .length = PAW_LENGTHOF(Message_), \
+            }); \
+    } } while (0)
+#define DANGLING ((void *)16)
+
 void paw_assert(paw_Bool cond)
 {
     if (!cond) {
@@ -136,6 +145,8 @@ paw_Usize paw_slice_Slice_len(paw_Slice self)
 
 paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size)
 {
+    API_CHECK(size != 0, "alloc: expected nonzero size");
+
     void *ptr = malloc(size);
     return ptr != NULL
         ? paw_mem_Result_Ptr_ok(ptr)
@@ -144,6 +155,9 @@ paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size)
 
 paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size)
 {
+    API_CHECK(ptr != NULL, "realloc: expected nonnull pointer");
+    API_CHECK(size != 0, "realloc: expected nonzero size");
+
     ptr = realloc(ptr, size);
     return ptr != NULL
         ? paw_mem_Result_Ptr_ok(ptr)
@@ -152,6 +166,9 @@ paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size)
 
 paw_mem_Result_Ptr paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size)
 {
+    API_CHECK(alignment != 0 && ((alignment & (alignment - 1)) == 0), "aligned_alloc: expected nonzero power-of-two alignment");
+    API_CHECK(size != 0, "aligned_alloc: expected nonzero size");
+
     void *ptr = aligned_alloc(alignment, size);
     return ptr != NULL
         ? paw_mem_Result_Ptr_ok(ptr)
@@ -160,30 +177,15 @@ paw_mem_Result_Ptr paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size
 
 void paw_mem_raw_dealloc(void *ptr)
 {
+    // `ptr` might be null
     free(ptr);
-}
-
-// fn memcpy(dest: *char, src: *char, size: int) -> *char
-void *paw_ptr_memcpy(void *dest, void *src, paw_Usize size)
-{
-    return memcpy(dest, src, size);
-}
-
-// fn memmove(dest: *char, src: *char, size: int) -> *char
-void *paw_ptr_memmove(void *dest, void *src, paw_Usize size)
-{
-    return memmove(dest, src, size);
-}
-
-// fn memset(ptr: *char, value: char, size: int) -> *char
-void *paw_ptr_memset(void *ptr, char value, paw_Usize size)
-{
-    return memset(ptr, value, size);
 }
 
 // fn memcmp(lhs: *char, rhs: *char, size: int) -> int
 paw_Int64 paw_ptr_memcmp(void *lhs, void *rhs, paw_Usize size)
 {
+    if (size == 0) return 0;
+    paw_assert(lhs != NULL && rhs != NULL);
     return memcmp(lhs, rhs, size);
 }
 

@@ -330,8 +330,15 @@ std::string PtrType::to_string() const
 }
 
 
+static llvm::Type *create_array_ty(Context &X, Type *element_type, uint64_t length)
+{
+    if (element_type->get_bitsize() == 0)
+        return X.get_array_ty(X.get_i8_ty(), 0);
+    return X.get_array_ty(element_type->get_ty(), length);
+}
+
 ArrayType::ArrayType(Context &X, Type *element_type, uint64_t length)
-    : Type(X, X.get_array_ty(element_type->get_ty(), length), Kind::ARRAY)
+    : Type(X, create_array_ty(X, element_type, length), Kind::ARRAY)
     , element_type_(element_type)
     , length_(length)
 {

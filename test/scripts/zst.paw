@@ -1,0 +1,111 @@
+// zst.paw
+
+use array;
+use hashmap;
+use list;
+use ptr;
+use slice;
+
+struct Empty;
+
+impl Copy for Empty {}
+
+impl Eq<Empty> for Empty {
+    fn eq(*self, rhs: *Self) -> bool {
+        true
+    }
+}
+
+impl Hash for Empty {
+    fn hash(*self) -> uint64 {
+        42
+    }
+}
+
+const LARGE_LENGTH: usize = USIZE_MAX;
+
+#[test]
+pub fn array_of_zst() {
+    let a: [LARGE_LENGTH]Empty = array::uninit();
+    let a: [LARGE_LENGTH](Empty, Empty) = array::uninit();
+}
+
+#[test]
+pub fn list_of_zst() {
+    // List<Empty> keeps track of length
+    let v = list::List::new();
+    for _ in 0..1_000usize {
+        v.push(Empty).unwrap();
+    }
+    assert(v.len() == 1_000);
+    v.pop();
+    v.remove(0);
+    assert(v.len() == 998);
+
+    let v = list::List::<Empty>::with_capacity(LARGE_LENGTH).unwrap();
+    assert(v.capacity() >= LARGE_LENGTH);
+
+    let s = slice::from_raw_parts(
+        ptr::dangling::<Empty>(),
+        USIZE_MAX);
+
+    // usize overflow
+    let v = list::List::new();
+    v.extend_from_slice(s).unwrap();
+    v.push(Empty).unwrap_err();
+}
+
+#[test]
+pub fn hashmap_with_zst_key() {
+    let map = hashmap::HashMap::new();
+    assert(map.len() == 0);
+    assert(!map.contains(&Empty));
+
+    map.insert(Empty, 10).unwrap();
+    assert(map.len() == 1);
+    assert(map[&Empty] == 10);
+
+    map.remove(&Empty).unwrap();
+    assert(map.len() == 0);
+    assert(!map.contains(&Empty));
+}
+
+#[test]
+pub fn hashmap_with_zst_value() {
+    let map = hashmap::HashMap::new();
+    assert(map.len() == 0);
+    assert(!map.contains(&10));
+    assert(!map.contains(&20));
+    assert(!map.contains(&30));
+
+    map.insert(10, Empty).unwrap();
+    map.insert(20, Empty).unwrap();
+    map.insert(30, Empty).unwrap();
+    assert(map.len() == 3);
+    assert(map.contains(&10));
+    assert(map.contains(&20));
+    assert(map.contains(&30));
+
+    map.remove(&10).unwrap();
+    map.remove(&20).unwrap();
+    map.remove(&30).unwrap();
+    assert(map.len() == 0);
+    assert(!map.contains(&10));
+    assert(!map.contains(&20));
+    assert(!map.contains(&30));
+}
+
+#[test]
+pub fn hashmap_with_zst_key_and_value() {
+    let map = hashmap::HashMap::new();
+    assert(map.len() == 0);
+    assert(!map.contains(&Empty));
+
+    map.insert(Empty, Empty).unwrap();
+    assert(map.len() == 1);
+    assert(map.contains(&Empty));
+    
+    map.remove(&Empty).unwrap();
+    assert(map.len() == 0);
+    assert(!map.contains(&Empty));
+}

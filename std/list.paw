@@ -4,8 +4,9 @@
 
 const DEFAULT_CAPACITY: usize = 4;
 
+
 pub struct List<T> {
-    start: *T,
+    pointer: *T,
     length: usize,
     capacity: usize,
 }
@@ -15,11 +16,13 @@ use mem;
 use ptr;
 use slice;
 
-const MAX_ELEMENTS: usize = ISIZE_MAX as usize;
+fn is_zst<T>() -> bool {
+    mem::sizeof::<T>() == 0
+}
 
 impl<T> List<T> {
     pub fn new() -> Self {
-        Self::from_raw_parts(ptr::null(), 0, 0)
+        Self::from_raw_parts(ptr::dangling(), 0, 0)
     }
 
     pub fn len(*self) -> usize {
@@ -32,12 +35,12 @@ impl<T> List<T> {
 
     pub fn get(*self, index: usize) -> Option<*T> {
         self.check_bounds(index)?;
-        Some(self.unchecked_gep(index))
+        Some(self.gep(index))
     }
 
     pub fn set(*self, index: usize, value: T) -> Option<T> {
         self.check_bounds(index)?;
-        Some(ptr::replace(self.unchecked_gep(index), value))
+        Some(ptr::replace(self.gep(index), value))
     }
 
     pub fn push(*self, value: T) -> mem::Result<()> {
@@ -59,8 +62,8 @@ impl<T> List<T> {
             return Err(value);
         }
 
-        let element_ptr = ptr::add(self.start, self.length as isize);
-        ptr::write(element_ptr, value);
+        let p = self.gep(self.length);
+        ptr::write(p, value);
         self.length += 1;
         Ok(())
     }
@@ -74,7 +77,7 @@ impl<T> List<T> {
             return Err((value, InsertError::OutOfBounds));
         }
 
-        let p = self.unchecked_gep(index);
+        let p = self.gep(index);
         ptr::copy(p, ptr::add(p, 1), 
             self.length - index);
         ptr::write(p, value);
@@ -84,7 +87,7 @@ impl<T> List<T> {
 
     pub fn remove(*self, index: usize) -> T {
         self.ensure_bounds(index);
-        let p = self.unchecked_gep(index);
+        let p = self.gep(index);
         let value = ptr::read(p);
         ptr::copy(ptr::add(p, 1), p, 
             self.length - index - 1);
@@ -97,31 +100,29 @@ impl<T> List<T> {
             panic("pop from empty list\n");
         }
         self.length -= 1;
-        ptr::read(self.unchecked_gep(self.length))
+        ptr::read(self.gep(self.length))
     }
 
-    pub fn reserve(*self, length: usize) -> mem::Result<()> {
-        if length > self.capacity {
-            self.grow_copy(length)?;
+    pub fn reserve(*self, capacity: usize) -> mem::Result<()> {
+        if capacity > self.capacity {
+            self.grow_copy(capacity)?;
         }
         Ok(())
     }
 
-    pub fn from_raw_parts(start: *T, length: usize, capacity: usize) -> Self {
-        Self{start, length, capacity: if mem::sizeof::<T>() == 0 {
-            USIZE_MAX
-        } else {
-            capacity
-        }}
+    pub fn from_raw_parts(pointer: *T, length: usize, capacity: usize) -> Self {
+        // use the maximum capacity for ZSTs to avoid the need for reallocation
+        if is_zst::<T>() { capacity = USIZE_MAX; }
+        Self{pointer, length, capacity}
     }
 
     pub fn into_raw_parts(self) -> (*T, usize, usize) {
-        let Self{start, length, capacity} = self;
-        (start, length, capacity)
+        let Self{pointer, length, capacity} = self;
+        (pointer, length, capacity)
     }
 
     fn check_bounds(*self, index: usize) -> Option<()> {
-        if 0 <= index && index < self.length {
+        if index < self.length {
             Some(())
         } else {
             None
@@ -137,40 +138,45 @@ impl<T> List<T> {
 
     fn next_capacity(minimum: usize) -> usize {
         let grow = minimum / 2 + 1;
-        if minimum <= MAX_ELEMENTS - grow {
+        if minimum <= USIZE_MAX - grow {
             minimum + grow
         } else {
-            MAX_ELEMENTS
+            USIZE_MAX
         }
     }
 
     fn grow_copy(*self, capacity: usize) -> mem::Result<()> {
         let n = Self::next_capacity(capacity);
         let p = mem::alloc::<T>(n)?;
-        ptr::copy(self.start, p, self.length);
+        ptr::copy_nonoverlapping(self.pointer, p, self.length);
         self.capacity = n;
-        self.start = p;
+        self.pointer = p;
         Ok(())
     }
 
     fn grow_resize(*self, capacity: usize) -> mem::Result<()> {
         let n = Self::next_capacity(capacity);
-        self.start = mem::realloc::<T>(self.start, n)?;
+        self.pointer = mem::realloc::<T>(self.pointer, n)?;
         self.capacity = n;
         Ok(())
     }
 
     fn ensure_one(*self) -> mem::Result<()> {
-        if self.length >= self.capacity {
-            // "self.length + 1" cannot overflow if this list is well-formed
+        assert(self.length <= self.capacity);
+        if self.length == self.capacity {
+            if self.length == USIZE_MAX {
+                return Err(mem::OutOfMemory);
+            }
             self.grow_resize(self.length + 1)?;
         }
         Ok(())
     }
 
     fn ensure_many(*self, count: usize) -> mem::Result<()> {
-        if self.capacity < count || self.length > self.capacity - count {
-            if self.length > MAX_ELEMENTS - count {
+        assert(self.length <= self.capacity);
+        if self.capacity < count 
+                || self.length > self.capacity - count {
+            if self.length > USIZE_MAX - count {
                 return Err(mem::OutOfMemory);
             }
             self.grow_copy(self.length + count)?;
@@ -178,15 +184,18 @@ impl<T> List<T> {
         Ok(())
     }
 
-    fn unchecked_gep(*self, index: usize) -> *T {
+    fn gep(*self, index: usize) -> *T {
         ptr::add(self.as_ptr(), index as isize)
     }
-}
 
-impl<T> List<T> {
-    pub fn from_array<const LENGTH: usize>(arr: [LENGTH]T) -> mem::Result<Self> {
+    pub fn with_capacity(capacity: usize) -> mem::Result<Self> {
         let result = Self::new();
-        result.reserve(LENGTH)?;
+        result.reserve(capacity)?;
+        Ok(result)
+    }
+
+    pub fn from_array<const LENGTH: usize>(arr: [LENGTH]T) -> mem::Result<Self> {
+        let result = Self::with_capacity(LENGTH)?;
         for value in arr {
             result.push(value).unwrap();
         }
@@ -203,13 +212,18 @@ pub enum InsertError {
 
 impl<T> Drop for List<T> {
     fn drop(*self) {
-        // drop each element in-place, in reverse order
-        for r in 0..self.length {
-            let index = self.length - r - 1;
-            mem::drop_in_place(self.unchecked_gep(index));
+        if ptr::needs_drop::<T>() {
+            for r in 0..self.length {
+                let index = self.length - r - 1;
+                mem::drop_in_place(self.gep(index));
+            }
         }
 
-        mem::dealloc(self.start);
+        if !is_zst::<T>() {
+            if self.capacity != 0 {
+                mem::dealloc(self.pointer);
+            }
+        }
     }
 }
 
@@ -231,35 +245,7 @@ impl<T> ToSlice<T> for List<T> {
 
 impl<T> AsPtr<T> for List<T> {
     fn as_ptr(*self) -> *T {
-        self.start
-    }
-}
-
-impl<T: Default> List<T> {
-    pub fn with_length(length: usize) -> mem::Result<Self> {
-        let result = List::new();
-        result.reserve(length)?;
-        for i in 0..length {
-            result.push(T::default())?;
-        }
-        Ok(result)
-    }
-
-    pub fn set_length(*self, length: usize) -> mem::Result<()> {
-        if length < self.len() {
-            for ri in length..self.len() {
-                let index = self.len() - ri - 1;
-                mem::drop_in_place(self.unchecked_gep(index));
-            }
-        } else {
-            self.reserve(length)?;
-            for i in self.len()..length {
-                let elem = ptr::add(self.as_ptr(), i as isize);
-                ptr::write(elem, T::default());
-            }
-        }
-        self.length = length;
-        Ok(())
+        self.pointer
     }
 }
 
@@ -287,7 +273,7 @@ impl<T> IntoIter<T> {
 impl<T> Drop for IntoIter<T> {
     fn drop(*self) {
         for i in self.index..self.inner.len() {
-            mem::drop_in_place(self.inner.unchecked_gep(i));
+            mem::drop_in_place(self.inner.gep(i));
         }
 
         // prevent elements from being dropped again
@@ -353,7 +339,7 @@ impl<T: Eq<T>> Eq<Self> for List<T> {
 //impl ToString for List<char> {
 //    fn to_string(*self) -> mem::Result<String> {
 //        Ok(String::from_raw_parts(
-//            self.start, 
+//            self.pointer, 
 //            self.length, 
 //            self.capacity))
 //    }
@@ -366,6 +352,22 @@ impl<T: Clone> List<T> {
         }
         Ok(())
     }
+
+    pub fn resize(*self, len: usize, value: T) -> mem::Result<()> {
+        if len > self.len() {
+            self.reserve(len)?;
+            for i in self.len()..len {
+                let elem = self.gep(i);
+                ptr::write(elem, value.clone());
+            }
+        } else if ptr::needs_drop::<T>() {
+            for i in len..self.len() {
+                mem::drop_in_place(self.gep(i));
+            }
+        }
+        self.length = len;
+        Ok(())
+    }
 }
 
 impl<T: Copy> List<T> {
@@ -373,7 +375,7 @@ impl<T: Copy> List<T> {
         self.ensure_many(slice.len())?;
 
         ptr::copy(slice.as_ptr(), 
-            ptr::add(self.start, self.length as isize),
+            ptr::add(self.pointer, self.length as isize),
             slice.len());
         self.length += slice.len();
         Ok(())

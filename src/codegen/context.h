@@ -324,6 +324,13 @@ public:
         return alloca;
     }
 
+    llvm::Value *create_dangling_ptr() const
+    {
+        return llvm::ConstantExpr::getIntToPtr(
+                llvm::ConstantInt::get(get_iptr_ty(), 16),
+                get_ptr_ty());
+    }
+
     llvm::ConstantPointerNull *create_null_ptr() const
     {
         return llvm::ConstantPointerNull::get(get_ptr_ty());
@@ -429,6 +436,11 @@ public:
     }
 
     llvm::Type *get_isize_ty() const
+    {
+        return M->get_data_layout().getIntPtrType(get_ptr_ty());
+    }
+
+    llvm::Type *get_iptr_ty() const
     {
         return M->get_data_layout().getIntPtrType(get_ptr_ty());
     }
