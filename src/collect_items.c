@@ -782,11 +782,15 @@ static void ensure_not_recursive(struct ItemCollector *X, IrType *type)
 
 static void ensure_type_is_well_formed(struct ItemCollector *X, struct SourceSpan span, IrType *type)
 {
-    if (IrIsAdt(type))
-        pawIr_solver_add_well_formed_obligation(X->C->S, IR_TYPE_DID(type),
-                IR_GENERIC_ARGS(type), (struct IrObligationCause){
+    if (IrIsAdt(type)) {
+        IrGenericArgs *args = IR_GENERIC_ARGS(type);
+        DeclId const did = IR_TYPE_DID(type);
+
+        pawIr_solver_add_well_formed_obligation(X->C->S, did,
+                args, (struct IrObligationCause){
                     .kind = IR_OBLIGATION_CAUSE_WF_CHECKING,
                     .span = span});
+    }
 }
 
 static void ensure_trait_is_well_formed(struct ItemCollector *X, struct SourceSpan span, IrTrait *trait)

@@ -180,6 +180,12 @@ static IrType *instantiate_segment(struct LowerType *L, struct HirSegment segmen
     if (segment.args != NULL) {
         IrGenericArgs *params = pawIr_get_generic_args(L->C, IR_TYPE_DID(type));
         IrGenericArgs *args = lower_generic_args(L, segment.args);
+        if (params->count != args->count)
+            LOWERING_ERROR(L, IncorrectTypeArity,
+                    .want = params->count,
+                    .have = args->count,
+                    .span = segment.span);
+
         struct Substitution const subst = {params, args};
         type = pawP_substitute(L->C, type, subst);
     } else if (!pawS_eq(segment.ident.name, SCAN_STR(L->C, "Self"))

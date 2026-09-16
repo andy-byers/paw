@@ -197,6 +197,19 @@ static void test_type_error(void)
     test_compiler_status(kErrFalseObligation, "invalid_map_key", "use hashmap::HashMap; struct S;", "let x: HashMap<S, int64> = HashMap::new();");
 }
 
+static void test_arity_error(void)
+{
+    test_compiler_status(kErrIncorrectTypeArity, "adt_arity",
+            "struct Struct;"
+            "impl<T> Struct<T> {}",
+            "");
+    test_compiler_status(kErrUnexpectedTypeArguments, "trait_arity",
+            "trait Trait {}"
+            "struct Struct;"
+            "impl<T> Trait<T> for Struct {}",
+            "");
+}
+
 static void test_name_too_long(void)
 {
     char long_name[1000] = "let ";
@@ -961,6 +974,7 @@ int main(void)
     test_enum_error();
     test_name_error();
     test_type_error();
+    test_arity_error();
     test_definite_assignment();
     test_closure_error();
     test_arithmetic_error();
