@@ -2,5 +2,57 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+// TODO: Duration should go in time module (not yet implemented)
+// TODO: sleep should go in thread module (not yet implemented)
+
 #[extern]
 pub fn args() -> []*char;
+
+
+// Represents an interval of time
+pub struct Duration {
+    nanos: uint64,
+}
+
+const MILLI: uint64 = 1_000;
+const MICRO: uint64 = MILLI * 1_000;
+const NANO: uint64 = MICRO * 1_000;
+
+impl Duration {
+    pub fn from_nanos(nanos: uint64) -> Self {
+        Self{nanos}
+    }
+
+    pub fn as_secs(*self) -> uint64 {
+        self.nanos / NANO
+    }
+
+    pub fn as_micros(*self) -> uint64 {
+        self.nanos / (NANO / MICRO)
+    }
+
+    pub fn as_nanos(*self) -> uint64 {
+        self.nanos
+    }
+}
+
+impl Default for Duration {
+    fn default() -> Self {
+        Self::from_nanos(0)
+    }
+}
+
+impl Copy for Duration {}
+
+impl Clone for Duration {
+    fn clone(*self) -> Self {
+        Self{nanos: self.nanos}
+    }
+}
+
+// Put the current thread to sleep for the given duration of time 
+// Note that if the target platform does not support nanosecond-resolution
+// time clocks, then the duration is rounded up to the nearest supported
+// unit (usually microseconds).
+#[extern = "paw_os_sleep"] pub fn sleep(d: Duration);
+

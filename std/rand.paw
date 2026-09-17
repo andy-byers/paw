@@ -4,10 +4,12 @@
 
 use ptr;
 
+// Allows a type to act as a random number generator
 pub trait Rng {
     fn fill_bytes(*self, bytes: []uint8);
 }
 
+// Allows creation of a random number generator with an explicit seed
 pub trait SeedableRng {
     type Seed;
 

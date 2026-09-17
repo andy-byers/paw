@@ -84,6 +84,7 @@ target_sources(paw_stdc
             ${STD_SRC}/pmath.h
     PRIVATE ${STD_SRC}/paw.c
             ${STD_SRC}/io.c
+            ${STD_SRC}/os.c
             ${STD_SRC}/pmath.c)
 target_include_directories(paw_stdc
     PUBLIC ${STD_SRC})

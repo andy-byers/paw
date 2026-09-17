@@ -10,13 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define API_CHECK(Expr_, Message_) \
-    do { if (!(Expr_)) { \
-        paw_panic_((paw_Slice){ \
-                .start = Message_, \
-                .length = PAW_LENGTHOF(Message_), \
-            }); \
-    } } while (0)
 #define DANGLING ((void *)16)
 
 void paw_assert(paw_Bool cond)
@@ -145,7 +138,7 @@ paw_Usize paw_slice_Slice_len(paw_Slice self)
 
 paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size)
 {
-    API_CHECK(size != 0, "alloc: expected nonzero size");
+    PAW_API_CHECK(size != 0, "alloc: expected nonzero size");
 
     void *ptr = malloc(size);
     return ptr != NULL
@@ -155,8 +148,8 @@ paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size)
 
 paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size)
 {
-    API_CHECK(ptr != NULL, "realloc: expected nonnull pointer");
-    API_CHECK(size != 0, "realloc: expected nonzero size");
+    PAW_API_CHECK(ptr != NULL, "realloc: expected nonnull pointer");
+    PAW_API_CHECK(size != 0, "realloc: expected nonzero size");
 
     ptr = realloc(ptr, size);
     return ptr != NULL
@@ -166,8 +159,8 @@ paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size)
 
 paw_mem_Result_Ptr paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size)
 {
-    API_CHECK(alignment != 0 && ((alignment & (alignment - 1)) == 0), "aligned_alloc: expected nonzero power-of-two alignment");
-    API_CHECK(size != 0, "aligned_alloc: expected nonzero size");
+    PAW_API_CHECK(alignment != 0 && ((alignment & (alignment - 1)) == 0), "aligned_alloc: expected nonzero power-of-two alignment");
+    PAW_API_CHECK(size != 0, "aligned_alloc: expected nonzero size");
 
     void *ptr = aligned_alloc(alignment, size);
     return ptr != NULL

@@ -30,6 +30,14 @@
 #define PAW_SIZE_MAX (sizeof(paw_Usize) < sizeof(paw_Int64) \
         ? SIZE_MAX : (paw_Usize)PAW_INT64_MAX)
 
+#define PAW_API_CHECK(Expr_, Message_) \
+    do { if (!(Expr_)) { \
+        paw_panic_((paw_Slice){ \
+                .start = Message_, \
+                .length = PAW_LENGTHOF(Message_), \
+            }); \
+    } } while (0)
+
 typedef struct {
     char _;
 } paw_Unit;
@@ -37,10 +45,21 @@ typedef struct {
 #define PAW_UNIT() ((paw_Unit){0})
 
 typedef uint8_t paw_Bool;
+
 typedef char paw_Char;
+
+typedef int8_t paw_Int8;
+typedef int16_t paw_Int16;
 typedef int32_t paw_Int32;
 typedef int64_t paw_Int64;
+
+typedef int8_t paw_Uint8;
+typedef int16_t paw_Uint16;
+typedef int32_t paw_Uint32;
+typedef uint64_t paw_Uint64;
 typedef size_t paw_Usize;
+
+typedef double paw_Float32;
 typedef double paw_Float64;
 
 #define PAW_FALSE ((paw_Bool)0)
@@ -194,5 +213,7 @@ void *paw_ptr_memset(void *ptr, char value, paw_Usize size);
 paw_Int64 paw_ptr_memcmp(void *lhs, void *rhs, paw_Usize size);
 
 paw_Int64 paw_fmt_write_float(double value, paw_Int64 precision, char *output, paw_Usize output_len);
+
+void paw_os_sleep(paw_Uint64 nanos);
 
 #endif // PAW_STD_PAW_H
