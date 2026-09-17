@@ -1,0 +1,59 @@
+// unify_projection.paw
+
+pub trait Create {
+    type Arg;
+    fn create(arg: Self::Arg) -> Self;
+}
+
+pub trait Report {
+    fn report(*self) -> uint64;
+}
+
+struct Struct {
+    state: uint64,
+}
+
+impl Create for Struct {
+    type Arg = bool;
+    fn create(arg: bool) -> Self {
+        Self{state: if arg {1_000} else {0}}
+    }
+}
+
+impl Report for Struct {
+    fn report(*self) -> uint64 {
+        self.state
+    }
+}
+
+fn create<T: Create>(arg: T::Arg) -> T {
+    T::create(arg)
+}
+
+fn report<T: Report>(t: *T) -> uint64 {
+    t.report()
+}
+
+fn create_and_report<T: Create + Report>(arg: T::Arg) -> uint64 {
+    let t = create::<T>(arg);
+    report(&t)
+}
+
+#[test]
+pub fn test() {
+    // Immediately after the target of the call expression is type checked, the parameter `arg` is given 
+    // the projection type `<?T as Create>::Arg`. When the argument is checked, we have to unify `bool`
+    // with `<?T as Create>::Arg`, which will fail spuriously.
+    // To make this work, the compiler adds an obligation `TypeEquals(<?T as Create>::Arg, ?X)` where `?X` 
+    // is a fresh type variable. Once the type of `?T` has been resolved to `Struct` by looking at the type 
+    // annotation, the compiler will find the associated type `Arg` on the trait impl block `impl Create 
+    // for Struct` and unify it with ?X.
+    let x: Struct = create(false);
+    assert(report(&x) == 0);
+
+    let x: Struct = create(true);
+    assert(report(&x) == 1_000);
+
+    assert(create_and_report::<Struct>(false) == 0);
+    assert(create_and_report::<Struct>(true) == 1_000);
+}

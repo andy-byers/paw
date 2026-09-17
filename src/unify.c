@@ -545,7 +545,15 @@ IrType *pawU_normalize_projections(struct Unifier *U, IrType *type)
             if (IrIsProjection(type)) {
                 struct IrProjection const *t = IrGetProjection(type);
                 IrType *self = ir_projection_self(t);
-                if (IrIsInfer(self)) return type;
+                if (IrIsInfer(self)) {
+                    // The projection P cannot be resolved since the type of Self is not yet known. Create a fresh
+                    // type variable ?T to represent P and add an obligation `TypeEquals(P, ?T)`. Once the type of
+                    // Self is determined, the trait solver will solve the obligation by finding the associated type
+                    // represented by P on a trait impl block with a compatible Self and unifying it with ?T.
+                    IrType *infer = pawU_new_type_var(U, IR_INFER_TYPE, (struct SourceSpan){0});
+                    pawIr_solver_add_type_equals_obligation(U->C->S, type, infer, (struct IrObligationCause){0});
+                    return infer;
+                }
 
                 IrTrait *trait = pawIr_get_projection_trait(U->C, t);
                 Str const *name = pawIr_get_assoc_item(U->C, t->did)->name;

@@ -42,6 +42,7 @@ TESTS=(
     "supertrait_assoc_type_bound"
     "supertrait_methods"
     "disambiguate_using_projection"
+    "unify_projection"
     "primitive"
     "operator"
     "op_assign"
