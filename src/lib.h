@@ -39,6 +39,7 @@ enum pawL_StdModule {
     PAWL_STD_OS,
     PAWL_STD_MATH,
     PAWL_STD_STRING_BUILDER,
+    PAWL_STD_RAND,
 
     PAWL_NUM_STD_MODULES
 };

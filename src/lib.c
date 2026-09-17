@@ -75,6 +75,7 @@ static char const *STD_NAMES[PAWL_NUM_STD_MODULES] = {
     [PAWL_STD_OS] = "os",
     [PAWL_STD_MATH] = "math",
     [PAWL_STD_STRING_BUILDER] = "string_builder",
+    [PAWL_STD_RAND] = "rand",
 };
 
 _Static_assert(PAWL_NUM_CORE_MODULES <= PAW_COUNTOF(STD_NAMES), "");

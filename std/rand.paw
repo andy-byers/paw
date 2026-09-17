@@ -1,0 +1,110 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+use ptr;
+
+pub trait Rng {
+    fn fill_bytes(*self, bytes: []uint8);
+}
+
+pub trait SeedableRng {
+    type Seed;
+
+    fn from_seed(seed: Self::Seed) -> Self;
+}
+
+// Default noncrypographic pseudorandom number generator
+// Uses the xoshiro256++ algorithm.
+// Source: https://en.wikipedia.org/wiki/Xorshift
+pub struct DefaultRng {
+    state: [4]uint64,
+}
+
+struct Mix64State {
+	state: uint64,
+}
+
+fn mix64(state: *Mix64State) -> uint64 {
+    state.state += 0x9E3779B97F4A7C15;
+
+    let result = state.state;
+	result = (result ^ (result >> 30)) * 0xBF58476D1CE4E5B9;
+	result = (result ^ (result >> 27)) * 0x94D049BB133111EB;
+	result ^ (result >> 31)
+}
+
+impl SeedableRng for DefaultRng {
+    type Seed = uint64;
+
+    fn from_seed(seed: uint64) -> Self {
+        let mx = Mix64State{state: seed};
+
+        Self{state: [
+            mix64(&mx),
+            mix64(&mx),
+            mix64(&mx),
+            mix64(&mx),
+        ]}
+    }
+}
+
+fn rol64(x: uint64 , k: uint64) -> uint64 {
+	(x << k) | (x >> (64 - k))
+}
+
+impl DefaultRng {
+    fn next_u64(*self) -> uint64 {
+        let s = &self.state;
+        let v = rol64(s[0] + s[3], 23) + s[0];
+        let t = s[1] << 17;
+
+        s[2] ^= s[0];
+        s[3] ^= s[1];
+        s[1] ^= s[2];
+        s[0] ^= s[3];
+
+        s[2] ^= t;
+        s[3] = rol64(s[3], 45);
+
+        v
+    }
+}
+
+impl Rng for DefaultRng {
+    fn fill_bytes(*self, bytes: []uint8) {
+        let WORDSIZE: usize = 8; // TODO: const
+
+        let offset = 0;
+        if bytes.len() > WORDSIZE {
+            while offset < bytes.len() - WORDSIZE {
+                let v = self.next_u64();
+                ptr::copy(&v as *char, 
+                    &bytes[offset] as *char, 
+                    WORDSIZE);
+                offset += WORDSIZE;
+            }
+        }
+
+        // NOTE: remainder is discarded
+        let v = self.next_u64();
+        ptr::copy(&v as *char, 
+            &bytes[offset] as *char, 
+            bytes.len() - offset);
+    }
+}
+
+// TODO: the following free fns should be defaulted trait methods on Rng
+
+use slice;
+
+pub fn next_bool<R: Rng>(rng: *R) -> bool {
+    next_u64(rng) >> 63 != 0
+}
+
+pub fn next_u64<R: Rng>(rng: *R) -> uint64 {
+    let value = 0u64;
+    rng.fill_bytes(slice::from_raw_parts(
+        &value as *char as *uint8, 8));
+    value
+}

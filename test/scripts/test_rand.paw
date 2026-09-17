@@ -1,0 +1,51 @@
+// test_rand.paw
+
+use io;
+use rand;
+
+fn from_seed<R: rand::SeedableRng>(seed: R::Seed) -> R {
+    R::from_seed(seed)
+}
+
+fn next_u64<R: rand::Rng>(rng: *R) -> uint64 {
+    rand::next_u64(rng)
+}
+
+#[test]
+pub fn default_rng() {
+    // type annotation needed because R does not appear as an argument
+    let rng: rand::DefaultRng = from_seed(0);
+
+    io::println(f"next_u64(&rng) = \{next_u64(&rng)}".unwrap());
+    io::println(f"next_u64(&rng) = \{next_u64(&rng)}".unwrap());
+    io::println(f"next_u64(&rng) = \{next_u64(&rng)}".unwrap());
+}
+
+struct CustomRng {
+    state: uint8,
+}
+
+impl rand::SeedableRng for CustomRng {
+    type Seed = uint8;
+    fn from_seed(seed: uint8) -> Self {
+        Self{state: seed}
+    }
+}
+
+impl rand::Rng for CustomRng {
+    fn fill_bytes(*self, bytes: []uint8) {
+        for p in bytes {
+            *p = self.state;
+        }
+        self.state += 1;
+    }
+}
+
+#[test]
+pub fn custom_rng() {
+    let rng: CustomRng = from_seed(0);
+
+    assert(next_u64(&rng) == 0x000000000000000);
+    assert(next_u64(&rng) == 0x101010101010101);
+    assert(next_u64(&rng) == 0x202020202020202);
+}
