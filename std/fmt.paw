@@ -77,6 +77,12 @@ impl Formatter {
 fn write_float_to(value: float64, precision: usize, output: *char, output_len: usize) -> usize;
 
 
+impl Display for char {
+    fn fmt(*self, f: *Formatter) -> Result<()> {
+        f.write_char(*self)
+    }
+} 
+
 impl Display for uint8 {
     fn fmt(*self, f: *Formatter) -> Result<()> {
         (*self as uint64).fmt(f)

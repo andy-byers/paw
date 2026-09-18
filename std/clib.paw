@@ -2,20 +2,29 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-pub type schar = int8;
-pub type uchar = uint8;
+ // TODO: may differ between platforms, need info from llvm::Target
 
-pub type short = int16;
-pub type ushort = uint16;
+pub type c_char = int8;
+pub type c_bool = int8;
+pub type c_short = int16;
+pub type c_int = int32;
+pub type c_long = int64;
+pub type c_longlong = int64;
 
-pub type int = int32;
-pub type uint = uint32;
+pub type c_schar = int8;
+pub type c_uchar = uint8;
 
-pub type long = int64;
-pub type ulong = uint64;
+pub type c_sshort = int16;
+pub type c_ushort = uint16;
 
-pub type longlong = int64;
-pub type ulonglong = uint64;
+pub type c_sint = int32;
+pub type c_uint = uint32;
+
+pub type c_slong = int64;
+pub type c_ulong = uint64;
+
+pub type c_slonglong = int64;
+pub type c_ulonglong = uint64;
 
 pub type size_t = usize;
 pub type ssize_t = isize;
