@@ -573,7 +573,7 @@ static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start)
     }
 
     save(X, '\0');
-    enum NumberSuffix suffix = try_int_suffix(X);
+    enum NumberSuffix const suffix = try_int_suffix(X);
     return consume_int_aux(X, start, 2, suffix);
 }
 
@@ -634,18 +634,23 @@ static struct Token consume_decimal_int(struct Lex *X, struct SourceLoc start, c
     return consume_int_aux(X, start, 10, suffix);
 }
 
-static struct Token consume_float(struct Lex *X, struct SourceLoc start, const char *begin)
+static struct Token consume_float(struct Lex *X, struct SourceLoc start, const char *begin, enum NumberSuffix suffix)
 {
     save_parsed_digits(X, begin);
     struct StringBuffer b = SCRATCH(X);
     paw_Float f;
 
+    if (suffix != NS_NONE) {
+        b.count -= PAW_LENGTHOF("fXX\0");
+        b.data[b.count] = '\0';
+    }
     enum ParseFloatStatus const rc = pawX_parse_float(b.data, &f);
     if (rc != FPARSE_OK)
         LEXER_ERROR(X, InvalidFloatLiteral,
                 .span = RANGE(start, X->loc));
     return (struct Token){
         .span = span_from(X, start),
+        .flags = TF_COMPOSE(suffix, 0),
         .kind = TK_FLOAT,
         .value.f = f,
     };
@@ -690,7 +695,18 @@ static struct Token consume_number(struct Lex *X, struct SourceLoc start)
 
     while (ISDIGIT(*X->ptr) || test(X, '_'))
         next(X);
-    return consume_float(X, start, begin);
+    enum NumberSuffix suffix = NS_NONE;
+    if (test_next(X, 'f')) {
+        if (TEST_NEXT_LITERAL(X, "32")) {
+            suffix = NS_F32;
+        } else if (TEST_NEXT_LITERAL(X, "64")) {
+            suffix = NS_F64;
+        } else {
+            LEXER_ERROR(X, InvalidFloatLiteral,
+                    .span = RANGE(start, X->loc));
+        }
+    }
+    return consume_float(X, start, begin, suffix);
 }
 
 static void skip_line_comment(struct Lex *X)

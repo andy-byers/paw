@@ -68,5 +68,13 @@ pub fn test_parse_missing_trailing_zero() {
 #[test]
 pub fn test_digit_separators() {
     assert(10_e1_0_0_ == 10e100);
-    assert(1_0_.0_0e100 == 10e100);
+    assert(1_0_.0_0e1_00 == 10e100);
+}
+
+#[test]
+pub fn float_suffix() {
+    let _: float32 = 1.0f32;
+    let _: float64 = 2.0f64;
+    let _ = 3.0e4_f32;
+    let _ = 4.0e-5_f64;
 }
