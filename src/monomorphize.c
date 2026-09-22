@@ -358,7 +358,7 @@ static IrType *get_assoc_fn(struct MonoCollector *M, IrType *self, IrTrait *trai
     // associated fn will always be found unless there is a bug in the compiler
     struct IrObligationCause const INFALLIBLE = {0};
     if (trait == NULL)
-        return pawP_find_method(M->C, self, name, INFALLIBLE)->inst;
+        return pawP_find_method(M->C, self, name, NULL, INFALLIBLE)->inst;
     return pawP_find_trait_method(M->C, self, trait, name, INFALLIBLE)->inst;
 }
 

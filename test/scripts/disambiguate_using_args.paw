@@ -1,0 +1,42 @@
+// disambiguate_using_args.paw
+
+struct A;
+struct B;
+
+impl Eq<B> for A {
+    fn eq(*self, rhs: *B) -> bool {
+        true
+    }
+}
+
+impl Eq<int64> for A {
+    fn eq(*self, rhs: *int64) -> bool {
+        true
+    }
+}
+
+impl Eq<float64> for A {
+    fn eq(*self, rhs: *float64) -> bool {
+        false
+    }
+}
+
+fn eq<A: Eq<B>, B>(a: *A, b: *B) -> bool {
+    a.eq(b)
+}
+
+#[test]
+pub fn test() {
+    let a = A;
+    let b = B;
+    let i = 123;
+    let f = 42.0;
+
+    assert(a.eq(&b));
+    assert(a.eq(&i));
+    assert(!a.eq(&f));
+
+    assert(eq(&a, &b));
+    assert(eq(&a, &i));
+    assert(!eq(&a, &f));
+}

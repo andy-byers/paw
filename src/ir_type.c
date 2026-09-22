@@ -1596,15 +1596,15 @@ static void print_generic_arg(struct Printer *P, IrGenericArg arg)
     }
 }
 
-static void print_binder(struct Printer *P, IrGenericArgs *binder)
+static void print_generic_args(struct Printer *P, IrGenericArgs *args)
 {
-    // TODO: be consistent semantics: does `.binder = NULL` or `.binder.count = 0` mean monomorphic
-    if (binder->count > 0) {
+    // TODO: be consistent w/ semantics: does `.args = NULL` or `.args.count = 0` mean monomorphic
+    if (args->count > 0) {
         P->print_bounds = PAW_TRUE;
         PRINT_CHAR(P, '<');
-        for (int i = 0; i < binder->count; ++i) {
+        for (int i = 0; i < args->count; ++i) {
             if (i > 0) PRINT_LITERAL(P, ", ");
-            print_generic_arg(P, IrGenericArgs_get(binder, i));
+            print_generic_arg(P, IrGenericArgs_get(args, i));
         }
         PRINT_CHAR(P, '>');
         P->print_bounds = PAW_FALSE;
@@ -1759,7 +1759,7 @@ static void print_type(struct Printer *P, IrType *type)
         case kIrClosure: {
             struct IrClosure *t = IrGetClosure(type);
             PRINT_FORMAT(P, "$closure_%d", t->did.value);
-            print_binder(P, t->args);
+            print_generic_args(P, t->args);
             IrType *fn = pawIr_materialize_fn(P->C, t->did, t->args);
             PRINT_FORMAT(P, "{%s}", pawIr_print_type(P->C, fn));
             break;
@@ -1770,7 +1770,7 @@ static void print_type(struct Printer *P, IrType *type)
             if (kind == IR_FN_DEF) {
                 struct IrFnDef *def = pawIr_get_fn_def(P->C, fsig->did);
                 PRINT_STRING(P, def->name);
-                print_binder(P, fsig->args);
+                print_generic_args(P, fsig->args);
                 IrType *fn = pawIr_materialize_fn(P->C, fsig->did, fsig->args);
                 PRINT_FORMAT(P, "{%s}", pawIr_print_type(P->C, fn));
             } else {
@@ -1841,7 +1841,7 @@ static void print_type(struct Printer *P, IrType *type)
             struct IrAdt *adt = IrGetAdt(type);
             struct IrAdtDef *def = pawIr_get_adt_def(P->C, adt->did);
             PRINT_STRING(P, def->name);
-            print_binder(P, adt->args);
+            print_generic_args(P, adt->args);
             break;
         }
     }

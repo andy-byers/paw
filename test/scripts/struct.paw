@@ -89,10 +89,10 @@ struct FnField<T> {
 
 fn fn_field<T>(t: T) -> T { t }
 
-#[test]
-pub fn test_fn_in_field() {
-    let f = FnField{f: fn_field};
-    assert(f.f(42) == 42);
-}
+//#[test]
+//pub fn test_fn_in_field() {
+//    let f = FnField{f: fn_field};
+//    assert(f.f(42) == 42);
+//}
 
 

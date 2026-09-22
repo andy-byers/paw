@@ -6,7 +6,8 @@
 
 struct IrObligationCause;
 
-struct Instantiation *pawP_find_method(struct Compiler *C, struct IrType *self, Str const *name, struct IrObligationCause cause);
+struct Instantiation *pawP_find_method(struct Compiler *C, struct IrType *self, Str const *name, struct IrTypeList *call_args, struct IrObligationCause cause);
+struct Instantiation *pawP_find_assoc_fn(struct Compiler *C, struct IrType *self, Str const *name, struct IrObligationCause cause);
 struct Instantiation *pawP_find_trait_method(struct Compiler *C, struct IrType *self, struct IrTrait *trait, Str const *name, struct IrObligationCause cause);
 
 struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, struct IrType *self, struct IrTrait *trait, Str const *name, struct IrObligationCause cause);

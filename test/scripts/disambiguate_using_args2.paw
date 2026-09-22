@@ -1,0 +1,45 @@
+// disambiguate_using_args2.paw
+
+// TODO: the type of each trait method call target, whether the receiver is a generic, a projection, or a concrete type, should have the following form:
+//       IrSignature{did: <DeclId of method on trait>, args: [<receiver type>, <rest of generic args>...]}
+//       essentially, we should always use the DeclId of the trait method. monomorphization should resolve this to a concrete method from a trait impl block since all types are known by this point
+//       currently we use the DeclId of a method from an impl block if possible, with Self substituted with the receiver type and removed from the args list
+//       this is inconsistent and requires too many special cases (one reason for the proliferation of method lookup functions, i.e. pawP_find_method, pawIr_resolve_trait_method, pawP_find_assoc_fn, etc.)
+
+struct X;
+
+trait A {
+    fn func(*self, x: bool) -> int64;
+}
+
+trait B {
+    fn func(*self, x: float64) -> int64;
+}
+
+impl A for X {
+    fn func(*self, x: bool) -> int64 {
+        1
+    }
+}
+impl B for X {
+    fn func(*self, x: float64) -> int64 {
+        2
+    }
+}
+
+// TODO: this causes a "multiple applicable items" error because it calls pawIr_resolve_trait_method instead of pawP_find_method, which is wrong
+// TODO: use pawP_find_method for all method lookups
+//fn funcs<T: A + B>(t: *T) -> (int64, int64) {
+//    (t.func(1.23), t.func(true))
+//}
+
+#[test]
+pub fn test() {
+    let x = X;
+
+    assert(x.func(false) == 1);
+    assert(x.func(1.23) == 2);
+
+//    assert(funcs(&x).0 == 1);
+//    assert(funcs(&x).1 == 2);
+}

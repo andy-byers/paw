@@ -1433,6 +1433,10 @@ static void dump_generic_args(struct Printer *P, struct HirGenericArgs *args)
         K_LIST_ENUMERATE (args, index, p) {
             if (index > 0) DUMP_CSTR(P, ", ");
             if (p->is_type) {
+                if (p->item != NULL) {
+                    DUMP_STR(P, p->item);
+                    DUMP_CSTR(P, " = ");
+                }
                 dump_type(P, p->t);
             } else {
                 dump_expr(P, p->k);

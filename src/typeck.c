@@ -720,7 +720,8 @@ static void unify_segment_types(struct TypeChecker *T, struct HirSegment segment
     }
 }
 
-static IrType *lookup_method(struct Compiler *C, IrType *self, Str const *name, struct SourceSpan span);
+static IrType *lookup_method(struct Compiler *C, IrType *self, Str const *name, IrTypeList *call_args, struct SourceSpan span);
+static IrType *lookup_assoc_fn(struct Compiler *C, IrType *self, Str const *name, struct SourceSpan span);
 
 static IrTrait *get_containing_bound(struct Compiler *C, IrType *base, DeclId did)
 {
@@ -837,7 +838,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             } else {
                 // The value must be an associated function called on an ADT. Such values
                 // cannot be found during name resolution (type information is required).
-                assoc = lookup_method(T->C, base, last.ident.name, last.span);
+                assoc = lookup_method(T->C, base, last.ident.name, NULL, last.span);
                 if (assoc == NULL)
                     TYPECK_ERROR(T, UnknownAssociatedItem,
                             .type = pawIr_print_type_v2(T->C, base),
@@ -1248,9 +1249,23 @@ static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjection
     return inst->inst;
 }
 
-static IrType *lookup_method(struct Compiler *C, IrType *self, Str const *name, struct SourceSpan span)
+static IrType *lookup_method(struct Compiler *C, IrType *self, Str const *name, IrTypeList *call_args, struct SourceSpan span)
 {
-    struct Instantiation *method = pawP_find_method(C, self, name, (struct IrObligationCause){
+    struct Instantiation *method = pawP_find_method(C, self, name, call_args,
+            (struct IrObligationCause){
+                .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+                .assoc_item_lookup.self = self,
+                .assoc_item_lookup.name = name,
+                .span = span,
+            });
+    if (method == NULL) return NULL;
+    return method->inst;
+}
+
+static IrType *lookup_assoc_fn(struct Compiler *C, IrType *self, Str const *name, struct SourceSpan span)
+{
+    struct Instantiation *method = pawP_find_assoc_fn(C, self, name,
+            (struct IrObligationCause){
                 .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
                 .assoc_item_lookup.self = self,
                 .assoc_item_lookup.name = name,
@@ -1495,7 +1510,7 @@ static IrType *select_field(struct TypeChecker *T, IrType *target, struct HirSel
     return result;
 }
 
-static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, int *pparam_offset)
+static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, IrTypeList *call_args, int *pparam_offset, paw_Bool *punify_args)
 {
     *pparam_offset = 0;
     if (!HirIsSelector(target))
@@ -1503,9 +1518,8 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
         return check_expr(T, target);
 
     struct HirSelector *select = HirGetSelector(target);
-    IrType *self = check_operandx(T, select->target);
-    IrType *orig = self; //TODO
-    self = auto_deref_full(self);
+    IrType *base = check_operandx(T, select->target);
+    IrType *self = auto_deref_full(base);
 
     IrType *method = NULL;
     if (IrIsGeneric(self)) {
@@ -1517,10 +1531,15 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
                     .type = pawIr_print_type_v2(T->C, self),
                     .span = select->ident.span);
     } else if (!select->is_index) {
-        IrTypeList *chain = pawIr_autoptr_chain(T->C, orig);
+        IrTypeList_insert(T->C, call_args, 0, NULL);
+        IrTypeList *chain = pawIr_autoptr_chain(T->C, base);
         K_LIST_XFOREACH (chain, IrType *const, p) {
-            method = lookup_method(T->C, *p, select->ident.name, select->span);
-            if (method != NULL) break;
+            IrTypeList_set(call_args, 0, *p); // set receiver
+            method = lookup_method(T->C, *p, select->ident.name, call_args, select->span);
+            if (method != NULL) {
+                *punify_args = PAW_FALSE;
+                break;
+            }
         }
     }
 
@@ -1546,8 +1565,15 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
 // Check a function call or enumerator constructor
 static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
 {
+    IrTypeList *call_args = IrTypeList_new(T->C);
+    K_LIST_XFOREACH (e->args, struct HirExpr *const, parg) {
+        IrType *arg = check_operand(T, *parg);
+        IrTypeList_push(T->C, call_args, arg);
+    }
+
+    paw_Bool unify_args = PAW_TRUE;
     int param_offset; // offset of first non-receiver parameter
-    IrType *target = check_call_target(T, e->target, &param_offset);
+    IrType *target = check_call_target(T, e->target, call_args, &param_offset, &unify_args);
     if (!IR_IS_FUNC_TYPE(target))
         TYPECK_ERROR(T, NotCallable,
                 .type = pawIr_print_type_v2(T->C, target),
@@ -1567,12 +1593,13 @@ static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
                 .type = pawIr_print_type_v2(T->C, fn->result),
                 .span = NODE_SPAN(e->target));
 
-    int index;
-    struct HirExpr *const *parg;
-    K_LIST_ENUMERATE (e->args, index, parg) {
-        IrType *param = IrTypeList_get(fn->params, index + param_offset);
-        IrType *arg = check_operand(T, *parg);
-        unify_types(T, NODE_SPAN(*parg), param, arg);
+    if (unify_args) {
+        int index;
+        IrType *const *parg;
+        K_LIST_ENUMERATE (call_args, index, parg) {
+            IrType *param = IrTypeList_get(fn->params, index + param_offset);
+            unify_types(T, NODE_SPAN(e->args->data[index]), param, *parg);
+        }
     }
 
     if (IrIsNever(fn->result)) // function never returns
