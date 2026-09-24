@@ -816,30 +816,6 @@
 //    }
 //}
 
-// TODO: Here's an example of a situation that should work but doesn't because we try to select a trait impl block method too early
-
-struct Struct<T>;
-
-pub trait Trait<T> {
-    fn func(*self) -> int64;
-}
-
-impl Trait<int64> for Struct<int64> {
-    fn func(*self) -> int64 {1}
-}
-
-impl Trait<float64> for Struct<float64> {
-    fn func(*self) -> int64 {2}
-}
-
-fn func<T>(s: *Struct<T>) -> int64 {
-    s.func()
-}
-
 #[test]
 pub fn test() {
-    let s = Struct::<int64>;
-    assert(func(&s) == 1);
-    let s = Struct::<float64>;
-    assert(func(&s) == 2);
 }

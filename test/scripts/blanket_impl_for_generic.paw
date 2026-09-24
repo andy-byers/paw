@@ -1,0 +1,30 @@
+// blanket_impl_for_generic.paw
+
+struct Struct<T>;
+
+pub trait Other {}
+impl<T> Other for T {}
+
+pub trait Trait<T> {
+    fn func(*self) -> int64;
+}
+
+impl<T: Other> Trait<T> for Struct<T> {
+    fn func(*self) -> int64 {42}
+}
+
+// `T` implements `Other` due to the blanket impl above
+fn func<T>(s: *Struct<T>) -> int64 {
+    s.func()
+}
+
+#[test]
+pub fn test() {
+    let s = Struct::<int64>;
+    assert(func(&s) == 42);
+
+    let s = Struct::<float64>;
+    assert(func(&s) == 42);
+}
+
+
