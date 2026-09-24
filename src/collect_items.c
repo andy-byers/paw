@@ -1285,7 +1285,7 @@ static void run_collection_phases(struct ItemCollector *X, struct Hir *hir)
     MAP_MODULES(X, hir->modules, collect_item_defs);
     MAP_MODULES(X, hir->modules, solve_signatures);
 
-    paw_assert(pawIr_solver_num_obligations(X->C->S) == 0);
+    pawIr_solver_solve_all_or_error(X->C->S);
 
 #undef MAP_MODULES
 }

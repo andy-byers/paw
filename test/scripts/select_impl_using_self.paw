@@ -1,0 +1,26 @@
+// select_impl_using_self.paw
+
+struct A;
+struct B;
+
+trait Value {
+    fn value(self) -> int64;
+}
+
+impl Value for A {
+    fn value(self) -> int64 { 1 }
+}
+
+impl Value for B {
+    fn value(self) -> int64 { 2 }
+}
+
+fn value<T: Value>(x: T) -> int64 {
+    x.value()
+}
+
+#[test]
+pub fn test() {
+    assert(value(A) == 1);
+    assert(value(B) == 2);
+}

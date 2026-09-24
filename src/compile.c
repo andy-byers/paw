@@ -380,7 +380,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->pending_constants = IrPendingConstants_new(C);
     C->resolved_constants = IrResolvedConstants_new(C);
     C->const_obligations = IrObligations_new(C);
-    C->indexes = IrType2Map_new(C);
+    C->method_selections = MethodSelectionMap_new(C);
 
     C->source_span_refs = SourceSpanRefs_new(C);
 

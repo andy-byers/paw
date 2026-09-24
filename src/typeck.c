@@ -67,10 +67,10 @@ struct FnState {
     struct CopyablePats *copyable_pats;
 };
 
-struct Type3 {
-    IrType *a;
-    IrType *b;
-    IrType *c;
+struct DeferredMethodSelection {
+    NodeId id;
+    IrTrait *trait;
+    IrType *method;
 };
 
 // Common state for type-checking routines
@@ -84,12 +84,9 @@ struct TypeChecker {
     struct BlockState *bs;
     struct FnState *fs;
     struct HirModule const *pm;
+    struct CallArgList *call_args;
 
-    // used to defer insertion of type of `Index::index` method for object/index
-    // type pairs into hash map until all types have been determined (inference
-    // types cannot be hashed)
-    struct Type3List *defer_index;
-
+    struct DeferredMethodSelections *defer_methods;
     IrTypeList *defer_closures;
 
     struct Hir *hir;
@@ -98,7 +95,8 @@ struct TypeChecker {
     DeclId enclosing_body;
 };
 
-DEFINE_LIST(struct TypeChecker, Type3List, struct Type3,)
+DEFINE_LIST(struct TypeChecker, DeferredMethodSelections, struct DeferredMethodSelection,)
+DEFINE_LIST(struct TypeChecker, CallArgList, IrTypeList *,)
 
 static paw_Bool is_scalar(enum IrTypeKind kind)
 {
@@ -260,7 +258,7 @@ static IrType *normalize_type(struct TypeChecker *T, IrType *type)
 
 static IrTrait *normalize_trait(struct TypeChecker *T, IrTrait *trait)
 {
-    return pawIr_normalize_trait(T->C, trait);
+    return pawIr_normalize_trait_projections(T->C, trait);
 }
 
 static IrGenericArg unify_args(struct TypeChecker *T, struct SourceSpan span, IrGenericArg a, IrGenericArg b)
@@ -535,14 +533,9 @@ static paw_Bool is_unit_type(struct TypeChecker *T, IrType *type)
     return pawP_type2code(T->C, type) == BUILTIN_UNIT;
 }
 
-static IrType *inference_var_fixup(struct IrTypeFolder *F, struct IrInfer *infer)
+static IrType *normalize_fixup(struct IrTypeFolder *F, IrType *type)
 {
-    return pawU_normalize(F->C->U, (IrType *)infer);
-}
-
-static IrType *projection_fixup(struct IrTypeFolder *F, struct IrProjection *projection)
-{
-    return pawU_normalize_projections(F->C->U, (IrType *)projection);
+    return pawU_normalize_projections(F->C->U, type);
 }
 
 static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
@@ -577,19 +570,17 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
 
     struct HirTypeFolder F;
     pawHir_type_folder_init(&F, T->hir, T);
-    F.F.FoldInfer = inference_var_fixup;
-    F.F.FoldProjection = projection_fixup;
+    F.F.FoldType = normalize_fixup;
     pawHir_fold_decl_type(&F, HIR_CAST_DECL(d));
 
     {
-        K_LIST_XFOREACH (T->defer_index, struct Type3 const, t) {
-            IrType *a = pawU_normalize_projections(T->U, t->a);
-            IrType *b = pawU_normalize_projections(T->U, t->b);
-            IrType *c = pawU_normalize_projections(T->U, t->c);
-            struct IrType2 const type2 = {a, b};
-            IrType2Map_insert(T->C, T->C->indexes, type2, c);
+        K_LIST_XFOREACH (T->defer_methods, struct DeferredMethodSelection, t) {
+            MethodSelectionMap_insert(T->C, T->C->method_selections, t->id, (struct MethodSelection){
+                    .trait = pawIr_normalize_trait_projections(T->C, t->trait),
+                    .method = pawU_normalize_projections(T->U, t->method),
+                });
         }
-        T->defer_index->count = 0;
+        T->defer_methods->count = 0;
 
         K_LIST_XFOREACH (T->defer_closures, IrType *const, pclosure) {
             struct IrClosure const *c = IrGetClosure(*pclosure);
@@ -720,8 +711,7 @@ static void unify_segment_types(struct TypeChecker *T, struct HirSegment segment
     }
 }
 
-static IrType *lookup_method(struct Compiler *C, IrType *self, Str const *name, IrTypeList *call_args, struct SourceSpan span);
-static IrType *lookup_assoc_fn(struct Compiler *C, IrType *self, Str const *name, struct SourceSpan span);
+static IrType *lookup_method(struct Compiler *C, IrType *self, IrTrait *trait, Str const *name, IrTypeList *call_args, struct SourceSpan span);
 
 static IrTrait *get_containing_bound(struct Compiler *C, IrType *base, DeclId did)
 {
@@ -838,7 +828,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             } else {
                 // The value must be an associated function called on an ADT. Such values
                 // cannot be found during name resolution (type information is required).
-                assoc = lookup_method(T->C, base, last.ident.name, NULL, last.span);
+                assoc = lookup_method(T->C, base, NULL, last.ident.name, NULL, last.span);
                 if (assoc == NULL)
                     TYPECK_ERROR(T, UnknownAssociatedItem,
                             .type = pawIr_print_type_v2(T->C, base),
@@ -1235,36 +1225,20 @@ static IrType *check_projection_expr(struct TypeChecker *T, struct HirProjection
     IrGenericArgs_insert(T->C, args, 0, IrGenericArg_from_type(type));
     IrTrait *trait = pawIr_new_trait(T->C, trait_decl->hdr.did, args);
 
-    struct Instantiation const *inst = pawP_find_trait_method(
-            T->C, type, trait, e->name, (struct IrObligationCause){
-                .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
-                .did = trait->did,
-                .span = e->span,
-            });
-    if (inst == NULL)
+    // TODO
+    IrTypeList *call_args = CallArgList_last(T->call_args);
+    IrType *method = lookup_method(T->C, type, trait, e->name, call_args, e->span);
+    if (method == NULL)
         TYPECK_ERROR(T, UnknownMethod,
                 .type = pawIr_print_type_v2(T->C, type),
                 .method = e->name,
                 .span = e->span);
-    return inst->inst;
+    return method;
 }
 
-static IrType *lookup_method(struct Compiler *C, IrType *self, Str const *name, IrTypeList *call_args, struct SourceSpan span)
+static IrType *lookup_method(struct Compiler *C, IrType *self, IrTrait *trait, Str const *name, IrTypeList *call_args, struct SourceSpan span)
 {
-    struct Instantiation *method = pawP_find_method(C, self, name, call_args,
-            (struct IrObligationCause){
-                .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
-                .assoc_item_lookup.self = self,
-                .assoc_item_lookup.name = name,
-                .span = span,
-            });
-    if (method == NULL) return NULL;
-    return method->inst;
-}
-
-static IrType *lookup_assoc_fn(struct Compiler *C, IrType *self, Str const *name, struct SourceSpan span)
-{
-    struct Instantiation *method = pawP_find_assoc_fn(C, self, name,
+    struct Instantiation *method = pawP_find_method(C, self, trait, name, call_args,
             (struct IrObligationCause){
                 .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
                 .assoc_item_lookup.self = self,
@@ -1510,7 +1484,7 @@ static IrType *select_field(struct TypeChecker *T, IrType *target, struct HirSel
     return result;
 }
 
-static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, IrTypeList *call_args, int *pparam_offset, paw_Bool *punify_args)
+static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, IrTypeList *raw_args, int *pparam_offset, paw_Bool *punify_args)
 {
     *pparam_offset = 0;
     if (!HirIsSelector(target))
@@ -1522,34 +1496,27 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
     IrType *self = auto_deref_full(base);
 
     IrType *method = NULL;
-    if (IrIsGeneric(self)) {
-        struct IrGeneric *g = IrGetGeneric(self);
-        method = pawIr_resolve_trait_method(T->C, g, select->ident.name);
-        if (method == NULL)
-            TYPECK_ERROR(T, UnknownMethod,
-                    .method = select->ident.name,
-                    .type = pawIr_print_type_v2(T->C, self),
-                    .span = select->ident.span);
-    } else if (!select->is_index) {
-        IrTypeList_insert(T->C, call_args, 0, NULL);
+    if (!select->is_index) {
+        IrTypeList *call_args = IrTypeList_new(T->C);
+        IrTypeList_reserve(T->C, call_args, 1 + raw_args->count);
+        IrTypeList_push(T->C, call_args, NULL);
+        K_LIST_XFOREACH (raw_args, IrType *const, p)
+            IrTypeList_push(T->C, call_args, *p);
+
         IrTypeList *chain = pawIr_autoptr_chain(T->C, base);
         K_LIST_XFOREACH (chain, IrType *const, p) {
             IrTypeList_set(call_args, 0, *p); // set receiver
-            method = lookup_method(T->C, *p, select->ident.name, call_args, select->span);
-            if (method != NULL) {
-                *punify_args = PAW_FALSE;
-                break;
-            }
+            method = lookup_method(T->C, *p, NULL, select->ident.name, call_args, select->span);
+            if (method != NULL) break;
         }
     }
 
-    if (method != NULL) {
-        struct IrFnPtr *fn = IrGetFnPtr(IR_SIGNATURE_FN(T->C, method));
-        if (!IrIsPtr(IrTypeList_first(fn->params)))
-            ensure_valid_rvalue(T, select->target);
-    } else {
+    if (method == NULL)
         return select_field(T, self, select);
-    }
+
+    struct IrFnPtr *fn = IrGetFnPtr(IR_SIGNATURE_FN(T->C, method));
+    if (!IrIsPtr(IrTypeList_first(fn->params)))
+        ensure_valid_rvalue(T, select->target);
 
     struct HirDecl *fn_decl = get_decl(T, IR_TYPE_DID(method));
     if (HirGetFnDecl(fn_decl)->is_assoc)
@@ -1566,6 +1533,7 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
 static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
 {
     IrTypeList *call_args = IrTypeList_new(T->C);
+    CallArgList_push(T, T->call_args, call_args);
     K_LIST_XFOREACH (e->args, struct HirExpr *const, parg) {
         IrType *arg = check_operand(T, *parg);
         IrTypeList_push(T->C, call_args, arg);
@@ -1605,6 +1573,7 @@ static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
     if (IrIsNever(fn->result)) // function never returns
         unify_never_type(T, e->span, T->bs->result);
 
+    CallArgList_pop(T->call_args);
     return fn->result;
 }
 
@@ -1859,7 +1828,8 @@ static IrType *check_array_index(struct TypeChecker *T, IrType *array, IrType *i
     return IrGetArray(array)->type;
 }
 
-static IrType *find_index_fn_aux(struct TypeChecker *T, IrType *target, IrType *index, struct SourceSpan span)
+// TODO: This isn't really correct since it's possible that pawP_find_method will find an inherent method on the receiver that shadows "Index::index"
+static IrType *find_index_fn(struct TypeChecker *T, IrType *target, IrType *index, struct SourceSpan span, struct IrTrait **trait_out)
 {
     // create trait descriptor for "Index<Target, Idx>"
     IrGenericArgs *args = IrGenericArgs_new(T->C);
@@ -1870,29 +1840,23 @@ static IrType *find_index_fn_aux(struct TypeChecker *T, IrType *target, IrType *
     IrGenericArgs_push(T->C, args, IrGenericArg_from_type(index));
 
     Str const *method_name = SCAN_STR(T->C, "index");
-    struct Instantiation const *inst = pawP_find_trait_method(T->C, target,
-            trait, method_name, (struct IrObligationCause){
-                .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
-                .assoc_item_lookup.self = target,
-                .assoc_item_lookup.name = method_name,
-                .span = span,
-            });
+    struct IrObligationCause const cause = (struct IrObligationCause){
+        .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+        .assoc_item_lookup.self = target,
+        .assoc_item_lookup.name = method_name,
+        .span = span,
+    };
 
-    if (inst != NULL) {
-        Type3List_push(T, T->defer_index, (struct Type3){
-                    .a = target,
-                    .b = index,
-                    .c = inst->inst,
-                });
-        return inst->inst;
-    }
-    return NULL;
+    // TODO: probably do this in a nested solver context
+    pawIr_solver_add_impl_trait_obligation(T->C->S, target, trait, cause);
+    solve_pending_obligations(T);
 
-}
-
-static IrType *find_index_fn(struct TypeChecker *T, IrType *target, IrType *index, struct SourceSpan span)
-{
-    return find_index_fn_aux(T, target, index, span);
+    IrTypeList *call_args = IrTypeList_new(T->C);
+    IrTypeList_push(T->C, call_args, new_ptr(T, target));
+    IrTypeList_push(T->C, call_args, index);
+    IrType *method = lookup_method(T->C, target, NULL, method_name, call_args, span);
+    if (method != NULL) *trait_out = trait;
+    return method;
 }
 
 static IrType *check_index(struct TypeChecker *T, struct HirIndex *e)
@@ -1906,13 +1870,19 @@ static IrType *check_index(struct TypeChecker *T, struct HirIndex *e)
 
     // Determine the concrete type of the "Index::index" method that will
     // be used to represent this indexing operation.
-    IrType *fn_type = find_index_fn(T, target, index, e->span);
-    if (fn_type == NULL)
+    IrTrait *index_trait;
+    IrType *index_method = find_index_fn(T, target, index, e->span, &index_trait);
+    if (index_method == NULL)
         pawErr_generic_error(ENV(T), T->pm->name, e->span,
                 "type cannot be indexed");
 
+    DeferredMethodSelections_push(T, T->defer_methods, (struct DeferredMethodSelection){
+                .id = e->id,
+                .trait = index_trait,
+                .method = index_method,
+            });
     struct IrFnPtr const *fn = IrGetFnPtr(pawIr_materialize_fn(T->C,
-                IR_TYPE_DID(fn_type), IR_GENERIC_ARGS(fn_type)));
+                IR_TYPE_DID(index_method), IR_GENERIC_ARGS(index_method)));
     IrType *fn_target = IrTypeList_get(fn->params, 0);
     IrType *fn_index = IrTypeList_get(fn->params, 1);
 
@@ -2464,12 +2434,6 @@ static void check_items(struct TypeChecker *T, struct HirDeclList *items)
         check_item(T, *pitem);
 }
 
-static IrType *call_normalize_type(struct IrTypeFolder *F, IrType *type)
-{
-    struct HirTypeFolder const *outer = F->ud;
-    return normalize_type(outer->ud, type);
-}
-
 static void use_module(struct TypeChecker *T, struct HirModule const *pm)
 {
     T->pm = pm;
@@ -2487,14 +2451,9 @@ static void check_module_types(struct TypeChecker *T, struct HirModule m)
 
     check_items(T, m.items);
 
-//    struct HirVisitor V;
-//    pawHir_visitor_init(&V, T->hir, T);
-//    V.PostVisitType = prove_type_obligations;
-//    pawHir_visit_decl_list(&V, m.items);
-
     struct HirTypeFolder F;
     pawHir_type_folder_init(&F, T->hir, T);
-    F.F.FoldType = call_normalize_type;
+    F.F.FoldType = normalize_fixup;
     pawHir_fold_decl_types(&F, m.items);
 }
 
@@ -2556,7 +2515,7 @@ static void check_constant_types(struct TypeChecker *T)
 
         struct HirTypeFolder F;
         pawHir_type_folder_init(&F, T->hir, T);
-        F.F.FoldInfer = inference_var_fixup;
+        F.F.FoldType = normalize_fixup;
         pawHir_fold_expr_type(&F, expr);
 
         DeclId param_did;
@@ -2604,8 +2563,9 @@ void pawP_check_types(struct Compiler *C)
         .U = C->U,
         .C = C,
     };
-    T.defer_index = Type3List_new(&T);
+    T.defer_methods = DeferredMethodSelections_new(&T);
     T.defer_closures = IrTypeList_new(C);
+    T.call_args = CallArgList_new(&T);
 
     void pawU_run_unit_tests(struct Unifier *U);
     pawU_run_unit_tests(C->U);

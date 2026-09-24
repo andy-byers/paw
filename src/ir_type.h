@@ -494,7 +494,6 @@ DEFINE_LIST(struct Compiler, IrConstraints, struct IrConstraint,)
 DEFINE_LIST(struct Compiler, IrFieldDefs, struct IrFieldDef *,)
 DEFINE_LIST(struct Compiler, IrParams, struct IrParam,)
 
-IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str const *name);
 
 EXTERN_C IrType *pawIr_get_type(struct Compiler *C, NodeId id);
 void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type);
@@ -616,6 +615,7 @@ DEFINE_LIST(struct Compiler, IrConstObligations, struct IrConstObligation,)
 paw_Bool pawIr_type_contains_inference_var(struct Compiler *C, IrType *type);
 paw_Bool pawIr_trait_contains_inference_var(struct Compiler *C, IrTrait *trait);
 
+DeclId pawIr_get_method_from_parent(struct Compiler *C, DeclId parent_did, Str const *name);
 
 EXTERN_C paw_Bool pawIr_is_unsized_type(struct Compiler *C, IrType *type);
 EXTERN_C IrType *pawIr_remove_indirection(struct Compiler *C, IrType *type);
@@ -666,6 +666,8 @@ static IrType *ir_auto_deref(IrType *type)
 
 IrDefs *pawIr_inherent_impls_for(struct Compiler *C, IrType *self);
 IrDefs *pawIr_trait_impls_for(struct Compiler *C, IrType *self);
+
+IrTraitList *pawIr_supertraits_of(struct Compiler *C, DeclId did);
 
 
 EXTERN_C char const *pawIr_print_type(struct Compiler *C, IrType *type);

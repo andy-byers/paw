@@ -356,7 +356,7 @@ static void test_arithmetic_error(void)
 
 static void test_tuple_error(void)
 {
-    test_compiler_status(kErrInvalidIndexTarget, "tuple_square_brackets", "", "let x = (1, 2); let y = x[0];");
+    test_compiler_status(kErrFalseObligation, "tuple_square_brackets", "", "let x = (1, 2); let y = x[0];");
     test_compiler_status(kErrExpectedElementSelector, "tuple_named_field", "", "let x = (1, 2); let y = x.first;");
     test_compiler_status(kErrElementSelectorOutOfRange, "tuple_index_out_of_range", "", "let x = (1, 2); let y = x.2;");
 }
@@ -575,7 +575,7 @@ static void test_trait_error(void)
         TRAIT "struct S; impl Trait for S {pub fn f(self) -> int64 {123}}", "");
     test_compiler_status(kErrTraitImplAssocItemNotCompatible, "trait_wrong_type",
         TRAIT "struct S; impl Trait for S {fn f(self) -> int64 {123}}", "");
-    test_compiler_status(kErrUnknownMethod, "generic_missing_bound",
+    test_compiler_status(kErrExpectedAdt, "generic_missing_bound",
         TRAIT "struct S; impl Trait for S {fn f(self) {}}\n"
               "pub fn call_f<T>(t: T) {t.f();}",
         "let x = S; call_f(x);");
@@ -737,7 +737,7 @@ static void test_projections(void)
             HEADER "pub trait Trait2 { type Type; }"
             "fn f<T: Trait + Trait2>(t: T, item: <T as Trait>::Type) {}", "");
 
-    test_compiler_status(kErrUnknownMethod, "unknown_assoc_item_path_expr",
+    test_compiler_status(kErrExpectedAdt, "unknown_assoc_item_path_expr",
             HEADER "fn f<T: Trait>(t: T) {t.nonexistent();}", "");
     test_compiler_status(kErrMultipleApplicableItems, "ambiguous_assoc_item_path_expr",
             HEADER "pub trait Trait2 { fn method(*self); }"

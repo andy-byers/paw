@@ -416,6 +416,10 @@ static enum IrSolverStatus solve_normalizes_to_obligation(IrSolver *S, IrType *p
     IrType *type = pawU_normalize_projections(S->U, projection);
     target = pawU_normalize_projections(S->U, target);
 
+// TODO: probably need to loop until steady state reached in pawU_normalize_projections
+type = pawU_normalize_projections(S->U, projection);
+target = pawU_normalize_projections(S->U, target);
+
     if (IrIsProjection(type)) {
         struct IrProjection const *p = IrGetProjection(type);
         if (IrIsInfer(ir_projection_self(p)))

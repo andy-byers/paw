@@ -948,7 +948,7 @@ void pawU_check_context(struct Unifier *U)
     K_LIST_XFOREACH (U->ctx->type_vars->ivars, InferenceVar const, var) {
         IrType *type = pawU_normalize(U, var->data.type);
         if (IrIsInfer(type)) {
-            paw_assert(var->kind == IR_INFER_TYPE);
+            paw_assert(var->kind == IVAR_TYPE);
             UNIFIER_ERROR(U, CannotInfer, var->span);
         }
     }

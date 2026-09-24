@@ -36,6 +36,7 @@ TESTS=(
     "trait_method_obligations"
     "projection_as_generic_arg"
     "blanket_impl_for_generic"
+    "select_impl_using_self"
     "const_generics"
     "supertraits"
     "poly_supertraits"

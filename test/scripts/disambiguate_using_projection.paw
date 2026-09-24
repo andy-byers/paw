@@ -14,14 +14,14 @@ impl Eq<int64> for Struct {
     }
 }
 
-fn eq<T: Eq<int64> + Eq<T>>(lhs: T, rhs: T) {
-    assert(<T as Eq<T>>::eq(&lhs, &rhs));
-    assert(!<T as Eq<int64>>::eq(&lhs, &123));
+fn eq<X: Eq<int64> + Eq<X>>(t: X) {
+    assert(<X as Eq<X>>::eq(&t, &t));
+    assert(!<X as Eq<int64>>::eq(&t, &123));
 }
 
 #[test]
 pub fn test() {
-    eq(Struct, Struct);
+    eq(Struct);
     assert(<Struct as Eq<Struct>>::eq(&Struct, &Struct));
     assert(!<Struct as Eq<int64>>::eq(&Struct, &123));
 }

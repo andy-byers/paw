@@ -177,7 +177,7 @@ struct Compiler {
     struct IrResolvedConstants *resolved_constants;
     struct IrObligations *const_obligations;
     struct NodeMap *self_types;
-    struct IrType2Map *indexes;
+    struct MethodSelectionMap *method_selections;
 
     struct SourceSpanRefs *source_span_refs;
 
@@ -375,6 +375,12 @@ EXTERN_C Str const *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str
 #define P_VALUE_HASH(Ctx_, Value_) ((void)Ctx_, V_UINT(Value_))
 #define P_VALUE_EQUALS(Ctx_, A_, B_) ((void)Ctx_, V_UINT(A_) == V_UINT(B_))
 
+struct MethodSelection {
+    struct IrTrait *trait;
+    struct IrType *method;
+};
+
+DEFINE_MAP(struct Compiler, MethodSelectionMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct MethodSelection,)
 DEFINE_MAP(struct Compiler, NodeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, NodeId,)
 DEFINE_MAP(struct Compiler, FnDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrFnDef *,)
 DEFINE_MAP(struct Compiler, AdtDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAdtDef *,)

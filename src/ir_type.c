@@ -80,6 +80,28 @@ IrTypeList *pawIr_autoptr_chain(struct Compiler *C, IrType *type)
     return chain;
 }
 
+static DeclId get_method_with_name(struct Compiler *C, IrTypeList *methods, Str const *name)
+{
+    K_LIST_XFOREACH (methods, IrType *const, p) {
+        struct IrFnDef const *def = pawIr_get_fn_def(C, IR_TYPE_DID(*p));
+        if (pawS_eq(def->name, name)) return IR_TYPE_DID(*p);
+    }
+    return INVALID_DECL_ID;
+}
+
+DeclId pawIr_get_method_from_parent(struct Compiler *C, DeclId parent_did, Str const *name)
+{
+    enum IrDefKind const parent_kind = pawIr_get_kind(C, parent_did);
+    if (parent_kind == IR_TRAIT_DEF) {
+        struct IrTraitDef const *trait_def = pawIr_get_trait_def(C, parent_did);
+        return get_method_with_name(C, trait_def->methods, name);
+    } else {
+        paw_assert(parent_kind == IR_IMPL_DEF);
+        struct IrImpl const *impl_def = pawIr_get_impl_def(C, parent_did);
+        return get_method_with_name(C, impl_def->methods, name);
+    }
+}
+
 void pawIr_set_def_kind(struct Compiler *C, DeclId did, enum IrDefKind kind)
 {
     paw_assert(DECL_ID_EXISTS(did));
@@ -649,62 +671,6 @@ static IrGenericArgs *replace_self_in_trait_args(struct Compiler *C, IrGenericAr
 
     IrGenericArgs_set(result, 0, IrGenericArg_from_type((IrType *)target));
     return result;
-}
-
-// TODO: handle ambiguous method calls (there are multiple trait bounds on a single generic that declare a method with the same name)
-IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str const *name)
-{
-    IrTraitList *bounds = pawIr_get_trait_bounds(C, target->did);
-
-    if (bounds != NULL) {
-        IrTypeList *candidates = IrTypeList_new(C);
-        IrTraitList *worklist = IrTraitList_new(C);
-        IrTraitList_reserve(C, worklist, bounds->count);
-        TraitCache *cache = TraitCache_new(C);
-        K_LIST_XFOREACH (bounds, IrTrait *const, b) {
-            TraitCache_insert_unique(C, cache, (*b)->did, NULL);
-            IrTraitList_push(C, worklist, *b);
-        }
-
-        while (worklist->count > 0) {
-            IrTrait *b = IrTraitList_last(worklist);
-            IrTraitList_pop(worklist);
-            struct IrTraitDef const *def = pawIr_get_trait_def(C, b->did);
-            IrTraitList *supertraits = pawIr_get_trait_bounds(C,
-                    IrGenericDefs_first(def->generics)->did);
-            if (supertraits != NULL) {
-                K_LIST_XFOREACH (supertraits, IrTrait *const, psupertrait) {
-                    IrTrait *supertrait = *psupertrait;
-                    if (!TraitCache_insert(C, cache, supertrait->did, NULL)) {
-                        IrGenericArgs *args = replace_self_in_trait_args(C, supertrait->args, target);
-                        IrTraitList_push(C, worklist, pawIr_new_trait(C, supertrait->did, args));
-                    }
-                }
-            }
-            K_LIST_XFOREACH (def->methods, IrType *const, m) {
-                struct IrFnDef const *fn = pawIr_get_fn_def(C, IR_TYPE_DID(*m));
-                if (pawS_eq(fn->name, name)) {
-                    IrType *type = pawIr_solver_instantiate_type(C->S, fn->did);
-                    IrType *type_ctx = pawIr_get_context(C, type);
-                    IrTrait *trait_ctx = pawIr_get_trait_context(C, type);
-                    pawIr_unify_traits_unchecked(C, trait_ctx, b);
-                    pawU_unify_unchecked(C->U, type_ctx, (IrType *)target);
-                    IrTypeList_push(C, candidates, type);
-                }
-            }
-        }
-
-        if (candidates->count > 1)
-            THROW_ERROR(C, MultipleApplicableItems,
-                    .modname = SCAN_STR(C, ""),
-                    .name = name,
-                    .span = {0});
-
-        if (candidates->count == 1)
-            return IrTypeList_first(candidates);
-    }
-
-    return NULL;
 }
 
 enum IrDefKind pawIr_get_kind(struct Compiler *C, DeclId did)
@@ -1546,6 +1512,14 @@ IrDefs *pawIr_inherent_impls_for(struct Compiler *C, IrType *self)
 IrDefs *pawIr_trait_impls_for(struct Compiler *C, IrType *self)
 {
     return get_or_create_candidates_for(C, self, C->impls.trait);
+}
+
+IrTraitList *pawIr_supertraits_of(struct Compiler *C, DeclId did)
+{
+    struct IrTraitDef const *trait_def = pawIr_get_trait_def(C, did);
+    struct IrGenericDef const *self_def = IrGenericDefs_first(trait_def->generics);
+    IrTraitList *supertraits = pawIr_get_trait_bounds(C, self_def->did);
+    return supertraits != NULL ? supertraits : IrTraitList_new(C);
 }
 
 

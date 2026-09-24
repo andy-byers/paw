@@ -27,11 +27,9 @@ impl B for X {
     }
 }
 
-// TODO: this causes a "multiple applicable items" error because it calls pawIr_resolve_trait_method instead of pawP_find_method, which is wrong
-// TODO: use pawP_find_method for all method lookups
-//fn funcs<T: A + B>(t: *T) -> (int64, int64) {
-//    (t.func(1.23), t.func(true))
-//}
+fn funcs<T: A + B>(t: *T) -> (int64, int64) {
+    (t.func(true), t.func(1.23))
+}
 
 #[test]
 pub fn test() {
@@ -40,6 +38,6 @@ pub fn test() {
     assert(x.func(false) == 1);
     assert(x.func(1.23) == 2);
 
-//    assert(funcs(&x).0 == 1);
-//    assert(funcs(&x).1 == 2);
+    assert(funcs(&x).0 == 1);
+    assert(funcs(&x).1 == 2);
 }

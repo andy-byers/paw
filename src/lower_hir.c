@@ -747,7 +747,6 @@ static struct MirPlace lower_index(struct HirVisitor *V, struct HirIndex *e)
     target = auto_deref_object(fs, target);
     struct MirPlace const index = lower_rvalue(V, e->index);
     IrType *target_type = mir_place_type(fs->mir, target);
-    IrType *index_type = GET_NODE_TYPE(L->C, e->index);
     IrType *raw_target_type = auto_deref_full(target_type);
 
     IrType *result_type = pawIr_new_ptr(L->C, get_type(L, e->id));
@@ -760,8 +759,8 @@ static struct MirPlace lower_index(struct HirVisitor *V, struct HirIndex *e)
 
     // Determine the concrete type of the "Index::index" method that will
     // be used to represent this indexing operation.
-    struct IrType2 const type2 = {raw_target_type, index_type};
-    IrType *fn_type = *IrType2Map_get(L->C, L->C->indexes, type2);
+    struct MethodSelection const *selection = MethodSelectionMap_get(L->C, L->C->method_selections, e->id);
+    IrType *fn_type = selection->method;
 
     if (!IrIsPtr(target_type))
         target = addr_of(fs, target);
@@ -1116,9 +1115,13 @@ static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceS
         IrGenericArgs_push(fs->C, trait_args, IrGenericArg_from_type(from_error_type));
         IrGenericArgs_push(fs->C, trait_args, IrGenericArg_from_type(into_error_type));
         IrTrait *into_trait = pawIr_new_trait(fs->C, trait_did, trait_args);
+
+        IrTypeList *call_args = IrTypeList_new(fs->C);
+        IrTypeList_push(fs->C, call_args, from_error_type);
+
         Str const *into_name = SCAN_STR(fs->C, "into");
-        struct Instantiation const *inst = pawP_find_trait_method(fs->C, from_error_type,
-                into_trait, into_name, (struct IrObligationCause){
+        struct Instantiation const *inst = pawP_find_method(fs->C, from_error_type,
+                into_trait, into_name, call_args, (struct IrObligationCause){
                     .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
                     .assoc_item_lookup.self = from_error_type,
                     .assoc_item_lookup.name = into_name,
@@ -1129,6 +1132,10 @@ static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceS
                     .trait = pawIr_print_trait_v2(fs->C, into_trait),
                     .type = pawIr_print_type_v2(fs->C, from_error_type),
                     .span = span);
+
+        struct IrSignature const *fn = IrGetSignature(inst->inst);
+        pawU_unify_unchecked(fs->C->U, into_error_type,
+                IrGenericArg_get_type(IrGenericArgs_get(fn->args, 1)));
 
         into_fn = new_register(fs, inst->inst);
         NEW_INSTR(fs, global, span, into_fn);
@@ -1337,15 +1344,6 @@ static void lower_function_block(struct LowerHir *L, struct HirExpr *block)
     struct FunctionState *fs = L->fs;
     struct MirPlace const result = lower_rvalue(L->V, block);
     terminate_return(fs, fs->mir->span, result);
-}
-
-static struct MirPlace get_register(struct FunctionState *fs, int index)
-{
-    struct MirRegisterData const *data = mir_reg_data(fs->mir, MIR_REG(index));
-    return (struct MirPlace){
-        .kind = MIR_PLACE_REGISTER,
-        .r = MIR_REG(index),
-    };
 }
 
 static void visit_params(struct HirVisitor *V, HirDeclList *params)
@@ -1740,12 +1738,8 @@ static struct MirPlace get_binding_reg(struct FunctionState *fs, struct Binding 
 {
     struct PlaceInfo const *pr = VarPlaces_get(fs->L, fs->ms->places, b.var);
     paw_assert(pr != NULL);
-    // TODO
-//    return b.var.deref ? load_from(fs, b.var.span, b.ref ? pr->place : load_from(fs, b.var.span, pr->place))
-//        : b.ref ? pr->place : load_from(fs, b.var.span, pr->place);
     struct MirPlace const place = deref_n(fs, pr->place, b.var.deref);
     return b.ref ? place : load_from(fs, b.var.span, place);
- //   return v.deref ? load_from(fs, pr->span, *pr) : *pr;
 }
 
 static void declare_match_bindings(struct FunctionState *fs, struct BindingList *bindings)
@@ -2141,7 +2135,7 @@ static struct MirPlace lower_rvalue(struct HirVisitor *V, struct HirExpr *expr)
 
 #undef GENERATE_COMMON_CASES
 
-static void lower_hir_body_aux(struct LowerHir *L, struct HirFnDecl *fn, struct Mir *mir)
+static void lower_hir_body_aux(struct LowerHir *L, struct HirFnDecl const *fn, struct Mir *mir)
 {
     struct BlockState bs;
     struct FunctionState fs;
@@ -2170,7 +2164,7 @@ static void validate_fn_annotations(struct LowerHir *L, struct Mir const *mir)
     }
 }
 
-static paw_Bool is_polymorphic_fn(struct LowerHir *L, struct HirFnDecl *fn)
+static paw_Bool is_polymorphic_fn(struct LowerHir *L, struct HirFnDecl const *fn)
 {
     if (fn->generics != NULL)
         return PAW_TRUE;
@@ -2185,7 +2179,7 @@ static paw_Bool is_polymorphic_fn(struct LowerHir *L, struct HirFnDecl *fn)
     return PAW_FALSE;
 }
 
-static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFnDecl *fn)
+static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFnDecl const *fn)
 {
     IrType *type = pawIr_get_def_type(L->C, fn->did);
     struct IrFnPtr const *fptr = get_fn_type(L, type);
@@ -2390,8 +2384,6 @@ void pawP_lower_hir(struct Compiler *C)
     L.V->VisitLetStmt = visit_let_stmt;
     L.V->VisitExprStmt = visit_expr_stmt;
 
-    pawU_enter_binder(C->U, SCAN_STR(C, "lower_hir"));
-
     lower_global_constants(&L);
 
     HirDeclMapIterator iter;
@@ -2399,17 +2391,19 @@ void pawP_lower_hir(struct Compiler *C)
     while (HirDeclMapIterator_is_valid(&iter)) {
         struct HirDecl *decl = *HirDeclMapIterator_valuep(&iter);
         if (HirIsFnDecl(decl) && is_entrypoint(C, decl->hdr.did)) {
-            struct HirFnDecl *d = HirGetFnDecl(decl);
+            pawU_enter_binder(C->U, SCAN_STR(C, "lower_hir"));
+            struct HirFnDecl const *d = HirGetFnDecl(decl);
             L.pm = &K_LIST_AT(L.hir->modules, d->did.modno);
             struct Mir *r = lower_hir_body(&L, d);
             BodyMap_insert(C, C->bodies, d->did, r);
+            pawIr_solver_solve_all_or_error(C->S); // FIXME: don't look up methods in this module, shouldn't need this call
+            pawU_leave_binder(C->U);
         }
         HirDeclMapIterator_next(&iter);
     }
 
     lower_pending_constants(&L);
 
-    pawU_leave_binder(C->U);
     pawP_pool_free(C, L.pool);
 }
 

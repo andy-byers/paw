@@ -17,6 +17,7 @@
 #include "ir_type.h"
 #include "mir.h"
 #include "solve.h"
+#include "trait.h"
 #include "type_folder.h"
 #include "unify.h"
 
@@ -54,6 +55,97 @@ static void log_instance(struct MonoCollector *M, char const *kind, Str const *n
     PAW_UNUSED(name);
     PAW_UNUSED(type);
 #endif
+}
+
+static IrType *monomorphize_inherent_method(struct MonoCollector *M, IrType *type, IrType *self, Str const *name, DeclId parent_did)
+{
+    return type;
+}
+
+static IrType *monomorphize_trait_method(struct MonoCollector *M, IrType *type, IrType *self, Str const *name, DeclId parent_did)
+{
+    IrTrait *trait = pawIr_get_trait_context(M->C, type);
+    IrDefs const *trait_impls = pawIr_trait_impls_for(M->C, self);
+    K_LIST_XFOREACH (trait_impls, DeclId const, p) {
+        struct IrImpl const *impl_def = pawIr_get_impl_def(M->C, *p);
+        if (P_ID_EQUALS(NULL, impl_def->trait->did, parent_did)) {
+            DeclId const did = pawIr_get_method_from_parent(M->C, *p, name);
+            IrType *result_type = pawIr_solver_instantiate_type(M->C->S, did);
+
+            IrType *result_self = pawIr_get_context(M->C, result_type);
+            pawU_unify_unchecked(M->C->U, result_self, self);
+
+            IrTrait *result_trait = pawIr_get_trait_context(M->C, result_type);
+            pawIr_unify_traits_unchecked(M->C, result_trait, trait);
+
+            return pawU_normalize(M->C->U, result_type);
+        }
+    }
+    return NULL;
+}
+
+static IrType *monomorphize_fn_type_inner(struct MonoCollector *M, IrType *type)
+{
+    struct IrFnDef const *fn_def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
+    if (!DECL_ID_EXISTS(fn_def->parent)) return type; // free function
+    enum IrDefKind const parent_kind = pawIr_get_kind(M->C, fn_def->parent);
+    if (parent_kind == IR_IMPL_DEF) return type;
+    paw_assert(parent_kind == IR_TRAIT_DEF);
+
+    IrType *self = IrGenericArg_get_type(IR_FIRST_GENERIC_ARG(type));
+    IrDefs const *trait_impls = pawIr_trait_impls_for(M->C, self);
+    K_LIST_XFOREACH (trait_impls, DeclId const, p) {
+        struct IrImpl const *impl_def = pawIr_get_impl_def(M->C, *p);
+        if (P_ID_EQUALS(NULL, impl_def->trait->did, fn_def->parent)) {
+            DeclId const did = pawIr_get_method_from_parent(M->C, *p, fn_def->name);
+            IrType *result_type = pawIr_solver_instantiate_type(M->C->S, did);
+            IrType *result_self = pawIr_get_context(M->C, result_type);
+            IrTrait *trait = pawIr_get_trait_context(M->C, type);
+            IrTrait *result_trait = pawIr_get_trait_context(M->C, result_type);
+            if (pawU_unify(M->C->U, result_self, self) == 0
+                    && pawIr_unify_traits(M->C, result_trait, trait) == 0) {
+                IrType *method = pawIr_materialize_fn(M->C,
+                        IR_TYPE_DID(result_type),
+                        IR_GENERIC_ARGS(result_type));
+                pawU_unify_unchecked(M->C->U, method, type);
+                return result_type;
+            }
+        }
+    }
+
+    K_LIST_XFOREACH (M->C->impls.blanket, DeclId const, p) {
+        struct IrImpl const *impl_def = pawIr_get_impl_def(M->C, *p);
+        if (P_ID_EQUALS(NULL, impl_def->trait->did, fn_def->parent)) {
+            DeclId const did = pawIr_get_method_from_parent(M->C, *p, fn_def->name);
+            IrType *result_type = pawIr_solver_instantiate_type(M->C->S, did);
+            IrType *result_self = pawIr_get_context(M->C, result_type);
+            IrTrait *trait = pawIr_get_trait_context(M->C, type);
+            IrTrait *result_trait = pawIr_get_trait_context(M->C, result_type);
+            if (pawU_unify(M->C->U, result_self, self) == 0
+                    && pawIr_unify_traits(M->C, result_trait, trait) == 0) {
+                IrType *method = pawIr_materialize_fn(M->C,
+                        IR_TYPE_DID(result_type),
+                        IR_GENERIC_ARGS(result_type));
+                pawU_unify_unchecked(M->C->U, method, type);
+                return result_type;
+            }
+        }
+    }
+
+    // indicates a programming or logic error in either the trait solver or the
+    // above loop
+    struct Module const m = ModuleInfo_get(M->C->modinfo, M->base->modno);
+    THROW_ERROR(M->C, Internal,
+            .message = SCAN_STR(M->C, "monomorphization lookup failure"),
+            .modname = m.name);
+}
+
+static IrType *monomorphize_fn_type(struct MonoCollector *M, IrType *type)
+{
+    type = monomorphize_fn_type_inner(M, type);
+    pawIr_solver_solve_all_or_error(M->C->S);
+    type = pawU_normalize_projections(M->C->U, type);
+    return pawU_normalize(M->C->U, type);
 }
 
 static enum BuiltinKind builtin_kind(struct MonoCollector *M, IrType *type)
@@ -353,34 +445,11 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, IrType *ty
     return M->mir;
 }
 
-static IrType *get_assoc_fn(struct MonoCollector *M, IrType *self, IrTrait *trait, Str const *name)
-{
-    // associated fn will always be found unless there is a bug in the compiler
-    struct IrObligationCause const INFALLIBLE = {0};
-    if (trait == NULL)
-        return pawP_find_method(M->C, self, name, NULL, INFALLIBLE)->inst;
-    return pawP_find_trait_method(M->C, self, trait, name, INFALLIBLE)->inst;
-}
-
 static IrType *copy_type(struct MonoCollector *M, IrType *type)
 {
     type = finalize_type(M, type);
-    if (IrIsSignature(type)) {
-        struct IrFnDef const *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
-        if (DECL_ID_EXISTS(def->parent)) {
-            enum IrDefKind const parent_kind = pawIr_get_kind(M->C, def->parent);
-            if (parent_kind == IR_TRAIT_DEF) {
-                // DeclId belongs to a trait associated function, meaning the receiver was a bound
-                // generic type. Now that a concrete receiver has been determined, get the DeclId of
-                // the associated function from the trait impl block.
-                IrType *self = pawIr_get_context(M->C, type);
-                IrTrait *trait = finalize_trait(M, pawIr_get_trait_context(M->C, type));
-                IrType *method = get_assoc_fn(M, self, trait, def->name);
-                pawU_unify_unchecked(M->C->U, method, type);
-                return pawU_normalize_projections(M->C->U, method);
-            }
-        }
-    }
+    if (IrIsSignature(type))
+        type = monomorphize_fn_type(M, type);
     return type;
 }
 
@@ -416,8 +485,6 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         }
     }
 
-//TODO
-
     {
         struct MirCaptureInfo const *pci;
         K_LIST_FOREACH (base->captured, pci) {
@@ -438,7 +505,7 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
     }
 }
 
-static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir *base, IrType *type)
+static struct Mir *monomorphize_fn_body_inner(struct MonoCollector *M, struct Mir *base, IrType *type)
 {
     M->subst.params = IR_GENERIC_ARGS(base->type);
     M->subst.args = IR_GENERIC_ARGS(type);
@@ -454,33 +521,14 @@ static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir
     return inst;
 }
 
-static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *base, IrType *type, IrType *self)
-{
-    paw_assert(IrIsSignature(type));
-    IrTrait *trait = pawIr_get_trait_context(M->C, type);
-    struct IrFnDef const *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
-    struct IrImpl *const *impl_ptr = ImplMap_get(M->C, M->C->impl_defs, base->parent_id);
-    if (impl_ptr == NULL || (*impl_ptr)->generics == NULL)
-        return monomorphize_function_aux(M, base, type);
-
-    IrType *fn = get_assoc_fn(M, self, trait, def->name);
-    IrGetSignature(type)->did = IR_TYPE_DID(fn);
-
-    pawU_unify_unchecked(M->C->U, type, fn);
-    type = pawU_normalize_projections(M->C->U, type);
-
-    return monomorphize_function_aux(M, base, type);
-}
-
 static struct Mir *monomorphize(struct MonoCollector *M, IrType *type)
 {
-    struct Mir *base = *BodyMap_get(M->C, M->bodies, IR_TYPE_DID(type)); // must exist
-    if (!IR_TYPE_IS_POLYMORPHIC(base->type)) return base;
+    type = monomorphize_fn_type(M, type);
 
-    IrType *self = pawIr_get_context(M->C, type);
-    return self == NULL
-               ? monomorphize_function_aux(M, base, type)
-               : monomorphize_method_aux(M, base, type, self);
+    struct Mir *mir = *BodyMap_get(M->C, M->bodies, IR_TYPE_DID(type)); // must exist
+    if (!IR_TYPE_IS_POLYMORPHIC(mir->type)) return mir;
+
+    return monomorphize_fn_body_inner(M, mir, type);
 }
 
 static IrType *collect_type(struct IrTypeFolder *F, IrType *type)
@@ -488,6 +536,9 @@ static IrType *collect_type(struct IrTypeFolder *F, IrType *type)
     struct MirTypeFolder *outer = F->ud;
     struct MonoCollector *M = outer->ud;
     paw_assert(!IrIsGeneric(type) && !IrIsInfer(type));
+
+    if (IrIsSignature(type))
+        type = monomorphize_fn_type(M, type);
     type = pawU_normalize_projections(F->C->U, type);
 
     void *const *p = TypeCollection_get(M->C, M->cache, type);
