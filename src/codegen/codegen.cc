@@ -290,43 +290,22 @@ private:
     Type *define_enum_type(IrType *irtype)
     {
         auto const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
-        auto *discr_type = define_discr_type(def->variants->count);
         paw_assert(def->variants->count > 0);
 
         std::vector<ObjectType::FieldTypes> variant_types(unsigned(def->variants->count));
         for (int i = 0; i < def->variants->count; ++i) {
             auto *field_irtypes = pawP_instantiate_variant_fields(C, &irtype->Adt_, i);
             auto field_types = get_or_create_types(field_irtypes);
-            field_types.insert(begin(field_types), discr_type);
             variant_types[unsigned(i)] = field_types;
         }
 
         return X->get_object_type(variant_types);
     }
 
-    Type *define_discr_type(int num_variants)
-    {
-        return X->get_int_type(IntKind::INT64);
-        // TODO: Need some way to convey the discriminant size to code that loads
-        //       and stores the discriminant. Could add sized integer types to Paw
-        //       and use for discriminant (sized integer types could be hidden from
-        //       the user if necessary, just exposing "int").
-//        return num_variants < 0x100ULL ? get_i8_ty() :
-//           num_variants < 0x10000ULL ? get_i16_ty() :
-//           num_variants < 0x100000000ULL ? get_i32_ty() :
-//           get_i64_ty();
-    }
-
     Type *create_adt(IrType *irtype)
     {
         auto const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
         auto variant_types = create_adt_variants(irtype, def->variants->count);
-        if (!def->is_struct) {
-            // add the discriminant to the start of each variant
-            auto *discr_type = define_discr_type(def->variants->count);
-            for (auto &field_types: variant_types)
-                field_types.insert(begin(field_types), discr_type);
-        }
         return X->get_object_type(variant_types);
     }
 
@@ -1363,6 +1342,9 @@ private:
             case kMirStructGEP:
                 create_structgep(instr->StructGEP_);
                 break;
+            case kMirGetDiscriminant:
+                create_getdiscriminant(instr->GetDiscriminant_);
+                break;
             case kMirCall:
                 create_call(instr->Call_);
                 break;
@@ -1510,12 +1492,20 @@ private:
         }
         auto *object_type = cast<ObjectType>(get_place_type(x.output));
         auto *variant_ty = object_type->get_variant_ty(Discriminant(x.discr));
-        llvm::Value *object = llvm::UndefValue::get(variant_ty);
-        for (auto i = 0U; i < unsigned(x.fields->count); ++i) {
-            auto *element = operand(x.fields->data[i]);
-            object = B->CreateInsertValue(object, element, i, "agg.init." + std::to_string(i));
+
+        auto index = 0U;
+        llvm::Value *init = llvm::UndefValue::get(variant_ty);
+        if (object_type->get_num_variants() > 1) {
+            auto *discr = llvm::ConstantInt::get(
+                    *object_type->get_discriminant_type(),
+                    static_cast<uint64_t>(x.discr));
+            init = B->CreateInsertValue(init, discr, index++, "agg.init.discr");
         }
-        set_result(x.output, object);
+        for (auto i = 0; i < x.fields->count; ++i)
+            init = B->CreateInsertValue(init,
+                    operand(MirPlaceList_get(x.fields, i)),
+                    index++, "agg.init." + std::to_string(i));
+        set_result(x.output, init);
     }
 
     IrType *get_place_irtype(MirPlace const place)
@@ -1603,6 +1593,22 @@ private:
         auto *element_type = get_type(ir_deref(output_irtype));
         auto *element_ptr = B->CreateInBoundsGEP(element_type->get_ty(), array, index);
         set_result(x.output, element_ptr);
+    }
+
+    void create_getdiscriminant(struct MirGetDiscriminant const &x)
+    {
+        auto *enum_irtype = get_place_irtype(x.object);
+        auto *object_type = (ObjectType *)get_deref_type(enum_irtype);
+        auto *object_value = !is_thin_ptr(enum_irtype)
+            ? state_->get_raw_value(x.object.r)
+            : operand(x.object);
+        Object object(*state_, object_value, object_type);
+
+        auto *discr_type = object_type->get_discriminant_type();
+        auto *discr_value = object.get_discriminant();
+        if (discr_type->get_bitsize() < 64)
+            discr_value = B->CreateZExt(discr_value, X.get_i64_ty());
+        set_result(x.output, discr_value);
     }
 
     BuiltinKind builtin_kind(IrType *type)

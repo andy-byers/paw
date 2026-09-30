@@ -215,6 +215,19 @@ struct MirInstruction *pawMir_new_array_gep(struct Mir *mir, struct SourceSpan s
     return instr;
 }
 
+struct MirInstruction *pawMir_new_get_discriminant(struct Mir *mir, struct SourceSpan span, struct MirPlace object, struct MirPlace output)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->GetDiscriminant_ = (struct MirGetDiscriminant){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirGetDiscriminant,
+        .span = span,
+        .object = object,
+        .output = output,
+    };
+    return instr;
+}
+
 struct MirInstruction *pawMir_new_get_range(struct Mir *mir, struct SourceSpan span, enum BuiltinKind b_kind, struct MirPlace output, struct MirPlace object, struct MirPlace lower, struct MirPlace upper)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
@@ -587,6 +600,12 @@ static void AcceptArrayGEP(struct MirVisitor *V, struct MirArrayGEP *t)
     pawMir_visit_place(V, t->output);
     pawMir_visit_place(V, t->array);
     pawMir_visit_place(V, t->index);
+}
+
+static void AcceptGetDiscriminant(struct MirVisitor *V, struct MirGetDiscriminant *t)
+{
+    pawMir_visit_place(V, t->output);
+    pawMir_visit_place(V, t->object);
 }
 
 static void AcceptGetRange(struct MirVisitor *V, struct MirGetRange *t)
@@ -1002,6 +1021,11 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
             ADD_INPUT(x->object);
             break;
         }
+        case kMirGetDiscriminant: {
+            struct MirGetDiscriminant *x = MirGetGetDiscriminant(instr);
+            ADD_INPUT(x->object);
+            break;
+        }
         case kMirGetRange: {
             struct MirGetRange *x = MirGetGetRange(instr);
             ADD_INPUT(x->object);
@@ -1109,6 +1133,9 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
             break;
         case kMirArrayGEP:
             ADD_OUTPUT(MirGetArrayGEP(instr)->output);
+            break;
+        case kMirGetDiscriminant:
+            ADD_OUTPUT(MirGetGetDiscriminant(instr)->output);
             break;
         case kMirGetRange:
             ADD_OUTPUT(MirGetGetRange(instr)->output);
@@ -1703,6 +1730,13 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_LITERAL(P, "[");
             print_place(P, t->index);
             PRINT_LITERAL(P, "]");
+            break;
+        }
+        case kMirGetDiscriminant: {
+            struct MirGetDiscriminant *t = MirGetGetDiscriminant(instr);
+            print_place(P, t->output);
+            PRINT_LITERAL(P, " = getdiscr");
+            print_place(P, t->object);
             break;
         }
         case kMirGetRange: {

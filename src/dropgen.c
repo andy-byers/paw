@@ -33,6 +33,11 @@ static struct MirInstruction *select_field(struct Mir *mir, struct MirPlace obje
     return pawMir_new_struct_gep(mir, TODO, output, object, field, discr);
 }
 
+static struct MirInstruction *get_discriminant(struct Mir *mir, struct MirPlace object, struct MirPlace output)
+{
+    return pawMir_new_get_discriminant(mir, TODO, object, output);
+}
+
 static struct MirInstruction *select_element(struct Mir *mir, struct MirPlace object, paw_Uint64 index, struct MirPlace output)
 {
     IrType *usize = pawIr_new_int(mir->C, IR_USIZE);
@@ -46,13 +51,13 @@ static void pushi(struct Mir *mir, struct MirBlockData const *data, struct MirIn
     MirInstructionList_push(mir, data->instructions, instr);
 }
 
-static void drop_fields_in_reverse(struct DropGenerator *G, struct Mir *mir, struct MirBlockData const *data, struct MirPlace place, int discr, IrTypeList *field_types, int field_offset)
+static void drop_fields_in_reverse(struct DropGenerator *G, struct Mir *mir, struct MirBlockData const *data, struct MirPlace place, int discr, IrTypeList *field_types)
 {
     for (int i = field_types->count - 1; i >= 0; --i) {
         IrType *field_type = IrTypeList_get(field_types, i);
         if (pawIr_needs_drop(G->C, field_type)) {
             struct MirPlace const field = new_register(mir, new_ptr(G, field_type));
-            pushi(mir, data, select_field(mir, place, discr, field_offset + i, field));
+            pushi(mir, data, select_field(mir, place, discr, i, field));
             pushi(mir, data, pawMir_new_drop(mir, TODO, field));
         }
     }
@@ -91,7 +96,7 @@ static void drop_tuple_fields(struct DropGenerator *G, struct Mir *mir, struct M
     struct MirInstruction *terminator = popi(data);
 
     struct IrTuple *t = IrGetTuple(ir_deref(mir_place_type(mir, local)));
-    drop_fields_in_reverse(G, mir, data, local, 0, t->elems, 0);
+    drop_fields_in_reverse(G, mir, data, local, 0, t->elems);
 
     MirInstructionList_push(mir, data->instructions, terminator);
 }
@@ -118,7 +123,7 @@ static void drop_struct_fields(struct DropGenerator *G, struct Mir *mir, struct 
 
     struct IrAdt *t = IrGetAdt(ir_deref(mir_place_type(mir, local)));
     IrTypeList *fields = pawP_instantiate_struct_fields(G->C, t);
-    drop_fields_in_reverse(G, mir, data, local, 0, fields, 0);
+    drop_fields_in_reverse(G, mir, data, local, 0, fields);
 
     MirInstructionList_push(mir, data->instructions, terminator);
 }
@@ -151,10 +156,8 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
     MirSwitchArmList *arms = MirSwitchArmList_new(mir);
     {
         // transform the return into a switch on the discriminant
-        struct MirPlace const discr_addr = new_register(mir, new_ptr(G, pawIr_new_int(G->C, IR_INT64)));
-        struct MirPlace const discr_value = new_register(mir, ir_deref(mir_place_type(mir, discr_addr)));
-        pushi(mir, last_data, select_field(mir, local, 0, 0, discr_addr));
-        pushi(mir, last_data, pawMir_new_load(mir, TODO, discr_addr, discr_value));
+        struct MirPlace const discr_value = new_register(mir, pawIr_new_int(G->C, IR_INT64));
+        pushi(mir, last_data, get_discriminant(mir, local, discr_value));
         terminator->Switch_ = (struct MirSwitch){
             .kind = kMirSwitch,
             .discr = discr_value,
@@ -188,7 +191,7 @@ static void drop_enum_variants(struct DropGenerator *G, struct Mir *mir, struct 
 
         // drop fields from this particular variant (indicated by "discr")
         IrTypeList *fields = pawP_instantiate_variant_fields(G->C, t, discr);
-        drop_fields_in_reverse(G, mir, block_data, local, discr, fields, 1);
+        drop_fields_in_reverse(G, mir, block_data, local, discr, fields);
 
         push_goto(mir, block_data);
     }
