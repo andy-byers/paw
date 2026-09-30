@@ -221,11 +221,48 @@ Object::Object(State &state, ObjectType *type, Object::CreationTag)
 {
 }
 
+static unsigned first_field_offset(ObjectType const &o)
+{
+    return o.get_num_variants() > 1;
+}
+
+llvm::Value *Object::get_discriminant() const
+{
+    auto *X = state_->get_context();
+    auto *B = state_->get_builder();
+
+    auto *type = get_type();
+    if (type->get_num_variants() > 1) {
+        auto *variant_ty = type->get_variant_ty(Discriminant::base());
+        auto *discr_ty = variant_ty->getElementType(0);
+        return B->CreateLoad(discr_ty, get_value());
+    }
+
+    return llvm::ConstantInt::get(X->get_isize_ty(), 0);
+}
+
+void Object::set_discriminant(Discriminant value)
+{
+    paw_assert(get_type()->get_num_variants() > 1);
+    set_discriminant(llvm::ConstantInt::get(
+            *get_type()->get_discriminant_type(),
+            value.value));
+}
+
+void Object::set_discriminant(llvm::Value *value)
+{
+    auto *B = state_->get_builder();
+    paw_assert(get_type()->get_num_variants() > 1);
+    B->CreateStore(value, get_value());
+}
+
 llvm::Value *Object::get_field_ptr(Discriminant discr, unsigned index)
 {
     auto *B = state_->get_builder();
-    auto *variant_ty = get_type()->get_variant_ty(discr);
-    return B->CreateStructGEP(variant_ty, get_value(), index);
+    auto *type = get_type();
+    return B->CreateStructGEP(
+            type->get_variant_ty(discr), get_value(),
+            first_field_offset(*type) + index);
 }
 
 llvm::Value *Object::get_field(Discriminant discr, unsigned index)

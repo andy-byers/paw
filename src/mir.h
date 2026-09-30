@@ -22,6 +22,7 @@ struct Mir;
     X(Array) \
     X(ArrayGEP) \
     X(StructGEP) \
+    X(GetDiscriminant) \
     X(SetRange) \
     X(GetRange) \
     X(Kill) \
@@ -196,6 +197,12 @@ struct MirArrayGEP {
     int field;
 };
 
+struct MirGetDiscriminant {
+    MIR_INSTRUCTION_HEADER;
+    struct MirPlace object;
+    struct MirPlace output;
+};
+
 struct MirGetRange {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
@@ -364,6 +371,10 @@ struct MirInstruction *pawMir_new_closure(struct Mir *mir, struct SourceSpan spa
 struct MirInstruction *pawMir_new_struct_gep(struct Mir *mir, struct SourceSpan span, struct MirPlace output, struct MirPlace object, int field, int discr);
 
 struct MirInstruction *pawMir_new_array_gep(struct Mir *mir, struct SourceSpan span, struct MirPlace output, struct MirPlace array, struct MirPlace index);
+
+struct MirInstruction *pawMir_new_get_discriminant(struct Mir *mir, struct SourceSpan span, struct MirPlace object, struct MirPlace output);
+
+struct MirInstruction *pawMir_new_set_discriminant(struct Mir *mir, struct SourceSpan span, struct MirPlace object, paw_Uint64 value);
 
 struct MirInstruction *pawMir_new_get_range(struct Mir *mir, struct SourceSpan span, enum BuiltinKind b_kind, struct MirPlace output, struct MirPlace object, struct MirPlace lower, struct MirPlace upper);
 

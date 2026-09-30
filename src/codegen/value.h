@@ -179,6 +179,12 @@ public:
         return (ObjectType *)type_;
     }
 
+    // Return the value of the integer discriminant
+    llvm::Value *get_discriminant() const;
+
+    void set_discriminant(Discriminant value);
+    void set_discriminant(llvm::Value *value);
+
     llvm::Value *get_field_ptr(Discriminant discr, unsigned index);
     llvm::Value *get_field(Discriminant discr, unsigned index);
     void set_field(Discriminant discr, unsigned index, llvm::Value *value);

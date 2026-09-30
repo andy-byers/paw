@@ -382,6 +382,13 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
                 break;
             }
 
+            case kMirGetDiscriminant: {
+                struct MirGetDiscriminant const *x = MirGetGetDiscriminant(*pinstr);
+                maybe_indicate_use(V, x->object);
+                maybe_indicate_def(V, x->output);
+                break;
+            }
+
             default: {
                 struct MirPlacePtrList const *loads = pawMir_get_loads(V->mir, *pinstr);
                 struct MirPlacePtrList const *stores = pawMir_get_stores(V->mir, *pinstr);

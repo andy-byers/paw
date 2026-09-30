@@ -340,6 +340,8 @@ public:
         return llvm::cast<llvm::StructType>(ty_);
     }
 
+    Type *get_discriminant_type() const;
+
     std::string const &get_name() const { return name_; }
     unsigned get_num_variants() const { return variants_.size(); }
     unsigned get_alignment() const override { return min_alignment_; }

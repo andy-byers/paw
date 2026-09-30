@@ -5,8 +5,7 @@
 #include "abi.h"
 #include "context.h"
 
-// TODO: remove DEFERRED_INIT thing, not necessary now that reference types don't exist
-#define DEFERRED_INIT ((llvm::Type *)42)
+#define DEFERRED_INIT ((llvm::Type *)16)
 
 namespace paw::cg {
 
@@ -376,6 +375,25 @@ ObjectType::ObjectType(Context &X, llvm::ArrayRef<ObjectType::FieldTypes> varian
     set_variants(variants);
 }
 
+static IntKind kind_of_discriminant(paw_Uint64 num_variants)
+{
+    if (num_variants < 0x100) {
+        return IntKind::UINT8;
+    } else if (num_variants < 0x10000) {
+        return IntKind::UINT16;
+    } else if (num_variants < 0x100000000) {
+        return IntKind::UINT32;
+    } else {
+        return IntKind::UINT64;
+    }
+}
+
+Type *ObjectType::get_discriminant_type() const
+{
+    auto const num_variants = get_num_variants();
+    return num_variants < 2 ? (Type *)X->get_unit_type()
+        : X->get_int_type(kind_of_discriminant(num_variants));
+}
 
 static llvm::Type *create_underlying_ty(Context &X, size_t size, unsigned alignment)
 {
@@ -391,49 +409,70 @@ static llvm::Type *create_underlying_ty(Context &X, size_t size, unsigned alignm
 void ObjectType::set_variants(llvm::ArrayRef<ObjectType::FieldTypes> variants)
 {
     auto *c = X->get_context();
-    variants_.resize(variants.size());
+    auto const num_variants = variants.size();
+    variants_.reserve(num_variants);
+    ty_ = X->get_unit_ty();
 
-    struct {
-        uint64_t size = 0;
-        std::vector<llvm::Type *> field_tys;
-        llvm::Type *ty;
-    } largest_variant;
-    unsigned strictest_alignment = 1;
+    if (num_variants > 1) {
+        // Object represents an enumeration with more than one variant. Add an unsigned integer
+        // discriminant to the start of each variant that is large enough to store the value
+        // `num_variants - 1`. The size and alignment of the object are determined by the largest
+        // and most-strictly-aligned variants, respectively.
+        struct {
+            uint64_t size = 0;
+            std::vector<llvm::Type *> field_tys;
+            llvm::Type *ty;
+        } largest_variant;
 
-    paw_assert(!variants.empty());
-    for (auto i = 0U; i < variants.size(); ++i) {
-        auto const field_types = variants[i];
-        std::vector<llvm::Type *> field_tys;
-        llvm::StructType *variant_ty;
-        {
-            field_tys.reserve(field_types.size());
-            for (auto *field_type: field_types)
-                field_tys.push_back(*field_type);
-            variant_ty = llvm::StructType::get(*c, field_tys, false);
+        IntType const discr_type(*X,
+                kind_of_discriminant(num_variants));
+        for (auto const &field_types: variants) {
+            std::vector<llvm::Type *> field_tys;
+            llvm::StructType *variant_ty;
+            {
+                field_tys.reserve(1 + field_types.size());
+                field_tys.push_back(discr_type.get_ty());
+                for (auto *field_type: field_types)
+                    field_tys.push_back(field_type->get_ty());
+                variant_ty = llvm::StructType::get(*c, field_tys, false);
+            }
+
+            variants_.push_back({
+                .field_types = field_types,
+                .ty = variant_ty,
+            });
+
+            auto const size = X->size_of(variant_ty);
+            if (largest_variant.size <= size) {
+                largest_variant.field_tys = std::move(field_tys);
+                largest_variant.ty = variant_ty;
+                largest_variant.size = size;
+            }
+            auto const alignment = X->align_of(variant_ty);
+            if (min_alignment_ < alignment.value())
+                min_alignment_ = alignment.value();
         }
 
-        variants_[i] = {
+        paw_assert(largest_variant.size > 0); // sizeof(discriminant) > 0
+        ty_ = create_underlying_ty(*X, largest_variant.size, min_alignment_);
+
+    } else if (num_variants == 1) {
+        // Object represents either a structure or an enumeration with a single variant.
+        // Either way, no discriminant field is needed.
+        auto const field_types = variants.front();
+        std::vector<llvm::Type *> field_tys;
+        field_tys.reserve(field_types.size());
+        for (auto *field_type: field_types)
+            field_tys.push_back(*field_type);
+        auto *variant_ty = llvm::StructType::get(*c, field_tys, false);
+
+        variants_.push_back({
             .field_types = field_types,
             .ty = variant_ty,
-        };
-
-        auto const size = X->size_of(variant_ty);
-        if (largest_variant.size <= size) {
-            largest_variant.field_tys = std::move(field_tys);
-            largest_variant.ty = variant_ty;
-            largest_variant.size = size;
-        }
-        auto const alignment = X->align_of(variant_ty);
-        if (strictest_alignment < alignment.value())
-            strictest_alignment = alignment.value();
-    }
-
-    if (variants.empty() || largest_variant.size == 0) {
-        ty_ = llvm::StructType::get(*c, {}, false);
-    } else {
-        ty_ = variants.size() == 1 ? largest_variant.ty
-            : create_underlying_ty(*X, largest_variant.size, strictest_alignment);
-        min_alignment_ = strictest_alignment;
+        });
+        min_alignment_ = X->align_of(variant_ty).value();
+        if (X->size_of(variant_ty) > 0)
+            ty_ = variant_ty;
     }
 }
 
