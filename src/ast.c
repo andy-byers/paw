@@ -269,6 +269,10 @@ static void AcceptParamDecl(struct AstVisitor *V, struct AstParamDecl *d)
 static void AcceptTypeDecl(struct AstVisitor *V, struct AstTypeDecl *d)
 {
     accept_decl_list(V, d->generics);
+    if (d->bounds != NULL) {
+        K_LIST_XFOREACH (d->bounds, struct AstGenericBound, p)
+            AcceptPath(V, &p->path);
+    }
     if (d->rhs != NULL)
         AcceptType(V, d->rhs);
 }

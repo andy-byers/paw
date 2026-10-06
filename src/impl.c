@@ -213,8 +213,19 @@ static IrTraitList *elaborate_trait_bounds(struct LookupState *L, IrTraitList co
     K_LIST_XFOREACH (bounds, IrTrait *const, ptrait) {
         IrTraitList_push(L->C, result, *ptrait);
         IrTraitList const *supertraits = pawIr_supertraits_of(L->C, (*ptrait)->did);
-        K_LIST_XFOREACH (supertraits, IrTrait *const, psupertrait)
-            IrTraitList_push(L->C, result, *psupertrait);
+        K_LIST_XFOREACH (supertraits, IrTrait *const, psupertrait) {
+            int position = pawU_current_position(L->C->U);
+            paw_Bool already_exists = PAW_FALSE;
+            K_LIST_XFOREACH (result, IrTrait *const, t) {
+                if (P_ID_EQUALS(L->C, (*t)->did, (*psupertrait)->did)) {
+                    already_exists = PAW_TRUE;
+                    break;
+                }
+            }
+            if (!already_exists)
+                IrTraitList_push(L->C, result, *psupertrait);
+            pawU_undo_unifications(L->C->U, position);
+        }
     }
     return result;
 }
@@ -392,7 +403,7 @@ struct Instantiation *pawIr_find_assoc_type_generic(struct Compiler *C, IrType *
                 ADD_APPLICABLE_TYPE(*p, def->items);
             }
         }
-   }
+    }
 
     if (candidates->count == 0)
         return NULL;
@@ -421,7 +432,7 @@ struct Instantiation *pawIr_find_assoc_type_generic(struct Compiler *C, IrType *
         .inst = assoc,
     };
     // TODO
-    pawIr_solver_add_obligations_from(C->S, trait2->did, trait2->args, cause);
+    //TODO pawIr_solver_add_obligations_from(C->S, trait2->did, trait2->args, cause);
     return out;
 
 #undef ADD_APPLICABLE_TYPE

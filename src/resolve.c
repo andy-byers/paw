@@ -7,7 +7,7 @@
 #include "lib.h"
 
 #define RESOLVER_ERROR(R_, Kind_, ...) THROW_ERROR((R_)->C, \
-        Kind_, .modname = (R_)->current->name, __VA_ARGS__)
+        Kind_, .modname = current_modname(R_), __VA_ARGS__)
 
 
 //
@@ -46,6 +46,8 @@ struct LookupResult {
 DEFINE_LIST(struct Resolver, SymbolList, struct Symbol,)
 DEFINE_LIST(struct Resolver, NodeIdList, NodeId,)
 
+static paw_Bool resolve_symbol(struct Resolver *R, struct AstPath path, enum Namespace ns, struct LookupResult *out);
+
 struct FnState {
     struct FnState *outer;
     UpvalueList *upvalues;
@@ -83,7 +85,7 @@ static NodeId next_id(struct Resolver *R)
 
 static DeclId next_did(struct Resolver *R)
 {
-    return pawP_next_decl_id(R->C, R->current->modno);
+    return pawP_next_decl_id(R->C, AstGetModuleDecl(K_LIST_LAST(R->modstack))->modno);
 }
 
 static paw_Bool is_unary_path(struct AstPath path)
@@ -101,6 +103,16 @@ static void set_result(struct Resolver *R, NodeId id, NodeId result, enum Resolv
 {
     struct ResolvedSegment const resolved = {.id = result, .kind = kind};
     SegmentTable_insert(R->C, R->segtab, id, resolved);
+}
+
+static struct AstModuleDecl *current_module(struct Resolver *R)
+{
+    return AstGetModuleDecl(K_LIST_LAST(R->modstack));
+}
+
+static Str const *current_modname(struct Resolver *R)
+{
+    return current_module(R)->ident.name;
 }
 
 PAW_NORETURN static void unknown_path(struct Resolver *R, struct AstPath path, enum Namespace ns)
@@ -122,7 +134,7 @@ static paw_Bool is_core_module(struct Resolver *R, struct AstDecl *mod)
     for (enum pawL_StdModule m = 0U; m < PAWL_NUM_CORE_MODULES; ++m) {
         paw_assert(pawL_is_core_module(m)); // core modules have low indices
         Str const *std_modname = SCAN_STR(R->C, pawL_std_module_name(m));
-        if (pawS_eq(d->name, std_modname)) return PAW_TRUE;
+        if (pawS_eq(d->ident.name, std_modname)) return PAW_TRUE;
     }
     return PAW_FALSE;
 }
@@ -130,7 +142,7 @@ static paw_Bool is_core_module(struct Resolver *R, struct AstDecl *mod)
 static paw_Bool is_math_module(struct Resolver *R, struct AstDecl *mod)
 {
     struct AstModuleDecl const *d = AstGetModuleDecl(mod);
-    return pawS_eq(d->name, SCAN_STR(R->C, "math"));
+    return pawS_eq(d->ident.name, SCAN_STR(R->C, "math"));
 }
 
 static void maybe_store_builtin(struct Resolver *R, NodeId module_id, struct AstIdent ident, NodeId id, DeclId did)
@@ -181,12 +193,6 @@ static void maybe_store_core_trait(struct Resolver *R, NodeId module_id, Str con
             R->C->core_traits[CORE_TRAIT_INTO] = did;
         }
     }
-}
-
-static Str const *current_modname(struct Resolver *R)
-{
-    struct AstModuleDecl const *m = pawAst_get_node(R->ast, R->current->id);
-    return m->name;
 }
 
 static char const *decl_kind(enum AstDeclKind kind)
@@ -251,39 +257,27 @@ static void validate_type_args(struct Resolver *R, enum AstDeclKind kind, AstDec
                 .span = segment.ident.span);
 }
 
-struct ImportSymbol const *pawP_find_import_symbol(struct Resolver *R, struct ImportScope const *scope, struct PathCursor pc, enum Namespace ns);
-
 static struct ImportScope const *get_iscope(struct Resolver *R, NodeId id)
 {
     return *ImportScopes_get(R, R->imports, id);
 }
 
-static struct ImportScope const *find_containing_module(struct Resolver *R, struct PathCursor *pc)
+static struct ImportScope const *get_current_iscope(struct Resolver *R)
 {
-    paw_assert(pc_is_valid(*pc));
-    struct ImportScope const *scope;
-    NodeId module_id = R->current->id;
-    do {
-        scope = get_iscope(R, module_id);
-        struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, *pc, NAMESPACE_TYPE);
-        if (psymbol == NULL) break;
+    return get_iscope(R, R->current_scope);
+}
 
-        struct AstDecl *decl = pawAst_get_node(R->ast, psymbol->id);
-        if (AstIsModuleDecl(decl)) {
-            struct AstSegment const segment = *pc_segment(*pc);
-            if (segment.args != NULL)
-                RESOLVER_ERROR(R, UnexpectedTypeArguments,
-                        .what = SCAN_STR(R->C, "module"),
-                        .name = segment.ident.name,
-                        .span = segment.span);
-            set_result(R, segment.id, psymbol->id, RESOLVED_MODULE);
-            module_id = psymbol->id;
-            pc_next(pc);
-        } else {
-            break;
-        }
-    } while (pc_is_valid(*pc));
-    return scope;
+static void iscope_enter(struct Resolver *R, NodeId id)
+{
+    R->current_scope = id;
+}
+
+static void iscope_leave(struct Resolver *R)
+{
+    struct ImportScope const *scope = get_current_iscope(R);
+    R->current_scope = scope->outer != NULL
+        ? scope->outer->id
+        : INVALID_NODE_ID;
 }
 
 static struct Scope get_scope(struct Resolver *R, int scope_id)
@@ -292,6 +286,24 @@ static struct Scope get_scope(struct Resolver *R, int scope_id)
 }
 
 #define NOT_FOUND (-1)
+
+static int resolve_local(struct Resolver *R, struct FnState *fs, Str const *name, enum Namespace ns, struct LookupResult *out)
+{
+    struct Scope const scope = get_scope(R, fs->scope_id);
+    for (int i = scope.symbols->count - 1; i >= 0; --i) {
+        struct Symbol const symbol = Symbols_get(scope.symbols, i);
+        if (symbol.ns == ns && pawS_eq(name, symbol.ident.name)) {
+            *out = (struct LookupResult){
+                .kind = RESULT_LOCAL,
+                .ident = symbol.ident,
+                .id = symbol.id,
+                .var.index = i,
+            };
+            return i;
+        }
+    }
+    return NOT_FOUND;
+}
 
 static int resolve_local_var(struct Resolver *R, struct FnState *fs, Str const *name, struct LookupResult *out)
 {
@@ -340,81 +352,20 @@ static int add_upvalue(struct Resolver *R, struct FnState *fs, struct LookupResu
     return r->var.index;
 }
 
-static void mark_local_captured(struct Resolver *R, struct FnState *fs, int index)
-{
-}
-
 static int resolve_upvalue(struct Resolver *R, struct FnState *fs, Str const *name, struct LookupResult *r)
 {
     struct FnState *caller = fs->outer;
     if (caller == NULL) return NOT_FOUND;
 
     int const local = resolve_local_var(R, fs->outer, name, r);
-    if (local != NOT_FOUND) {
-        mark_local_captured(R, fs, local);
+    if (local != NOT_FOUND)
         return add_upvalue(R, fs, r, PAW_TRUE);
-    }
 
     int const upvalue = resolve_upvalue(R, caller, name, r);
     if (upvalue != NOT_FOUND)
         return add_upvalue(R, fs, r, PAW_FALSE);
 
     return NOT_FOUND;
-}
-
-static paw_Bool find_nonglobal_decl(struct Resolver *R, struct PathCursor pc, enum Namespace ns, struct LookupResult *out)
-{
-    paw_assert(R->symtab != NULL);
-    struct AstSegment const segment = *pc_segment(pc);
-    for (int i = R->symtab->count - 1; i >= 0; --i) {
-        struct Scope const scope = Symtab_get(R->symtab, i);
-        for (int j = scope.symbols->count - 1; j >= 0; --j) {
-            struct Symbol const symbol = Symbols_get(scope.symbols, j);
-            if (symbol.ns == ns && symbol.kind == SYMBOL_DECL
-                    && pawS_eq(segment.ident.name, symbol.ident.name)) {
-                *out = (struct LookupResult){
-                    .kind = RESULT_DECL,
-                    .ident = symbol.ident,
-                    .id = symbol.id,
-                };
-                return PAW_TRUE;
-            }
-        }
-    }
-    return PAW_FALSE;
-}
-
-static paw_Bool find_global(struct Resolver *R, struct ImportScope const *scope, struct PathCursor pc, enum Namespace ns, struct LookupResult *out)
-{
-    struct AstSegment const segment = *pc_segment(pc);
-    struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, pc, ns);
-    if (psymbol == NULL) return PAW_FALSE;
-
-    *out = (struct LookupResult){
-        .kind = RESULT_DECL,
-        .ident = segment.ident,
-        .id = psymbol->id,
-    };
-    return PAW_TRUE;
-}
-
-static paw_Bool find_containing_type(struct Resolver *R, struct PathCursor *pc, struct LookupResult *result_out, struct ImportScope const **scope_out)
-{
-    *scope_out = get_iscope(R, R->current->id);
-
-    struct LookupResult result;
-    if (find_nonglobal_decl(R, *pc, NAMESPACE_TYPE, &result)) {
-        struct AstSegment const segment = *pc_segment(*pc);
-        set_result(R, segment.id, result.id, RESOLVED_DECL);
-    } else {
-        *scope_out = find_containing_module(R, pc);
-        if (!find_global(R, *scope_out, *pc, NAMESPACE_TYPE, &result))
-            return PAW_FALSE;
-        struct AstSegment const segment = *pc_segment(*pc);
-        set_result(R, segment.id, result.id, RESOLVED_DECL);
-    }
-    *result_out = result;
-    return PAW_TRUE;
 }
 
 static struct Scope find_outer_scope(struct Resolver *R)
@@ -448,107 +399,21 @@ static void defer_method_lookup(struct AstIdent ident, struct LookupResult *out)
     };
 }
 
-static paw_Bool find_associated_type(struct Resolver *R, struct PathCursor *pc, struct LookupResult *out)
-{
-    if (pawS_eq(out->ident.name, SCAN_STR(R->C, "Self"))) {
-        struct Scope const scope = find_outer_scope(R);
-        struct ImportScope const *iscope = get_iscope(R, scope.id);
-        struct ImportSymbol const *p = pawP_find_import_symbol(R, iscope, *pc, NAMESPACE_TYPE);
-        if (p == NULL) return PAW_FALSE;
-
-        struct AstSegment const *segment = pc_segment(*pc);
-        *out = (struct LookupResult){
-            .ident = segment->ident,
-            .kind = RESULT_DECL,
-            .id = p->id,
-        };
-        set_result(R, segment->id, p->id, RESOLVED_ASSOC);
-        return PAW_TRUE;
-    }
-
-    struct AstSegment const *segment = pc_segment(*pc);
-    defer_type_lookup(segment->ident, out);
-    set_result(R, segment->id, out->id, RESOLVED_ASSOC);
-    return PAW_TRUE;
-}
-
-static paw_Bool lookup_type(struct Resolver *R, struct PathCursor pc, struct LookupResult *out)
-{
-    struct LookupResult result;
-    struct ImportScope const *scope;
-    if (!find_containing_type(R, &pc, &result, &scope))
-        return PAW_FALSE;
-
-    if (!pc_is_last(pc)) {
-        pc_next(&pc);
-        if (find_associated_type(R, &pc, &result)) {
-            *out = result;
-            return PAW_TRUE;
-        }
-    }
-
-    set_result(R, pc_segment(pc)->id,
-            result.id, RESOLVED_DECL);
-    *out = result;
-    return PAW_TRUE;
-}
-
 static paw_Bool find_value_in_scope(struct Resolver *R, NodeId scope_id, struct PathCursor pc, struct LookupResult *out)
 {
     struct ImportScope const *scope = get_iscope(R, scope_id);
-    struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, pc, NAMESPACE_VALUE);
+    struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, pc_ident(pc).name, NAMESPACE_VALUE);
     if (psymbol == NULL) return PAW_FALSE;
 
     *out = (struct LookupResult){
-        .ident = pc_segment(pc)->ident,
+        .ident = pc_ident(pc),
         .kind = RESULT_DECL,
         .id = psymbol->id,
     };
     return PAW_TRUE;
 }
 
-static struct ResolvedSegment get_path_result(struct Resolver *R, struct AstPath path)
-{
-    struct AstSegment last = K_LIST_LAST(path.segments);
-    return *SegmentTable_get(R->C, R->segtab, last.id);
-}
-
 static paw_Bool lookup(struct Resolver *R, struct AstPath path, enum Namespace ns, struct LookupResult *out);
-
-static paw_Bool find_value_in_generic(struct Resolver *R, struct AstGenericDecl *d, struct PathCursor pc, struct LookupResult *out)
-{
-    if (d->is_type) {
-        if (d->t.bounds == NULL)
-            RESOLVER_ERROR(R, MissingTraitBounds,
-                    .span = pc_segment(pc)->span);
-
-        paw_Bool found = PAW_FALSE;
-        struct AstGenericBound const *pbound;
-        K_LIST_FOREACH (d->t.bounds, pbound) {
-            struct ResolvedSegment const res = get_path_result(R, pbound->path);
-            if (find_value_in_scope(R, res.id, pc, out)) {
-                if (found) // more than 1 bound contains a method with the given name
-                    RESOLVER_ERROR(R, MultipleApplicableItems,
-                            .span = pc_segment(pc)->span);
-                found = PAW_TRUE;
-            }
-        }
-        return found;
-    }
-
-    return PAW_FALSE;
-}
-
-static paw_Bool find_value_in_type(struct Resolver *R, struct AstTypeDecl *d, struct PathCursor pc, struct LookupResult *out)
-{
-    struct LookupResult base;
-    struct AstPathType *rhs = AstGetPathType(d->rhs);
-    if (!lookup(R, rhs->path, NAMESPACE_TYPE, &base))
-        unknown_path(R, rhs->path, NAMESPACE_TYPE);
-    if (!find_value_in_scope(R, base.id, pc, out))
-        defer_method_lookup(pc_segment(pc)->ident, out);
-    return PAW_TRUE;
-}
 
 static struct LookupResult lookup_or_error(struct Resolver *R, struct AstPath path, enum Namespace ns)
 {
@@ -558,104 +423,237 @@ static struct LookupResult lookup_or_error(struct Resolver *R, struct AstPath pa
     return result;
 }
 
-static paw_Bool lookup_assoc_item(struct Resolver *R, NodeId type_id, struct PathCursor *pc, struct LookupResult *out)
+static paw_Bool find_nonglobal_decl(struct Resolver *R, Str const *name, enum Namespace ns, struct LookupResult *out)
 {
-    struct AstDecl *type = pawAst_get_node(R->ast, type_id);
-    switch (AST_KINDOF(type)) {
-        case kAstTypeDecl:
-            return find_value_in_type(R, AstGetTypeDecl(type), *pc, out);
-        case kAstGenericDecl:
-            return find_value_in_generic(R, AstGetGenericDecl(type), *pc, out);
-        case kAstTraitDecl:
-            return find_value_in_scope(R, type_id, *pc, out);
-        case kAstAdtDecl:
-            // defer resolution of associated functions on ADTs until type checking
-            if (!find_value_in_scope(R, type_id, *pc, out))
-                defer_method_lookup(pc_segment(*pc)->ident, out);
-            return PAW_TRUE;
-        case kAstImplDecl: {
-            struct LookupResult base;
-            struct AstImplDecl *d = AstGetImplDecl(type);
-            struct AstPathType *rhs = AstGetPathType(d->type);
-            if (!lookup(R, rhs->path, NAMESPACE_TYPE, &base))
-                unknown_path(R, rhs->path, NAMESPACE_TYPE);
-            if (!find_value_in_scope(R, base.id, *pc, out))
-                defer_method_lookup(pc_segment(*pc)->ident, out);
-            return PAW_TRUE;
+    paw_assert(R->symtab != NULL);
+    for (int i = R->symtab->count - 1; i >= 0; --i) {
+        struct Scope const scope = Symtab_get(R->symtab, i);
+        for (int j = scope.symbols->count - 1; j >= 0; --j) {
+            struct Symbol const symbol = Symbols_get(scope.symbols, j);
+            if (symbol.ns == ns && symbol.kind == SYMBOL_DECL
+                    && pawS_eq(name, symbol.ident.name)) {
+                *out = (struct LookupResult){
+                    .kind = RESULT_DECL,
+                    .ident = symbol.ident,
+                    .id = symbol.id,
+                };
+                return PAW_TRUE;
+            }
         }
-        default: {
-            unknown_path(R, pc->path, NAMESPACE_VALUE);
+    }
+    return PAW_FALSE;
+}
+
+static void resolve_path_prefix_aux(struct Resolver *R, struct PathCursor *pc, NodeId target, struct LookupResult *out)
+{
+    struct AstDecl const *root = pawAst_get_node(R->ast, target);
+    set_result(R, pc_segment(*pc)->id, target,
+            AstIsModuleDecl(root) ? RESOLVED_MODULE : RESOLVED_DECL);
+    pc_next(pc);
+    if (pc_is_valid(*pc)) {
+        struct ImportScope *const *pscope = ImportScopes_get(R, R->imports, target);
+        if (pscope == NULL) return;
+
+        struct ImportScope const *scope = *pscope;
+        while (!pc_is_last(*pc) && scope != NULL && scope->kind == ISCOPE_MODULE) {
+            struct ImportSymbol const *symbol = pawP_find_import_symbol(R, scope, pc_ident(*pc).name, NAMESPACE_TYPE);
+            if (symbol == NULL) break;
+
+            *out = (struct LookupResult){
+                .id = symbol->id,
+                .ident = symbol->ident,
+                .kind = RESULT_DECL,
+            };
+            struct AstDecl const *decl = pawAst_get_node(R->ast, symbol->id);
+            set_result(R, pc_segment(*pc)->id, symbol->id,
+                    AstIsModuleDecl(decl) ? RESOLVED_MODULE : RESOLVED_DECL);
+            scope = get_iscope(R, symbol->id);
+            pc_next(pc);
         }
     }
 }
 
-static paw_Bool find_nonglobal_var(struct Resolver *R, struct PathCursor pc, struct LookupResult *out)
+static paw_Bool resolve_path_prefix(struct Resolver *R, struct PathCursor *pc, enum Namespace ns, struct LookupResult *out)
 {
-    paw_assert(R->fs != NULL);
-    Str const *name = pc_segment(pc)->ident.name;
-    return resolve_local_var(R, R->fs, name, out) != NOT_FOUND
-        || resolve_upvalue(R, R->fs, name, out) != NOT_FOUND;
+    paw_assert(pc_is_valid(*pc));
+    enum Namespace const root_ns = pc_is_last(*pc) ? ns : NAMESPACE_TYPE;
+    Str const *root_name = pc_ident(*pc).name;
+
+    if (find_nonglobal_decl(R, root_name, root_ns, out)) {
+        resolve_path_prefix_aux(R, pc, out->id, out);
+        return PAW_TRUE;
+    }
+
+    struct ImportScope const *scope = get_current_iscope(R);
+    do {
+        struct AstDecl const *parent = pawAst_get_node(R->ast, scope->id);
+        if (!AstIsImplDecl(parent)) {
+            struct ImportSymbol const *symbol = pawP_find_import_symbol(R, scope, pc_ident(*pc).name, root_ns);
+            if (symbol != NULL) {
+                *out = (struct LookupResult){
+                    .ident = symbol->ident,
+                    .kind = RESULT_DECL,
+                    .id = symbol->id,
+                };
+                resolve_path_prefix_aux(R, pc, symbol->id, out);
+                return PAW_TRUE;
+            }
+        }
+        scope = scope->outer;
+    } while (scope != NULL);
+    return PAW_FALSE;
 }
 
-// TODO: if const decl inside fn is ever supported, then local variables should be prevented from having the same names as constants. constants should be hoisted into a map at the (toplevel) function level
-static paw_Bool lookup_value(struct Resolver *R, struct PathCursor pc, struct LookupResult *out)
+static paw_Bool resolve_symbol_in_module(struct Resolver *R, NodeId module_id, struct AstSegment segment, enum Namespace ns, struct LookupResult *out)
 {
-    struct LookupResult r;
-    if (!pc_is_last(pc)) {
-        // must be an associated item
-        struct ImportScope const *outer;
-        if (find_containing_type(R, &pc, &r, &outer)) {
-            set_result(R, pc_segment(pc)->id, r.id, RESOLVED_DECL);
-            // TODO: shouldn't this be an error if pc_is_last(pc)?
-            if (!pc_is_last(pc)) {
-                pc_next(&pc); // find associated item in type referenced by "r.symbol"
-                if (!lookup_assoc_item(R, r.id, &pc, &r)) return PAW_FALSE;
-                set_result(R, pc_segment(pc)->id, r.id, RESOLVED_ASSOC);
-            }
+    struct ImportSymbol const *symbol = pawP_find_import_symbol(R,
+            get_iscope(R, module_id), segment.ident.name, ns);
+    if (symbol != NULL) {
+        *out = (struct LookupResult){
+            .id = symbol->id,
+            .ident = symbol->ident,
+            .kind = RESULT_DECL,
+        };
+        set_result(R, segment.id, symbol->id, RESOLVED_DECL);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
 
-        } else { // must be a value at the toplevel of an imported module
-            if (!find_global(R, outer, pc, NAMESPACE_VALUE, &r))
-                return PAW_FALSE;
-            set_result(R, pc_segment(pc)->id, r.id, RESOLVED_DECL);
+static paw_Bool defer_assoc_lookup(struct Resolver *R, struct AstSegment segment, enum Namespace ns, struct LookupResult *out)
+{
+    if (ns == NAMESPACE_VALUE) {
+        defer_method_lookup(segment.ident, out);
+    } else {
+        defer_type_lookup(segment.ident, out);
+    }
+    set_result(R, segment.id, INVALID_NODE_ID, RESOLVED_ASSOC);
+    return PAW_TRUE;
+}
+
+static paw_Bool resolve_symbol_in_trait(struct Resolver *R, NodeId trait_id, struct AstSegment segment, enum Namespace ns, struct LookupResult *out)
+{
+    struct ImportSymbol const *symbol = pawP_find_import_symbol(R,
+            get_iscope(R, trait_id), segment.ident.name, ns);
+    if (symbol != NULL) {
+        *out = (struct LookupResult){
+            .id = symbol->id,
+            .ident = symbol->ident,
+            .kind = RESULT_DECL,
+        };
+        set_result(R, segment.id, symbol->id, RESOLVED_ASSOC);
+        return PAW_TRUE;
+    }
+
+    defer_assoc_lookup(R, segment, ns, out);
+    return PAW_TRUE;
+}
+
+static paw_Bool find_assoc(struct Resolver *R, struct AstSegment segment, struct ImportScope const *iscope, enum Namespace ns, struct LookupResult *out)
+{
+    struct ImportSymbol const *symbol = pawP_find_import_symbol(R,
+            iscope, segment.ident.name, ns);
+    if (symbol != NULL) {
+        *out = (struct LookupResult){
+            .id = symbol->id,
+            .ident = symbol->ident,
+            .kind = RESULT_DECL,
+        };
+        set_result(R, segment.id, symbol->id, RESOLVED_ASSOC);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+static paw_Bool resolve_symbol_in_impl(struct Resolver *R, NodeId impl_id, struct AstSegment segment, enum Namespace ns, struct LookupResult *out)
+{
+    struct AstImplDecl const *d = pawAst_get_node(R->ast, impl_id);
+    if (AstIsPathType(d->type)) {
+        struct LookupResult adt;
+        struct AstPathType const *t = AstGetPathType(d->type);
+        if (resolve_symbol(R, t->path, NAMESPACE_TYPE, &adt)) {
+            if (find_assoc(R, segment, get_iscope(R, adt.id), ns, out))
+                return PAW_TRUE;
+        }
+    }
+
+    if (find_assoc(R, segment, get_iscope(R, impl_id), ns, out))
+        return PAW_TRUE;
+
+    defer_assoc_lookup(R, segment, ns, out);
+    return PAW_TRUE;
+}
+
+static paw_Bool resolve_symbol_in(struct Resolver *R, NodeId parent_id, struct AstSegment segment, enum Namespace ns, struct LookupResult *out)
+{
+    struct ImportSymbol const *symbol = pawP_find_import_symbol(R,
+            get_iscope(R, parent_id), segment.ident.name, ns);
+    if (symbol != NULL) {
+        set_result(R, segment.id, symbol->id, RESOLVED_ASSOC);
+        *out = (struct LookupResult){
+            .id = symbol->id,
+            .ident = symbol->ident,
+            .kind = RESULT_DECL,
+        };
+        return PAW_TRUE;
+    }
+
+    defer_assoc_lookup(R, segment, ns, out);
+    return PAW_TRUE;
+}
+
+static paw_Bool resolve_symbol(struct Resolver *R, struct AstPath path, enum Namespace ns, struct LookupResult *out)
+{
+    paw_assert(path.segments->count > 0);
+    if (path.segments->count == 1 && R->fs != NULL && ns == NAMESPACE_VALUE) {
+        struct AstSegment const first = AstSegments_first(path.segments);
+        if (resolve_local_var(R, R->fs, first.ident.name, out) != NOT_FOUND) {
+            set_result(R, first.id, out->id, RESOLVED_LOCAL);
+            return PAW_TRUE;
+        } else if (resolve_upvalue(R, R->fs, first.ident.name, out) != NOT_FOUND) {
+            SegmentTable_insert(R->C, R->segtab, first.id,
+                    (struct ResolvedSegment){
+                        .kind = RESOLVED_UPVALUE,
+                        .upvalue = out->var.index,
+                    });
+            return PAW_TRUE;
+        }
+    }
+
+    struct LookupResult root;
+    struct PathCursor pc = pc_create(path);
+    if (resolve_path_prefix(R, &pc, ns, &root)) {
+        if (!pc_is_valid(pc)) {
+            *out = root;
+            return PAW_TRUE;
         }
 
         if (!pc_is_last(pc))
             RESOLVER_ERROR(R, ExtraSegment,
-                    .name = pc_segment(pc)->ident.name,
-                    .span = pc_segment(pc)->ident.span);
+                    .name = pc_ident(pc).name,
+                    .span = pc_ident(pc).span);
 
-    } else if (R->fs != NULL && find_nonglobal_var(R, pc, &r)) {
-        if (r.kind == RESULT_LOCAL) {
-            set_result(R, pc_segment(pc)->id, r.id, RESOLVED_LOCAL);
-        } else {
-            SegmentTable_insert(R->C, R->segtab, pc_segment(pc)->id,
-                    (struct ResolvedSegment){
-                        .kind = RESOLVED_UPVALUE,
-                        .upvalue = r.var.index,
-                    });
+        struct AstDecl const *decl = pawAst_get_node(R->ast, root.id);
+        switch (AST_KINDOF(decl)) {
+            case kAstModuleDecl:
+                return resolve_symbol_in_module(R, root.id, *pc_segment(pc), ns, out);
+            case kAstTraitDecl:
+                return resolve_symbol_in_trait(R, root.id, *pc_segment(pc), ns, out);
+            case kAstImplDecl:
+                return resolve_symbol_in_impl(R, root.id, *pc_segment(pc), ns, out);
+            case kAstGenericDecl:
+            case kAstTypeDecl:
+                return defer_assoc_lookup(R, *pc_segment(pc), ns, out);
+            default:
+                return resolve_symbol_in(R, root.id, *pc_segment(pc), ns, out);
         }
-//        enum ResolvedKind const kind = r.kind == RESULT_LOCAL
-//            ? RESOLVED_LOCAL : RESOLVED_UPVALUE;
-//        set_result(R, pc_segment(pc)->id, r.id, kind);
-    } else if (find_nonglobal_decl(R, pc, NAMESPACE_VALUE, &r)) {
-        set_result(R, pc_segment(pc)->id, r.id, RESOLVED_DECL);
-    } else {
-        struct ImportScope const *scope = get_iscope(R, R->current->id);
-        if (!find_global(R, scope, pc, NAMESPACE_VALUE, &r))
-            return PAW_FALSE;
-        set_result(R, pc_segment(pc)->id, r.id, RESOLVED_DECL);
     }
-
-    *out = r;
-    return PAW_TRUE;
+    return PAW_FALSE;
 }
 
 static paw_Bool lookup(struct Resolver *R, struct AstPath path, enum Namespace ns, struct LookupResult *out)
 {
-    struct PathCursor pc = pc_create(path);
-    return ns == NAMESPACE_VALUE
-        ? lookup_value(R, pc, out)
-        : lookup_type(R, pc, out);
+    return resolve_symbol(R, path, ns, out);
 }
 
 static int add_local(struct Resolver *R, struct Scope scope, struct AstIdent ident, NodeId id, enum Namespace ns, enum SymbolKind kind)
@@ -749,6 +747,16 @@ static void declare_type_aliases(struct Resolver *R, NodeId parent_id)
         new_local_type(R, TODO, symbol.id, SYMBOL_DECL);
         ImportNamesIterator_next(&iter);
     }
+
+    ImportNamesIterator_init(scope->values, &iter);
+    while (ImportNamesIterator_is_valid(&iter)) {
+        struct ImportName const *iname = *ImportNamesIterator_valuep(&iter);
+        paw_assert(iname->symbols->count == 1);
+        struct ImportSymbol symbol = K_LIST_FIRST(iname->symbols);
+        struct AstIdent TODO = {.name = (Str const *)ImportNamesIterator_key(&iter)};
+        new_local_value(R, TODO, symbol.id, SYMBOL_DECL);
+        ImportNamesIterator_next(&iter);
+    }
 }
 
 // Create a local type symbol for each generic type parameter
@@ -786,11 +794,7 @@ static void resolve_trait_args(struct AstVisitor *V, NodeId trait_id, struct Ast
             K_LIST_XFOREACH (segment->args, struct AstGenericArg, arg) {
                 pawAst_visit_generic_arg(V, *arg);
                 if (arg->item != NULL) {
-                    AstSegments *segments = AstSegments_new(R->ast);
-                    struct AstIdent const ident = {.span = segment->span, .name = (Str const *)arg->item};
-                    pawAst_add_segment(R->ast, segments, segment->span, next_id(R), ident, NULL);
-                    struct AstPath const path = {.span = segment->span, .segments = segments};
-                    struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, pc_create(path), NAMESPACE_TYPE);
+                    struct ImportSymbol const *psymbol = pawP_find_import_symbol(R, scope, arg->item, NAMESPACE_TYPE);
                     if (psymbol == NULL)
                         unknown_path(R, path, NAMESPACE_TYPE);
 
@@ -833,15 +837,16 @@ static paw_Bool resolve_projection_type(struct AstVisitor *V, struct AstProjecti
     if (AstIsPathType(t->type)) {
         struct LookupResult result;
         struct AstPathType const *path = AstGetPathType(t->type);
-        if (!lookup_type(R, pc_create(path->path), &result))
+        if (!lookup(R, path->path, NAMESPACE_TYPE, &result))
             RESOLVER_ERROR(R, UnknownPath,
                     .path = pawAst_print_type_path(R->ast, path->path),
                     .span = t->span);
 
-        struct AstDecl *self = pawAst_get_node(R->ast, result.id);
-        if (AstIsTraitDecl(self))
-            RESOLVER_ERROR(R, UnexpectedTrait,
-                    .span = t->span);
+        // TODO: this check needs to be moved somewhere else. it cannot be here b/c we don't yet know the NodeId of associated types
+//        struct AstDecl *self = pawAst_get_node(R->ast, result.id);
+//        if (AstIsTraitDecl(self))
+//            RESOLVER_ERROR(R, UnexpectedTrait,
+//                    .span = t->span);
     } else {
         pawAst_visit_type(V, t->type);
     }
@@ -1010,14 +1015,14 @@ static paw_Bool enter_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
     struct Resolver *R = V->ud;
     if (R->fs == NULL)
         enter_fn(R, d->id, INVALID_DECL_ID);
-    maybe_store_core_item(R, R->current->id, d->ident.name, d->did);
+    maybe_store_core_item(R, current_module(R)->id, d->ident.name, d->did);
     return PAW_TRUE;
 }
 
 static void leave_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
 {
     struct Resolver *R = V->ud;
-    if (R->fs->outer == NULL)
+    if (!DECL_ID_EXISTS(R->fs->did))
         leave_fn(R);
     PAW_UNUSED(d);
 }
@@ -1040,28 +1045,30 @@ static paw_Bool resolve_param_decl(struct AstVisitor *V, struct AstParamDecl *d)
     return PAW_TRUE;
 }
 
+static void resolve_bounds(struct AstVisitor *V, AstBoundList *bounds)
+{
+    struct Resolver *R = V->ud;
+    K_LIST_XFOREACH (bounds, struct AstGenericBound const, pbound) {
+        struct LookupResult const r = lookup_or_error(R, pbound->path, NAMESPACE_TYPE);
+        struct AstDecl *decl = pawAst_get_node(R->ast, r.id);
+        if (!AstIsTraitDecl(decl))
+            RESOLVER_ERROR(R, ExpectedTrait,
+                    .path = pawAst_print_type_path(R->ast, pbound->path),
+                    .span = pbound->path.span);
+        resolve_trait_args(V, r.id, pbound->path);
+
+        struct AstTraitDecl *trait = AstGetTraitDecl(decl);
+        struct AstSegment const last = K_LIST_LAST(pbound->path.segments);
+        validate_type_args(R, kAstTraitDecl, trait->generics, last);
+    }
+}
 
 static paw_Bool resolve_generic_decl(struct AstVisitor *V, struct AstGenericDecl *d)
 {
-    struct Resolver *R = V->ud;
-    if (d->is_type) {
-        if (d->t.bounds != NULL) {
-            K_LIST_XFOREACH (d->t.bounds, struct AstGenericBound const, pbound) {
-                struct LookupResult const r = lookup_or_error(R, pbound->path, NAMESPACE_TYPE);
-                struct AstDecl *decl = pawAst_get_node(R->ast, r.id);
-                if (!AstIsTraitDecl(decl))
-                    RESOLVER_ERROR(R, ExpectedTrait,
-                            .path = pawAst_print_type_path(R->ast, pbound->path),
-                            .span = pbound->path.span);
-                resolve_trait_args(V, r.id, pbound->path);
-
-                struct AstTraitDecl *trait = AstGetTraitDecl(decl);
-                struct AstSegment const last = K_LIST_LAST(pbound->path.segments);
-                validate_type_args(R, kAstTraitDecl, trait->generics, last);
-            }
-        }
-    } else {
+    if (!d->is_type) {
         pawAst_visit_type(V, d->k.type);
+    } else if (d->t.bounds != NULL) {
+        resolve_bounds(V, d->t.bounds);
     }
     return PAW_FALSE;
 }
@@ -1099,7 +1106,7 @@ static paw_Bool resolve_projection_expr(struct AstVisitor *V, struct AstProjecti
     if (AstIsPathType(e->type)) {
         struct LookupResult result;
         struct AstPathType const *path = AstGetPathType(e->type);
-        if (!lookup_type(R, pc_create(path->path), &result))
+        if (!lookup(R, path->path, NAMESPACE_TYPE, &result))
             RESOLVER_ERROR(R, UnknownPath,
                     .path = pawAst_print_type_path(R->ast, path->path),
                     .span = e->span);
@@ -1139,11 +1146,12 @@ static void leave_for_expr(struct AstVisitor *V, struct AstForExpr *e)
 static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 {
     struct Resolver *R = V->ud;
+    iscope_enter(R, d->id);
     enter_fn(R, d->id, d->did);
 
     declare_generics(R, d->generics);
     declare_type_aliases(R, d->id);
-    maybe_store_core_item(R, R->current->id, d->ident.name, d->did);
+    maybe_store_core_item(R, current_module(R)->id, d->ident.name, d->did);
     return PAW_TRUE;
 }
 
@@ -1152,6 +1160,7 @@ static void leave_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
     PAW_UNUSED(d);
 
     leave_fn(V->ud);
+    iscope_leave(V->ud);
 }
 
 static void declare_self(struct Resolver *R, struct SourceSpan span, NodeId id, enum Namespace ns)
@@ -1166,13 +1175,14 @@ static void declare_self(struct Resolver *R, struct SourceSpan span, NodeId id, 
 static paw_Bool enter_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
 {
     struct Resolver *R = V->ud;
+    iscope_enter(R, d->id);
     enter_scope(R, d->id, SCOPE_ADT);
 
     declare_generics(R, d->generics);
     declare_self(R, d->span, d->id, NAMESPACE_TYPE);
 
-    maybe_store_core_item(R, R->current->id, d->ident.name, d->did);
-    maybe_store_builtin(R, R->current->id, d->ident, d->id, d->did);
+    maybe_store_core_item(R, current_module(R)->id, d->ident.name, d->did);
+    maybe_store_builtin(R, current_module(R)->id, d->ident, d->id, d->did);
     return PAW_TRUE;
 }
 
@@ -1180,11 +1190,13 @@ static void leave_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
 {
     PAW_UNUSED(d);
     leave_scope(V->ud);
+    iscope_leave(V->ud);
 }
 
 static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
 {
     struct Resolver *R = V->ud;
+    iscope_enter(R, d->id);
     enter_scope(R, d->id, SCOPE_TRAIT);
 
     declare_generics(R, d->generics);
@@ -1208,8 +1220,8 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
         pawAst_visit_decl(V, self);
     }
 
-    maybe_store_core_item(R, R->current->id, d->ident.name, d->did);
-    maybe_store_core_trait(R, R->current->id, d->ident.name, d->did, d->id);
+    maybe_store_core_item(R, current_module(R)->id, d->ident.name, d->did);
+    maybe_store_core_trait(R, current_module(R)->id, d->ident.name, d->did, d->id);
     return PAW_TRUE;
 }
 
@@ -1217,11 +1229,13 @@ static void leave_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
 {
     PAW_UNUSED(d);
     leave_scope(V->ud);
+    iscope_leave(V->ud);
 }
 
 static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
 {
     struct Resolver *R = V->ud;
+    iscope_enter(R, d->id);
     enter_scope(R, d->id, SCOPE_IMPL);
 
     declare_generics(R, d->generics);
@@ -1231,8 +1245,7 @@ static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
         struct LookupResult r;
         // locate the context parameter definition
         struct AstPathType const *path = AstGetPathType(d->type);
-        struct PathCursor pc = pc_create(path->path);
-        if (!lookup_type(R, pc, &r))
+        if (!lookup(R, path->path, NAMESPACE_TYPE, &r))
             unknown_path(R, path->path, NAMESPACE_TYPE);
 
         struct AstDecl *self = pawAst_get_node(R->ast, r.id);
@@ -1257,6 +1270,7 @@ static void leave_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
 {
     PAW_UNUSED(d);
     leave_scope(V->ud);
+    iscope_leave(V->ud);
 }
 
 static paw_Bool enter_type_decl(struct AstVisitor *V, struct AstTypeDecl *d)
@@ -1265,6 +1279,8 @@ static paw_Bool enter_type_decl(struct AstVisitor *V, struct AstTypeDecl *d)
     enter_scope(R, d->id, SCOPE_TYPE);
 
     declare_generics(R, d->generics);
+    if (d->bounds != NULL)
+        resolve_bounds(V, d->bounds);
     return PAW_TRUE;
 }
 
@@ -1277,7 +1293,8 @@ static void leave_type_decl(struct AstVisitor *V, struct AstTypeDecl *d)
 static paw_Bool enter_module_decl(struct AstVisitor *V, struct AstModuleDecl *d)
 {
     struct Resolver *R = V->ud;
-    R->current = d;
+    AstDeclList_push(R->ast, R->modstack, AST_CAST_DECL(d));
+    iscope_enter(R, d->id);
     return PAW_TRUE;
 }
 
@@ -1285,13 +1302,15 @@ static void leave_module_decl(struct AstVisitor *V, struct AstModuleDecl *d)
 {
     PAW_UNUSED(d);
     struct Resolver *R = V->ud;
-    R->current = NULL;
+    AstDeclList_pop(R->modstack);
+    iscope_leave(R);
 }
 
 static paw_Bool enter_closure_expr(struct AstVisitor *V, struct AstClosureExpr *e)
 {
     PAW_UNUSED(e);
     enter_fn(V->ud, e->id, e->did);
+    declare_type_aliases(V->ud, e->id);
     return PAW_TRUE;
 }
 
@@ -1324,6 +1343,8 @@ void pawP_resolve_names(struct Compiler *C)
         .P = P,
         .C = C,
     };
+    R.nonlexical_decls = NonLexicalDecls_new(&R),
+    R.modstack = AstDeclList_new(R.ast),
     R.modules = ImportModules_new(&R);
     R.imports = ImportScopes_new(&R);
     R.symtab = Symtab_new(&R);

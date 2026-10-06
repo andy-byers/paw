@@ -8,6 +8,7 @@
 
 struct Str;
 typedef struct File File;
+typedef struct Directory Directory;
 
 File *pawO_stdout(void);
 
@@ -26,6 +27,11 @@ size_t pawO_read(paw_Env *P, File *file, void *data, size_t size);
 size_t pawO_write(paw_Env *P, File *file, void const *data, size_t size);
 void pawO_read_exact(paw_Env *P, File *file, void *data, size_t size);
 void pawO_write_all(paw_Env *P, File *file, void const *data, size_t size);
+
+typedef paw_Bool (*AcceptEntry)(paw_Env *P, char const *name, size_t length, void *ctx);
+void pawOs_traverse_dir(paw_Env *P, char const *dirname, AcceptEntry accept, void *ctx);
+
+paw_Bool pawOs_is_dir(paw_Env *P, char const *name);
 
 char const *pawOs_find_last_sep(char const *s, size_t n, size_t *pn);
 

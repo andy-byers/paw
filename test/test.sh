@@ -46,6 +46,8 @@ TESTS=(
     "disambiguate_using_projection"
     "disambiguate_using_args"
     "disambiguate_using_args2"
+    "local_items"
+    "nested_modules"
     "unify_projection"
     "primitive"
     "operator"

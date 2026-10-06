@@ -256,7 +256,10 @@ static void AcceptParamDecl(struct HirVisitor *V, struct HirParamDecl *d)
 static void AcceptTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
 {
     accept_decl_list(V, d->generics);
-    if (d-> rhs != NULL)
+    if (d->bounds != NULL)
+        K_LIST_XFOREACH (d->bounds, struct HirGenericBound, p)
+            AcceptPath(V, &p->path);
+    if (d->rhs != NULL)
         AcceptType(V, d->rhs);
 }
 
@@ -886,13 +889,6 @@ static struct HirDecl *FoldParamDecl(struct HirFolder *F, struct HirParamDecl *d
     return pawHir_new_param_decl(F->hir, d->span, next_node_id(F), d->did, d->ident, tag);
 }
 
-static struct HirDecl *FoldTypeDecl(struct HirFolder *F, struct HirTypeDecl *d)
-{
-    HirDeclList *generics = pawHir_fold_decl_list(F, d->generics);
-    struct HirType *rhs = FOLD_TYPE0(F, d->rhs);
-    return pawHir_new_type_decl(F->hir, d->span, next_node_id(F), d->did, d->ident, generics, rhs, d->is_pub);
-}
-
 static struct HirBoundList *fold_bounds(struct HirFolder *F, struct HirBoundList *bounds)
 {
     HirBoundList *result = HirBoundList_new(F->hir);
@@ -902,6 +898,14 @@ static struct HirBoundList *fold_bounds(struct HirFolder *F, struct HirBoundList
         HirBoundList_push(F->hir, result, (struct HirGenericBound){path});
     }
     return result;
+}
+
+static struct HirDecl *FoldTypeDecl(struct HirFolder *F, struct HirTypeDecl *d)
+{
+    HirDeclList *generics = pawHir_fold_decl_list(F, d->generics);
+    HirBoundList *bounds = fold_bounds(F, d->bounds);
+    struct HirType *rhs = FOLD_TYPE0(F, d->rhs);
+    return pawHir_new_type_decl(F->hir, d->span, next_node_id(F), d->did, d->ident, generics, bounds, rhs, d->is_pub);
 }
 
 static struct HirDecl *FoldGenericDecl(struct HirFolder *F, struct HirGenericDecl *d)

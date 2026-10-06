@@ -2090,6 +2090,24 @@ static struct Annotations *annotations(struct Lex *lex)
     return annos;
 }
 
+static void toplevel_items(struct Lex *lex, struct AstDeclList *items);
+
+static struct AstDecl *mod_decl(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
+{
+    struct SourceLoc const start = TOKEN_START(lex->t);
+    skip(lex); // "mod" token
+
+    struct AstIdent const ident = parse_ident(lex);
+    AstDeclList *items = AstDeclList_new(lex->ast);
+
+    check_next(lex, '{');
+    toplevel_items(lex, items);
+    struct SourceLoc const end = delim_next(lex, '}', '{', start);
+
+    return NEW_NODE(lex, module_decl, RANGE(start, end), next_id(lex),
+            next_did(lex), ident, -1, items, annos, is_pub);
+}
+
 static struct AstDecl *fn_decl(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
@@ -2295,7 +2313,7 @@ static struct AstDecl *type_decl(struct Lex *lex, paw_Bool is_pub)
     struct SourceLoc const end = TOKEN_END(lex->t);
     semicolon(lex, "type declaration");
     return NEW_NODE(lex, type_decl, RANGE(start, end), next_id(lex), next_did(lex),
-            ident, generics, rhs, is_pub);
+            ident, generics, NULL, rhs, is_pub);
 }
 
 static struct SourceLoc trait_impl_body(struct Lex *lex, struct AstDeclList *types, struct AstDeclList *constants, struct AstDeclList *methods)
@@ -2373,6 +2391,20 @@ static struct AstDecl *impl_decl(struct Lex *lex)
             type, trait, generics, types, constants, methods);
 }
 
+static struct AstDecl *assoc_type_decl(struct Lex *lex)
+{
+    struct SourceLoc const start = TOKEN_START(lex->t);
+    skip(lex); // skip "type" token
+    // "type" NAME [":" Trait {"+" Trait}]
+    struct AstIdent const ident = parse_ident(lex);
+    struct AstBoundList *bounds = parse_generic_bounds(lex);
+    struct SourceLoc const end = bounds != NULL
+        ? RANGE_END(K_LIST_LAST(bounds).path.span)
+        : RANGE_END(ident.span);
+    return NEW_NODE(lex, type_decl, RANGE(start, end), next_id(lex),
+            next_did(lex), ident, NULL, bounds, NULL, PAW_TRUE);
+}
+
 static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
@@ -2389,8 +2421,8 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
                 || methods->count == INT_MAX)
             break; // throw error below
 
-        if (test_next(lex, TK_TYPE)) {
-            struct AstDecl *type = generic_param(lex);
+        if (test(lex, TK_TYPE)) {
+            struct AstDecl *type = assoc_type_decl(lex);
             semicolon(lex, "associated type declaration");
             AstDeclList_push(lex->ast, types, type);
         } else {
@@ -2445,6 +2477,20 @@ static AstStmtList *block_inner(struct Lex *lex, struct AstExpr **presult)
                 AstStmtList_push(lex->ast, stmts, stmt);
                 break;
             }
+            case TK_CONST: {
+                struct AstDecl *decl = const_decl(lex, Annotations_new(lex->C), PAW_FALSE);
+                struct AstStmt *stmt = NEW_NODE(lex, decl_stmt, decl->hdr.span,
+                        next_id(lex), decl);
+                AstStmtList_push(lex->ast, stmts, stmt);
+                break;
+            }
+            case TK_USE: {
+                struct AstDecl *decl = use_decl(lex, PAW_FALSE);
+                struct AstStmt *stmt = NEW_NODE(lex, decl_stmt, decl->hdr.span,
+                        next_id(lex), decl);
+                AstStmtList_push(lex->ast, stmts, stmt);
+                break;
+            }
             default: {
                 struct AstExpr *expr = block_expr(lex);
                 if (expr == NULL)
@@ -2485,6 +2531,8 @@ static struct AstDecl *toplevel_item(struct Lex *lex)
     struct SourceLoc const start = TOKEN_START(lex->t);
     paw_Bool const is_pub = test_next(lex, TK_PUB);
     switch (lex->t.kind) {
+        case TK_MOD:
+            return mod_decl(lex, annos, is_pub);
         case TK_FN:
             return fn_decl(lex, annos, is_pub);
         case TK_CONST:
@@ -2512,7 +2560,8 @@ static struct AstDecl *toplevel_item(struct Lex *lex)
 
 static void toplevel_items(struct Lex *lex, struct AstDeclList *items)
 {
-    while (!test(lex, TK_END)) {
+    // TODO: make sure to report an error if an extra '}' is encountered
+    while (!end_of_block(lex)) {
         struct AstDecl *item = toplevel_item(lex);
         AstDeclList_push(lex->ast, items, item);
     }
@@ -2522,8 +2571,6 @@ static void toplevel_items(struct Lex *lex, struct AstDeclList *items)
 //
 //     use prelude;
 //     use prelude::*;
-//
-// If the prelude file is being parsed, inject core type definitions.
 //
 static void import_prelude(struct Lex *lex, struct AstDeclList *items)
 {
@@ -2590,7 +2637,7 @@ static void generate_builtin_items(struct Lex *lex, AstDeclList *items)
 #undef GENERATE_DECL
 }
 
-static struct AstDecl *parse_module(struct Lex *lex, paw_Reader input, void *ud)
+static struct AstDecl *parse_source_file(struct Lex *lex, paw_Reader input, void *ud)
 {
     pawX_set_source(lex, input, ud);
 
@@ -2605,17 +2652,18 @@ static struct AstDecl *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 
     paw_assert(lex->ptr == lex->end);
     struct AstDecl *decl = NEW_NODE(lex, module_decl, span_from(lex, start),
-            next_id(lex), next_did(lex), lex->modname, lex->modno, items);
+            next_id(lex), next_did(lex), (struct AstIdent){.name = lex->modname},
+            lex->modno, items, Annotations_new(lex->C), PAW_TRUE);
     AstDeclList_push(lex->ast, lex->ast->modules, decl);
     return decl;
 }
 
-static void init_lexer(struct Compiler *C, Str const *modname, struct Lex *lex)
+static void init_lexer(struct Compiler *C, Str const *pkgname, struct Lex *lex)
 {
     *lex = (struct Lex){
         .pool = pawP_pool_new(C, C->aux_stats),
         .modno = C->modinfo->count - 1,
-        .modname = modname,
+        .modname = pkgname,
         .ast = C->ast,
         .dm = C->dm,
         .P = C->P,
@@ -2623,12 +2671,12 @@ static void init_lexer(struct Compiler *C, Str const *modname, struct Lex *lex)
     };
 }
 
-struct AstDecl *pawP_parse_module(struct Compiler *C, Str const *modname, paw_Reader input, void *ud)
+struct AstDecl *pawP_parse_source_file(struct Compiler *C, Str const *pkgname, paw_Reader input, void *ud)
 {
     struct Lex lex;
-    init_lexer(C, modname, &lex);
+    init_lexer(C, pkgname, &lex);
 
-    struct AstDecl *decl = parse_module(&lex, input, ud);
+    struct AstDecl *toplevel = parse_source_file(&lex, input, ud);
     pawP_pool_free(C, lex.pool);
-    return decl;
+    return toplevel;
 }

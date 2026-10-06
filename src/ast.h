@@ -137,9 +137,11 @@ struct AstDeclHeader {
 
 struct AstModuleDecl {
     AST_DECL_HEADER;
+    paw_Bool is_pub;
     int modno;
-    struct Str const *name;
+    struct AstIdent ident;
     struct AstDeclList *items;
+    struct Annotations *annos;
 };
 
 struct AstConstDecl {
@@ -157,6 +159,7 @@ struct AstTypeDecl {
     struct AstIdent ident;
     struct AstType *rhs;
     struct AstDeclList *generics;
+    struct AstBoundList *bounds;
 };
 
 struct AstFnDecl {
@@ -274,17 +277,19 @@ AST_DECL_LIST(X)
 
 struct AstDecl *pawAst_new_decl(struct Ast *ast);
 
-static struct AstDecl *pawAst_new_module_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct Str const *name, int modno, struct AstDeclList *items)
+static struct AstDecl *pawAst_new_module_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, int modno, struct AstDeclList *items, struct Annotations *annos, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ModuleDecl_ = (struct AstModuleDecl){
         .id = id,
         .did = did,
         .span = span,
+        .is_pub = is_pub,
         .kind = kAstModuleDecl,
         .items = items,
-        .name = name,
+        .ident = ident,
         .modno = modno,
+        .annos = annos,
     };
     pawAst_set_node(ast, id, d);
     return d;
@@ -412,7 +417,7 @@ inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct Source
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstDeclList *generics, struct AstType *rhs, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, struct SourceSpan span, NodeId id, DeclId did, struct AstIdent ident, struct AstDeclList *generics, struct AstBoundList *bounds, struct AstType *rhs, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->TypeDecl_ = (struct AstTypeDecl){
@@ -422,6 +427,7 @@ inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, struct Sourc
         .kind = kAstTypeDecl,
         .ident = ident,
         .generics = generics,
+        .bounds = bounds,
         .rhs = rhs,
         .is_pub = is_pub,
     };

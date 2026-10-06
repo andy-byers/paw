@@ -87,11 +87,6 @@ char const *pawL_std_module_name(enum pawL_StdModule m)
     return STD_NAMES[m];
 }
 
-static paw_Bool matches_modname(Str const *lhs, char const *rhs)
-{
-    return strncmp(rhs, lhs->text, lhs->length) == 0;
-}
-
 static Str const *add_module_ext(paw_Env *P, Str const *modname)
 {
     Buffer b;
@@ -142,8 +137,8 @@ static int searcher_Paw(paw_Env *P, void *arg)
         ? PAWL_NUM_CORE_MODULES
         : PAWL_NUM_STD_MODULES;
     for (unsigned i = 0; i < num_modules; ++i) {
-        char const *modname = STD_NAMES[i];
-        if (matches_modname(state->name, modname)) {
+        Str const *modname = SCAN_STR(P->C, STD_NAMES[i]);
+        if (pawS_eq(modname, state->name)) {
             Str const *dirname = pawS_new_str(P, PAW_STDLIB_PATH);
             Str const *filename = add_module_ext(P, state->name);
             int const found = open_source_file(P, dirname, filename, state->fr);

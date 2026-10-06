@@ -11,6 +11,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#if defined(PAW_OS_POSIX)
+# include <sys/stat.h>
+#else
+# error "Windows is not yet supported"
+#endif
+
 #define INTR_TIMEOUT 100
 
 struct File {
@@ -153,6 +159,82 @@ File *pawO_detach_file(paw_Env *P, File *src)
 void pawO_free_file(paw_Env *P, File *file)
 {
     pawM_free(P, file);
+}
+
+enum DirNextStatus {
+    DN_FOUND_ENTRY,
+    DN_END_OF_DIR,
+    DN_ERROR,
+};
+
+#if defined(PAW_OS_POSIX)
+# include <dirent.h>
+
+struct Directory {
+    DIR *inner;
+};
+
+static int os_open_dir(paw_Env *P, char const *pathname, Directory *out)
+{
+    DIR *dir = opendir(pathname);
+    if (dir == NULL) return -1;
+    out->inner = dir;
+    return 0;
+}
+
+static enum DirNextStatus os_dir_next(paw_Env *P, Directory dir, char const **name_out, size_t *length_out)
+{
+    PAW_UNUSED(P);
+    struct dirent *entry = readdir(dir.inner);
+    if (entry != NULL) {
+        *name_out = entry->d_name;
+        *length_out = entry->d_namlen;
+        return DN_FOUND_ENTRY;
+    } else if (errno == 0) {
+        return DN_END_OF_DIR;
+    } else {
+        return DN_ERROR;
+    }
+}
+
+static void os_close_dir(paw_Env *P, Directory dir)
+{
+    PAW_UNUSED(P);
+    closedir(dir.inner);
+}
+
+#else
+# error "Windows not yet supported"
+#endif
+
+void pawOs_traverse_dir(paw_Env *P, char const *dirname, AcceptEntry accept, void *ctx)
+{
+    enum DirNextStatus s = DN_ERROR;
+
+    struct Directory dir;
+    if (os_open_dir(P, dirname, &dir) == 0) {
+        char const *p;
+        size_t n;
+
+        while ((s = os_dir_next(P, dir, &p, &n)) == DN_FOUND_ENTRY
+                && accept(P, p, n, ctx)) {}
+
+        os_close_dir(P, dir);
+    }
+
+    if (s == DN_ERROR)
+        pawO_error(P);
+}
+
+paw_Bool pawOs_is_dir(paw_Env *P, char const *name)
+{
+    PAW_UNUSED(P);
+#if defined(PAW_OS_POSIX)
+    struct stat st;
+    return lstat(name, &st) == 0 && S_ISDIR(st.st_mode);
+#else
+    return PAW_FALSE;
+#endif
 }
 
 char const *pawOs_find_last_sep(char const *s, size_t n, size_t *pn)

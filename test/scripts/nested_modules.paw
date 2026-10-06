@@ -1,0 +1,46 @@
+// nested_modules.paw
+
+pub mod other {
+    pub struct OtherStruct;
+}
+
+pub mod module {
+    pub struct Struct;
+    pub enum Enum {Variant}
+    pub const CONSTANT: int64 = 1;
+    pub use other::*;
+
+    pub mod nested {
+        pub struct Struct;
+        pub enum Enum {Variant}
+        pub const CONSTANT: int64 = 2;
+        pub use io;
+
+        pub mod nested {
+            pub struct Struct;
+            pub enum Enum {Variant}
+            pub const CONSTANT: int64 = 3;
+            pub use list::List;
+        }
+    }
+}
+
+#[test]
+pub fn test() {
+    let _ = module::Struct;
+    let _ = module::nested::Struct;
+    let _ = module::nested::nested::Struct;
+
+    let _ = module::Enum::Variant;
+    let _ = module::nested::Enum::Variant;
+    let _ = module::nested::nested::Enum::Variant;
+
+    assert(module::CONSTANT == 1);
+    assert(module::nested::CONSTANT == 2);
+    assert(module::nested::nested::CONSTANT == 3);
+
+    module::nested::io::println("Hello, world!");
+    let _ = module::nested::nested::List::<int64>::new();
+    let _: other::OtherStruct = module::OtherStruct;
+}
+

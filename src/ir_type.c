@@ -1514,12 +1514,22 @@ IrDefs *pawIr_trait_impls_for(struct Compiler *C, IrType *self)
     return get_or_create_candidates_for(C, self, C->impls.trait);
 }
 
+static IrTraitList *without_first_trait(struct Compiler *C, IrTraitList *traits)
+{
+    paw_assert(traits->count > 0);
+    IrTraitList *suffix = IrTraitList_new(C);
+    IrTraitList_reserve(C, suffix, traits->count - 1);
+    for (int i = 1; i < traits->count; ++i)
+        IrTraitList_push(C, suffix, IrTraitList_get(traits, i));
+    return suffix;
+}
+
 IrTraitList *pawIr_supertraits_of(struct Compiler *C, DeclId did)
 {
     struct IrTraitDef const *trait_def = pawIr_get_trait_def(C, did);
     struct IrGenericDef const *self_def = IrGenericDefs_first(trait_def->generics);
     IrTraitList *supertraits = pawIr_get_trait_bounds(C, self_def->did);
-    return supertraits != NULL ? supertraits : IrTraitList_new(C);
+    return supertraits != NULL ? without_first_trait(C, supertraits) : IrTraitList_new(C);
 }
 
 

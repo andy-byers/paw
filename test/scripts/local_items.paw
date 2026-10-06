@@ -1,0 +1,13 @@
+// local_items.paw
+
+#[test]
+pub fn local_import_is_hoisted() {
+    maaath::cos(maaath::PI);
+    { use math as maaath; }
+}
+
+#[test]
+pub fn local_constant_is_hoisted() {
+    assert(K + 1 == 124);
+    { const K: int64 = 123; }
+}

@@ -386,13 +386,14 @@ struct HirConstDecl {
 };
 
 // Node representing a type declaration
-// Used for type aliases and builtin types.
+// Used for type aliases and associated types.
 struct HirTypeDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     struct HirIdent ident;
     struct HirType *rhs;
     struct HirDeclList *generics;
+    struct HirBoundList *bounds;
 };
 
 struct HirFnDecl {
@@ -520,7 +521,7 @@ static struct HirDecl *pawHir_new_const_decl(struct Hir *hir, struct SourceSpan 
     return d;
 }
 
-static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirDeclList *generics, struct HirType *rhs, paw_Bool is_pub)
+static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirDeclList *generics, struct HirBoundList *bounds, struct HirType *rhs, paw_Bool is_pub)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->TypeDecl_ = (struct HirTypeDecl){
@@ -530,6 +531,7 @@ static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, struct SourceSpan s
         .kind = kHirTypeDecl,
         .ident = ident,
         .generics = generics,
+        .bounds = bounds,
         .rhs = rhs,
         .is_pub = is_pub,
     };

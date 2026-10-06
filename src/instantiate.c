@@ -245,23 +245,28 @@ IrConst *pawP_substitute_const(struct Compiler *C, IrConst *k, struct Substituti
 
 struct Instantiation pawP_instantiate_assoc(struct Compiler *C, IrType *type, IrType *method)
 {
-    IrType *base = pawIr_get_context(C, method);
+    struct Substitution subst = {
+        subst.params = IrGenericArgs_new(C),
+        subst.args = IrGenericArgs_new(C),
+    };
 
-    struct Substitution subst;
+    IrType *base = pawIr_get_context(C, method);
     if (IrIsGeneric(base)) {
-        subst.params = IrGenericArgs_new(C);
-        subst.args = IrGenericArgs_new(C);
         IrGenericArgs_push(C, subst.params, IrGenericArg_from_type(base));
         IrGenericArgs_push(C, subst.args, IrGenericArg_from_type(type));
-    } else {
-        subst.params = IR_GENERIC_ARGS(base);
-        subst.args = IR_GENERIC_ARGS(type);
     }
 
-    if (subst.params != NULL) {
-        paw_assert(subst.args != NULL);
-        method = pawP_substitute(C, method, subst);
+    IrGenericArgs const *method_args = IR_GENERIC_ARGS(method);
+    K_LIST_XFOREACH (method_args, IrGenericArg const, arg) {
+        IrType *infer = pawU_new_type_var(C->U, IR_INFER_TYPE, (struct SourceSpan){0});
+        IrGenericArgs_push(C, subst.params, *arg);
+        IrGenericArgs_push(C, subst.args, IrGenericArg_from_type(infer));
     }
+
+    method = pawP_substitute(C, method, subst);
+
+    base = pawIr_get_context(C, method);
+    pawU_unify_unchecked(C->U, base, type);
 
     return (struct Instantiation){
         .inst = method,

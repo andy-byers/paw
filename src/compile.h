@@ -330,7 +330,7 @@ void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, s
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str const *modname, Str const *pathname, Str const *dirname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
-struct AstDecl *pawP_parse_module(struct Compiler *C, Str const *modname, paw_Reader input, void *ud);
+struct AstDecl *pawP_parse_source_file(struct Compiler *C, Str const *pkgname, paw_Reader input, void *ud);
 
 struct MonoResult {
     struct BodyList *bodies;
@@ -380,6 +380,7 @@ struct MethodSelection {
     struct IrType *method;
 };
 
+DEFINE_LIST(struct Compiler, NodeList, NodeId,)
 DEFINE_MAP(struct Compiler, MethodSelectionMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct MethodSelection,)
 DEFINE_MAP(struct Compiler, NodeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, NodeId,)
 DEFINE_MAP(struct Compiler, FnDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrFnDef *,)

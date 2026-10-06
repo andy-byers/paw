@@ -57,14 +57,16 @@ struct paw_Options {
     void *ud;
     paw_Alloc alloc;
     char opt_suffix;
+    char const *target;
     char const *output_dirname;
     char const *output_filename;
     char const *include_paths;
     char const **linker_specs;
     char const **linker_paths;
-    char const *target;
+    char const **dependencies;
     int num_linker_specs;
     int num_linker_paths;
+    int num_dependencies;
     paw_Bool compile_only : 1;
     paw_Bool build_tests : 1;
     paw_Bool enable_asan : 1;
@@ -72,6 +74,7 @@ struct paw_Options {
     paw_Bool dump_ir : 1;
     paw_Bool no_std : 1;
 };
+
 paw_Env *paw_open(struct paw_Options const *o);
 void paw_close(paw_Env *P);
 

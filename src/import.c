@@ -28,6 +28,21 @@ struct ImportBinding {
     paw_Bool is_pub;
 };
 
+static struct ImportSymbol const *find_import_symbol(struct Resolver *R, struct ImportScope const *scope, struct PathCursor pc, enum Namespace ns)
+{
+    return pawP_find_import_symbol(R, scope, pc_ident(pc).name, ns);
+}
+
+static struct AstModuleDecl *current_module(struct Resolver *R)
+{
+    return AstGetModuleDecl(K_LIST_LAST(R->modstack));
+}
+
+static Str const *current_modname(struct Resolver *R)
+{
+    return current_module(R)->ident.name;
+}
+
 static struct ImportBinding *new_binding(struct Resolver *R)
 {
     return P_ALLOC(R->C, NULL, 0, sizeof(struct ImportBinding));
@@ -50,7 +65,12 @@ static struct ImportScope *get_iscope(struct Resolver *R, NodeId id)
     return pscope != NULL ? *pscope : NULL;
 }
 
-static struct ImportScope *iscope_new(struct Resolver *R, NodeId id, enum ImportScopeKind kind, struct ImportScope *outer)
+static struct ImportScope *current_iscope(struct Resolver *R)
+{
+    return get_iscope(R, R->current_scope);
+}
+
+static struct ImportScope *iscope_enter(struct Resolver *R, NodeId id, enum ImportScopeKind kind, struct ImportScope *outer)
 {
     struct ImportScope *is = P_ALLOC(R, NULL, 0, sizeof(*is));
     *is = (struct ImportScope){
@@ -60,10 +80,36 @@ static struct ImportScope *iscope_new(struct Resolver *R, NodeId id, enum Import
         .kind = kind,
         .id = id,
     };
+    ImportScopes_insert(R, R->imports, id, is);
+    R->current_scope = id;
     return is;
 }
 
-static struct ImportScope *collect_items(struct Resolver *R, struct AstDecl *mod, ImportBindings *bindings);
+static struct ImportScope *iscope_leave(struct Resolver *R)
+{
+    struct ImportScope const *iscope = get_iscope(R, R->current_scope);
+    paw_assert(iscope != NULL);
+    if (iscope->outer != NULL) {
+        R->current_scope = iscope->outer->id;
+        return get_iscope(R, R->current_scope);
+    } else {
+        R->current_scope = INVALID_NODE_ID;
+        return NULL;
+    }
+}
+
+static struct ImportScope *enter_module(struct Resolver *R, NodeId id, struct ImportScope *outer)
+{
+    AstDeclList_push(R->ast, R->modstack, pawAst_get_node(R->ast, id));
+    return iscope_enter(R, id, ISCOPE_MODULE, outer);
+}
+
+static struct ImportScope *leave_module(struct Resolver *R)
+{
+    return iscope_leave(R);
+}
+
+static struct ImportScope *collect_items(struct Resolver *R, struct AstDecl *toplevel, ImportBindings *bindings);
 
 static struct AstDecl *import_module(struct Resolver *R, Str const *name, ImportBindings *bindings)
 {
@@ -80,7 +126,7 @@ static struct AstDecl *import_module(struct Resolver *R, Str const *name, Import
                     .name = name,
                 });
 
-        struct AstDecl *mod = pawP_parse_module(R->C, name, fr.f, &fr);
+        struct AstDecl *mod = pawP_parse_source_file(R->C, name, fr.f, &fr);
         pawL_finish_import(P, &fr);
 
         struct AstModuleDecl *m = AstGetModuleDecl(mod);
@@ -113,11 +159,10 @@ static struct ImportSymbol const *get_explicit_symbol(struct ImportName *iname)
     return NULL;
 }
 
-struct ImportSymbol const *pawP_find_import_symbol(struct Resolver *R, struct ImportScope const *scope, struct PathCursor pc, enum Namespace ns)
+struct ImportSymbol const *pawP_find_import_symbol(struct Resolver *R, struct ImportScope const *scope, Str const *name, enum Namespace ns)
 {
-    struct AstIdent const ident = pc_segment(pc)->ident;
     ImportNames *inames = ns == NAMESPACE_TYPE ? scope->types : scope->values;
-    struct ImportName *const *piname = ImportNames_get(R, inames, ident.name);
+    struct ImportName *const *piname = ImportNames_get(R, inames, name);
     if (piname == NULL) return NULL;
 
     struct ImportName *iname = *piname;
@@ -132,11 +177,16 @@ struct ImportSymbol const *pawP_find_import_symbol(struct Resolver *R, struct Im
         while (scope->outer != NULL) scope = scope->outer;
         struct AstModuleDecl const *m = GET_NODE(R, scope->id);
         IMPORTER_ERROR(R, AmbiguousPath,
-                .path = pawAst_print_type_path(R->ast, pc.path),
-                .modname = m->name,
-                .span = ident.span);
+                .path = SCAN_STR(R->C, "TODO"),
+                .modname = m->ident.name,
+                .span = {0});
     }
     return psymbol;
+}
+
+static struct ImportSymbol const *find_type(struct Resolver *R, struct ImportScope const *scope, struct PathCursor pc)
+{
+    return find_import_symbol(R, scope, pc, NAMESPACE_TYPE);
 }
 
 static struct ImportSymbol const *lookup_in_scope(struct Resolver *R, struct ImportScope const *outer, struct PathCursor pc, enum Namespace ns);
@@ -155,7 +205,7 @@ static struct ImportSymbol const *lookup_nested_type(struct Resolver *R, struct 
 
 static struct ImportSymbol const *lookup_type_in_scope(struct Resolver *R, struct ImportScope const *outer, struct PathCursor pc)
 {
-    struct ImportSymbol const *result = pawP_find_import_symbol(R, outer, pc, NAMESPACE_TYPE);
+    struct ImportSymbol const *result = find_import_symbol(R, outer, pc, NAMESPACE_TYPE);
     if (result != NULL) return lookup_nested_type(R, result, pc);
     return result;
 }
@@ -172,10 +222,10 @@ static struct ImportSymbol const *lookup_nested_value(struct Resolver *R, struct
 
 static struct ImportSymbol const *lookup_value_in_scope(struct Resolver *R, struct ImportScope const *outer, struct PathCursor pc)
 {
-    struct ImportSymbol const *result = pawP_find_import_symbol(R, outer, pc, NAMESPACE_TYPE);
+    struct ImportSymbol const *result = find_import_symbol(R, outer, pc, NAMESPACE_TYPE);
     if (result != NULL) result = lookup_nested_value(R, result, pc);
     if (result != NULL) return result; // found associated value
-    return pawP_find_import_symbol(R, outer, pc, NAMESPACE_VALUE);
+    return find_import_symbol(R, outer, pc, NAMESPACE_VALUE);
 }
 
 static struct ImportSymbol const *lookup_in_scope(struct Resolver *R, struct ImportScope const *outer, struct PathCursor pc, enum Namespace ns)
@@ -195,7 +245,7 @@ static paw_Bool lookup(struct Resolver *R, struct ImportScope const *current, st
     struct PathCursor pc = pc_create(b.path);
     struct ImportSymbol const *result = lookup_in_scope(R, current, pc, ns);
     if (result == NULL) {
-        // try again in a different module
+        // try again in a different package
         struct AstSegment const first = K_LIST_FIRST(b.path.segments);
         int const *pmodno = ImportModules_get(R, R->modules, first.ident.name);
         if (pmodno == NULL) return PAW_FALSE;
@@ -205,8 +255,8 @@ static paw_Bool lookup(struct Resolver *R, struct ImportScope const *current, st
         struct AstModuleDecl const *m = AstGetModuleDecl(mod);
         if (!pc_is_valid(pc)) {
             if (ns == NAMESPACE_VALUE) return PAW_FALSE;
-            // found module import, e.g. "use mod;"
-            *out = ISYMBOL(m->id, pc_segment(pc)->ident, ISYMBOL_EXPLICIT, b.is_pub);
+            // found module import, e.g. "use package;"
+            *out = ISYMBOL(m->id, pc_ident(pc), ISYMBOL_EXPLICIT, b.is_pub);
             return PAW_TRUE;
         }
         struct ImportScope *scope = get_iscope(R, NODE_ID(mod));
@@ -236,7 +286,7 @@ static paw_Bool add_symbol(struct Resolver *R, struct ImportScope *scope, struct
         while (scope->outer != NULL) scope = scope->outer;
         struct AstModuleDecl const *m = GET_NODE(R, scope->id);
         IMPORTER_ERROR(R, DuplicateName,
-                .modname = m->name,
+                .modname = m->ident.name,
                 .what = ns == NAMESPACE_TYPE
                     ? SCAN_STR(R->C, "type")
                     : SCAN_STR(R->C, "value"),
@@ -266,201 +316,215 @@ static paw_Bool add_value(struct Resolver *R, struct ImportScope *scope, struct 
 
 struct VisitorContext {
     struct ImportScope *scope;
+    ImportBindings *bindings;
     struct Resolver *R;
 };
 
 static void collect_item(struct Resolver *R, struct ImportScope *scope, struct AstDecl *decl);
 
-// TODO: Store to .PostVisitTypeDecl and remove the conditional
-static void declare_alias(struct AstVisitor *V, struct AstDecl *decl)
+static void declare_self(struct VisitorContext *X, NodeId id, enum Namespace ns, struct SourceSpan span)
 {
-    if (AstIsTypeDecl(decl)) {
-        struct VisitorContext *ctx = V->ud;
-        collect_item(ctx->R, ctx->scope, decl);
-    }
-}
-
-static void collect_fn_decl(struct Resolver *R, struct ImportScope *outer, struct AstFnDecl const *d)
-{
-    struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_FN, outer);
-    ImportScopes_insert(R, R->imports, d->id, scope);
-
-    struct VisitorContext ctx = {
-        .scope = scope,
-        .R = R,
+    struct AstIdent const ident = {
+        .name = SCAN_STR(X->R->C, "Self"),
+        .span = span,
     };
-    struct AstVisitor *V = &(struct AstVisitor){0};
-    pawAst_visitor_init(V, R->ast, &ctx);
-    V->PostVisitDecl = declare_alias;
-
-    pawAst_visit_decl(V, AST_CAST_DECL(d));
+    add_symbol(X->R, X->scope, ident, id, ISYMBOL_EXPLICIT, ns, PAW_TRUE);
 }
 
-static void collect_trait_decl(struct Resolver *R, struct ImportScope *outer, struct AstTraitDecl *d)
+static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 {
-    struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_TYPE, outer);
-    ImportScopes_insert(R, R->imports, d->id, scope);
-
-    // add associated types to trait type namespace
-    K_LIST_XFOREACH (d->types, struct AstDecl *const, p) {
-        struct AstGenericDecl const *t = AstGetGenericDecl(*p);
-        add_type(R, scope, t->t.ident, t->id, ISYMBOL_EXPLICIT, d->is_pub);
-    }
-
-    // add methods and associated functions to trait value namespace
-    struct AstDecl *const *pdecl;
-    K_LIST_FOREACH (d->methods, pdecl) {
-        struct AstFnDecl *f = AstGetFnDecl(*pdecl);
-        add_value(R, scope, f->ident, f->id, ISYMBOL_EXPLICIT, f->is_pub);
-        collect_fn_decl(R, scope, f);
-    }
+    struct VisitorContext *ctx = V->ud;
+    add_value(ctx->R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
+    ctx->scope = iscope_enter(ctx->R, d->id, ISCOPE_FN, ctx->scope);
+    return PAW_TRUE;
 }
 
-static void collect_impl_decl(struct Resolver *R, struct ImportScope *outer, struct AstImplDecl *d)
+static void leave_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 {
-    struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_TYPE, outer);
-    ImportScopes_insert(R, R->imports, d->id, scope);
-
-    K_LIST_XFOREACH (d->types, struct AstDecl *const, p) {
-        struct AstTypeDecl const *t = AstGetTypeDecl(*p);
-        add_type(R, scope, t->ident, t->id, ISYMBOL_EXPLICIT, t->is_pub);
-    }
-
-    // add methods and associated functions to impl block value namespace
-    K_LIST_XFOREACH (d->methods, struct AstDecl *const, p) {
-        struct AstFnDecl *f = AstGetFnDecl(*p);
-        add_value(R, scope, f->ident, f->id, ISYMBOL_EXPLICIT, f->is_pub);
-        collect_fn_decl(R, scope, f);
-    }
+    PAW_UNUSED(d);
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_leave(ctx->R);
 }
 
-static paw_Bool is_core_adt(struct Resolver *R, Str const *name)
+static paw_Bool enter_closure_expr(struct AstVisitor *V, struct AstClosureExpr *e)
 {
-    return R->current->modno == PRELUDE_MODNO && (
-            pawS_eq(name, SCAN_STR(R->C, "unit"))
-            || pawS_eq(name, SCAN_STR(R->C, "bool"))
-            || pawS_eq(name, SCAN_STR(R->C, "char"))
-            || pawS_eq(name, SCAN_STR(R->C, "int8"))
-            || pawS_eq(name, SCAN_STR(R->C, "int16"))
-            || pawS_eq(name, SCAN_STR(R->C, "int32"))
-            || pawS_eq(name, SCAN_STR(R->C, "int64"))
-            || pawS_eq(name, SCAN_STR(R->C, "isize"))
-            || pawS_eq(name, SCAN_STR(R->C, "ioffset"))
-            || pawS_eq(name, SCAN_STR(R->C, "uint8"))
-            || pawS_eq(name, SCAN_STR(R->C, "uint16"))
-            || pawS_eq(name, SCAN_STR(R->C, "uint32"))
-            || pawS_eq(name, SCAN_STR(R->C, "uint64"))
-            || pawS_eq(name, SCAN_STR(R->C, "usize"))
-            || pawS_eq(name, SCAN_STR(R->C, "uoffset"))
-            || pawS_eq(name, SCAN_STR(R->C, "float32"))
-            || pawS_eq(name, SCAN_STR(R->C, "float64"))
-            || pawS_eq(name, SCAN_STR(R->C, "int"))
-            || pawS_eq(name, SCAN_STR(R->C, "float"))
-            || pawS_eq(name, SCAN_STR(R->C, "str")));
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_enter(ctx->R, e->id, ISCOPE_FN, ctx->scope);
+    return PAW_TRUE;
 }
 
-static void collect_adt_decl(struct Resolver *R, struct ImportScope *outer, struct AstAdtDecl *d)
+static void leave_closure_expr(struct AstVisitor *V, struct AstClosureExpr *e)
 {
-    if (pawAst_is_unit_struct(d) && !is_core_adt(R, d->ident.name)) {
-        // add name of unit struct to global value namespace
-        struct AstDecl *v = K_LIST_FIRST(d->variants);
-        add_value(R, outer, d->ident, v->hdr.id, ISYMBOL_EXPLICIT, d->is_pub);
-    }
-
-    struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_TYPE, outer);
-    ImportScopes_insert(R, R->imports, d->id, scope);
-
-    if (!d->is_struct) {
-        // add variant constructors to ADT value namespace
-        struct AstDecl *const *pdecl;
-        K_LIST_FOREACH (d->variants, pdecl) {
-            struct AstVariantDecl *v = AstGetVariantDecl(*pdecl);
-            add_value(R, scope, v->ident, v->id, ISYMBOL_EXPLICIT, PAW_TRUE);
-        }
-    }
+    PAW_UNUSED(e);
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_leave(ctx->R);
 }
 
-static void collect_item(struct Resolver *R, struct ImportScope *scope, struct AstDecl *decl)
+static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
 {
-    switch (AST_KINDOF(decl)) {
-        case kAstFnDecl: {
-            struct AstFnDecl *d = AstGetFnDecl(decl);
-            add_value(R, scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
-            collect_fn_decl(R, scope, d);
-            break;
-        }
-        case kAstConstDecl: {
-            struct AstConstDecl *d = AstGetConstDecl(decl);
-            add_value(R, scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
-            break;
-        }
-        case kAstTypeDecl: {
-            struct AstTypeDecl *d = AstGetTypeDecl(decl);
-            add_type(R, scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
-            break;
-        }
-        case kAstTraitDecl: {
-            struct AstTraitDecl *d = AstGetTraitDecl(decl);
-            add_type(R, scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
-            collect_trait_decl(R, scope, d);
-            break;
-        }
-        case kAstImplDecl: {
-            struct AstImplDecl *d = AstGetImplDecl(decl);
-            collect_impl_decl(R, scope, d);
-            break;
-        }
-        default: { // kAstAdtDecl
-            struct AstAdtDecl *d = AstGetAdtDecl(decl);
-            add_type(R, scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
-            collect_adt_decl(R, scope, d);
-            break;
-        }
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_enter(ctx->R, d->id, ISCOPE_TYPE, ctx->scope);
+    declare_self(ctx, d->id, NAMESPACE_TYPE, d->span);
+    return PAW_TRUE;
+}
+
+static void leave_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
+{
+    PAW_UNUSED(d);
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_leave(ctx->R);
+}
+
+static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
+{
+    struct VisitorContext *ctx = V->ud;
+    add_type(ctx->R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
+    ctx->scope = iscope_enter(ctx->R, d->id, ISCOPE_TYPE, ctx->scope);
+    return PAW_TRUE;
+}
+
+static void leave_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
+{
+    PAW_UNUSED(d);
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_leave(ctx->R);
+}
+
+static paw_Bool enter_module_decl(struct AstVisitor *V, struct AstModuleDecl *d)
+{
+    struct VisitorContext *ctx = V->ud;
+    add_type(ctx->R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
+    ctx->scope = enter_module(ctx->R, d->id, ctx->scope);
+    return PAW_TRUE;
+}
+
+static void leave_module_decl(struct AstVisitor *V, struct AstModuleDecl *d)
+{
+    PAW_UNUSED(d);
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = leave_module(ctx->R);
+}
+
+static paw_Bool is_unit_struct(struct Resolver *R, struct AstAdtDecl *d)
+{
+    return pawAst_is_unit_struct(d)
+        && (current_module(R)->modno != PRELUDE_MODNO
+                || BuiltinMap_get(R->C, R->C->builtin_lookup, d->ident.name) == NULL);
+}
+
+static paw_Bool enter_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
+{
+    struct VisitorContext *ctx = V->ud;
+    struct Resolver *R = ctx->R;
+
+    if (is_unit_struct(R, d)) {
+        // add name of unit struct to enclosing value namespace
+        struct AstDecl const *v = AstDeclList_first(d->variants);
+        add_value(R, ctx->scope, d->ident, v->hdr.id, ISYMBOL_EXPLICIT, d->is_pub);
     }
+
+    add_type(R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
+    ctx->scope = iscope_enter(R, d->id, ISCOPE_TYPE, ctx->scope);
+    declare_self(ctx, d->id, NAMESPACE_TYPE, d->span);
+    return PAW_TRUE;
+}
+
+static void leave_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
+{
+    PAW_UNUSED(d);
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_leave(ctx->R);
+}
+
+static paw_Bool visit_variant_decl(struct AstVisitor *V, struct AstVariantDecl *d)
+{
+    struct VisitorContext *ctx = V->ud;
+    add_value(ctx->R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, PAW_TRUE);
+    return PAW_TRUE;
+}
+
+static paw_Bool visit_type_decl(struct AstVisitor *V, struct AstTypeDecl *d)
+{
+    struct VisitorContext *ctx = V->ud;
+    add_type(ctx->R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
+    return PAW_TRUE;
+}
+
+static paw_Bool visit_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
+{
+    struct VisitorContext *ctx = V->ud;
+    add_value(ctx->R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
+    return PAW_TRUE;
+}
+
+static paw_Bool visit_use_decl(struct AstVisitor *V, struct AstUseDecl *d)
+{
+    struct VisitorContext *ctx = V->ud;
+    struct Resolver *R = ctx->R;
+
+    struct AstIdent const source = K_LIST_LAST(d->path.segments).ident;
+    struct AstIdent const target = d->use_kind == AST_USE_ALIAS ? d->as : source;
+
+    struct ImportBinding *pb = new_binding(R);
+    *pb = (struct ImportBinding){
+        .kind = d->use_kind == AST_USE_GLOB
+            ? ISYMBOL_GLOB : ISYMBOL_EXPLICIT,
+        .target_id = current_iscope(R)->id,
+        .source_id = current_module(R)->id,
+        .target = target,
+        .source = source,
+        .path = d->path,
+        .is_pub = d->is_pub,
+        .id = d->id,
+    };
+
+    // save imports to resolve later
+    ImportBindings_push(R, ctx->bindings, pb);
+    return PAW_TRUE;
 }
 
 static struct ImportScope *collect_items(struct Resolver *R, struct AstDecl *mod, ImportBindings *bindings)
 {
-    struct AstModuleDecl *m = AstGetModuleDecl(mod);
-    struct ImportScope *scope = iscope_new(R, m->id, ISCOPE_MODULE, NULL);
-    ImportScopes_insert(R, R->imports, m->id, scope);
-    R->current = m;
+    struct AstModuleDecl const *m = AstGetModuleDecl(mod);
+    struct VisitorContext ctx = {
+        .scope = enter_module(R, m->id, NULL),
+        .bindings = bindings,
+        .R = R,
+    };
 
-    struct AstDecl *const *pitem;
-    K_LIST_FOREACH (m->items, pitem) {
-        if (!AstIsUseDecl(*pitem)) {
-            collect_item(R, scope, *pitem);
-        } else { // save imports to resolve later
-            struct AstUseDecl const *d = AstGetUseDecl(*pitem);
-            struct AstIdent const source = K_LIST_LAST(d->path.segments).ident;
-            struct AstIdent const target = d->use_kind == AST_USE_ALIAS ? d->as : source;
-            struct ImportBinding *pb = new_binding(R);
-            *pb = (struct ImportBinding){
-                .kind = d->use_kind == AST_USE_GLOB
-                    ? ISYMBOL_GLOB : ISYMBOL_EXPLICIT,
-                .is_pub = d->is_pub,
-                .target_id = m->id,
-                .source_id = m->id,
-                .target = target,
-                .source = source,
-                .path = d->path,
-                .id = d->id,
-            };
-            ImportBindings_push(R, bindings, pb);
-        }
-    }
+    struct AstVisitor V;
+    pawAst_visitor_init(&V, R->ast, &ctx);
+    V.VisitAdtDecl = enter_adt_decl;
+    V.PostVisitAdtDecl = leave_adt_decl;
+    V.VisitVariantDecl = visit_variant_decl;
+    V.VisitTraitDecl = enter_trait_decl;
+    V.PostVisitTraitDecl = leave_trait_decl;
+    V.VisitTypeDecl = visit_type_decl;
+    V.VisitFnDecl = enter_fn_decl;
+    V.PostVisitFnDecl = leave_fn_decl;
+    V.VisitImplDecl = enter_impl_decl;
+    V.PostVisitImplDecl = leave_impl_decl;
+    V.VisitModuleDecl = enter_module_decl;
+    V.PostVisitModuleDecl = leave_module_decl;
+    V.VisitClosureExpr = enter_closure_expr;
+    V.PostVisitClosureExpr = leave_closure_expr;
+    V.VisitConstDecl = visit_const_decl;
+    V.VisitUseDecl = visit_use_decl;
 
-    return scope;
+    pawAst_visit_decl_list(&V, m->items);
+
+    leave_module(R);
+    return ctx.scope;
 }
 
 static paw_Bool resolve_module_prefix(struct Resolver *R, struct ImportScope *target, struct ImportBinding *pb, ImportBindings *bindings)
 {
-    // only the first segment can refer to a not-yet-seen module
-    Str const *name = K_LIST_FIRST(pb->path.segments).ident.name;
+    // only the first segment can refer to a not-yet-seen package
+    Str const *name = AstSegments_first(pb->path.segments).ident.name;
     struct AstDecl *mod = get_module_by_name(R, name);
     if (mod != NULL) return PAW_FALSE; // already imported
     mod = import_module(R, name, bindings);
-    if (mod == NULL) return PAW_FALSE; // not a module
+    if (mod == NULL) return PAW_FALSE; // not a package
 
     pb->source_id = NODE_ID(mod);
     if (pb->path.segments->count == 1 && pb->kind == ISYMBOL_EXPLICIT) {
@@ -595,7 +659,7 @@ static paw_Bool resolve_glob_in(struct Resolver *R, struct ImportScope const *so
             default:
                 IMPORTER_ERROR(R, InvalidGlobTarget,
                         .path = pawAst_print_type_path(R->ast, pb->path),
-                        .modname = R->current->name,
+                        .modname = current_modname(R),
                         .span = pb->source.span);
         }
     }
@@ -648,7 +712,7 @@ static void validate_bindings(struct Resolver *R, ImportBindings *bindings)
             IMPORTER_ERROR(R, UnknownPath,
                     .path = pawAst_print_type_path(R->ast, pb->path),
                     .kind = SCAN_STR(R->C, "either (type or value)"),
-                    .modname = m->name,
+                    .modname = m->ident.name,
                     .span = ident.span);
         }
     }
@@ -668,7 +732,7 @@ void pawP_resolve_imports(struct Resolver *R)
     paw_assert(R->ast->modules->count == 1);
     struct AstDecl *main = K_LIST_FIRST(R->ast->modules);
     struct AstModuleDecl *m = AstGetModuleDecl(main);
-    ImportModules_insert(R, R->modules, m->name, m->modno);
+    ImportModules_insert(R, R->modules, m->ident.name, m->modno);
 
     ImportBindings *bindings = ImportBindings_new(R);
     collect_items(R, main, bindings);
@@ -676,3 +740,4 @@ void pawP_resolve_imports(struct Resolver *R)
 
     pawP_callback(R->C, "paw.on_build_ast", R->ast);
 }
+

@@ -12,7 +12,7 @@
 #include "str.h"
 
 #define LOWERING_ERROR(L_, Kind_, ...) THROW_ERROR((L_)->C, \
-        Kind_, .modname = (L_)->m->name, __VA_ARGS__)
+        Kind_, .modname = (L_)->m->ident.name, __VA_ARGS__)
 
 #define NEW_NODE(L_, Kind_, ...) \
     pawHir_new_##Kind_((L_)->hir, __VA_ARGS__)
@@ -512,11 +512,11 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
             variants, d->is_pub, d->is_struct);
 }
 
-static struct HirDecl *lower_self_decl(struct LowerAst *L, NodeId parent_id)
+static struct HirDecl *lower_self_decl(struct LowerAst *L, struct AstTraitDecl *d)
 {
-    NodeId const self_id = *NodeMap_get(L->C, L->C->self_types, parent_id);
-    struct AstDecl *self_decl = pawAst_get_node(L->ast, self_id);
-    return lower_decl(L, self_decl);
+    NodeId const self_id = *NodeMap_get(L->C, L->C->self_types, d->id);
+    struct AstDecl *ast_self = pawAst_get_node(L->ast, self_id);
+    return lower_decl(L, ast_self);
 }
 
 static struct HirBoundList *lower_bounds(struct LowerAst *L, struct AstBoundList *bounds)
@@ -537,7 +537,7 @@ static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d
 {
     HirDeclList *generics = lower_decl_list(L, d->generics);
     if (generics == NULL) generics = HirDeclList_new(L->hir);
-    HirDeclList_insert(L->hir, generics, 0, lower_self_decl(L, d->id));
+    HirDeclList_insert(L->hir, generics, 0, lower_self_decl(L, d));
 
     HirDeclList *types = lower_decl_list(L, d->types);
     HirDeclList *methods = lower_methods(L, d->methods);
@@ -558,7 +558,8 @@ static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
     struct HirIdent const ident = lower_ident(d->ident);
     HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirType *rhs = d->rhs != NULL ? lower_type(L, d->rhs) : NULL;
-    return NEW_NODE(L, type_decl, d->span, d->id, d->did, ident, generics, rhs, d->is_pub);
+    HirBoundList *bounds = d->bounds != NULL ? lower_bounds(L, d->bounds) : NULL;
+    return NEW_NODE(L, type_decl, d->span, d->id, d->did, ident, generics, bounds, rhs, d->is_pub);
 }
 
 // Lower a function call or enumerator constructor
@@ -1159,6 +1160,8 @@ static struct HirExpr *LowerJumpExpr(struct LowerAst *L, struct AstJumpExpr *e)
 
 static struct HirStmt *LowerDeclStmt(struct LowerAst *L, struct AstDeclStmt *s)
 {
+    if (AstIsUseDecl(s->decl))
+        return NULL;
     struct HirDecl *decl = lower_decl(L, s->decl);
     return NEW_NODE(L, decl_stmt, s->span, s->id, decl);
 }
@@ -1240,11 +1243,11 @@ static struct HirPat *LowerRefPat(struct LowerAst *L, struct AstRefPat *p)
 {
     struct HirPat *referent = lower_pat(L, p->referent);
     if (!HirIsBindingPat(referent))
-        pawErr_generic_error(ENV(L), L->m->name, p->span,
+        pawErr_generic_error(ENV(L), L->m->ident.name, p->span,
                 "reference can only be applied to a binding pattern");
     struct HirBindingPat *binding = HirGetBindingPat(referent);
     if (binding->is_ref)
-        pawErr_generic_error(ENV(L), L->m->name, p->span,
+        pawErr_generic_error(ENV(L), L->m->ident.name, p->span,
                 "only one `&` is allowed on a binding");
     binding->is_ref = PAW_TRUE;
     return referent;
@@ -1383,7 +1386,7 @@ static struct HirDecl *LowerModuleDecl(struct LowerAst *L, struct AstModuleDecl 
 
     struct HirModule const m = {
         .modno = d->modno,
-        .name = d->name,
+        .name = d->ident.name,
         .items = items,
     };
     HirModuleList_push(L->hir, L->hir->modules, m);
@@ -1454,7 +1457,7 @@ static NodeId find_builtin_fn(struct LowerAst *L, char const *modname, char cons
     Str const *name_str = SCAN_STR(L->C, name);
     K_LIST_XFOREACH (L->ast->modules, struct AstDecl *const, pmodule) {
         struct AstModuleDecl const *m = AstGetModuleDecl(*pmodule);
-        if (pawS_eq(modname_str, m->name)) {
+        if (pawS_eq(modname_str, m->ident.name)) {
             K_LIST_XFOREACH (m->items, struct AstDecl *const, pdecl) {
                 if (AstIsFnDecl(*pdecl)) {
                     struct AstFnDecl const *d = AstGetFnDecl(*pdecl);

@@ -93,7 +93,7 @@ void paw_close(paw_Env *P)
 struct CompileState {
     paw_Reader input;
     struct DynamicMem dm;
-    char const *modname;
+    char const *pkgname;
     char const *dirname;
     char const *pathname;
     void *ud;
@@ -103,19 +103,19 @@ static int compile_aux(paw_Env *P, void *arg)
 {
     struct CompileState *p = arg;
 
-    Str const *modname = pawS_new_str(P, p->modname);
-    Str const *pathname = p->pathname != NULL ? pawS_new_str(P, p->pathname) : modname;
+    Str const *pkgname = pawS_new_str(P, p->pkgname);
+    Str const *pathname = p->pathname != NULL ? pawS_new_str(P, p->pathname) : pkgname;
     Str const *dirname = pawS_new_str(P, p->dirname != NULL ? p->dirname : ".");
-    pawP_startup(P, P->C, &p->dm, modname, pathname, dirname);
+    pawP_startup(P, P->C, &p->dm, pkgname, pathname, dirname);
     pawP_compile(P->C, p->input, p->ud);
     return 0;
 }
 
-int paw_load(paw_Env *P, paw_Reader input, char const *modname, char const *dirname, char const *pathname, void *ud)
+int paw_load(paw_Env *P, paw_Reader input, char const *pkgname, char const *dirname, char const *pathname, void *ud)
 {
     struct CompileState p = {
         .input = input,
-        .modname = modname,
+        .pkgname = pkgname,
         .dirname = dirname,
         .pathname = pathname,
         .ud = ud,

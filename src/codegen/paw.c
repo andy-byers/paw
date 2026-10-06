@@ -2,6 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+// TODO: use a list from list.h for holding list-like program options instead of requiring an argument count specified at compile time
+
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +14,7 @@
 #include "ir_type.h"
 #include "lex.h"
 #include "lib.h"
+#include "list.h"
 #include "mir.h"
 #include "os.h"
 
@@ -26,16 +29,18 @@ enum Status {
 #define PROGRAM_OPTIONS \
     OPT_STR(e, source, "accept source code from string argument") \
     OPT_STR(d, phase, "dump debug info for compilation phase(s)") \
-    OPT_STR(T, target, "triple specifying compilation target") \
+    OPT_STR(T, triple, "triple specifying compilation target") \
     OPT_STR(O, level, "optimization level") \
     OPT_STR(o, path, "path to compiler output") \
     OPT_STR(I, include, "list of import paths") \
+    OPT_STR(a, name, "name of the target package") \
     OPT_STRS(L, path, 100, "add to linker search path") \
     OPT_STRS(l, spec, 100, "specify library to link") \
+    OPT_STRS(p, deps, 100, "list of Paw package dependencies") \
     OPT_OPT(h, "display this help message") \
     OPT_OPT(n, "omit the standard library") \
     OPT_OPT(c, "compile the program only") \
-    OPT_OPT(t, "build module tests") \
+    OPT_OPT(t, "build tests") \
     OPT_OPT(V, "validate LLVM IR") \
     OPT_OPT(q, "suppress output")
 
@@ -51,10 +56,14 @@ static struct {
 #undef OPT_STRS
 } s_opt;
 
+DEFINE_LIST(struct Compiler, CStrings, char const *)
+
 static struct {
     char const *name;
 
-    char const *module_pathname;
+    char const *package_pathname;
+
+    char const *package_name;
 
     paw_Bool started_compilation;
 
@@ -183,10 +192,10 @@ static void parse_options(int argc, char const **argv)
         char const *a = option;
         if (a[0] != '-') {
             // found the module pathname
-            if (s_program.module_pathname != NULL)
+            if (s_program.package_pathname != NULL)
                 error("expected a single module pathname "
                       "(the non-option argument)\n");
-            s_program.module_pathname = option;
+            s_program.package_pathname = option;
             continue;
         }
         ++a;
@@ -365,31 +374,40 @@ static int stats_reporter(paw_Env *P, void *arg)
     return 0;
 }
 
-static void decompose_pathname(char const *pathname, size_t pathlen, char *modname, char *dirname, paw_Bool strip_ext)
+static void decompose_pathname(char const *pathname, size_t pathlen, char *dirname, char *filename, char *ext)
 {
-    size_t modlen, dirlen;
-    char const *begin = pawOs_find_last_sep(pathname, pathlen, &modlen);
+    size_t filelen, dirlen;
+    char const *begin = pawOs_find_last_sep(pathname, pathlen, &filelen);
     if (begin != NULL) {
-        dirlen = pathlen - modlen;
+        dirlen = pathlen - filelen;
         // skip separator
-        --modlen;
+        --filelen;
         ++begin;
     } else {
         begin = pathname;
-        modlen = pathlen;
+        filelen = pathlen;
         dirlen = 0;
     }
 
     memcpy(dirname, pathname, dirlen);
     dirname[dirlen] = '\0';
 
-    if (strip_ext) {
-        char const *end = strchr(begin, '.');
-        if (end != NULL)
-            modlen = (size_t)(end - begin);
+    if (ext != NULL) {
+        *ext = '\0';
+        // exclude the `i == 0` iteration to prevent the "foo" part of ".foo" from
+        // being considered an extension
+        for (size_t i = pathlen - 1; i != 0; --i) {
+            if (pathname[i] == '.') {
+                size_t const extlen = pathlen - i - 1;
+                memcpy(ext, pathname + i + 1, extlen);
+                ext[extlen] = '\0';
+                filelen -= extlen + 1;
+                break;
+            }
+        }
     }
-    memcpy(modname, begin, modlen);
-    modname[modlen] = '\0';
+    memcpy(filename, begin, filelen);
+    filename[filelen] = '\0';
 }
 
 int main(int argc, char const *argv[])
@@ -417,7 +435,7 @@ int main(int argc, char const *argv[])
         output_filename = (char[PATH_MAX + 1]){0};
         output_dirname = (char[PATH_MAX + 1]){0};
         decompose_pathname(s_opt.o, strlen(s_opt.o),
-                output_filename, output_dirname, PAW_FALSE);
+                output_dirname, output_filename, NULL);
     }
 
     // ensure linker specs have form `["static" | "dynamic"] "=" name`
@@ -432,8 +450,10 @@ int main(int argc, char const *argv[])
     paw_Env *P = paw_open(&(struct paw_Options){
                 .num_linker_paths = s_opt.L_count,
                 .num_linker_specs = s_opt.l_count,
+                .num_dependencies = s_opt.p_count,
                 .linker_paths = s_opt.L,
                 .linker_specs = s_opt.l,
+                .dependencies = s_opt.p,
                 .output_filename = output_filename,
                 .output_dirname = output_dirname,
                 .include_paths = s_opt.I,
@@ -463,14 +483,15 @@ int main(int argc, char const *argv[])
     // then always use the provided string (ignore path).
     if (s_opt.e != NULL) {
         status = pawL_load_chunk(P, "(code)", s_opt.e);
-    } else if (s_program.module_pathname != NULL) {
-        char modname[PATH_MAX + 1];
-        char dirname[PATH_MAX + 1];
-        decompose_pathname(s_program.module_pathname,
-                strlen(s_program.module_pathname),
-                modname, dirname, PAW_TRUE);
-        status = pawL_load_file(P, modname,
-                s_program.module_pathname, dirname);
+    } else if (s_program.package_pathname != NULL) {
+        char dir[PATH_MAX + 1];
+        char file[PATH_MAX + 1];
+        char ext[PATH_MAX + 1];
+        decompose_pathname(s_program.package_pathname,
+                strlen(s_program.package_pathname),
+                dir, file, ext);
+        char const *package_name = s_opt.a != NULL ? s_opt.a : file;
+        status = pawL_load_file(P, package_name, s_program.package_pathname, dir);
     } else {
         error("missing pathname or chunk\n");
     }

@@ -17,6 +17,7 @@
 //
 // ORDER TokenKind
 static char const *kKeywords[] = {
+    "mod",
     "pub",
     "use",
     "fn",
@@ -111,7 +112,7 @@ void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     void pawP_lower_hir(struct Compiler *C);
     void pawP_generate_code(struct Compiler *C);
 
-    pawP_parse_module(C, (Str const *)C->modname, input, ud);
+    pawP_parse_source_file(C, (Str const *)C->modname, input, ud);
 
     pawP_resolve_names(C);
     pawP_lower_ast(C);

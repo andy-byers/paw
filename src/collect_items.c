@@ -97,7 +97,7 @@ static void add_predicates_from(struct ItemCollector *X, IrSolver *S, DeclId did
 
 static DeclId resolve_trait_segment(struct ItemCollector *X, struct HirSegment s)
 {
-    NodeId const id = SegmentTable_get(X->C, X->C->segtab, s.id)->id;
+    NodeId const id = s.target.id; //TODO SegmentTable_get(X->C, X->C->segtab, s.id)->id;
     struct HirDecl const *decl = pawHir_get_node(X->hir, id);
     return decl->hdr.did;
 }
@@ -417,6 +417,53 @@ static void finish_module(struct ItemCollector *X)
     X->pm = NULL;
 }
 
+static void collect_bound_traits_(struct ItemCollector *X, DeclId did, HirBoundList *bounds, IrConstraints *result)
+{
+    IrType *generic = pawIr_get_def_type(X->C, did);
+    if (bounds != NULL) {
+        IrTraitList *tbounds = IrTraitList_new(X->C);
+        K_LIST_XFOREACH (bounds, struct HirGenericBound const, pbound) {
+            struct HirSegment const last = HirSegments_last(pbound->path.segments);
+            DeclId const did = resolve_trait_segment(X, last);
+
+            IrGenericArgs *args = IrGenericArgs_new(X->C);
+            IrGenericArgs_push(X->C, args, IrGenericArg_from_type(generic));
+            IrTrait *trait = pawIr_new_trait(X->C, did, args);
+            IrTraitList_push(X->C, tbounds, trait);
+            IrConstraints_push(X->C, result, (struct IrConstraint){
+                        .kind = IR_CONSTRAINT_IMPL_TRAIT,
+                        .span = pbound->path.span,
+                        .parent = did,
+                        .impl.type = generic,
+                        .impl.trait = trait,
+                    });
+        }
+        pawIr_set_trait_bounds(X->C, did, tbounds);
+
+        struct IrGenericDef *def = pawIr_get_generic_def(X->C, did);
+        if (def != NULL) def->type.bounds = tbounds;
+    }
+}
+
+static void collect_bound_args_(struct ItemCollector *X, DeclId did, HirBoundList *bounds, IrConstraints *result)
+{
+    IrType *generic = pawIr_get_def_type(X->C, did);
+    if (bounds != NULL) {
+        IrTraitList *tbounds = pawIr_get_trait_bounds(X->C, did);
+
+        IrTrait *const *ptrait;
+        struct HirGenericBound const *pbound;
+        K_LIST_ZIP (bounds, pbound, tbounds, ptrait) {
+            IrTrait *trait = *ptrait;
+            struct HirSegment const last = HirSegments_last(pbound->path.segments);
+            if (last.args != NULL) {
+                collect_equals_constraints(X, last.args, generic, trait, result);
+                collect_trait_args(X, last.args, trait->args);
+            }
+        }
+    }
+}
+
 static void collect_bound_traits(struct ItemCollector *X, struct HirGenericDecl const *d, IrConstraints *result)
 {
     IrType *generic = pawIr_get_def_type(X->C, d->did);
@@ -460,6 +507,20 @@ static void collect_bound_args(struct ItemCollector *X, struct HirGenericDecl co
                 collect_equals_constraints(X, last.args, generic, trait, result);
                 collect_trait_args(X, last.args, trait->args);
             }
+        }
+    }
+}
+
+static void collect_assoc_type_bounds(struct ItemCollector *X, struct HirDeclList *assoc_types, IrConstraints *result)
+{
+    if (assoc_types != NULL) {
+        K_LIST_XFOREACH (assoc_types, struct HirDecl *const, pdecl) {
+            struct HirTypeDecl const *d = HirGetTypeDecl(*pdecl);
+            collect_bound_traits_(X, d->did, d->bounds, result);
+        }
+        K_LIST_XFOREACH (assoc_types, struct HirDecl *const, pdecl) {
+            struct HirTypeDecl const *d = HirGetTypeDecl(*pdecl);
+            collect_bound_args_(X, d->did, d->bounds, result);
         }
     }
 }
@@ -548,9 +609,7 @@ static void collect_trait(struct ItemCollector *X, struct HirTraitDecl const *d)
     IrGenericArgs *args = pawIr_get_generic_args(X->C, d->did);
 
     K_LIST_XFOREACH (d->types, struct HirDecl *const, p) {
-        struct HirGenericDecl const *t = HirGetGenericDecl(*p);
-        paw_assert(t->is_type);
-
+        struct HirTypeDecl const *t = HirGetTypeDecl(*p);
         IrType *type = pawIr_new_projection(X->C, t->did, args);
         set_def_type(X, t->did, type);
         SET_TYPE(X, t->id, type);
@@ -582,9 +641,8 @@ static void collect_trait_def(struct ItemCollector *X, struct HirTraitDecl const
 
     IrAssocItems *items = IrAssocItems_new(X->C);
     K_LIST_XFOREACH (d->types, struct HirDecl *const, p) {
-        struct HirGenericDecl const *t = HirGetGenericDecl(*p);
-        paw_assert(t->is_type);
-        struct IrAssocItem *item = pawIr_new_assoc_item(X->C, t->did, t->t.ident.name, d->did, d->is_pub);
+        struct HirTypeDecl const *t = HirGetTypeDecl(*p);
+        struct IrAssocItem *item = pawIr_new_assoc_item(X->C, t->did, t->ident.name, d->did, d->is_pub);
         IrAssocItemMap_insert(X->C, X->C->ir_assoc_items, t->did, item);
         IrAssocItems_push(X->C, items, item);
     }
@@ -701,6 +759,15 @@ static void collect_definitions(struct ItemCollector *X, struct HirModule m)
     }
 }
 
+static void add_self_bound(struct ItemCollector *X, DeclId trait_did, struct HirDecl *generic)
+{
+    struct HirGenericDecl const *g = HirGetGenericDecl(generic);
+    IrTraitList *bounds = pawIr_get_trait_bounds(X->C, g->did);
+    if (bounds == NULL) bounds = IrTraitList_new(X->C);
+    IrTraitList_insert(X->C, bounds, 0, pawIr_get_trait(X->C, trait_did));
+    IrTraitBounds_insert(X->C, X->C->ir_trait_bounds, g->did, bounds);
+}
+
 static void collect_constraints_from(struct ItemCollector *X, struct HirDecl *decl)
 {
     IrConstraints *constraints = IrConstraints_new(X->C);
@@ -716,7 +783,8 @@ static void collect_constraints_from(struct ItemCollector *X, struct HirDecl *de
     } else if (HirIsTraitDecl(decl)) {
         struct HirTraitDecl const *d = HirGetTraitDecl(decl);
         collect_generic_bounds(X, d->generics, constraints);
-        collect_generic_bounds(X, d->types, constraints);
+        add_self_bound(X, d->did, HirDeclList_first(d->generics));
+        collect_assoc_type_bounds(X, d->types, constraints);
         paw_assert(X->outer_constraints == NULL);
         X->outer_constraints = constraints;
         K_LIST_XFOREACH (d->methods, struct HirDecl *const, p)

@@ -7,7 +7,7 @@
 #include "compile.h"
 #include "value.h"
 
-#define FIRST_KEYWORD TK_PUB
+#define FIRST_KEYWORD TK_MOD
 #define IS_KEYWORD(s) ((s)->flag > 0)
 #define IS_BUILTIN(s) ((s)->flag < 0)
 #define FLAG2CODE(x) (-(x) - 1)
@@ -58,6 +58,7 @@ enum MultiChar {
     TK_STRING_EXPR_CLOSE,
 
     // Keywords (must be in this order):
+    TK_MOD,
     TK_PUB,
     TK_USE,
     TK_FN,

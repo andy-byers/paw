@@ -781,6 +781,16 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                     target = instantiate(T, target, args, segment.span);
                     return target;
                 }
+            } else if (HirIsConstDecl(item)) {
+                IrType *target = pawIr_get_type(T->C, segment.target.id);
+                if (target == NULL) {
+                    // Determine the type of a "const" declaration lazily. "const" declarations are
+                    // effectively hoisted to the top of their containing modules or function bodies.
+                    struct HirConstDecl const *d = pawHir_get_node(T->hir, segment.target.id);
+                    target = check_type(T, d->tag, d->span);
+                    SET_TYPE(T, d->id, target);
+                }
+                return target;
             } else {
                 IrType *target = GET_TYPE(T, segment.target.id);
                 target = instantiate(T, target, NULL, segment.span);
@@ -804,27 +814,14 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
 
             IrType *assoc;
             if (last.target.id.value != INVALID_NODE_ID.value) {
-                // the value was located during name resolution, meaning it must be an enum
-                // variant or a method/associated function called on a type parameter
-                assoc = GET_TYPE(T, last.target.id);
-                if (IrIsGeneric(base)) {
-                    paw_assert(first.args == NULL);
-                    struct IrSignature const *fn = IrGetSignature(assoc);
-                    assoc = instantiate(T, assoc, NULL, first.span);
-                    IrTrait *bound = get_containing_bound(T->C, base, fn->did);
-                    IrType *type_ctx = pawIr_get_context(T->C, assoc);
-                    IrTrait *trait_ctx = pawIr_get_trait_context(T->C, assoc);
-                    unify_types(T, last.span, type_ctx, base);
-                    unify_traits(T, last.span, trait_ctx, bound);
-                } else {
-                    // path refers to a type constructor
-                    assoc = pawP_instantiate_assoc(T->C, base, assoc).inst;
-                    if (last.args != NULL)
-                        TYPECK_ERROR(T, UnexpectedTypeArguments,
-                                .what = SCAN_STR(T->C, "type constructor"),
-                                .name = last.ident.name,
-                                .span = last.span);
-                }
+                // the value was located during name resolution, meaning it must be an enum variant
+                if (last.args != NULL)
+                    TYPECK_ERROR(T, UnexpectedTypeArguments,
+                            .what = SCAN_STR(T->C, "type constructor"),
+                            .name = last.ident.name,
+                            .span = last.span);
+                assoc = pawP_instantiate_assoc(T->C,
+                        base, GET_TYPE(T, last.target.id)).inst;
             } else {
                 // The value must be an associated function called on an ADT. Such values
                 // cannot be found during name resolution (type information is required).
