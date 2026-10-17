@@ -122,6 +122,30 @@ impl Eq<Self> for String {
     }
 }
 
+impl Eq<str> for String {
+    fn eq(*self, rhs: *str) -> bool {
+        self.to_slice().eq(&rhs.to_slice())
+    }
+}
+
+impl Eq<String> for str {
+    fn eq(*self, rhs: *String) -> bool {
+        self.to_slice().eq(&rhs.to_slice())
+    }
+}
+
+impl Eq<[]char> for String {
+    fn eq(*self, rhs: *[]char) -> bool {
+        self.to_slice().eq(rhs)
+    }
+}
+
+impl Eq<String> for []char {
+    fn eq(*self, rhs: *String) -> bool {
+        self.eq(&rhs.to_slice())
+    }
+}
+
 impl Ord<Self> for String {
     fn cmp(*self, rhs: *Self) -> Ordering {
         self.to_slice().cmp(&rhs.to_slice())

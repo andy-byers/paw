@@ -168,7 +168,7 @@ pub fn handles_large_items() {
 }
 
 #[test]
-pub fn strings_can_be_hashmap_keys() {
+pub fn str_can_be_hashmap_key() {
     let map = HashMap::<str, str>::new();
     map.insert("a", "A").unwrap().unwrap_none();
     map.insert("b", "B").unwrap().unwrap_none();
@@ -177,3 +177,41 @@ pub fn strings_can_be_hashmap_keys() {
     assert(map[&"b"] == "B");
     assert(map[&"c"] == "C");
 }
+
+use string::String;
+
+struct CustomKey {
+    value: int64,
+}
+
+impl Hash for CustomKey {
+    fn hash(*self) -> uint64 {
+        self.value.hash()
+    }
+}
+
+impl Eq<CustomKey> for CustomKey {
+    fn eq(*self, rhs: *Self) -> bool {
+        self.value == rhs.value
+    }
+}
+
+impl Eq<CustomKey> for int64 {
+    fn eq(*self, rhs: *CustomKey) -> bool {
+        *self == rhs.value
+    }
+}
+
+#[test]
+pub fn heterogeneous_lookup_is_supported() {
+    let m = HashMap::new();
+    m.insert(String::from_chars("x").unwrap(), 42);
+    assert(*m.get(&"x").unwrap() == 42);
+    assert(m.get(&"y").is_none());
+
+    let m = HashMap::new();
+    m.insert(CustomKey{value: 42}, 100);
+    assert(*m.get(&42).unwrap() == 100);
+    assert(m.get(&100).is_none());
+}
+

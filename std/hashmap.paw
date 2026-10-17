@@ -256,7 +256,7 @@ impl<K: Hash + Eq<K>, V> HashMap<K, V> {
         self.capacity
     }
 
-    pub fn get(*self, key: *K) -> Option<*V> {
+    pub fn get<K2: Hash + Eq<K>>(*self, key: *K2) -> Option<*V> {
         match self.lookup(key, key.hash()) {
             Some(c) => Some(c.value()),
             None => None,
@@ -361,15 +361,15 @@ impl<K: Hash + Eq<K>, V> HashMap<K, V> {
         Cursor::new(self.buffer as *Metadata, items, index as usize)
     }
 
-    fn lookup(*self, key: *K, hash: uint64) -> Option<Cursor<K, V>> {
+    fn lookup<K2: Hash + Eq<K>>(*self, key: *K2, hash: uint64) -> Option<Cursor<K, V>> {
         if self.length == 0 { return None; }
         let prefix = Fingerprint::from_hash(hash);
         let cursor = self.cursor(hash);
         for _ in 0..self.capacity {
             match cursor.state() {
                 State::Occupied => {
-                    if cursor.prefix().eq(&prefix)
-                            && cursor.key().eq(key) {
+                    if prefix.eq(&cursor.prefix())
+                            && key.eq(cursor.key()) {
                         return Some(cursor);
                     }
                 },
