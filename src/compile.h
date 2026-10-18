@@ -121,8 +121,12 @@ struct Compiler {
     DeclId core_traits[NUM_CORE_TRAITS];
     NodeId core_trait_index_id_hack; // TODO
 
+    struct IrType *default_int;
+    struct IrType *default_float;
+
     DeclId std_math_NAN;
     DeclId std_math_INFINITY;
+    DeclId std_ops_ordering;
 
     // callbacks for debugging
     IrValue on_build_ast;

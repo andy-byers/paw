@@ -224,7 +224,7 @@ IrType *pawIr_new_closure(struct Compiler *C, DeclId did, IrGenericArgs *args)
 
 IrType *pawIr_new_signature(struct Compiler *C, DeclId did, IrGenericArgs *args)
 {
-    paw_assert(args != NULL);
+    paw_assert(DECL_ID_EXISTS(did) && args != NULL);
     IrType *t = NEW_NODE(C, IrType);
     t->Signature_ = (struct IrSignature){
         .kind = kIrSignature,

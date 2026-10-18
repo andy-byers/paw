@@ -35,6 +35,8 @@ void pawU_enter_binder(struct Unifier *U, Str const *modname);
 void pawU_leave_binder(struct Unifier *U);
 void pawU_check_context(struct Unifier *U);
 
+void pawU_set_default_literal_types(struct Unifier *U);
+
 int pawU_current_position(struct Unifier *U);
 void pawU_undo_unifications(struct Unifier *U, int position);
 void pawU_discard_variables(struct Unifier *U);

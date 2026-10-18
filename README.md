@@ -39,8 +39,8 @@ use io;
 pub fn main() -> fmt::Result<()> {
     // Create a closure. The type of "n" is inferred as "int64" and the 
     // return type as "String".
-    let fizzbuzz = |n| {
-        if n % 15 == 0 { 
+    let fizzbuzz = |n| -> Result<_, fmt::Error> {
+        let r = if n % 15 == 0 { 
             f"FizzBuzz"?
         } else if n % 3 == 0 {
             f"Fizz"?
@@ -48,7 +48,8 @@ pub fn main() -> fmt::Result<()> {
             f"Buzz"?
         } else { 
             f"\{n}"?
-        }
+        };
+        Ok(r)
     };
 
     // Call the closure for each integer 1 to 100, exclusive.
@@ -147,15 +148,17 @@ Methods and associated functions can be defined on a data type using an `impl` b
 Paw supports parametric polymorphism, a.k.a. generic type parameters.
 
 ```paw
+use io;
 use list::List;
 
 // type aliases can accept type arguments
 type PairSlice<T> = [](T, T);
 
-fn map2<X, Y>(f: fn(X, X) -> Y, xs: PairSlice<X>) -> List<Y> {
+fn map2<X: Copy, Y>(f: fn(X, X) -> Y, xs: PairSlice<X>) -> List<Y> {
     let ys = List::new();
     // destructuring is supported in "for" loops and "let" declarations
-    for (a, b) in xs {
+    // note that "X: Copy" is required for the following line to compile
+    for *(a, b) in xs {
         ys.push(f(a, b));
     }
     ys
@@ -170,14 +173,14 @@ pub fn main() {
         (5, 6),
     ];
 
-    let data = map2(|x: int16, y| x + y, data.to_slice());
+    let data = map2(|x, y| x + y, data.to_slice());
 
     let total = 0;
     for value in data {
-        total = total + value;
+        total += value;
     }
 
-    io::println(f"total = \{total}".unwrap()).unwrap(); // total = 35
+    io::println(f"total = \{total}".unwrap()); // total = 35
 }
 ```
 

@@ -151,7 +151,7 @@ static paw_Bool equals_cstr(struct Lex *lex, Str const *ident, unsigned cstr)
 enum UnOp {
     UN_NEG, // -
     UN_NOT, // !
-    UN_BNOT, // ~
+    UN_BITNOT, // ~
     UN_DEREF, // *
     UN_ADDROF, // &
 
@@ -257,7 +257,7 @@ static enum UnOp get_unop(struct Lex *lex, TokenKind kind)
         case '!':
             return UN_NOT;
         case '~':
-            return UN_BNOT;
+            return UN_BITNOT;
         case '*':
             return UN_DEREF;
         case TK_AMPER2:
@@ -1765,11 +1765,11 @@ static enum BinaryOp into_binary_op(enum InfixOp op)
         case INFIX_AMOD:
             return BINARY_MOD;
         case INFIX_ABITXOR:
-            return BINARY_BXOR;
+            return BINARY_BITXOR;
         case INFIX_ABITAND:
-            return BINARY_BAND;
+            return BINARY_BITAND;
         case INFIX_ABITOR:
-            return BINARY_BOR;
+            return BINARY_BITOR;
         case INFIX_ASHL:
             return BINARY_SHL;
         case INFIX_ASHR:

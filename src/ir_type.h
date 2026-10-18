@@ -566,6 +566,17 @@ EXTERN_C int pawIr_unify(struct Compiler *C, IrGenericArg a, IrGenericArg b);
 EXTERN_C IrGenericArg pawIr_normalize(struct Compiler *C, IrGenericArg g);
 EXTERN_C IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g);
 
+enum IrOrdering {
+    IR_ORDERING_LESS,
+    IR_ORDERING_EQUAL,
+    IR_ORDERING_GREATER,
+};
+
+static IrType *ir_get_ordering_type(struct Compiler *C)
+{
+    return pawIr_get_def_type(C, C->std_ops_ordering);
+}
+
 static void pawIr_unify_unchecked(struct Compiler *C, IrGenericArg a, IrGenericArg b)
 {
     int const rc = pawIr_unify(C, a, b);

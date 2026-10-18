@@ -762,7 +762,7 @@ static struct MirPlace lower_index(struct HirVisitor *V, struct HirIndex *e)
     struct MethodSelection const *selection = MethodSelectionMap_get(L->C, L->C->method_selections, e->id);
     IrType *fn_type = selection->method;
 
-    if (!IrIsPtr(target_type))
+    if (!IrIsPtr(target_type)) // TODO: add this functionality to auto_deref_object
         target = addr_of(fs, target);
 
     struct MirPlace const fn = new_register(fs, fn_type);
@@ -1098,61 +1098,26 @@ static struct MirPlace option_try_error(struct FunctionState *fs, struct SourceS
     return output;
 }
 
-static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceSpan span, struct MirPlace object)
+static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceSpan span, struct MirPlace object, NodeId expr_id)
 {
+    struct MethodSelection const *from_error = MethodSelectionMap_get(fs->C, fs->C->method_selections, expr_id);
+    paw_assert(from_error != NULL);
+
     IrType *result_type = auto_deref_full(mir_place_type(fs->mir, object));
-    IrType *from_error_type = IrGenericArg_get_type(IrGenericArgs_last(IrGetAdt(result_type)->args));
-    IrType *into_error_type = IrGenericArg_get_type(IrGenericArgs_last(IrGetAdt(fs->result)->args));
-    struct MirPlace const from_error = select_field(fs, object, 0, PAW_RESULT_ERR, from_error_type);
-    struct MirPlace const into_error = new_register(fs, into_error_type);
+    IrType *error_type = IrGenericArg_get_type(IrGenericArgs_last(IrGetAdt(result_type)->args));
+    IrType *error2_type = IrGenericArg_get_type(IrGenericArgs_last(IrGetAdt(fs->result)->args));
+    struct MirPlace const error = select_field(fs, object, 0, PAW_RESULT_ERR, error_type);
+    struct MirPlace const error2 = new_register(fs, error2_type);
 
-    // Determine the type of method `<E as Into<E2>>::into`, where `Result<_, E>` is the type of
-    // the operand to `?` and `Result<_, E2>` is the return type of the enclosing function. Note
-    // that the blanket implementation (`impl<T> Into<T> for T`) is used if a more specific impl
-    // has not been provided.
-    struct MirPlace into_fn;
-    {
-        IrGenericArgs *args = IrGenericArgs_new(fs->C);
-        IrGenericArgs_push(fs->C, args, IrGenericArg_from_type(into_error_type));
+    struct MirPlace from_fn = new_register(fs, from_error->method);
+    NEW_INSTR(fs, global, span, from_fn);
 
-        DeclId const trait_did = fs->C->core_traits[CORE_TRAIT_INTO];
-        IrGenericArgs *trait_args = IrGenericArgs_new(fs->C);
-        IrGenericArgs_push(fs->C, trait_args, IrGenericArg_from_type(from_error_type));
-        IrGenericArgs_push(fs->C, trait_args, IrGenericArg_from_type(into_error_type));
-        IrTrait *into_trait = pawIr_new_trait(fs->C, trait_did, trait_args);
-
-        IrTypeList *call_args = IrTypeList_new(fs->C);
-        IrTypeList_push(fs->C, call_args, from_error_type);
-
-        Str const *into_name = SCAN_STR(fs->C, "into");
-        struct Instantiation const *inst = pawP_find_method(fs->C, from_error_type,
-                into_trait, into_name, call_args, (struct IrObligationCause){
-                    .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
-                    .assoc_item_lookup.self = from_error_type,
-                    .assoc_item_lookup.name = into_name,
-                    .span = span,
-                });
-        if (inst == NULL)
-            LOWERING_ERROR(fs->L, TraitNotImplemented,
-                    .trait = pawIr_print_trait_v2(fs->C, into_trait),
-                    .type = pawIr_print_type_v2(fs->C, from_error_type),
-                    .span = span);
-
-        struct IrSignature const *fn = IrGetSignature(inst->inst);
-        pawU_unify_unchecked(fs->C->U, into_error_type,
-                IrGenericArg_get_type(IrGenericArgs_get(fn->args, 1)));
-
-        into_fn = new_register(fs, inst->inst);
-        NEW_INSTR(fs, global, span, into_fn);
-    }
-
-    // convert to the type of the error variant payload from the function return type
-    MirPlaceList *into_args = MirPlaceList_new(fs->mir);
-    MirPlaceList_push(fs->mir, into_args, load_from(fs, span, from_error));
-    NEW_INSTR(fs, call, span, into_fn, into_args, into_error);
+    MirPlaceList *from_args = MirPlaceList_new(fs->mir);
+    MirPlaceList_push(fs->mir, from_args, load_from(fs, span, error));
+    NEW_INSTR(fs, call, span, from_fn, from_args, error2);
 
     MirPlaceList *fields = MirPlaceList_new(fs->mir);
-    MirPlaceList_push(fs->mir, fields, into_error);
+    MirPlaceList_push(fs->mir, fields, error2);
 
     struct MirPlace const output = new_register(fs, fs->result);
     NEW_INSTR(fs, aggregate, span, fields, output, PAW_RESULT_ERR);
@@ -1162,8 +1127,8 @@ static struct MirPlace result_try_error(struct FunctionState *fs, struct SourceS
 
 // Given a try expression `x?`, this function performs the following
 // transformation (depending on the type of `x`):
-//   if (x: Option<T>)    => match x {Some(v) => v, None => return None}
-//   if (x: Result<T, E>) => match x {Ok(v) => v, Err(e) => return e.into()}
+//   (x: Option<T>)?    => match x {Some(t) => t, None => return None}
+//   (x: Result<T, E>)? => match x {Ok(t) => t, Err(e) => return From::from(e)}
 static struct MirPlace lower_try_expr(struct HirVisitor *V, struct HirTryExpr *e)
 {
     _Static_assert(PAW_OPTION_SOME == PAW_RESULT_OK && PAW_OPTION_NONE == PAW_RESULT_ERR,
@@ -1200,7 +1165,7 @@ static struct MirPlace lower_try_expr(struct HirVisitor *V, struct HirTryExpr *e
     add_edge(fs, input_bb, none_bb);
     struct MirPlace const error = kind == BUILTIN_OPTION
         ? option_try_error(fs, expr_span)
-        : result_try_error(fs, expr_span, object);
+        : result_try_error(fs, expr_span, object, e->id);
     terminate_return(fs, expr_span, error);
 
     set_current_bb(fs, after_bb);
@@ -1214,7 +1179,7 @@ static enum MirUnaryOpKind as_mir_unop(enum UnaryOp unop)
             return MIR_UNARY_NEG;
         case UNARY_NOT:
             return MIR_UNARY_NOT;
-        case UNARY_BNOT:
+        case UNARY_BITNOT:
             return MIR_UNARY_BITNOT;
         default:
             PAW_UNREACHABLE();
@@ -1242,11 +1207,11 @@ static enum MirBinaryOpKind as_mir_binop(enum BinaryOp binop)
             return MIR_BINARY_DIV;
         case BINARY_MOD:
             return MIR_BINARY_MOD;
-        case BINARY_BAND:
+        case BINARY_BITAND:
             return MIR_BINARY_BITAND;
-        case BINARY_BOR:
+        case BINARY_BITOR:
             return MIR_BINARY_BITOR;
-        case BINARY_BXOR:
+        case BINARY_BITXOR:
             return MIR_BINARY_BITXOR;
         case BINARY_SHL:
             return MIR_BINARY_SHL;
@@ -1268,6 +1233,17 @@ static struct MirPlace lower_addrof(struct HirVisitor *V, struct HirExpr *target
             || HirIsIndex(target))
         return input;
     return addr_of(fs, input);
+}
+
+static void lower_unop_method(struct FunctionState *fs, struct MirPlace output, struct MirPlace value, IrType *method, struct SourceSpan span)
+{
+    struct MirPlace const fn = new_register(fs, method);
+    NEW_INSTR(fs, global, span, fn);
+
+    MirPlaceList *args = MirPlaceList_new(fs->mir);
+    MirPlaceList_push(fs->mir, args, value);
+
+    NEW_INSTR(fs, call, span, fn, args, output);
 }
 
 static struct MirPlace lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr *e)
@@ -1306,6 +1282,12 @@ static struct MirPlace lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr 
     struct MirPlace const output = new_register(fs, get_type(L, e->id));
     if (IrIsNever(value_type)) return output;
 
+    struct MethodSelection const *selection = MethodSelectionMap_get(L->C, L->C->method_selections, e->id);
+    if (selection != NULL) {
+        lower_unop_method(fs, output, value, selection->method, e->span);
+        return output;
+    }
+
     NEW_INSTR(fs, unary_op, e->span, op, value, output);
     return output;
 }
@@ -1323,6 +1305,50 @@ static void new_binary_op(struct FunctionState *fs, struct SourceSpan span, enum
     NEW_INSTR(fs, binary_op, span, as_mir_binop(op), lhs, rhs, output);
 }
 
+static void lower_comparison_method(struct FunctionState *fs, struct MirPlace output, struct MirPlace lhs, struct MirPlace rhs, IrType *method, struct SourceSpan span)
+{
+    struct MirPlace left = auto_deref_object(fs, lhs);
+    struct MirPlace right = auto_deref_object(fs, rhs);
+    if (!IrIsPtr(mir_place_type(fs->mir, left)))
+        left = addr_of(fs, left);
+    if (!IrIsPtr(mir_place_type(fs->mir, right)))
+        right = addr_of(fs, right);
+
+    struct MirPlace const fn = new_register(fs, method);
+    NEW_INSTR(fs, global, span, fn);
+
+    MirPlaceList *args = MirPlaceList_new(fs->mir);
+    MirPlaceList_push(fs->mir, args, left);
+    MirPlaceList_push(fs->mir, args, right);
+
+    NEW_INSTR(fs, call, span, fn, args, output);
+}
+
+static void lower_relational_method(struct FunctionState *fs, struct MirPlace output, struct MirPlace lhs, struct MirPlace rhs, paw_Bool x, enum IrOrdering a, enum IrOrdering b, IrType *method, struct SourceSpan span)
+{
+    struct MirPlace const ordering = new_register(fs, ir_get_ordering_type(fs->C));
+    lower_comparison_method(fs, ordering, lhs, rhs, method, span);
+    // inject code to transform the output of `<Lhs as Ord<Rhs>>::cmp`, i.e. an instance of the
+    // `Ordering` enum, into the boolean output of the desired comparison operation (less than,
+    // greater than or equal, etc.)
+    struct MirPlace const discr = emit_get_discr(fs, span, ordering);
+    struct MirPlace const expected = new_const_int(fs, span, x ? a : b, IR_UINT64);
+    NEW_INSTR(fs, binary_op, span, MIR_BINARY_EQ, discr, expected, output);
+    if (!x) NEW_INSTR(fs, unary_op, span, MIR_UNARY_NOT, output, output);
+}
+
+static void lower_arithmetic_method(struct FunctionState *fs, struct MirPlace output, struct MirPlace lhs, struct MirPlace rhs, IrType *method, struct SourceSpan span)
+{
+    struct MirPlace const fn = new_register(fs, method);
+    NEW_INSTR(fs, global, span, fn);
+
+    MirPlaceList *args = MirPlaceList_new(fs->mir);
+    MirPlaceList_push(fs->mir, args, lhs);
+    MirPlaceList_push(fs->mir, args, rhs);
+
+    NEW_INSTR(fs, call, span, fn, args, output);
+}
+
 static struct MirPlace lower_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
 {
     struct LowerHir *L = V->ud;
@@ -1335,6 +1361,34 @@ static struct MirPlace lower_binop_expr(struct HirVisitor *V, struct HirBinOpExp
     struct MirPlace const rhs = lower_rvalue(V, e->rhs);
     if (IrIsNever(lhs_type) || IrIsNever(rhs_type))
         return output;
+
+    struct MethodSelection const *selection = MethodSelectionMap_get(L->C, L->C->method_selections, e->id);
+    if (selection != NULL) {
+        switch (e->op) {
+            case BINARY_EQ:
+            case BINARY_NE:
+                lower_comparison_method(fs, output, lhs, rhs, selection->method, e->span);
+                if (e->op == BINARY_NE)
+                    // implement `a != b` by performing `!(a == b)`
+                    NEW_INSTR(fs, unary_op, e->span, MIR_UNARY_NOT, output, output);
+                return output;
+            case BINARY_LT:
+            case BINARY_LE:
+                lower_relational_method(fs, output, lhs, rhs, e->op == BINARY_LT,
+                        IR_ORDERING_LESS, IR_ORDERING_GREATER, selection->method, e->span);
+                break;
+            case BINARY_GT:
+            case BINARY_GE:
+                lower_relational_method(fs, output, lhs, rhs, e->op == BINARY_GT,
+                        IR_ORDERING_GREATER, IR_ORDERING_LESS, selection->method, e->span);
+                break;
+            default:
+                paw_assert(e->op != BINARY_AS);
+                lower_arithmetic_method(fs, output, lhs, rhs, selection->method, e->span);
+                break;
+        }
+        return output;
+    }
 
     new_binary_op(fs, e->span, e->op, lhs, rhs, output);
     return output;

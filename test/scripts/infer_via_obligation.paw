@@ -3,7 +3,7 @@
 pub fn sum<I: IntoIterator<Item = T>, T: Add<T, Output = T>>(iter: I, zero: T) -> T {
     let result = zero;
     for value in iter {
-        result = result.add(&value);
+        result = result + value;
     }
     result
 }

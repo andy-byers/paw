@@ -139,6 +139,12 @@ static paw_Bool is_core_module(struct Resolver *R, struct AstDecl *mod)
     return PAW_FALSE;
 }
 
+static paw_Bool is_ops_module(struct Resolver *R, struct AstDecl *mod)
+{
+    struct AstModuleDecl const *d = AstGetModuleDecl(mod);
+    return pawS_eq(d->ident.name, SCAN_STR(R->C, "ops"));
+}
+
 static paw_Bool is_math_module(struct Resolver *R, struct AstDecl *mod)
 {
     struct AstModuleDecl const *d = AstGetModuleDecl(mod);
@@ -158,8 +164,13 @@ static void maybe_store_builtin(struct Resolver *R, NodeId module_id, struct Ast
 
 static void maybe_store_core_item(struct Resolver *R, NodeId module_id, Str const *name, DeclId did)
 {
+    // TODO: once packages are supported, check if the package is "std"
     struct AstDecl *m = pawAst_get_node(R->ast, module_id);
     if (is_core_module(R, m)) {
+        if (is_ops_module(R, m)) {
+            if (pawS_eq(name, SCAN_STR(R->C, "Ordering")))
+                R->C->std_ops_ordering = did;
+        }
     } else if (is_math_module(R, m)) {
         if (pawS_eq(name, SCAN_STR(R->C, "NAN"))) {
             R->C->std_math_NAN = did;
@@ -178,12 +189,12 @@ static void maybe_store_core_trait(struct Resolver *R, NodeId module_id, Str con
             R->C->core_traits[CORE_TRAIT_DROP] = did;
         } else if (pawS_eq(name, SCAN_STR(R->C, "Default"))) {
             R->C->core_traits[CORE_TRAIT_DEFAULT] = did;
-        } else if (pawS_eq(name, SCAN_STR(R->C, "Compare"))) {
-            R->C->core_traits[CORE_TRAIT_COMPARE] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Ord"))) {
+            R->C->core_traits[CORE_TRAIT_ORD] = did;
         } else if (pawS_eq(name, SCAN_STR(R->C, "Hash"))) {
             R->C->core_traits[CORE_TRAIT_HASH] = did;
-        } else if (pawS_eq(name, SCAN_STR(R->C, "Equals"))) {
-            R->C->core_traits[CORE_TRAIT_EQUALS] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Eq"))) {
+            R->C->core_traits[CORE_TRAIT_EQ] = did;
         } else if (pawS_eq(name, SCAN_STR(R->C, "Index"))) {
             R->C->core_traits[CORE_TRAIT_INDEX] = did;
             R->C->core_trait_index_id_hack = id;
@@ -191,6 +202,32 @@ static void maybe_store_core_trait(struct Resolver *R, NodeId module_id, Str con
             R->C->core_traits[CORE_TRAIT_FROM] = did;
         } else if (pawS_eq(name, SCAN_STR(R->C, "Into"))) {
             R->C->core_traits[CORE_TRAIT_INTO] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Neg"))) {
+            R->C->core_traits[CORE_TRAIT_NEG] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Not"))) {
+            R->C->core_traits[CORE_TRAIT_NOT] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "BitNot"))) {
+            R->C->core_traits[CORE_TRAIT_BITNOT] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Add"))) {
+            R->C->core_traits[CORE_TRAIT_ADD] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Sub"))) {
+            R->C->core_traits[CORE_TRAIT_SUB] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Mul"))) {
+            R->C->core_traits[CORE_TRAIT_MUL] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Div"))) {
+            R->C->core_traits[CORE_TRAIT_DIV] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Rem"))) {
+            R->C->core_traits[CORE_TRAIT_MOD] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "BitAnd"))) {
+            R->C->core_traits[CORE_TRAIT_BITAND] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "BitOr"))) {
+            R->C->core_traits[CORE_TRAIT_BITOR] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "BitXor"))) {
+            R->C->core_traits[CORE_TRAIT_BITXOR] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Shl"))) {
+            R->C->core_traits[CORE_TRAIT_SHL] = did;
+        } else if (pawS_eq(name, SCAN_STR(R->C, "Shr"))) {
+            R->C->core_traits[CORE_TRAIT_SHR] = did;
         }
     }
 }

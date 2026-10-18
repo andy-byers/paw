@@ -182,13 +182,14 @@ static int os_open_dir(paw_Env *P, char const *pathname, Directory *out)
     return 0;
 }
 
+// TODO: some platforms have d_namlen (check _DIRENT_HAVE_D_NAMLEN?)
 static enum DirNextStatus os_dir_next(paw_Env *P, Directory dir, char const **name_out, size_t *length_out)
 {
     PAW_UNUSED(P);
     struct dirent *entry = readdir(dir.inner);
     if (entry != NULL) {
         *name_out = entry->d_name;
-        *length_out = entry->d_namlen;
+        *length_out = strlen(entry->d_name);
         return DN_FOUND_ENTRY;
     } else if (errno == 0) {
         return DN_END_OF_DIR;

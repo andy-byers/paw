@@ -141,6 +141,26 @@ static paw_Bool equals_core_trait(struct TypeChecker *T, IrTrait *trait, enum Co
     return trait->did.value == T->C->core_traits[kind].value;
 }
 
+static paw_Bool is_int_var(IrType *type)
+{
+    return IrIsInfer(type) && IrGetInfer(type)->ikind == IR_INFER_INTEGER;
+}
+
+static paw_Bool is_float_var(IrType *type)
+{
+    return IrIsInfer(type) && IrGetInfer(type)->ikind == IR_INFER_FLOAT;
+}
+
+static paw_Bool is_type_var(IrType *type)
+{
+    return IrIsInfer(type) && IrGetInfer(type)->ikind == IR_INFER_TYPE;
+}
+
+static paw_Bool is_builtin_type(struct TypeChecker *T, IrType *type)
+{
+    return IS_BUILTIN_TYPE(pawP_type2code(T->C, type));
+}
+
 DEFINE_MAP(struct TypeChecker, CopyablePats, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, void *,)
 DEFINE_MAP(struct TypeChecker, FieldMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, int,)
 DEFINE_MAP(struct TypeChecker, PatFieldMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, struct HirPat *,)
@@ -566,8 +586,6 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     bs.result = unify_types(T, d->span, result, bs.result);
     unify_types(T, d->span, bs.result, ret);
 
-    pawU_check_context(T->U);
-
     struct HirTypeFolder F;
     pawHir_type_folder_init(&F, T->hir, T);
     F.F.FoldType = normalize_fixup;
@@ -680,7 +698,7 @@ static IrType *lower_adt_segment(struct TypeChecker *T, struct HirSegment segmen
 
     // TODO: hack to avoid instantiating "Self" since it is already instantiated. Probably need a way to distinguish between
     // TODO: generic params (type schemes) and generic args (concrete not-yet-known types). currently IrGeneric is used for both
-    if (pawS_eq(SCAN_STR(T->C, "Self"), segment.ident.name))
+    if (pawS_eq(STRING_LIT(T, "Self"), segment.ident.name))
         return type;
 
     IrGenericArgs *args = NULL;
@@ -817,7 +835,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                 // the value was located during name resolution, meaning it must be an enum variant
                 if (last.args != NULL)
                     TYPECK_ERROR(T, UnexpectedTypeArguments,
-                            .what = SCAN_STR(T->C, "type constructor"),
+                            .what = STRING_LIT(T, "type constructor"),
                             .name = last.ident.name,
                             .span = last.span);
                 assoc = pawP_instantiate_assoc(T->C,
@@ -898,18 +916,117 @@ static paw_Bool is_result_t(struct TypeChecker *T, IrType *type)
     return IrIsAdt(type) && IR_TYPE_DID(type).value == T->C->builtins[BUILTIN_RESULT].did.value;
 }
 
+static IrType *find_core_trait_method(struct TypeChecker *T, char const *name, IrType *self, IrTrait *trait, IrTypeList *call_args, struct SourceSpan span)
+{
+    Str const *method_name = STRING_LIT(T, name);
+    struct IrObligationCause const cause = (struct IrObligationCause){
+        .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+        .assoc_item_lookup.self = self,
+        .assoc_item_lookup.name = method_name,
+        .span = span,
+    };
+
+    pawIr_solver_add_impl_trait_obligation(T->C->S, self, trait, cause);
+    solve_pending_obligations(T);
+
+    return lookup_method(T->C, self, trait, method_name, call_args, span);
+}
+
+static struct UnpackedResult {
+    IrType *type;
+    IrType *error;
+} unpack_result(IrType *result)
+{
+    IrGenericArgs const *args = IR_GENERIC_ARGS(result);
+    paw_assert(args->count == 2);
+
+    return (struct UnpackedResult){
+        .type = IrGenericArg_get_type(IrGenericArgs_get(args, 0)),
+        .error = IrGenericArg_get_type(IrGenericArgs_get(args, 1)),
+    };
+}
+
+static DeclId find_assoc_item(struct TypeChecker *T, DeclId trait_did, Str const *name)
+{
+    struct IrTraitDef const *def = pawIr_get_trait_def(T->C, trait_did);
+    K_LIST_XFOREACH (def->items, struct IrAssocItem *const, p) {
+        if (pawS_eq((*p)->name, name))
+            return (*p)->did;
+    }
+    K_LIST_XFOREACH (def->methods, IrType *const, p) {
+        struct IrFnDef const *fn_def = pawIr_get_fn_def(T->C, IR_TYPE_DID(*p));
+        if (pawS_eq(fn_def->name, name))
+            return fn_def->did;
+    }
+    return INVALID_DECL_ID;
+}
+
+static IrGenericArgs *copy_args(struct TypeChecker *T, IrGenericArgs const *args)
+{
+    IrGenericArgs *result = IrGenericArgs_new(T->C);
+    IrGenericArgs_reserve(T->C, result, args->count);
+    K_LIST_XFOREACH (args, IrGenericArg const, arg)
+        IrGenericArgs_push(T->C, result, *arg);
+    return result;
+}
+
 static IrType *check_try_expr(struct TypeChecker *T, struct HirTryExpr *e)
 {
     IrType *type = check_operand(T, e->target);
 
     paw_assert(T->rs->prev != NULL);
-    IrGenericArg const ret = IrGenericArg_from_type(T->rs->prev);
+    IrType *arg = instantiate(T, type, NULL, e->span);
+    unify_types(T, NODE_SPAN(e->target), arg, T->rs->prev);
 
-    if (is_option_t(T, type) || is_result_t(T, type)) {
-        IrGenericArg const arg = IrGenericArg_from_type(
-                instantiate(T, type, NULL, e->span));
-        unify_args(T, NODE_SPAN(e->target), arg, ret);
-    } else {
+    if (is_result_t(T, type)) {
+        // given that the target of the try expression has type `Result<T, E>` and the
+        // enclosing function has return type `Result<T, E2>`, ensure that `E2: From<E>`
+        // is true
+        IrType *ret = normalize_type(T, T->rs->prev);
+        struct UnpackedResult const r = unpack_result(type);
+        struct UnpackedResult const r2 = unpack_result(ret);
+
+        Str const *method_name = STRING_LIT(T, "from");
+        struct IrObligationCause const cause = (struct IrObligationCause){
+            .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+            .assoc_item_lookup.self = r2.error,
+            .assoc_item_lookup.name = method_name,
+            .span = e->span,
+        };
+
+        IrGenericArgs *args = IrGenericArgs_new(T->C);
+        DeclId const did = T->C->core_traits[CORE_TRAIT_FROM];
+        IrGenericArgs_reserve(T->C, args, 2);
+        IrGenericArgs_push(T->C, args, IrGenericArg_from_type(r2.error));
+        IrGenericArgs_push(T->C, args, IrGenericArg_from_type(r.error));
+        IrTrait *trait = pawIr_new_trait(T->C, did, args);
+
+        IrType *method;
+        if (is_type_var(r2.error)) {
+            pawIr_solver_add_impl_trait_obligation(T->C->S, r2.error, trait, cause);
+
+            DeclId const op_item = find_assoc_item(T, trait->did, method_name);
+            method = pawIr_new_signature(T->C, op_item, copy_args(T, trait->args));
+        } else {
+            IrTypeList *call_args = IrTypeList_new(T->C);
+            IrTypeList_push(T->C, call_args, r.error);
+
+            method = find_core_trait_method(T, method_name->text, r2.error, trait, call_args, e->span);
+            if (method == NULL)
+                TYPECK_ERROR(T, UnknownMethod,
+                        .type = pawIr_print_type_v2(T->C, r2.error),
+                        .method = method_name,
+                        .span = e->span);
+        }
+
+        DeferredMethodSelections_push(T, T->defer_methods,
+                (struct DeferredMethodSelection){
+                    .id = e->id,
+                    .trait = trait,
+                    .method = method,
+                });
+
+    } else if (!is_option_t(T, type)) {
         TYPECK_ERROR(T, InvalidChainOperand,
                 .type = pawIr_print_type_v2(T->C, type),
                 .span = e->span);
@@ -930,6 +1047,167 @@ static enum IrTypeKind kind_of_type(IrType *type)
     return IR_KINDOF(type);
 }
 
+static enum CoreTrait trait_for_unary_op(enum UnaryOp op)
+{
+    switch (op) {
+        case UNARY_NEG:
+            return CORE_TRAIT_NEG;
+        case UNARY_NOT:
+            return CORE_TRAIT_NOT;
+        default:
+            paw_assert(op >= UNARY_BITNOT);
+            return CORE_TRAIT_BITNOT;
+    }
+}
+
+static enum CoreTrait trait_for_binary_op(enum BinaryOp op)
+{
+    paw_assert(op >= BINARY_EQ);
+    switch (op) {
+        case BINARY_EQ:
+        case BINARY_NE:
+            return CORE_TRAIT_EQ;
+        case BINARY_LT:
+        case BINARY_LE:
+        case BINARY_GT:
+        case BINARY_GE:
+            return CORE_TRAIT_ORD;
+        default:
+            paw_assert(op >= BINARY_ADD);
+            return CORE_TRAIT_ADD + (op - BINARY_ADD);
+    }
+}
+
+static IrTrait *create_unary_op_trait(struct TypeChecker *T, enum CoreTrait kind, IrType *type)
+{
+    IrGenericArgs *args = IrGenericArgs_new(T->C);
+    DeclId const did = T->C->core_traits[kind];
+    IrGenericArgs_push(T->C, args, IrGenericArg_from_type(type));
+    return pawIr_new_trait(T->C, did, args);
+}
+
+static IrTrait *create_binary_op_trait(struct TypeChecker *T, enum CoreTrait kind, IrType *lhs, IrType *rhs)
+{
+    IrGenericArgs *args = IrGenericArgs_new(T->C);
+    DeclId const did = T->C->core_traits[kind];
+    IrGenericArgs_reserve(T->C, args, 2);
+    IrGenericArgs_push(T->C, args, IrGenericArg_from_type(lhs));
+    IrGenericArgs_push(T->C, args, IrGenericArg_from_type(rhs));
+    return pawIr_new_trait(T->C, did, args);
+}
+
+static paw_Bool is_comparison_op(enum BinaryOp op)
+{
+    switch (op) {
+        case BINARY_EQ:
+        case BINARY_NE:
+        case BINARY_LT:
+        case BINARY_LE:
+        case BINARY_GT:
+        case BINARY_GE:
+            return PAW_TRUE;
+        default:
+            return PAW_FALSE;
+    }
+}
+
+static char const *unop_method_name(enum UnaryOp op)
+{
+    switch (op) {
+        case UNARY_NEG:
+            return "neg";
+        case UNARY_NOT:
+            return "not";
+        default:
+            paw_assert(op == UNARY_BITNOT);
+            return "bit_not";
+    }
+}
+
+static char const *binop_method_name(enum BinaryOp op)
+{
+    switch (op) {
+        case BINARY_EQ:
+        case BINARY_NE:
+            return "eq";
+        case BINARY_LT:
+        case BINARY_LE:
+        case BINARY_GT:
+        case BINARY_GE:
+            return "cmp";
+        case BINARY_ADD:
+            return "add";
+        case BINARY_SUB:
+            return "sub";
+        case BINARY_MUL:
+            return "mul";
+        case BINARY_DIV:
+            return "div";
+        case BINARY_MOD:
+            return "rem";
+        case BINARY_BITAND:
+            return "bit_and";
+        case BINARY_BITOR:
+            return "bit_or";
+        case BINARY_BITXOR:
+            return "bit_xor";
+        case BINARY_SHL:
+            return "shl";
+        default:
+            paw_assert(op == BINARY_SHR);
+            return "shr";
+    }
+}
+
+enum Ordering {
+    ORDERING_LESS,
+    ORDERING_EQUAL,
+    ORDERING_GREATER,
+};
+
+static IrType *find_unop_method(struct TypeChecker *T, IrType *type, enum UnaryOp op, struct SourceSpan span, IrTrait **trait_out)
+{
+    enum CoreTrait const core_trait = trait_for_unary_op(op);
+
+    IrGenericArgs *args = IrGenericArgs_new(T->C);
+    DeclId const did = T->C->core_traits[core_trait];
+    IrGenericArgs_push(T->C, args, IrGenericArg_from_type(type));
+
+    IrTypeList *call_args = IrTypeList_new(T->C);
+    IrTypeList_push(T->C, call_args, type);
+
+    *trait_out = pawIr_new_trait(T->C, did, args);
+    return find_core_trait_method(T, unop_method_name(op), type, *trait_out, call_args, span);
+}
+
+static IrType *find_binop_method(struct TypeChecker *T, IrType *lhs, IrType *rhs, paw_Bool call_by_ref, enum BinaryOp op, struct SourceSpan span, IrTrait **trait_out)
+{
+    IrType *raw_lhs = lhs;
+    IrType *raw_rhs = rhs;
+    if (call_by_ref) {
+        raw_lhs = auto_deref_full(lhs);
+        raw_rhs = auto_deref_full(rhs);
+        lhs = new_ptr(T, raw_lhs);
+        rhs = new_ptr(T, raw_rhs);
+    }
+
+    enum CoreTrait const core_trait = trait_for_binary_op(op);
+
+    IrGenericArgs *args = IrGenericArgs_new(T->C);
+    DeclId const did = T->C->core_traits[core_trait];
+    IrGenericArgs_reserve(T->C, args, 2);
+    IrGenericArgs_push(T->C, args, IrGenericArg_from_type(raw_lhs));
+    IrGenericArgs_push(T->C, args, IrGenericArg_from_type(raw_rhs));
+
+    IrTypeList *call_args = IrTypeList_new(T->C);
+    IrTypeList_push(T->C, call_args, lhs);
+    IrTypeList_push(T->C, call_args, rhs);
+
+    *trait_out = pawIr_new_trait(T->C, did, args);
+    return find_core_trait_method(T, binop_method_name(op),
+            raw_lhs, *trait_out, call_args, span);
+}
+
 static paw_Bool is_bool_unop(enum UnaryOp op)
 {
     switch (op) {
@@ -937,6 +1215,94 @@ static paw_Bool is_bool_unop(enum UnaryOp op)
             return PAW_TRUE;
         default:
             return PAW_FALSE;
+    }
+}
+
+static IrType *check_unop_expr(struct TypeChecker *T, struct HirUnOpExpr *e)
+{
+    static uint8_t const VALID_OPS[][IR_NUM_TYPE_KINDS] = {
+        //     type     = {0, b, c, i, f}
+        [UNARY_NEG]     = {0, 0, 0, 1, 1},
+        [UNARY_NOT]     = {0, 1, 0, 0, 0},
+        [UNARY_BITNOT]  = {0, 0, 0, 1, 0},
+        [UNARY_DEREF]   = {0, 0, 0, 0, 0},
+    };
+
+    static char const *UNOP_REPR[] = {
+        [UNARY_NEG] = "-",
+        [UNARY_NOT] = "!",
+        [UNARY_BITNOT] = "~",
+        [UNARY_DEREF] = "*",
+    };
+
+    IrType *type = check_operandx(T, e->target);
+    if (IrIsNever(type)) return type;
+
+    if (e->op == UNARY_ADDROF)
+        return new_ptr(T, type);
+
+    ensure_valid_rvalue(T, e->target);
+    if (e->op == UNARY_DEREF && IrIsPtr(type))
+        return ir_deref(type);
+
+    if (is_type_var(type)) {
+        Str const *op_name = STRING_LIT(T, unop_method_name(e->op));
+        struct IrObligationCause const cause = {
+            .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+            .assoc_item_lookup.self = type,
+            .assoc_item_lookup.name = op_name,
+        };
+        // create obligation `Lhs: Op`
+        IrTrait *trait = create_unary_op_trait(T, trait_for_unary_op(e->op), type);
+        pawIr_solver_add_impl_trait_obligation(T->C->S, type, trait, cause);
+        IrType *result = new_unknown(T, e->span); // type variable ?X
+
+        // create obligation `<Lhs as Op>::Output => ?X`
+        DeclId const output_item = find_assoc_item(T, trait->did, STRING_LIT(T, "Output"));
+        IrType *output_type = pawIr_new_projection(T->C, output_item, copy_args(T, trait->args));
+        pawIr_solver_add_type_equals_obligation(T->C->S, output_type, result, cause);
+
+        DeclId const op_item = find_assoc_item(T, trait->did, op_name);
+        IrType *method = pawIr_new_signature(T->C, op_item, copy_args(T, trait->args));
+        DeferredMethodSelections_push(T, T->defer_methods,
+                (struct DeferredMethodSelection){
+                    .id = e->id,
+                    .trait = trait,
+                    .method = method,
+                });
+        return result;
+    }
+
+    if (!is_builtin_type(T, type)
+            && !is_int_var(type)
+            && !is_float_var(type)) {
+        // search for implementations of traits from `std::ops` for user-defined types
+        IrTrait *trait;
+        IrType *method = find_unop_method(T, type, e->op, e->span, &trait);
+        if (method == NULL)
+            TYPECK_ERROR(T, UnknownMethod,
+                    .type = pawIr_print_type_v2(T->C, type),
+                    .method = STRING_LIT(T, unop_method_name(e->op)),
+                    .span = e->span);
+
+        DeferredMethodSelections_push(T, T->defer_methods,
+                (struct DeferredMethodSelection){
+                    .id = e->id,
+                    .trait = trait,
+                    .method = method,
+                });
+        return ir_fn_result(T->C, method);
+    }
+
+    if (!VALID_OPS[e->op][kind_of_type(type)]) {
+        TYPECK_ERROR(T, InvalidUnaryOperand,
+                .type = pawIr_print_type_v2(T->C, type),
+                .op = STRING_LIT(T, UNOP_REPR[e->op]),
+                .span = e->span);
+    } else if (is_bool_unop(e->op)) {
+        return builtin_type(T, BUILTIN_BOOL);
+    } else {
+        return type;
     }
 }
 
@@ -955,64 +1321,26 @@ static paw_Bool is_bool_binop(enum BinaryOp op)
     }
 }
 
-static IrType *check_unop_expr(struct TypeChecker *T, struct HirUnOpExpr *e)
-{
-    static uint8_t const VALID_OPS[][IR_NUM_TYPE_KINDS] = {
-        //     type   = {0, b, c, i, f}
-        [UNARY_NEG]   = {0, 0, 0, 1, 1},
-        [UNARY_NOT]   = {0, 1, 0, 0, 0},
-        [UNARY_BNOT]  = {0, 0, 0, 1, 0},
-        [UNARY_DEREF] = {0, 0, 0, 0, 0},
-    };
-
-    static char const *UNOP_REPR[] = {
-        [UNARY_NEG] = "-",
-        [UNARY_NOT] = "!",
-        [UNARY_BNOT] = "~",
-        [UNARY_DEREF] = "*",
-    };
-
-    IrType *type = check_operandx(T, e->target);
-    if (IrIsNever(type)) return type;
-
-    if (e->op == UNARY_ADDROF)
-        return new_ptr(T, type);
-    ensure_valid_rvalue(T, e->target);
-    if (e->op == UNARY_DEREF && IrIsPtr(type))
-        return ir_deref(type);
-
-    if (!VALID_OPS[e->op][kind_of_type(type)]) {
-        TYPECK_ERROR(T, InvalidUnaryOperand,
-                .type = pawIr_print_type_v2(T->C, type),
-                .op = SCAN_STR(T->C, UNOP_REPR[e->op]),
-                .span = e->span);
-    } else if (is_bool_unop(e->op)) {
-        return builtin_type(T, BUILTIN_BOOL);
-    } else {
-        return type;
-    }
-}
-
 static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, enum BinaryOp op, IrType *lhs, IrType *rhs)
 {
     static uint8_t const VALID_OPS[][IR_NUM_TYPE_KINDS] = {
-        //     type   = {0, b, c, i, f, s}
-        [BINARY_EQ]   = {0, 1, 1, 1, 1, 1},
-        [BINARY_NE]   = {0, 1, 1, 1, 1, 1},
-        [BINARY_LT]   = {0, 0, 1, 1, 1, 1},
-        [BINARY_LE]   = {0, 0, 1, 1, 1, 1},
-        [BINARY_GT]   = {0, 0, 1, 1, 1, 1},
-        [BINARY_GE]   = {0, 0, 1, 1, 1, 1},
-        [BINARY_ADD]  = {0, 0, 0, 1, 1, 0},
-        [BINARY_SUB]  = {0, 0, 0, 1, 1, 0},
-        [BINARY_MUL]  = {0, 0, 0, 1, 1, 0},
-        [BINARY_DIV]  = {0, 0, 0, 1, 1, 0},
-        [BINARY_MOD]  = {0, 0, 0, 1, 1, 0},
-        [BINARY_BXOR] = {0, 0, 0, 1, 0, 0},
-        [BINARY_BAND] = {0, 0, 0, 1, 0, 0},
-        [BINARY_BOR]  = {0, 0, 0, 1, 0, 0},
-        [BINARY_SHL]  = {0, 0, 0, 1, 0, 0},
-        [BINARY_SHR]  = {0, 0, 0, 1, 0, 0},
+        //     type     = {0, b, c, i, f, s}
+        [BINARY_EQ]     = {0, 1, 1, 1, 1, 1},
+        [BINARY_NE]     = {0, 1, 1, 1, 1, 1},
+        [BINARY_LT]     = {0, 0, 1, 1, 1, 1},
+        [BINARY_LE]     = {0, 0, 1, 1, 1, 1},
+        [BINARY_GT]     = {0, 0, 1, 1, 1, 1},
+        [BINARY_GE]     = {0, 0, 1, 1, 1, 1},
+        [BINARY_ADD]    = {0, 0, 0, 1, 1, 0},
+        [BINARY_SUB]    = {0, 0, 0, 1, 1, 0},
+        [BINARY_MUL]    = {0, 0, 0, 1, 1, 0},
+        [BINARY_DIV]    = {0, 0, 0, 1, 1, 0},
+        [BINARY_MOD]    = {0, 0, 0, 1, 1, 0},
+        [BINARY_BITXOR] = {0, 0, 0, 1, 0, 0},
+        [BINARY_BITAND] = {0, 0, 0, 1, 0, 0},
+        [BINARY_BITOR]  = {0, 0, 0, 1, 0, 0},
+        [BINARY_SHL]    = {0, 0, 0, 1, 0, 0},
+        [BINARY_SHR]    = {0, 0, 0, 1, 0, 0},
     };
 
     static char const *BINOP_REPR[] = {
@@ -1027,9 +1355,9 @@ static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, en
         [BINARY_MUL] = "*",
         [BINARY_DIV] = "/",
         [BINARY_MOD] = "%",
-        [BINARY_BXOR] = "^",
-        [BINARY_BAND] = "&",
-        [BINARY_BOR] = "|",
+        [BINARY_BITXOR] = "^",
+        [BINARY_BITAND] = "&",
+        [BINARY_BITOR] = "|",
         [BINARY_SHL] = "<<",
         [BINARY_SHR] = ">>",
     };
@@ -1038,7 +1366,7 @@ static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, en
     if (!VALID_OPS[op][kind_of_type(type)]) {
         TYPECK_ERROR(T, InvalidBinaryOperand,
                 .type = pawIr_print_type_v2(T->C, type),
-                .op = SCAN_STR(T->C, BINOP_REPR[op]),
+                .op = STRING_LIT(T, BINOP_REPR[op]),
                 .span = span);
     } else if (is_bool_binop(op)) {
         return builtin_type(T, BUILTIN_BOOL);
@@ -1051,7 +1379,101 @@ static IrType *check_binop_expr(struct TypeChecker *T, struct HirBinOpExpr *e)
 {
     IrType *lhs = check_operand(T, e->lhs);
     IrType *rhs = check_operand(T, e->rhs);
+
+    if (IrIsNever(lhs) || IrIsNever(rhs))
+        return !is_comparison_op(e->op)
+            ? (IrIsNever(lhs) ? rhs : lhs)
+            : pawIr_new_bool(T->C);
+
+    if (is_type_var(lhs)) {
+        Str const *op_name = STRING_LIT(T, binop_method_name(e->op));
+        struct IrObligationCause const cause = {
+            .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
+            .assoc_item_lookup.self = lhs,
+            .assoc_item_lookup.name = op_name,
+        };
+        // create obligation `Lhs: Op<Rhs>`
+        IrTrait *trait = create_binary_op_trait(T, trait_for_binary_op(e->op), lhs, rhs);
+        pawIr_solver_add_impl_trait_obligation(T->C->S, lhs, trait, cause);
+
+        IrType *result;
+        if (is_comparison_op(e->op)) {
+            result = pawIr_new_bool(T->C);
+        } else {
+            // arithmetic and bitwise operator traits allow the output type to be specified by
+            // the trait implementation
+            result = new_unknown(T, e->span); // type variable ?X
+
+            // create obligation `<Lhs as Op<Rhs>>::Output => ?X`
+            DeclId const output_item = find_assoc_item(T, trait->did, STRING_LIT(T, "Output"));
+            IrType *output_type = pawIr_new_projection(T->C, output_item, copy_args(T, trait->args));
+            pawIr_solver_add_type_equals_obligation(T->C->S, output_type, result, cause);
+        }
+        DeclId const op_item = find_assoc_item(T, trait->did, op_name);
+        IrType *method = pawIr_new_signature(T->C, op_item, copy_args(T, trait->args));
+        DeferredMethodSelections_push(T, T->defer_methods,
+                (struct DeferredMethodSelection){
+                    .id = e->id,
+                    .trait = trait,
+                    .method = method,
+                });
+        return result;
+    }
+
+    if (!is_builtin_type(T, lhs)
+            && !is_int_var(lhs)
+            && !is_float_var(lhs)) {
+        // search for implementations of traits from `std::ops` for user-defined types
+        IrTrait *trait;
+        IrType *result = NULL;
+        IrType *method = NULL;
+        switch (e->op) {
+            case BINARY_EQ:
+            case BINARY_NE:
+                method = find_binop_method(T, lhs, rhs, PAW_TRUE, e->op, e->span, &trait);
+                break;
+            case BINARY_LT:
+            case BINARY_LE:
+            case BINARY_GT:
+            case BINARY_GE:
+                // TODO: note that once default trait methods are supported we could just use `lt`, `le`, etc. instead of calling `cmp` and injecting a comparison during HIR lowering, then all comparison ops could be handled the same way
+                //       right now we have to pretend the method returns a bool and generate the shim later
+                method = find_binop_method(T, lhs, rhs, PAW_TRUE, e->op, e->span, &trait);
+                result = pawIr_new_bool(T->C);
+                break;
+            case BINARY_ADD:
+            case BINARY_SUB:
+            case BINARY_MUL:
+            case BINARY_DIV:
+            case BINARY_MOD:
+            case BINARY_BITAND:
+            case BINARY_BITOR:
+            case BINARY_BITXOR:
+            case BINARY_SHL:
+            case BINARY_SHR:
+                method = find_binop_method(T, lhs, rhs, PAW_FALSE, e->op, e->span, &trait);
+                break;
+            case BINARY_AS:
+                TYPECK_ERROR(T, Unsupported, e->span);
+        }
+        if (method == NULL)
+            TYPECK_ERROR(T, UnknownMethod,
+                    .type = pawIr_print_type_v2(T->C, lhs),
+                    .method = STRING_LIT(T, binop_method_name(e->op)),
+                    .span = e->span);
+
+        DeferredMethodSelections_push(T, T->defer_methods,
+                (struct DeferredMethodSelection){
+                    .id = e->id,
+                    .trait = trait,
+                    .method = method,
+                });
+        return result != NULL ? result
+            : ir_fn_result(T->C, method);
+    }
+
     return check_binary_op(T, e->span, e->op, lhs, rhs);
+
 }
 
 static IrType *check_assign_expr(struct TypeChecker *T, struct HirAssignExpr *e)
@@ -1186,7 +1608,7 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
                     });
         }
 
-        struct IrFnDef *r = pawIr_new_fn_def(T->C, e->did, SCAN_STR(T->C, "(closure)"),
+        struct IrFnDef *r = pawIr_new_fn_def(T->C, e->did, STRING_LIT(T, "(closure)"),
                 IrGenericDefs_new(T->C), ret, ir_params, INVALID_DECL_ID, PAW_FALSE);
         FnDefMap_insert(T->C, T->C->fn_defs, e->did, r);
 
@@ -1301,12 +1723,12 @@ static void CheckLetStmt(struct TypeChecker *T, struct HirLetStmt *s)
         : new_unknown(T, s->span);
     struct BlockState bs;
     struct MatchState ms;
-    enter_block(T, &bs, s->span, BLOCK_MATCH);
+//    enter_block(T, &bs, s->span, BLOCK_MATCH);
     enter_match_ctx(T, &ms, tag);
     IrType *lhs = check_pat(T, s->pat);
-    unify_types(T, s->span, bs.result, tag);
+//    unify_types(T, s->span, bs.result, tag);
     leave_match_ctx(T);
-    leave_block(T);
+//    leave_block(T);
 
     unify_types(T, s->span, lhs, tag);
     unify_types(T, s->span, tag, rhs);
@@ -1358,7 +1780,7 @@ static void const_check_expr(struct HirVisitor *V, struct HirExpr *expr)
 
     struct TypeChecker *T = V->ud;
     TYPECK_ERROR(T, CannotConstantEvaluate,
-            .what = SCAN_STR(T->C, name),
+            .what = STRING_LIT(T, name),
             .span = expr->hdr.span);
 }
 
@@ -1825,35 +2247,20 @@ static IrType *check_array_index(struct TypeChecker *T, IrType *array, IrType *i
     return IrGetArray(array)->type;
 }
 
-// TODO: This isn't really correct since it's possible that pawP_find_method will find an inherent method on the receiver that shadows "Index::index"
 static IrType *find_index_fn(struct TypeChecker *T, IrType *target, IrType *index, struct SourceSpan span, struct IrTrait **trait_out)
 {
-    // create trait descriptor for "Index<Target, Idx>"
     IrGenericArgs *args = IrGenericArgs_new(T->C);
     DeclId const did = T->C->core_traits[CORE_TRAIT_INDEX];
-    IrTrait *trait = pawIr_new_trait(T->C, did, args);
     IrGenericArgs_reserve(T->C, args, 3);
     IrGenericArgs_push(T->C, args, IrGenericArg_from_type(target));
     IrGenericArgs_push(T->C, args, IrGenericArg_from_type(index));
 
-    Str const *method_name = SCAN_STR(T->C, "index");
-    struct IrObligationCause const cause = (struct IrObligationCause){
-        .kind = IR_OBLIGATION_CAUSE_ASSOC_ITEM_LOOKUP,
-        .assoc_item_lookup.self = target,
-        .assoc_item_lookup.name = method_name,
-        .span = span,
-    };
-
-    // TODO: probably do this in a nested solver context
-    pawIr_solver_add_impl_trait_obligation(T->C->S, target, trait, cause);
-    solve_pending_obligations(T);
-
     IrTypeList *call_args = IrTypeList_new(T->C);
     IrTypeList_push(T->C, call_args, new_ptr(T, target));
     IrTypeList_push(T->C, call_args, index);
-    IrType *method = lookup_method(T->C, target, NULL, method_name, call_args, span);
-    if (method != NULL) *trait_out = trait;
-    return method;
+
+    *trait_out = pawIr_new_trait(T->C, did, args);
+    return find_core_trait_method(T, "index", target, *trait_out, call_args, span);
 }
 
 static IrType *check_index(struct TypeChecker *T, struct HirIndex *e)
@@ -2334,10 +2741,9 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
         case kHirTryExpr:
             type = check_try_expr(T, HirGetTryExpr(expr));
             break;
-        case kHirUnOpExpr: {
+        case kHirUnOpExpr:
             type = check_unop_expr(T, HirGetUnOpExpr(expr));
             break;
-        }
         case kHirBinOpExpr:
             type = check_binop_expr(T, HirGetBinOpExpr(expr));
             break;
@@ -2407,6 +2813,8 @@ static void check_item(struct TypeChecker *T, struct HirDecl *item)
         check_const_item(T, HirGetConstDecl(item));
     }
 
+    pawU_set_default_literal_types(T->U);
+
     struct IrSolverResult const result = solve_pending_obligations(T);
     if (result.status == IR_SOLVER_AMBIGUOUS) {
         IrObligations const *const_obligations = pawIr_solver_remove_const_obligations(T->C->S);
@@ -2422,6 +2830,8 @@ static void check_item(struct TypeChecker *T, struct HirDecl *item)
     }
 
     pawIr_pop_solver(T->C);
+
+    pawU_check_context(T->U);
 }
 
 static void check_items(struct TypeChecker *T, struct HirDeclList *items)

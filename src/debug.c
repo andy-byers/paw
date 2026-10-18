@@ -31,7 +31,7 @@ char const *paw_unop_symbol(enum UnaryOp unop)
             return "-";
         case UNARY_NOT:
             return "!";
-        case UNARY_BNOT:
+        case UNARY_BITNOT:
             return "~";
     }
 }
@@ -51,11 +51,11 @@ char const *paw_binop_symbol(enum BinaryOp binop)
             return "/";
         case BINARY_MOD:
             return "%";
-        case BINARY_BXOR:
+        case BINARY_BITXOR:
             return "^";
-        case BINARY_BAND:
+        case BINARY_BITAND:
             return "&";
-        case BINARY_BOR:
+        case BINARY_BITOR:
             return "|";
         case BINARY_SHL:
             return "<<";

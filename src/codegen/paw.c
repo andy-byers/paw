@@ -56,7 +56,7 @@ static struct {
 #undef OPT_STRS
 } s_opt;
 
-DEFINE_LIST(struct Compiler, CStrings, char const *)
+DEFINE_LIST(struct Compiler, CStrings, char const *,)
 
 static struct {
     char const *name;

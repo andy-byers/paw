@@ -930,21 +930,24 @@ void pawU_enter_binder(struct Unifier *U, Str const *modname)
     ++U->depth;
 }
 
-void pawU_check_context(struct Unifier *U)
+void pawU_set_default_literal_types(struct Unifier *U)
 {
-    IrType *default_int = pawIr_new_int(U->C, IR_INT64);
-    IrType *default_float = pawIr_new_float(U->C, IR_FLOAT64);
     K_LIST_XFOREACH (U->ctx->type_vars->ivars, InferenceVar const, var) {
         IrType *type = pawU_normalize(U, var->data.type);
         if (IrIsInfer(type)) {
             struct IrInfer const *t = IrGetInfer(type);
             if (t->ikind == IR_INFER_INTEGER) {
-                *type = *default_int;
+                *type = *U->C->default_int;
             } else if (t->ikind == IR_INFER_FLOAT) {
-                *type = *default_float;
+                *type = *U->C->default_float;
             }
         }
     }
+
+}
+
+void pawU_check_context(struct Unifier *U)
+{
     K_LIST_XFOREACH (U->ctx->type_vars->ivars, InferenceVar const, var) {
         IrType *type = pawU_normalize(U, var->data.type);
         if (IrIsInfer(type)) {

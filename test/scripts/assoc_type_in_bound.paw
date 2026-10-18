@@ -7,24 +7,24 @@ struct Second {pub value: int64}
 
 impl Add<int64> for First {
     type Output = int64;
-    fn add(*self, rhs: *int64) -> int64 {
-        self.value + *rhs
+    fn add(self, rhs: int64) -> int64 {
+        self.value + rhs
     }
 }
 
 impl Add<Second> for First {
     type Output = First;
-    fn add(*self, rhs: *Second) -> First {
+    fn add(self, rhs: Second) -> First {
         First{value: self.value + rhs.value}
     }
 }
 
 pub fn add<X: Add<Y, Output = Z>, Y, Z>(first: X, second: Y) -> Z {
-    first.add(&second)
+    first.add(second)
 }
 
 pub fn add_2<X: Add<int64, Output = Z>, Z>(first: X, second: int64) -> Z {
-    first.add(&second)
+    first.add(second)
 }
 
 pub trait AsType {
@@ -40,7 +40,7 @@ impl AsType for Second {
 }
 
 pub fn add_3<X: Add<Y::Output, Output = Z>, Y: AsType, Z>(first: X, second: Y) -> Z {
-    first.add(&second.as_type())
+    first.add(second.as_type())
 }
 
 #[test]

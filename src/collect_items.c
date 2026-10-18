@@ -1375,6 +1375,7 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool)
 
     run_collection_phases(&X, C->hir);
 
+    pawU_set_default_literal_types(C->U);
     pawU_check_context(C->U);
     pawU_leave_binder(C->U);
 

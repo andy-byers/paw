@@ -4,10 +4,12 @@ struct Wrapper<T> {
     pub value: T,
 }
 
-impl<T: Add<T, Output = T>> Add<Wrapper<T>> for Wrapper<T> {
+impl<T: Copy> Copy for Wrapper<T> {}
+
+impl<T: Copy + Add<T, Output = T>> Add<Wrapper<T>> for Wrapper<T> {
     type Output = Self;
-    fn add(*self, rhs: *Wrapper<T>) -> Self {
-        Self{value: self.value.add(&rhs.value)}
+    fn add(self, rhs: Wrapper<T>) -> Self {
+        Self{value: self.value + rhs.value}
     }
 }
 
@@ -20,7 +22,7 @@ impl<T> From<T> for Wrapper<T> {
 fn transform<I: IntoIterator<Item = A>, A: Into<B>, B: Add<B, Output = B>>(iter: I, zero: B) -> B {
     let result = zero;
     for value in iter {
-        result = result.add(&value.into());
+        result = result + value.into();
     }
     result
 }

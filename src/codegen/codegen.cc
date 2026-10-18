@@ -1776,7 +1776,9 @@ private:
             case MIR_UNARY_BITNOT:
                 return B->CreateNot(value);
             case MIR_UNARY_NEG:
-                return B->CreateNeg(value);
+                return value->getType()->isIntegerTy()
+                    ? B->CreateNeg(value)
+                    : B->CreateFNeg(value);
             case MIR_UNARY_NOT:
                 return B->CreateCmp(llvm::CmpInst::ICMP_EQ, value, X.create_i1(0));
         }

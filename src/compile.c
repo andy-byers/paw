@@ -359,6 +359,9 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
 
     C->main_name = SCAN_STR(C, "main");
 
+    C->default_int = pawIr_new_int(C, IR_INT64);
+    C->default_float = pawIr_new_float(C, IR_FLOAT64);
+
     C->modinfo = ModuleInfo_new(C);
     C->builtin_lookup = BuiltinMap_new(C);
     C->hir_types = HirTypeMap_new(C);

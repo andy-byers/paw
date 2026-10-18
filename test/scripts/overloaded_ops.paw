@@ -1,0 +1,120 @@
+// overloaded_ops.paw
+
+struct Custom {
+    value: int64,
+}
+
+impl Copy for Custom {}
+
+impl Ord<Custom> for Custom {
+    fn cmp(*self, rhs: *Custom) -> Ordering {
+        self.value.cmp(&rhs.value)
+    }
+}
+
+impl Eq<Custom> for Custom {
+    fn eq(*self, rhs: *Custom) -> bool {
+        self.value == rhs.value
+    }
+}
+
+impl Eq<int64> for Custom {
+    fn eq(*self, rhs: *int64) -> bool {
+        self.value == *rhs
+    }
+}
+
+impl Add<Custom> for Custom {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self{value: self.value + rhs.value}
+    }
+}
+
+impl BitAnd<int64> for Custom {
+    type Output = int64;
+
+    fn bit_and(self, rhs: int64) -> Self::Output {
+        self.value & rhs
+    }
+}
+
+fn cc(value: int64) -> Custom {
+    Custom{value}
+}
+
+fn add<T: Add<T, Output = T>>(lhs: T, rhs: T) -> T {
+    lhs.add(rhs)
+}
+
+fn bit_and<Lhs: BitAnd<Rhs, Output = Rhs>, Rhs>(lhs: Lhs, rhs: Rhs) -> Rhs {
+    lhs.bit_and(rhs)
+}
+
+#[test]
+pub fn binary_ops() {
+    assert(cc(1) == cc(1));
+    assert(!(cc(2) == cc(3)));
+    assert(cc(1) == 1);
+    assert(!(cc(2) == 3));
+
+    assert(cc(1) != cc(2));
+    assert(!(cc(3) != cc(3)));
+    assert(cc(1) != 2);
+    assert(!(cc(3) != 3));
+
+    assert(cc(1) < cc(2));
+    assert(cc(3) > cc(2));
+    assert(cc(3) <= cc(4));
+    assert(cc(5) >= cc(4));
+    assert(cc(6) <= cc(6));
+    assert(cc(7) >= cc(7));
+
+    assert(add(cc(1), cc(2)) == cc(3));
+    assert(bit_and(cc(0b1111), 0b1010) == 0b1010);
+}
+
+#[test]
+pub fn closures() {
+    let f = |a, b| a + b;
+    let r = f(cc(1), cc(2));
+    assert(r == cc(3));
+
+    let f = |a, b| a * b;
+    let r = f(2, 4usize);
+    assert(r == 8);
+
+    let f = |a, b, c| a * b / c;
+    let r = f(6, 2, 3);
+    assert(r == 4);
+}
+
+struct A;
+struct B;
+
+impl Not for A {
+    type Output = B;
+    fn not(self) -> B { B }
+}
+
+impl Not for B {
+    type Output = A;
+    fn not(self) -> A { A }
+}
+
+impl Neg for A {
+    type Output = int64;
+    fn neg(self) -> int64 {
+        123
+    }
+}
+
+#[test]
+pub fn unary_ops() {
+    assert(-A == 123);
+
+    let _: B = !A;
+    let _: A = !!A;
+    let _: B = !!!A;
+}

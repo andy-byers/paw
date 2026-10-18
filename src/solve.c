@@ -434,6 +434,15 @@ target = pawU_normalize_projections(S->U, target);
     return IR_SOLVER_SOLVED;
 }
 
+static enum CoreTrait check_core_trait_in_range(struct Compiler *C, DeclId did, enum CoreTrait lower_bound, enum CoreTrait upper_bound)
+{
+    for (enum CoreTrait t = lower_bound; t < upper_bound; ++t) {
+        if (P_ID_EQUALS(C, did, C->core_traits[t]))
+            return t;
+    }
+    return NUM_CORE_TRAITS;
+}
+
 #define RESULT_SOLVED() ((struct IrSolverResult){ \
         .status = IR_SOLVER_SOLVED, \
     })
@@ -492,8 +501,19 @@ struct IrSolverResult pawIr_solver_solve(IrSolver *S)
                     LOGLN("SOLVER:%p: encountered impl trait obligation `%s`",
                             (void *)S, pawIr_print_impl_trait_obligation(S->C, type, trait));
 
-                    if (IrIsInfer(type))
+                    if (IrIsInfer(type)) {
+                        struct IrInfer const *infer = IrGetInfer(type);
+                        enum CoreTrait const LOWER_BOUND = CORE_TRAIT_EQ;
+                        enum CoreTrait const upper_bound = infer->ikind == IR_INFER_INTEGER ? NUM_CORE_TRAITS :
+                            infer->ikind == IR_INFER_FLOAT ? CORE_TRAIT_MOD + 1 : LOWER_BOUND;
+                        enum CoreTrait const core_trait = check_core_trait_in_range(S->C, trait->did, LOWER_BOUND, upper_bound);
+                        if (core_trait != NUM_CORE_TRAITS) {
+                            paw_assert(trait->args->count == 2);
+                            IrType *rhs = IrGenericArg_get_type(IrGenericArgs_get(trait->args, 1));
+                            solved = pawU_unify(S->U, type, rhs) == 0;
+                        }
                         break;
+                    }
 
                     IrSolver *child = pawIr_push_solver(S->C);
                     if (IrIsProjection(type)) {
