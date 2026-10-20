@@ -27,7 +27,7 @@ const LOAD_LENGTH: usize = 7;
 const LOAD_CAPACITY: usize = 8;
 
 
-pub struct HashMap<K: Hash + Eq<K>, V> {
+pub struct HashMap<K, V> {
     buffer: *char,
     length: usize,
     capacity: usize,

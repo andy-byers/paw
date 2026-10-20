@@ -336,7 +336,7 @@ public:
         return llvm::ConstantPointerNull::get(get_ptr_ty());
     }
 
-    llvm::Value *create_unit() const
+    llvm::Constant *create_unit() const
     {
         return llvm::ConstantStruct::get(
                 llvm::StructType::get(*ctx_, {}, false),
@@ -381,6 +381,12 @@ public:
     llvm::ConstantInt *create_isize(size_t value) const
     {
         return llvm::ConstantInt::get(B->getIntPtrTy(M->get_data_layout()), value);
+    }
+
+    llvm::ConstantInt *create_sized_int(unsigned num_bytes, paw_Uint64 value) const
+    {
+        auto *ty = get_sized_int_ty(num_bytes);
+        return llvm::ConstantInt::get(ty, value);
     }
 
     llvm::Constant *create_f32(paw_Float32 value) const

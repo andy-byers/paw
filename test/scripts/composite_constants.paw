@@ -1,0 +1,59 @@
+// composite_constants.paw
+
+enum Enum {
+    First,
+    Second(int64)
+}
+
+struct Nested {
+    v: (bool, int32),
+}
+
+struct Composite {
+    a: int64,
+    b: float32,
+    c: Nested,
+}
+
+#[test]
+pub fn arrays() {
+    const ARRAY: [3]int64 = [1, 10, 100];
+
+    assert(ARRAY[0] == 1);
+
+    const ARRAY2: [2][3]int64 = [
+        ARRAY,
+        [2, 20, 200],
+    ];
+
+    assert(ARRAY2[0][1] == 10);
+    assert(ARRAY2[1][2] == 200);
+}
+
+#[test]
+pub fn structures() {
+    const NESTED: Nested = Nested{
+        v: (true, 10),
+    };
+    assert(NESTED.v.1 == 10);
+
+    const COMPOSITE: Composite = Composite{
+        a: 1,
+        b: 2.0,
+        c: Nested{
+            v: (false, 4),
+        },
+    };
+    assert(COMPOSITE.b == 2.0);
+    assert(COMPOSITE.c.v.1 == 4);
+}
+
+#[test]
+pub fn enumerations() {
+    const ENUM: Enum = Enum::Second(123);
+    assert(match ENUM {
+        Enum::First => -1,
+        Enum::Second(v) => 123,
+    } == 123);
+}
+

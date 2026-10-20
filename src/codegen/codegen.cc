@@ -1173,7 +1173,7 @@ public:
         return itr->get();
     }
 
-    llvm::Value *create_constant_int(IrValue value, IrIntKind kind)
+    llvm::Constant *create_constant_int(IrValue value, IrIntKind kind)
     {
         switch (kind) {
             case IR_INT8:
@@ -1194,7 +1194,7 @@ public:
         }
     }
 
-    llvm::Value *create_constant_float(IrValue value, IrFloatKind kind)
+    llvm::Constant *create_constant_float(IrValue value, IrFloatKind kind)
     {
         switch (kind) {
             case IR_FLOAT32:
@@ -1204,7 +1204,63 @@ public:
         }
     }
 
-    llvm::Value *create_constant(IrValue value, IrType *type)
+    llvm::Constant *create_constant_array(IrValue value, IrArray const *array)
+    {
+        std::vector<llvm::Constant *> values;
+        values.reserve(value.t->num_fields);
+        for (size_t i = 0; i < value.t->num_fields; ++i)
+            values.push_back(create_constant(value.t->fields[i], array->type));
+        return llvm::ConstantArray::get(
+                llvm::ArrayType::get(*get_type(array->type), value.t->num_fields),
+                values);
+    }
+
+    llvm::Constant *create_constant_tuple(IrValue value, IrTuple const *tuple)
+    {
+        auto *c = X.get_context();
+        std::vector<llvm::Type *> types;
+        std::vector<llvm::Constant *> values;
+        types.reserve(value.t->num_fields);
+        values.reserve(value.t->num_fields);
+        for (size_t i = 0; i < value.t->num_fields; ++i) {
+            auto *type = IrTypeList_get(tuple->elems, i);
+            types.push_back(get_type(type)->get_ty());
+            values.push_back(create_constant(value.t->fields[i], type));
+        }
+        return llvm::ConstantStruct::get(
+                llvm::StructType::get(*c, types, false),
+                values);
+    }
+
+    llvm::Constant *create_constant_adt(IrValue value, IrAdt *adt)
+    {
+        auto *c = X.get_context();
+        std::vector<llvm::Type *> types;
+        std::vector<llvm::Constant *> values;
+        types.reserve(1 + value.t->num_fields);
+        values.reserve(1 + value.t->num_fields);
+
+        auto const discr = value.t->discr;
+        auto *object_type = cast<ObjectType>(get_type(IR_CAST_TYPE(adt)));
+        auto const *fields = pawP_instantiate_variant_fields(C, adt, discr);
+
+        if (object_type->get_num_variants() > 1) {
+            auto *discr_type = object_type->get_discriminant_type();
+            values.push_back(llvm::ConstantInt::get(discr_type->get_ty(), discr));
+            types.push_back(discr_type->get_ty());
+        }
+
+        for (size_t i = 0; i < value.t->num_fields; ++i) {
+            auto *type = IrTypeList_get(fields, i);
+            types.push_back(get_type(type)->get_ty());
+            values.push_back(create_constant(value.t->fields[i], type));
+        }
+        return llvm::ConstantStruct::get(
+                llvm::StructType::get(*c, types, false),
+                values);
+    }
+
+    llvm::Constant *create_constant(IrValue value, IrType *type)
     {
         switch (IR_KINDOF(type)) {
             case kIrUnit:
@@ -1217,6 +1273,12 @@ public:
                 return create_constant_int(value, IR_INT_KIND(type));
             case kIrFloat:
                 return create_constant_float(value, IR_FLOAT_KIND(type));
+            case kIrArray:
+                return create_constant_array(value, IrGetArray(type));
+            case kIrTuple:
+                return create_constant_tuple(value, IrGetTuple(type));
+            case kIrAdt:
+                return create_constant_adt(value, IrGetAdt(type));
             default:
                 paw_assert(IrIsString(type));
                 return get_constant_str((::Str const *)value.p);
@@ -1342,6 +1404,9 @@ private:
             case kMirStructGEP:
                 create_structgep(instr->StructGEP_);
                 break;
+            case kMirGetConstant:
+                create_getconstant(instr->GetConstant_);
+                break;
             case kMirGetDiscriminant:
                 create_getdiscriminant(instr->GetDiscriminant_);
                 break;
@@ -1416,16 +1481,14 @@ private:
         return get_block(get_successor(index).value);
     }
 
-    llvm::Value *get_constant_str(::Str const *k)
+    llvm::Constant *get_constant_str(::Str const *k)
     {
         auto const itr = strings_.find(k);
         paw_assert(itr != end(strings_));
 
         auto const [text, len] = itr->second;
-        llvm::Value *str = llvm::UndefValue::get(X.get_str_ty());
-        str = B->CreateInsertValue(str, text, 0);
-        str = B->CreateInsertValue(str, len, 1);
-        return str;
+        return llvm::ConstantStruct::get(
+                X.get_str_ty(), {text, len});
     }
 
     // TODO: locals that became SSA registers need their drops removed, then use ir_deref instead of ir_auto_deref
@@ -1593,6 +1656,12 @@ private:
         auto *element_type = get_type(ir_deref(output_irtype));
         auto *element_ptr = B->CreateInBoundsGEP(element_type->get_ty(), array, index);
         set_result(x.output, element_ptr);
+    }
+
+    void create_getconstant(struct MirGetConstant const &x)
+    {
+        auto *value = state_->constants_.at(unsigned(x.k.value));
+        set_result(x.output, value);
     }
 
     void create_getdiscriminant(struct MirGetDiscriminant const &x)
@@ -2104,7 +2173,7 @@ private:
     llvm::GlobalValue *os_argv_;
 
     // mapping from IR strings to runtime global variables
-    struct StringDescriptor { llvm::Value *text; llvm::Value *length; };
+    struct StringDescriptor { llvm::Constant *text; llvm::Constant *length; };
     std::unordered_map<::Str const *, StringDescriptor> strings_;
 
     // List of mangled names referring to functions marked with the "test" annotation.

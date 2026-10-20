@@ -1723,47 +1723,32 @@ static void CheckLetStmt(struct TypeChecker *T, struct HirLetStmt *s)
         : new_unknown(T, s->span);
     struct BlockState bs;
     struct MatchState ms;
-//    enter_block(T, &bs, s->span, BLOCK_MATCH);
+    enter_block(T, &bs, s->span, BLOCK_MATCH);
     enter_match_ctx(T, &ms, tag);
     IrType *lhs = check_pat(T, s->pat);
-//    unify_types(T, s->span, bs.result, tag);
     leave_match_ctx(T);
-//    leave_block(T);
+    leave_block(T);
 
     unify_types(T, s->span, lhs, tag);
     unify_types(T, s->span, tag, rhs);
+    unify_types(T, s->span, rhs, bs.result);
 
     pawIr_set_type(T->C, s->id, rhs);
-}
-
-static void const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
-{
-    struct TypeChecker *T = V->ud;
-    IrType *type = lower_value_path(T, e->path);
-    if (!IS_BASIC_TYPE(TYPE2CODE(T, type)))
-        TYPECK_ERROR(T, NonprimitiveConstant,
-                .type = pawIr_print_type_v2(T->C, type),
-                .span = e->span);
 }
 
 static void const_check_expr(struct HirVisitor *V, struct HirExpr *expr)
 {
     char const *name;
+    struct TypeChecker *T = V->ud;
     switch (HIR_KINDOF(expr)) {
         case kHirClosureExpr:
             name = "closure";
-            break;
-        case kHirCallExpr:
-            name = "function call";
             break;
         case kHirIndex:
             name = "index expression";
             break;
         case kHirSelector:
             name = "selector expression";
-            break;
-        case kHirFieldExpr:
-            name = "field expression";
             break;
         case kHirLoopExpr:
             name = "loop";
@@ -1774,11 +1759,56 @@ static void const_check_expr(struct HirVisitor *V, struct HirExpr *expr)
                 break;
             }
             return;
+        case kHirCallExpr: {
+            struct HirCallExpr const *e = HirGetCallExpr(expr);
+            IrType *type = GET_NODE_TYPE(T->C, e->target);
+            if (IrIsSignature(type)) {
+                struct HirDecl *item = pawHir_get_decl(T->hir, IR_TYPE_DID(type));
+                if (!HirIsFnDecl(item)) return;
+            }
+            name = "function call";
+            break;
+        }
+        case kHirPathExpr: {
+            struct HirPathExpr const *e = HirGetPathExpr(expr);
+            switch (e->path.kind) {
+                case HIR_PATH_LOCAL:
+                    return; // TODO
+                case HIR_PATH_UPVALUE: {
+                    struct HirSegment const segment = HirSegments_first(e->path.segments);
+                    TYPECK_ERROR(T, CannotConstantEvaluate,
+                            .what = segment.ident.name,
+                            .span = expr->hdr.span);
+                }
+                case HIR_PATH_ITEM: {
+                    struct HirSegment const segment = HirSegments_first(e->path.segments);
+                    struct HirDecl *item = pawHir_get_node(T->hir, segment.target.id);
+
+                    if (HirIsAdtDecl(item)) {
+                        return;
+                    } else if (HirIsParamDecl(item)) {
+                        TYPECK_ERROR(T, CannotConstantEvaluate,
+                                .what = segment.ident.name,
+                                .span = expr->hdr.span);
+                    } else if (HirIsVariantDecl(item)) {
+                        return;
+                    } else if (HirIsConstDecl(item)) {
+                        return;
+                    } else {
+                        name = "non-constant item";
+                        break;
+                    }
+                }
+                case HIR_PATH_ASSOC: {
+                    break;
+                }
+            }
+            return;
+        }
         default:
             return;
     }
 
-    struct TypeChecker *T = V->ud;
     TYPECK_ERROR(T, CannotConstantEvaluate,
             .what = STRING_LIT(T, name),
             .span = expr->hdr.span);
@@ -1791,13 +1821,6 @@ static void check_const(struct TypeChecker *T, struct HirExpr *expr, IrType *typ
     pawHir_visitor_init(&V, T->hir, T);
     V.PostVisitExpr = const_check_expr;
     pawHir_visit_expr(&V, expr);
-
-    if (!is_scalar((IrIsInfer(type) && IrGetInfer(type)->ikind == IR_INFER_INTEGER) ? kIrInt :
-                (IrIsInfer(type) && IrGetInfer(type)->ikind == IR_INFER_FLOAT) ? kIrFloat : IR_KINDOF(type))
-            && !IrIsString(type))
-        TYPECK_ERROR(T, NonprimitiveConstant,
-                .type = pawIr_print_type_v2(T->C, type),
-                .span = NODE_SPAN(expr));
 }
 
 static void check_const_item(struct TypeChecker *T, struct HirConstDecl *d)

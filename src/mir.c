@@ -215,6 +215,19 @@ struct MirInstruction *pawMir_new_array_gep(struct Mir *mir, struct SourceSpan s
     return instr;
 }
 
+struct MirInstruction *pawMir_new_get_constant(struct Mir *mir, struct SourceSpan span, MirConstant k, struct MirPlace output)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->GetConstant_ = (struct MirGetConstant){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirGetConstant,
+        .span = span,
+        .k = k,
+        .output = output,
+    };
+    return instr;
+}
+
 struct MirInstruction *pawMir_new_get_discriminant(struct Mir *mir, struct SourceSpan span, struct MirPlace object, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
@@ -600,6 +613,11 @@ static void AcceptArrayGEP(struct MirVisitor *V, struct MirArrayGEP *t)
     pawMir_visit_place(V, t->output);
     pawMir_visit_place(V, t->array);
     pawMir_visit_place(V, t->index);
+}
+
+static void AcceptGetConstant(struct MirVisitor *V, struct MirGetConstant *t)
+{
+    pawMir_visit_place(V, t->output);
 }
 
 static void AcceptGetDiscriminant(struct MirVisitor *V, struct MirGetDiscriminant *t)
@@ -1133,6 +1151,9 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
             break;
         case kMirArrayGEP:
             ADD_OUTPUT(MirGetArrayGEP(instr)->output);
+            break;
+        case kMirGetConstant:
+            ADD_OUTPUT(MirGetGetConstant(instr)->output);
             break;
         case kMirGetDiscriminant:
             ADD_OUTPUT(MirGetGetDiscriminant(instr)->output);
@@ -1730,6 +1751,12 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_LITERAL(P, "[");
             print_place(P, t->index);
             PRINT_LITERAL(P, "]");
+            break;
+        }
+        case kMirGetConstant: {
+            struct MirGetConstant *t = MirGetGetConstant(instr);
+            print_place(P, t->output);
+            PRINT_FORMAT(P, " = getk %d", t->k.value);
             break;
         }
         case kMirGetDiscriminant: {

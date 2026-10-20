@@ -167,7 +167,7 @@ static IrTypeList *instantiate_variant_fields(struct Compiler *C, struct IrVaria
     return pawIr_fold_type_list(&F, fields);
 }
 
-IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst)
+IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt const *inst)
 {
     struct IrAdt *base = IrGetAdt(pawIr_get_def_type(C, inst->did));
     struct IrAdtDef *def = pawIr_get_adt_def(C, inst->did);
@@ -176,7 +176,7 @@ IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *ins
     return instantiate_variant_fields(C, variant, base->args, inst->args);
 }
 
-IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index)
+IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt const *inst, int index)
 {
     paw_assert(index >= 0); // expects valid discriminant number
     struct IrAdt *base = IrGetAdt(pawIr_get_def_type(C, inst->did));

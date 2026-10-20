@@ -325,8 +325,8 @@ struct IrType *pawP_instantiate(struct Compiler *C, struct IrType *base, struct 
 struct IrType *pawP_instantiate_method(struct Compiler *C, struct IrType *self, struct IrTypeList *types, struct IrType *method);
 struct IrGenericArgs *pawP_instantiate_typelist(struct Compiler *C, struct IrGenericArgs *before, struct IrGenericArgs *after, struct IrGenericArgs *target);
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);
-EXTERN_C struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
-EXTERN_C struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
+EXTERN_C struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt const *inst);
+EXTERN_C struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt const *inst, int index);
 
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
                                    struct IrGenericArgs *params, struct IrGenericArgs *args);

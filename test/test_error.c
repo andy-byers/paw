@@ -4,13 +4,9 @@
 //
 // TODO: there are quite a few commented-out things that need to be updated to reflect changes in syntax/semantics...
 
-#include "auxlib.h"
-#include "call.h"
-#include "compile.h"
 #include "env.h"
 #include "error.h"
 #include "lib.h"
-#include "os.h"
 #include "test.h"
 #include <limits.h>
 #include <inttypes.h>
@@ -342,12 +338,12 @@ static void test_closure_error(void)
 
 static void test_arithmetic_error(void)
 {
+    test_compiler_status(kErrConstantDivideByZero, "constant_division_by_0_int", "const X: int64 = 1 / 0;", "");
+    test_compiler_status(kErrConstantDivideByZero, "constant_division_by_0_float", "const X: float64 = 1.0 / 0.0;", "");
+    test_compiler_status(kErrConstantOverflow, "constant_negative_left_shift", "const X: int64 = 1 << -2;", "");
+    test_compiler_status(kErrConstantOverflow, "constant_negative_right_shift", "const X: int64 = 1 >> -2;", "");
+
     // TODO: should these be caught outside constant folding? constant folding (should be optional technically) is disabled right now
-//    test_compiler_status(kErrConstantDivideByZero, "constant_division_by_0_int", "const X: int64 = 1 / 0;", "");
-//    test_compiler_status(kErrConstantDivideByZero, "constant_division_by_0_float", "const X: float64 = 1.0 / 0.0;", "");
-//    test_compiler_status(kErrConstantOverflow, "constant_negative_left_shift", "const X: int64 = 1 << -2;", "");
-//    test_compiler_status(kErrConstantOverflow, "constant_negative_right_shift", "const X: int64 = 1 >> -2;", "");
-//
 //    test_compiler_status(kErrConstantDivideByZero, "special_division_by_0_int", "fn f(x: int64) -> int64 {x / 0}", "f(1);");
 //    test_compiler_status(kErrConstantDivideByZero, "special_division_by_0_float", "fn f(x: float64) -> float64 {x / 0.0}", "f(1.0);");
 //    test_compiler_status(kErrConstantOverflow, "special_negative_left_shift", "fn f(x: int64) -> int64 {x << -2}", "f(1);");
@@ -408,33 +404,6 @@ static void test_enum_error(void)
     // boxing the enum adds the necessary indirection to give the object a finite size
     test_compiler_status(PAW_OK, "enum_finite_size", "struct P<T> {v: *T} enum E{X(Option<P<E>>)}", "let x = E::X(Option::None);");
     test_compiler_status(PAW_OK, "enum_finite_size_2", "struct P<T> {v: *T} enum E{X(Option<P<E2>>)} enum E2{X(Option<P<E>>)}", "let x = E::X(Option::None);");
-}
-
-static void test_list_error(void)
-{
-    test_compiler_status(kErrCyclicType, "list_cyclic_type", "", "let x = []; x = [x];");
-    test_compiler_status(kErrCyclicType, "list_nested_cyclic_type", "", "let x = []; x = [[x]];");
-    test_compiler_status(kErrCannotInfer, "list_cannot_infer", "", "let a = [];");
-    test_compiler_status(kErrCannotInfer, "list_cannot_infer_binop", "", "let a = [] ++ [];");
-    test_compiler_status(kErrCannotInfer, "list_use_before_inference", "", "let a = []; let b = #a;");
-    test_compiler_status(kErrIncompatibleTypes, "list_incompatible_types", "", "let a = [1]; a = [2.0];");
-    test_compiler_status(kErrIncompatibleTypes, "list_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");
-    test_compiler_status(kErrIncompatibleTypes, "list_mixed_types", "", "let a = [1, 2, 3, 4, '5'];");
-    test_compiler_status(kErrIncompatibleTypes, "list_mixed_nesting", "", "let a = [[[1]], [[2]], [3]];");
-}
-
-static void test_map_error(void)
-{
-    test_compiler_status(kErrCyclicType, "map_cyclic_type", "", "let x = [:]; x = [\"cyclic\": x];");
-    test_compiler_status(kErrCyclicType, "map_nested_cyclic_type", "", "let x = [:]; x = [\"cyclic\": [\"nested\": x]];");
-    test_compiler_status(kErrCannotInfer, "map_cannot_infer", "", "let a = [:];");
-    test_compiler_status(kErrCannotInfer, "map_use_before_inference", "", "let a = [:]; let b = #a;");
-    test_compiler_status(kErrIncompatibleTypes, "map_incompatible_types", "", "let a = [1: 2]; a = [3: 4.0];");
-    test_compiler_status(kErrIncompatibleTypes, "map_incompatible_types_2", "", "let a = [:]; if true {a = [0: 0];} else {a = [1: true];}");
-    test_compiler_status(kErrIncompatibleTypes, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6'];");
-    test_compiler_status(kErrIncompatibleTypes, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
-    test_compiler_status(kErrFalseObligation, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
-    test_compiler_status(kErrFalseObligation, "map_unhashable_type_key", "", "let map: [[int64]: int64] = [:];");
 }
 
 static void test_import_error(void)
@@ -650,8 +619,8 @@ static void test_underscore(void)
 
 static void test_global_const(void)
 {
-    test_compiler_status(kErrNonprimitiveConstant, "const_struct", "struct X; const C: X = X;", "");
-    test_compiler_status(kErrNonprimitiveConstant, "const_enum", "enum X {E} const C: X = X::E;", "");
+    test_compiler_status(kErrNone, "const_struct", "struct X; const C: X = X;", "");
+    test_compiler_status(kErrNone, "const_enum", "enum X {E} const C: X = X::E;", "");
     test_compiler_status(kErrCannotConstantEvaluate, "const_call", "fn f() {} const C: () = f();", "");
     test_compiler_status(kErrNonprimitiveConstant, "const_function", "fn f() {} const C: fn() = f;", "");
 
@@ -968,6 +937,7 @@ static void test_definite_assignment(void)
 
 int main(void)
 {
+    test_arithmetic_error();
     test_syntax_error();
     test_underscore();
     test_annotations();
@@ -982,8 +952,6 @@ int main(void)
     test_struct_error();
     test_impl_error();
     test_deref_pat();
-//    test_list_error();
-//    test_map_error();
     test_import_error();
     test_uninit_local();
     test_global_const();

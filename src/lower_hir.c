@@ -327,45 +327,88 @@ static IrType *new_ptr(struct FunctionState *fs, IrType *type)
     return pawIr_new_ptr(fs->C, type);
 }
 
-static struct MirPlace new_const_value(struct FunctionState *fs, struct SourceSpan span, union IrValue value, IrType *type)
+static MirConstant new_discriminant(struct FunctionState *fs, paw_Uint64 value)
 {
-    MirConstant const k = pawMir_kcache_add_value(fs->mir, fs->mir->kcache, value, type);
-
-    return (struct MirPlace){
-        .kind = MIR_PLACE_CONSTANT,
-        .span = span,
-        .k = k,
-    };
+    return pawMir_kcache_add_value(fs->mir, fs->mir->kcache, (IrValue){.u64 = value}, pawIr_new_int(fs->C, IR_INT64));
 }
 
-static struct MirPlace new_const_unit(struct FunctionState *fs, struct SourceSpan span)
+static struct MirPlace discharge_const(struct FunctionState *fs, struct SourceSpan span, MirConstant k)
 {
-    return new_const_value(fs, span, (union IrValue){0}, pawIr_new_unit(fs->C));
+    IrType *type = mir_const_data(fs->mir, k)->type;
+    struct MirPlace const output = new_register(fs, type);
+    NEW_INSTR(fs, get_constant, span, k, output);
+    return output;
 }
 
-static struct MirPlace new_const_bool(struct FunctionState *fs, struct SourceSpan span, paw_Bool b)
+static MirConstant new_const_value(struct FunctionState *fs, union IrValue value, IrType *type)
 {
-    return new_const_value(fs, span, (union IrValue){.b = b}, pawIr_new_bool(fs->C));
+    return pawMir_kcache_add_value(fs->mir, fs->mir->kcache, value, type);
 }
 
-static struct MirPlace new_const_char(struct FunctionState *fs, struct SourceSpan span, paw_Char c)
+static MirConstant new_const_unit(struct FunctionState *fs)
 {
-    return new_const_value(fs, span, (union IrValue){.c = c}, pawIr_new_char(fs->C));
+    return new_const_value(fs, (union IrValue){0}, pawIr_new_unit(fs->C));
 }
 
-static struct MirPlace new_const_int(struct FunctionState *fs, struct SourceSpan span, paw_Int i, enum IrIntKind kind)
+static MirConstant new_const_bool(struct FunctionState *fs, paw_Bool b)
 {
-    return new_const_value(fs, span, (union IrValue){.i = i}, pawIr_new_int(fs->C, kind));
+    return new_const_value(fs, (union IrValue){.b = b}, pawIr_new_bool(fs->C));
 }
 
-static struct MirPlace new_const_float(struct FunctionState *fs, struct SourceSpan span, paw_Float f, enum IrFloatKind kind)
+static MirConstant new_const_char(struct FunctionState *fs, paw_Char c)
 {
-    return new_const_value(fs, span, (union IrValue){.f = f}, pawIr_new_float(fs->C, kind));
+    return new_const_value(fs, (union IrValue){.c = c}, pawIr_new_char(fs->C));
 }
 
-static struct MirPlace new_const_str(struct FunctionState *fs, struct SourceSpan span, Str const *s)
+static MirConstant new_const_int(struct FunctionState *fs, paw_Int i, enum IrIntKind kind)
 {
-    return new_const_value(fs, span, (union IrValue){.s = s}, pawIr_new_string(fs->C));
+    return new_const_value(fs, (union IrValue){.i = i}, pawIr_new_int(fs->C, kind));
+}
+
+static MirConstant new_const_float(struct FunctionState *fs, paw_Float f, enum IrFloatKind kind)
+{
+    return new_const_value(fs, (union IrValue){.f = f}, pawIr_new_float(fs->C, kind));
+}
+
+static MirConstant new_const_str(struct FunctionState *fs, Str const *s)
+{
+    return new_const_value(fs, (union IrValue){.s = s}, pawIr_new_string(fs->C));
+}
+
+static struct MirPlace discharge_value(struct FunctionState *fs, struct SourceSpan span, IrValue value, IrType *type)
+{
+    return discharge_const(fs, span,
+            new_const_value(fs, value, type));
+}
+
+static struct MirPlace discharge_const_bool(struct FunctionState *fs, struct SourceSpan span, paw_Bool b)
+{
+    return discharge_const(fs, span,
+            new_const_value(fs, (union IrValue){.b = b}, pawIr_new_bool(fs->C)));
+}
+
+static struct MirPlace discharge_const_char(struct FunctionState *fs, struct SourceSpan span, paw_Char c)
+{
+    return discharge_const(fs, span,
+            new_const_value(fs, (union IrValue){.c = c}, pawIr_new_char(fs->C)));
+}
+
+static struct MirPlace discharge_const_int(struct FunctionState *fs, struct SourceSpan span, paw_Int i, enum IrIntKind kind)
+{
+    return discharge_const(fs, span,
+            new_const_value(fs, (union IrValue){.i = i}, pawIr_new_int(fs->C, kind)));
+}
+
+static struct MirPlace discharge_const_float(struct FunctionState *fs, struct SourceSpan span, paw_Float f, enum IrFloatKind kind)
+{
+    return discharge_const(fs, span,
+            new_const_value(fs, (union IrValue){.f = f}, pawIr_new_float(fs->C, kind)));
+}
+
+static struct MirPlace discharge_const_str(struct FunctionState *fs, struct SourceSpan span, Str const *s)
+{
+    return discharge_const(fs, span,
+            new_const_value(fs, (union IrValue){.s = s}, pawIr_new_string(fs->C)));
 }
 
 static struct MirPlace new_named_register(struct FunctionState *fs, Str const *name, IrType *type, struct SourceSpan span)
@@ -403,7 +446,7 @@ static struct MirPlace new_register(struct FunctionState *fs, IrType *type)
     };
 }
 
-static struct MirPlace new_register_literal(struct FunctionState *fs, enum BuiltinKind kind)
+static struct MirPlace discharge_const_register(struct FunctionState *fs, enum BuiltinKind kind)
 {
     return new_register(fs, get_builtin_type(fs->L, kind));
 }
@@ -615,7 +658,7 @@ static struct MirPlace alloc_anon_local(struct FunctionState *fs, struct SourceS
 
 static struct MirPlace unit_literal(struct FunctionState *fs, struct SourceSpan span)
 {
-    return new_const_unit(fs, span);
+    return discharge_const(fs, span, new_const_unit(fs));
 }
 
 static struct MirPlace never_place(struct FunctionState *fs, struct SourceSpan span)
@@ -881,19 +924,19 @@ static struct MirPlace lower_literal_expr(struct HirVisitor *V, struct HirLitera
 
     switch (e->lit_kind) {
         case HIR_LIT_BOOL:
-            return new_const_bool(fs, e->span, e->b);
+            return discharge_const_bool(fs, e->span, e->b);
         case HIR_LIT_CHAR:
-            return new_const_char(fs, e->span, e->c);
+            return discharge_const_char(fs, e->span, e->c);
         case HIR_LIT_INT: {
             IrType *i = pawIr_get_type(L->C, e->id);
-            return new_const_int(fs, e->span, e->i.value, IR_INT_KIND(i));
+            return discharge_const_int(fs, e->span, e->i.value, IR_INT_KIND(i));
         }
         case HIR_LIT_FLOAT: {
             IrType *f = pawIr_get_type(L->C, e->id);
-            return new_const_float(fs, e->span, e->f.value, IR_FLOAT_KIND(f));
+            return discharge_const_float(fs, e->span, e->f.value, IR_FLOAT_KIND(f));
         }
         case HIR_LIT_STR:
-            return new_const_str(fs, e->span, e->s);
+            return discharge_const_str(fs, e->span, e->s);
         case HIR_LIT_TUPLE:
             return lower_tuple_lit(V, e);
         case HIR_LIT_COMPOSITE:
@@ -969,7 +1012,7 @@ static struct MirPlace lookup_global_constant(struct LowerHir *L, struct HirCons
     int const *pid = GlobalMap_get(L, L->globals.mapping, d->did);
     if (pid != NULL) {
         struct GlobalInfo const info = GlobalList_get(L->globals.values, *pid);
-        return new_const_value(L->fs, d->span, info.value->value.value, info.type);
+        return discharge_value(L->fs, d->span, info.value->value.value, info.type);
     }
     lower_global_constant(L, d);
     return lookup_global_constant(L, d);
@@ -1029,7 +1072,6 @@ static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr 
             };
         }
         case HIR_PATH_UPVALUE: {
-            struct MirUpvalueInfo const up = MirUpvalueList_get(fs->upvalues, last.target.index);
             return (struct MirPlace){
                 .kind = MIR_PLACE_UPVALUE,
                 .up = last.target.index,
@@ -1154,7 +1196,7 @@ static struct MirPlace lower_try_expr(struct HirVisitor *V, struct HirTryExpr *e
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, input_bb, 1);
     terminate_switch(fs, expr_span, discr, arms, PAW_TRUE);
     struct MirSwitchArm *arm = &K_LIST_FIRST(arms);
-    arm->k = new_const_int(fs, TODO, EXISTS, IR_INT64).k;
+    arm->k = new_discriminant(fs, EXISTS);
 
     set_current_bb(fs, get_last_successor(fs));
     struct MirPlace const value = emit_get_field(fs, expr_span,
@@ -1273,7 +1315,7 @@ static struct MirPlace lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr 
         IrValue koutput;
         switch (pawMir_fold_unary_op(op, ktype, kvalue, &koutput)) {
             case MIR_FOLD_FOLDED:
-                return new_const_value(fs, e->span, koutput, ktype);
+                return discharge_value(fs, e->span, koutput, ktype);
             default:
                 LOWERING_ERROR(L, ConstantOverflow, e->span);
         }
@@ -1332,7 +1374,7 @@ static void lower_relational_method(struct FunctionState *fs, struct MirPlace ou
     // `Ordering` enum, into the boolean output of the desired comparison operation (less than,
     // greater than or equal, etc.)
     struct MirPlace const discr = emit_get_discr(fs, span, ordering);
-    struct MirPlace const expected = new_const_int(fs, span, x ? a : b, IR_UINT64);
+    struct MirPlace const expected = discharge_const_int(fs, span, x ? a : b, IR_UINT64);
     NEW_INSTR(fs, binary_op, span, MIR_BINARY_EQ, discr, expected, output);
     if (!x) NEW_INSTR(fs, unary_op, span, MIR_UNARY_NOT, output, output);
 }
@@ -1942,7 +1984,7 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, struct 
         set_current_bb(fs, *psucc++);
         enum BuiltinKind const kind = cons_kind(pmc->cons.kind);
         union IrValue const temp = {.p = pmc->cons.value.p}; // TODO
-        parm->k = new_const_value(fs, TODO, temp, pawP_builtin_type(fs->C, kind)).k;
+        parm->k = new_const_value(fs, temp, pawP_builtin_type(fs->C, kind));
 
         visit_decision(V, pmc->dec, result);
         set_goto_edge(fs, span, join_bb);
@@ -1980,7 +2022,7 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, struct
     struct MatchCase const *pmc;
     MirBlock const *psucc = get_successors(fs);
     K_LIST_ZIP (cases, pmc, arms, parm) {
-        parm->k = new_const_int(fs, TODO, pmc->cons.variant.index, IR_INT64).k;
+        parm->k = new_discriminant(fs, (paw_Uint64)pmc->cons.variant.index);
         set_current_bb(fs, *psucc++);
 
         struct BlockState bs;
@@ -2327,11 +2369,13 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
         register_global_constant(L, d, (union IrValue){.f64 = NAN},
                 pawIr_new_float(L->C, IR_FLOAT64));
         return;
-    } else if (P_ID_EQUALS(NULL, d->did, L->C->std_math_INFINITY)) {
+    }
+    if (P_ID_EQUALS(NULL, d->did, L->C->std_math_INFINITY)) {
         register_global_constant(L, d, (union IrValue){.f64 = INFINITY},
                 pawIr_new_float(L->C, IR_FLOAT64));
         return;
-    } else if (d->init == NULL)
+    }
+    if (d->init == NULL)
         LOWERING_ERROR(L, UninitializedConstant,
                 .name = d->ident.name,
                 .span = d->span);

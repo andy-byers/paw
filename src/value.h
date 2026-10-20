@@ -51,7 +51,6 @@ typedef enum ValueKind {
     NVTYPES
 } ValueKind;
 
-
 #define OBJECT_HEADER ValueKind objkind : 8
 typedef struct Object {
     OBJECT_HEADER;
@@ -73,6 +72,7 @@ typedef union IrValue {
     paw_Float32 f32;
     paw_Float64 f64;
     struct Str const *s;
+    struct Tuple *t;
     Object *o;
     void *p;
 
@@ -88,6 +88,12 @@ typedef union IrValue {
 #define I2V(Int_) (IrValue){ .i64 = (paw_Int64)(Int_) }
 #define F2V(Float_) (IrValue){ .f64 = (paw_Float64)(Float_) }
 
+
+struct Tuple {
+    paw_Uint64 discr;
+    size_t num_fields;
+    union IrValue fields[];
+};
 
 typedef struct Str {
     OBJECT_HEADER;

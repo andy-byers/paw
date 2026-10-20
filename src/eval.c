@@ -34,24 +34,49 @@ struct EvalStep {
 #define ES_PANIC(Message_) (struct EvalStep){.kind = ESK_PANIC, .message = Message_}
 #define ES_GOTO(Target_) (struct EvalStep){.kind = ESK_GOTO, .target = Target_}
 
+static IrValue new_tuple(struct Pool *pool, size_t num_elements)
+{
+    struct Tuple *t = pawK_pool_alloc(pool, NULL, 0, sizeof(struct Tuple) + num_elements * sizeof(IrValue));
+    t->num_fields = num_elements;
+    t->discr = 0;
+    return (IrValue){.t = t};
+}
+
+static int new_tuple_checked(struct Pool *pool, size_t num_elements, IrValue *out)
+{
+    if (num_elements > (SIZE_MAX - sizeof(struct Tuple)) / sizeof(IrValue))
+        return -1;
+    *out = new_tuple(pool, num_elements);
+    return 0;
+}
+
 static IrValue get_rvalue(struct EvalCtx *E, struct MirPlace place)
 {
-    if (place.kind == MIR_PLACE_REGISTER) {
-        return ValueTable_get(E->values, place.r.value);
-    } else {
-        paw_assert(place.kind == MIR_PLACE_CONSTANT);
-        IrConst *k = mir_const_data(E->mir, place.k)->data;
-        paw_assert(k->kind == IR_CONST_VALUE);
-        return k->value.value;
-    }
+    paw_assert(place.kind == MIR_PLACE_REGISTER);
+    return ValueTable_get(E->values, place.r.value);
+
+//    if (place.kind == MIR_PLACE_REGISTER) {
+//        return ValueTable_get(E->values, place.r.value);
+//    } else {
+//        paw_assert(place.kind == MIR_PLACE_CONSTANT);
+//        IrConst *k = mir_const_data(E->mir, place.k)->data;
+//        paw_assert(k->kind == IR_CONST_VALUE);
+//        return k->value.value;
+//    }
 }
 
 static IrValue *get_lvalue(struct EvalCtx *E, struct MirPlace place)
 {
-
     paw_assert(place.kind == MIR_PLACE_REGISTER);
     paw_assert(0 <= place.r.value && place.r.value < E->values->count);
     return &K_LIST_AT(E->values, place.r.value);
+}
+
+static IrValue get_const_value(struct EvalCtx *E, MirConstant k)
+{
+    struct MirConstantData const *kdata = mir_const_data(E->mir, k);
+    paw_assert(kdata->data->kind == IR_CONST_VALUE);
+    return kdata->data->value.value;
 }
 
 static struct EvalStep evaluate_basic_block(struct EvalCtx *E, struct MirBlockData bb)
@@ -84,14 +109,6 @@ static struct EvalStep evaluate_basic_block(struct EvalCtx *E, struct MirBlockDa
 //                struct MirGlobal const *x = MirGetGlobal(*pinstr);
 //                break;
 //            }
-//            case kMirAggregate: {
-//                struct MirAggregate const *x = MirGetAggregate(*pinstr);
-//                break;
-//            }
-//            case kMirArray: {
-//                struct MirArray const *x = MirGetArray(*pinstr);
-//                break;
-//            }
 //            case kMirArrayGep: {
 //                struct MirArrayGep const *x = MirGetArrayGep(*pinstr);
 //                break;
@@ -118,6 +135,21 @@ static struct EvalStep evaluate_basic_block(struct EvalCtx *E, struct MirBlockDa
                         mir_place_type(E->mir, x->target),
                         mir_place_type(E->mir, x->output),
                         LVALUE(x->output));
+                break;
+            }
+            case kMirGetConstant: {
+                struct MirGetConstant const *x = MirGetGetConstant(*pinstr);
+                IrType const *type = mir_place_type(E->mir, x->output);
+                if (IrIsArray(type) || IrIsTuple(type) || IrIsAdt(type)) {
+                    IrValue const value = get_const_value(E, x->k);
+                    IrValue const result = new_tuple(E->pool, value.t->num_fields);
+                    result.t->discr = value.t->discr;
+                    for (size_t i = 0; i < value.t->num_fields; ++i)
+                        result.t->fields[i] = value.t->fields[i];
+                    *LVALUE(x->output) = result;
+                } else {
+                    *LVALUE(x->output) = get_const_value(E, x->k);
+                }
                 break;
             }
             case kMirUnaryOp: {
@@ -153,6 +185,32 @@ static struct EvalStep evaluate_basic_block(struct EvalCtx *E, struct MirBlockDa
                 }
                 break;
             }
+            case kMirGetDiscriminant: {
+                struct MirGetDiscriminant const *x = MirGetGetDiscriminant(*pinstr);
+                LVALUE(x->output)->u64 = RVALUE(x->object).t->discr;
+                break;
+            }
+            case kMirAggregate: {
+                struct MirAggregate const *x = MirGetAggregate(*pinstr);
+                IrValue *output = LVALUE(x->output);
+                if (new_tuple_checked(E->pool, (size_t)x->fields->count, output) != 0)
+                    return ES_PANIC(SCAN_STR(E->C, "too many array elements"));
+                output->t->discr = (paw_Uint64)x->discr;
+                int index = 0;
+                K_LIST_XFOREACH (x->fields, struct MirPlace const, p)
+                    output->t->fields[index++] = RVALUE(*p);
+                break;
+            }
+            case kMirArray: {
+                struct MirArray const *x = MirGetArray(*pinstr);
+                IrValue *output = LVALUE(x->output);
+                if (new_tuple_checked(E->pool, (size_t)x->elems->count, output) != 0)
+                    return ES_PANIC(SCAN_STR(E->C, "too many array elements"));
+                int index = 0;
+                K_LIST_XFOREACH (x->elems, struct MirPlace const, p)
+                    output->t->fields[index++] = RVALUE(*p);
+                break;
+            }
             case kMirReturn: {
                 return ES_RETURN();
             }
@@ -181,14 +239,49 @@ static struct EvalStep evaluate_basic_block(struct EvalCtx *E, struct MirBlockDa
     PAW_UNREACHABLE();
 }
 
-static struct MirEvalResult evaluate(struct EvalCtx *E)
+static void initialize(struct EvalCtx *E)
 {
     struct Mir *mir = E->mir;
-    // set up scratch memory containing IR values
+    E->values = ValueTable_new(E);
     ValueTable_reserve(E, E->values, mir->registers->count);
     K_LIST_XFOREACH (mir->registers, struct MirRegisterData const, p)
         ValueTable_push(E, E->values, (IrValue){0});
+}
 
+static IrValue clone_value_into(struct EvalCtx *E, struct Pool *pool, IrType *type, IrValue value)
+{
+    if (IrIsArray(type)) {
+        IrValue const value2 = new_tuple(pool, value.t->num_fields);
+        IrType *element_type = IrGetArray(type)->type;
+        for (size_t i = 0; i < value.t->num_fields; ++i)
+            value2.t->fields[i] = clone_value_into(E, pool, element_type, value.t->fields[i]);
+        return value2;
+    } else if (IrIsAdt(type)) {
+        IrTypeList *fields = pawP_instantiate_variant_fields(E->C, IrGetAdt(type), value.t->discr);
+        IrValue const value2 = new_tuple(pool, value.t->num_fields);
+        value2.t->discr = value.t->discr;
+        for (size_t i = 0; i < value.t->num_fields; ++i)
+            value2.t->fields[i] = clone_value_into(E, pool, IrTypeList_get(fields, i), value.t->fields[i]);
+        return value2;
+    } else if (IrIsTuple(type)) {
+        struct IrTuple const *t = IrGetTuple(type);
+        IrValue const value2 = new_tuple(pool, value.t->num_fields);
+        for (size_t i = 0; i < value.t->num_fields; ++i)
+            value2.t->fields[i] = clone_value_into(E, pool, IrTypeList_get(t->elems, i), value.t->fields[i]);
+        return value2;
+    }
+    return value;
+}
+
+static IrValue save_return_value(struct EvalCtx *E)
+{
+    IrValue const r = ValueTable_first(E->values);
+    return clone_value_into(E, E->C->pool, E->mir->result_type, r);
+}
+
+static struct MirEvalResult evaluate(struct EvalCtx *E)
+{
+    struct Mir *mir = E->mir;
     MirBlock cursor = MIR_ENTRY_BB;
     for (;;) {
         struct MirBlockData const bb = *mir_bb_data(mir, cursor);
@@ -200,7 +293,7 @@ static struct MirEvalResult evaluate(struct EvalCtx *E)
             case ESK_RETURN:
                 return (struct MirEvalResult){
                     .status = MES_EVALUATED,
-                    .value = ValueTable_first(E->values),
+                    .value = save_return_value(E),
                 };
             case ESK_PANIC:
                 return (struct MirEvalResult){
@@ -228,7 +321,7 @@ struct MirEvalResult pawMir_eval(struct Mir *mir)
     {
         struct Pool *pool = pawP_pool_new(C, C->aux_stats);
         struct EvalCtx E = { .pool = pool, .mir = mir, .C = C };
-        E.values = ValueTable_new(&E);
+        initialize(&E);
         result = evaluate(&E);
         pawP_pool_free(C, pool);
     }

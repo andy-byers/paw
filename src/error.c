@@ -947,7 +947,7 @@ static void FormatCannotConstantEvaluateError(paw_Env *P, struct CannotConstantE
 {
     add_error_header(P, error->modname, error->span, buffer);
     pawL_add_fstring(P, buffer, "%s cannot be constant evaluated",
-            error->what);
+            error->what->text);
 }
 
 static void FormatNonprimitiveConstantError(paw_Env *P, struct NonprimitiveConstantError const *error, Buffer *buffer)

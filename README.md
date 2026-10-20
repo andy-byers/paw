@@ -54,8 +54,9 @@ pub fn main() -> fmt::Result<()> {
 
     // Call the closure for each integer 1 to 100, exclusive.
     for i in 1..100 {
-        io::println(f"fizzbuzz(\{i}) = \{fizzbuzz(i)?}"?)?;
+        io::println(f"fizzbuzz(\{i}) = \{fizzbuzz(i)?}"?);
     }
+    Ok(())
 }
 ```
 
@@ -239,7 +240,7 @@ pub fn main() {
 
 ## Error handling
 Paw uses `Result<T, E>` to express a recoverable error, e.g. "no such file or directory".
-Runtime panics are issued for unrecoverable errors, e.g. "out of memory", an assertion failure, or an out-of-bounds element access.
+Runtime panics are issued for unrecoverable errors, e.g. an assertion failure, or an out-of-bounds element access.
 Panics cannot be caught.
 A panic always stops execution at the location of the panic and exits the process with a nonzero status code.
 A panic can also be caused by calling the `panic` builtin function.

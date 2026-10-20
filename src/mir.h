@@ -22,6 +22,7 @@ struct Mir;
     X(Array) \
     X(ArrayGEP) \
     X(StructGEP) \
+    X(GetConstant) \
     X(GetDiscriminant) \
     X(SetRange) \
     X(GetRange) \
@@ -195,6 +196,12 @@ struct MirArrayGEP {
     struct MirPlace array;
     struct MirPlace index;
     int field;
+};
+
+struct MirGetConstant {
+    MIR_INSTRUCTION_HEADER;
+    MirConstant k;
+    struct MirPlace output;
 };
 
 struct MirGetDiscriminant {
@@ -372,6 +379,8 @@ struct MirInstruction *pawMir_new_struct_gep(struct Mir *mir, struct SourceSpan 
 
 struct MirInstruction *pawMir_new_array_gep(struct Mir *mir, struct SourceSpan span, struct MirPlace output, struct MirPlace array, struct MirPlace index);
 
+struct MirInstruction *pawMir_new_get_constant(struct Mir *mir, struct SourceSpan span, MirConstant k, struct MirPlace output);
+
 struct MirInstruction *pawMir_new_get_discriminant(struct Mir *mir, struct SourceSpan span, struct MirPlace object, struct MirPlace output);
 
 struct MirInstruction *pawMir_new_set_discriminant(struct Mir *mir, struct SourceSpan span, struct MirPlace object, paw_Uint64 value);
@@ -520,25 +529,25 @@ static MirId mir_bb_last(struct MirBlockData const *block)
     return MirInstructionList_last(block->instructions)->hdr.mid;
 }
 
-static struct MirBlockData *mir_bb_data(struct Mir *mir, MirBlock bb)
+static struct MirBlockData *mir_bb_data(struct Mir const *mir, MirBlock bb)
 {
     return MirBlockDataList_get(mir->blocks, bb.value);
 }
 
-static struct MirConstantData *mir_const_data(struct Mir *mir, MirConstant k)
+static struct MirConstantData *mir_const_data(struct Mir const *mir, MirConstant k)
 {
     paw_assert(0 <= k.value && k.value < mir->kcache->data->count);
     return &K_LIST_AT(mir->kcache->data, k.value);
 }
 
-static struct MirRegisterData *mir_reg_data(struct Mir *mir, MirRegister r)
+static struct MirRegisterData *mir_reg_data(struct Mir const *mir, MirRegister r)
 {
     paw_assert(0 <= r.value && r.value < mir->registers->count);
     return &K_LIST_AT(mir->registers, r.value);
 }
 
 // Determine the index of "x" in the predecessor list of "y"
-static int mir_which_pred(struct Mir *mir, MirBlock y, MirBlock x)
+static int mir_which_pred(struct Mir const *mir, MirBlock y, MirBlock x)
 {
     int index;
     MirBlock const *pb;
@@ -551,7 +560,7 @@ static int mir_which_pred(struct Mir *mir, MirBlock y, MirBlock x)
     PAW_UNREACHABLE();
 }
 
-static int mir_which_succ(struct Mir *mir, MirBlock x, MirBlock y)
+static int mir_which_succ(struct Mir const *mir, MirBlock x, MirBlock y)
 {
     int index;
     MirBlock const *pb;

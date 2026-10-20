@@ -249,27 +249,32 @@ static MirPlaceList *copy_places(struct MonoCollector *M, struct MirPlaceList *l
     return result;
 }
 
-static void copy_array(struct MonoCollector *M, struct MirArray *x, struct MirArray *r)
+static void copy_array(struct MonoCollector *M, struct MirArray const *x, struct MirArray *r)
 {
     r->elems = copy_places(M, x->elems);
 }
 
-static void copy_aggregate(struct MonoCollector *M, struct MirAggregate *x, struct MirAggregate *r)
+static void copy_aggregate(struct MonoCollector *M, struct MirAggregate const *x, struct MirAggregate *r)
 {
     r->fields = copy_places(M, x->fields);
 }
 
-static void copy_call(struct MonoCollector *M, struct MirCall *x, struct MirCall *r)
+static void copy_call(struct MonoCollector *M, struct MirCall const *x, struct MirCall *r)
 {
     r->args = copy_places(M, x->args);
 }
 
-static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct MirSwitch *r)
+static void copy_getconstant(struct MonoCollector *M, struct MirGetConstant const *x, struct MirGetConstant *r)
+{
+    r->k = refresh_constant(M, x->k);
+}
+
+static void copy_switch(struct MonoCollector *M, struct MirSwitch const *x, struct MirSwitch *r)
 {
     r->arms = MirSwitchArmList_new(M->mir);
-    MirSwitchArmList_reserve(M->mir, r->arms, t->arms->count);
+    MirSwitchArmList_reserve(M->mir, r->arms, x->arms->count);
 
-    K_LIST_XFOREACH (t->arms, struct MirSwitchArm const, parm)
+    K_LIST_XFOREACH (x->arms, struct MirSwitchArm const, parm)
         MirSwitchArmList_push(M->mir, r->arms, (struct MirSwitchArm){
                     .k = refresh_constant(M, parm->k),
                 });
@@ -391,6 +396,9 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
             break;
         case kMirCall:
             copy_call(M, MirGetCall(instr), MirGetCall(r));
+            break;
+        case kMirGetConstant:
+            copy_getconstant(M, MirGetGetConstant(instr), MirGetGetConstant(r));
             break;
         case kMirSwitch:
             copy_switch(M, MirGetSwitch(instr), MirGetSwitch(r));

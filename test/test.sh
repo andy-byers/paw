@@ -105,6 +105,7 @@ TESTS=(
     "match_or"
     "match_indirect"
     "constants"
+    "composite_constants"
     "import"
     "alias"
     "misc"

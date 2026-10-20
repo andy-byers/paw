@@ -1831,35 +1831,86 @@ static void print_type(struct Printer *P, IrType *type)
     }
 }
 
+static void print_value(struct Printer *P, IrValue value, IrType *type)
+{
+    if (IrIsUnit(type)) {
+        PRINT_LITERAL(P, "()");
+    } else if (IrIsBool(type)) {
+        if (value.b) {
+            PRINT_LITERAL(P, "true");
+        } else {
+            PRINT_LITERAL(P, "false");
+        }
+    } else if (IrIsChar(type)) {
+        PRINT_CHAR(P, value.c);
+    } else if (IrIsInt(type)) {
+        pawL_add_int(ENV(P), P->buf, value.i);
+    } else if (IrIsFloat(type)) {
+        pawL_add_float(ENV(P), P->buf, value.f);
+    } else if (IrIsString(type)) {
+        L_ADD_STRING(ENV(P), P->buf, value.s);
+    } else if (IrIsArray(type)) {
+        struct IrArray const *ty = IrGetArray(type);
+        struct Tuple const *t = value.t;
+        PRINT_CHAR(P, '[');
+        for (size_t i = 0; i < t->num_fields; ++i) {
+            if (i != 0) PRINT_LITERAL(P, ", ");
+            print_value(P, t->fields[i], ty->type);
+        }
+        PRINT_CHAR(P, ']');
+    } else if (IrIsTuple(type)) {
+        struct IrTuple const *ty = IrGetTuple(type);
+        struct Tuple const *t = value.t;
+        PRINT_CHAR(P, '(');
+        for (size_t i = 0; i < t->num_fields; ++i) {
+            if (i != 0) PRINT_LITERAL(P, ", ");
+            print_value(P, t->fields[i], IrTypeList_get(ty->elems, i));
+        }
+        PRINT_CHAR(P, ')');
+    } else if (IrIsAdt(type)) {
+        struct IrAdt const *ty = IrGetAdt(type);
+        struct Tuple const *t = value.t;
+        struct IrAdtDef const *adt_def = pawIr_get_adt_def(P->C, ty->did);
+        struct IrVariantDef const *variant_def = IrVariantDefs_get(adt_def->variants, t->discr);
+        IrTypeList *fields = pawP_instantiate_variant_fields(P->C, ty, t->discr);
+        if (adt_def->is_struct) {
+            PRINT_STRING(P, adt_def->name);
+            PRINT_CHAR(P, '{');
+            for (size_t i = 0; i < t->num_fields; ++i) {
+                if (i != 0) PRINT_LITERAL(P, ", ");
+                struct IrFieldDef const *field_def = IrFieldDefs_get(variant_def->fields, i);
+                PRINT_STRING(P, field_def->name);
+                PRINT_LITERAL(P, ": ");
+                print_value(P, t->fields[i], IrTypeList_get(fields, i));
+            }
+            PRINT_CHAR(P, '}');
+        } else {
+            PRINT_STRING(P, adt_def->name);
+            PRINT_LITERAL(P, "::");
+            PRINT_STRING(P, variant_def->name);
+            PRINT_CHAR(P, '{');
+            for (size_t i = 0; i < t->num_fields; ++i) {
+                if (i != 0) PRINT_LITERAL(P, ", ");
+                print_value(P, t->fields[i], IrTypeList_get(fields, i));
+            }
+            PRINT_CHAR(P, '}');
+        }
+    } else {
+        paw_assert(IrIsInfer(type));
+        if (IrGetInfer(type)->ikind == IR_INFER_INTEGER) {
+            pawL_add_int(ENV(P), P->buf, value.i);
+        } else {
+            paw_assert(IrGetInfer(type)->ikind == IR_INFER_FLOAT);
+            pawL_add_float(ENV(P), P->buf, value.f);
+        }
+    }
+}
+
 static void print_const(struct Printer *P, IrConst *konst)
 {
     switch (konst->kind) {
         case IR_CONST_VALUE:
-            if (IrIsUnit(konst->value.type)) {
-                PRINT_LITERAL(P, "()");
-            } else if (IrIsBool(konst->value.type)) {
-                if (konst->value.value.b) {
-                    PRINT_LITERAL(P, "true");
-                } else {
-                    PRINT_LITERAL(P, "false");
-                }
-            } else if (IrIsChar(konst->value.type)) {
-                PRINT_CHAR(P, konst->value.value.c);
-            } else if (IrIsInt(konst->value.type)) {
-                pawL_add_int(ENV(P), P->buf, konst->value.value.i);
-            } else if (IrIsFloat(konst->value.type)) {
-                pawL_add_float(ENV(P), P->buf, konst->value.value.f);
-            } else if (IrIsString(konst->value.type)) {
-                L_ADD_STRING(ENV(P), P->buf, konst->value.value.s);
-            } else {
-                paw_assert(IrIsInfer(konst->value.type));
-                if (IrGetInfer(konst->value.type)->ikind == IR_INFER_INTEGER) {
-                    pawL_add_int(ENV(P), P->buf, konst->value.value.i);
-                } else {
-                    paw_assert(IrGetInfer(konst->value.type)->ikind == IR_INFER_FLOAT);
-                    pawL_add_float(ENV(P), P->buf, konst->value.value.f);
-                }
-            }
+            print_value(P, konst->value.value, konst->value.type);
             break;
         case IR_CONST_PENDING:
             PRINT_LITERAL(P, "<unevaluated>");
