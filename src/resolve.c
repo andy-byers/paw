@@ -23,6 +23,7 @@ struct Symbol {
     enum Namespace ns;
     enum SymbolKind kind;
     struct AstIdent ident;
+    NodeId const_ctx;
     NodeId id;
 };
 
@@ -66,6 +67,7 @@ enum ScopeKind {
     SCOPE_TYPE,
     SCOPE_TRAIT,
     SCOPE_IMPL,
+    SCOPE_CONST,
 };
 
 struct Scope {
@@ -77,6 +79,10 @@ struct Scope {
 DEFINE_LIST(struct Resolver, Symbols, struct Symbol,)
 DEFINE_LIST(struct Resolver, Symtab, struct Scope,)
 
+static paw_Bool inside_const_ctx(struct Resolver *R)
+{
+    return NODE_ID_EXISTS(pawR_enclosing_const_ctx(R));
+}
 
 static NodeId next_id(struct Resolver *R)
 {
@@ -324,24 +330,6 @@ static struct Scope get_scope(struct Resolver *R, int scope_id)
 
 #define NOT_FOUND (-1)
 
-static int resolve_local(struct Resolver *R, struct FnState *fs, Str const *name, enum Namespace ns, struct LookupResult *out)
-{
-    struct Scope const scope = get_scope(R, fs->scope_id);
-    for (int i = scope.symbols->count - 1; i >= 0; --i) {
-        struct Symbol const symbol = Symbols_get(scope.symbols, i);
-        if (symbol.ns == ns && pawS_eq(name, symbol.ident.name)) {
-            *out = (struct LookupResult){
-                .kind = RESULT_LOCAL,
-                .ident = symbol.ident,
-                .id = symbol.id,
-                .var.index = i,
-            };
-            return i;
-        }
-    }
-    return NOT_FOUND;
-}
-
 static int resolve_local_var(struct Resolver *R, struct FnState *fs, Str const *name, struct LookupResult *out)
 {
     struct Scope const scope = get_scope(R, fs->scope_id);
@@ -349,6 +337,19 @@ static int resolve_local_var(struct Resolver *R, struct FnState *fs, Str const *
         struct Symbol const symbol = Symbols_get(scope.symbols, i);
         if (symbol.ns == NAMESPACE_VALUE && symbol.kind == SYMBOL_VAR
                 && pawS_eq(name, symbol.ident.name)) {
+            if (!P_ID_EQUALS(R->C, symbol.const_ctx, pawR_enclosing_const_ctx(R))) {
+                paw_assert(inside_const_ctx(R));
+                if (NODE_ID_EXISTS(symbol.const_ctx)) {
+                    RESOLVER_ERROR(R, CannotConstantEvaluate,
+                            .what = SCAN_STR(R->C, "local variable from enclosing constant context"),
+                            .span = symbol.ident.span);
+                } else {
+                    RESOLVER_ERROR(R, CannotConstantEvaluate,
+                            .what = SCAN_STR(R->C, "local variable from non-constant context"),
+                            .span = symbol.ident.span);
+                }
+            }
+
             *out = (struct LookupResult){
                 .kind = RESULT_LOCAL,
                 .ident = symbol.ident,
@@ -403,19 +404,6 @@ static int resolve_upvalue(struct Resolver *R, struct FnState *fs, Str const *na
         return add_upvalue(R, fs, r, PAW_FALSE);
 
     return NOT_FOUND;
-}
-
-static struct Scope find_outer_scope(struct Resolver *R)
-{
-    struct Scope scope;
-    for (int index = R->symtab->count - 1;; --index) {
-        scope = Symtab_get(R->symtab, index);
-        if (index <= 0
-                || scope.kind == SCOPE_TRAIT
-                || scope.kind == SCOPE_IMPL)
-            break;
-    }
-    return scope;
 }
 
 static void defer_type_lookup(struct AstIdent ident, struct LookupResult *out)
@@ -647,7 +635,8 @@ static paw_Bool resolve_symbol(struct Resolver *R, struct AstPath path, enum Nam
         if (resolve_local_var(R, R->fs, first.ident.name, out) != NOT_FOUND) {
             set_result(R, first.id, out->id, RESOLVED_LOCAL);
             return PAW_TRUE;
-        } else if (resolve_upvalue(R, R->fs, first.ident.name, out) != NOT_FOUND) {
+        }
+        if (resolve_upvalue(R, R->fs, first.ident.name, out) != NOT_FOUND) {
             SegmentTable_insert(R->C, R->segtab, first.id,
                     (struct ResolvedSegment){
                         .kind = RESOLVED_UPVALUE,
@@ -696,6 +685,7 @@ static paw_Bool lookup(struct Resolver *R, struct AstPath path, enum Namespace n
 static int add_local(struct Resolver *R, struct Scope scope, struct AstIdent ident, NodeId id, enum Namespace ns, enum SymbolKind kind)
 {
     struct Symbol const symbol = {
+        .const_ctx = pawR_enclosing_const_ctx(R),
         .ident = ident,
         .kind = kind,
         .ns = ns,
@@ -712,11 +702,12 @@ static void leave_scope(struct Resolver *R)
 
 static void enter_scope(struct Resolver *R, NodeId id, enum ScopeKind kind)
 {
-    Symtab_push(R, R->symtab, (struct Scope){
-                .symbols = Symbols_new(R),
-                .kind = kind,
-                .id = id,
-            });
+    struct Scope const scope = {
+        .symbols = Symbols_new(R),
+        .kind = kind,
+        .id = id,
+    };
+    Symtab_push(R, R->symtab, scope);
 }
 
 static void leave_block(struct Resolver *R)
@@ -779,9 +770,8 @@ static void declare_type_aliases(struct Resolver *R, NodeId parent_id)
     while (ImportNamesIterator_is_valid(&iter)) {
         struct ImportName const *iname = *ImportNamesIterator_valuep(&iter);
         paw_assert(iname->symbols->count == 1);
-        struct ImportSymbol symbol = K_LIST_FIRST(iname->symbols);
-        struct AstIdent TODO = {.name = (Str const *)ImportNamesIterator_key(&iter)};
-        new_local_type(R, TODO, symbol.id, SYMBOL_DECL);
+        struct ImportSymbol const symbol = K_LIST_FIRST(iname->symbols);
+        new_local_type(R, symbol.ident, symbol.id, SYMBOL_DECL);
         ImportNamesIterator_next(&iter);
     }
 
@@ -789,9 +779,8 @@ static void declare_type_aliases(struct Resolver *R, NodeId parent_id)
     while (ImportNamesIterator_is_valid(&iter)) {
         struct ImportName const *iname = *ImportNamesIterator_valuep(&iter);
         paw_assert(iname->symbols->count == 1);
-        struct ImportSymbol symbol = K_LIST_FIRST(iname->symbols);
-        struct AstIdent TODO = {.name = (Str const *)ImportNamesIterator_key(&iter)};
-        new_local_value(R, TODO, symbol.id, SYMBOL_DECL);
+        struct ImportSymbol const symbol = K_LIST_FIRST(iname->symbols);
+        new_local_value(R, symbol.ident, symbol.id, SYMBOL_DECL);
         ImportNamesIterator_next(&iter);
     }
 }
@@ -855,8 +844,23 @@ static paw_Bool resolve_path_expr(struct AstVisitor *V, struct AstPathExpr *e)
 {
     struct Resolver *R = V->ud;
     struct LookupResult const r = lookup_or_error(R, e->path, NAMESPACE_VALUE);
-    if (r.kind == RESULT_DECL)
+    if (r.kind == RESULT_DECL) {
         resolve_type_args(V, e->path);
+        if (inside_const_ctx(R)) {
+            // prevent functions from being referenced inside const contexts
+            // note that if `!NODE_ID_EXISTS(r.id)`, then lookup was deferred until
+            // type checking meaning the path refers to an associated function
+            paw_Bool is_fn = PAW_TRUE;
+            if (NODE_ID_EXISTS(r.id)) {
+                struct AstDecl const *decl = pawAst_get_node(R->ast, r.id);
+                is_fn = AstIsFnDecl(decl);
+            }
+            if (is_fn)
+                RESOLVER_ERROR(R, CannotConstantEvaluate,
+                        .what = pawP_format_string(R->C, "reference to function"),
+                        .span = e->span);
+        }
+    }
     return PAW_FALSE;
 }
 
@@ -1050,6 +1054,7 @@ static paw_Bool resolve_variant_decl(struct AstVisitor *V, struct AstVariantDecl
 static paw_Bool enter_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
 {
     struct Resolver *R = V->ud;
+    pawR_enter_const_ctx(R, d->id);
     if (R->fs == NULL)
         enter_fn(R, d->id, INVALID_DECL_ID);
     maybe_store_core_item(R, current_module(R)->id, d->ident.name, d->did);
@@ -1061,6 +1066,7 @@ static void leave_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
     struct Resolver *R = V->ud;
     if (!DECL_ID_EXISTS(R->fs->did))
         leave_fn(R);
+    pawR_leave_const_ctx(R);
     PAW_UNUSED(d);
 }
 
@@ -1127,12 +1133,14 @@ static paw_Bool enter_block_expr(struct AstVisitor *V, struct AstBlock *e)
 {
     PAW_UNUSED(e);
     enter_block(V->ud);
+    iscope_enter(V->ud, e->id);
     return PAW_TRUE;
 }
 
 static void leave_block_expr(struct AstVisitor *V, struct AstBlock *e)
 {
     PAW_UNUSED(e);
+    iscope_leave(V->ud);
     leave_block(V->ud);
 }
 
@@ -1380,6 +1388,7 @@ void pawP_resolve_names(struct Compiler *C)
         .P = P,
         .C = C,
     };
+    R.const_ctx_stack = NodeList_new(C);
     R.nonlexical_decls = NonLexicalDecls_new(&R),
     R.modstack = AstDeclList_new(R.ast),
     R.modules = ImportModules_new(&R);
@@ -1434,5 +1443,23 @@ void pawP_resolve_names(struct Compiler *C)
     resolve_names(&R);
 
     pawP_pool_free(C, R.pool);
+}
+
+
+NodeId pawR_enclosing_const_ctx(struct Resolver *R)
+{
+    return R->const_ctx_stack->count > 0
+        ? NodeList_last(R->const_ctx_stack)
+        : INVALID_NODE_ID;
+}
+
+void pawR_enter_const_ctx(struct Resolver *R, NodeId const_id)
+{
+    NodeList_push(R->C, R->const_ctx_stack, const_id);
+}
+
+void pawR_leave_const_ctx(struct Resolver *R)
+{
+    NodeList_pop(R->const_ctx_stack);
 }
 

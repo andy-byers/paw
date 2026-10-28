@@ -41,11 +41,11 @@ pub fn test_glob_import() {
 
 use mod_c::*;
 
-//use MATH::sin as SIN;
-//use math as MATH;
-//
-//#[test]
-//pub fn test_import_as() {
-//    MATH::sin(1.09);
-//    SIN(1.09);
-//}
+use MATH::sin as SIN;
+use math as MATH;
+
+#[test]
+pub fn test_import_as() {
+    MATH::sin(1.09);
+    SIN(1.09);
+}

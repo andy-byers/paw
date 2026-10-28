@@ -36,7 +36,13 @@ struct Resolver {
     struct SegmentTable *segtab;
     // TODO: only needed for import resolution. pull this and a few other things into a special context type for import resolution only
     NodeId current_scope;
+
+    struct NodeList *const_ctx_stack;
 };
+
+NodeId pawR_enclosing_const_ctx(struct Resolver *R);
+void pawR_enter_const_ctx(struct Resolver *R, NodeId const_id);
+void pawR_leave_const_ctx(struct Resolver *R);
 
 struct OrState {
     struct OrState const *outer;
@@ -79,6 +85,7 @@ struct ImportName {
 
 enum ImportScopeKind {
     ISCOPE_MODULE,
+    ISCOPE_BLOCK,
     ISCOPE_TYPE,
     ISCOPE_FN,
 };

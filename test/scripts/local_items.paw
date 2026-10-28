@@ -3,11 +3,42 @@
 #[test]
 pub fn local_import_is_hoisted() {
     maaath::cos(maaath::PI);
-    { use math as maaath; }
+    use math as maaath;
 }
 
 #[test]
 pub fn local_constant_is_hoisted() {
     assert(K + 1 == 124);
-    { const K: int64 = 123; }
+    const K: int64 = 123;
+}
+
+#[test]
+pub fn use_inside_const() {
+    const A: int64 = {
+        use math;
+        math::PI as int64
+    };
+    assert(A == 3);
+}
+
+#[test]
+pub fn const_inside_const() {
+    const A: int64 = {
+        const B: int64 = 100;
+        const C: int64 = 20;
+        3 + B + C
+    };
+    assert(A == 123);
+}
+
+#[test]
+pub fn item_is_hoisted_inside_const() {
+    const K: int64 = {
+        let x = X as T + 7;
+        const X: float64 = PI;
+        use math::PI;
+        type T = int64;
+        x + 32
+    };
+    assert(K == 42);
 }

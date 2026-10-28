@@ -1,0 +1,57 @@
+// glob_import.paw
+
+mod m {
+    pub const X: int64 = 1;
+    pub type X = bool;
+    pub enum E {
+        A, B, C,
+    }
+    pub use E::*;
+}
+
+mod m2 {
+    pub const X: int64 = 11;
+    pub type X = int8;
+}
+
+mod m3 {
+    pub const X: int64 = 111;
+    pub type X = int64;
+}
+
+#[test]
+pub fn glob_ambiguity() {
+    // OK if no ambiguous path is ever used
+    use m::*;
+    use m2::*;
+    use m3::*;
+}
+
+#[test]
+pub fn disambiguate_using_explicit_import() {
+    use m::*;
+    use m2::*;
+    use m3::X;
+    const K: X = X;
+    assert(K == 111);
+}
+
+#[test]
+pub fn rename_imports() {
+    use m::X as X1;
+    use m2::X as X2;
+    use m3::X as X3;
+    const K: X3 = X1 + X2 + X3;
+    assert(K == 123);
+}
+
+#[test]
+pub fn enum_variants_at_module_level() {
+    use m;
+    use m::*;
+    let m_e: m::E = m::A;
+    let e: E = m_e;
+    e = B;
+}
+
+
