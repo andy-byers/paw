@@ -149,7 +149,7 @@ static struct AstDecl *get_module_by_name(struct Resolver *R, Str const *name)
     return get_module_by_number(R, *pmodno);
 }
 
-static struct ImportSymbol const *get_explicit_symbol(struct ImportName *iname)
+static struct ImportSymbol const *get_explicit_symbol(struct ImportName const *iname)
 {
     struct ImportSymbol const *psymbol;
     K_LIST_FOREACH (iname->symbols, psymbol) {
@@ -165,7 +165,7 @@ struct ImportSymbol const *pawP_find_import_symbol(struct Resolver *R, struct Im
     struct ImportName *const *piname = ImportNames_get(R, inames, name);
     if (piname == NULL) return NULL;
 
-    struct ImportName *iname = *piname;
+    struct ImportName const *iname = *piname;
     if (iname->symbols->count == 1)
         return &K_LIST_FIRST(iname->symbols);
 
@@ -334,6 +334,11 @@ static void declare_self(struct VisitorContext *X, NodeId id, enum Namespace ns,
 static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 {
     struct VisitorContext *ctx = V->ud;
+    if (NODE_ID_EXISTS(pawR_enclosing_const_ctx(ctx->R)))
+        IMPORTER_ERROR(ctx->R, CannotConstantEvaluate,
+                .what = SCAN_STR(ctx->R->C, "function"),
+                .span = d->span);
+
     add_value(ctx->R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
     ctx->scope = iscope_enter(ctx->R, d->id, ISCOPE_FN, ctx->scope);
     return PAW_TRUE;
@@ -346,9 +351,27 @@ static void leave_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
     ctx->scope = iscope_leave(ctx->R);
 }
 
+static paw_Bool enter_block_expr(struct AstVisitor *V, struct AstBlock *e)
+{
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_enter(ctx->R, e->id, ISCOPE_BLOCK, ctx->scope);
+    return PAW_TRUE;
+}
+
+static void leave_block_expr(struct AstVisitor *V, struct AstBlock *e)
+{
+    PAW_UNUSED(e);
+    struct VisitorContext *ctx = V->ud;
+    ctx->scope = iscope_leave(ctx->R);
+}
+
 static paw_Bool enter_closure_expr(struct AstVisitor *V, struct AstClosureExpr *e)
 {
     struct VisitorContext *ctx = V->ud;
+    if (NODE_ID_EXISTS(pawR_enclosing_const_ctx(ctx->R)))
+        IMPORTER_ERROR(ctx->R, CannotConstantEvaluate,
+                .what = SCAN_STR(ctx->R->C, "closure"),
+                .span = e->span);
     ctx->scope = iscope_enter(ctx->R, e->id, ISCOPE_FN, ctx->scope);
     return PAW_TRUE;
 }
@@ -450,11 +473,19 @@ static paw_Bool visit_type_decl(struct AstVisitor *V, struct AstTypeDecl *d)
     return PAW_TRUE;
 }
 
-static paw_Bool visit_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
+static paw_Bool enter_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
 {
     struct VisitorContext *ctx = V->ud;
     add_value(ctx->R, ctx->scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
+    pawR_enter_const_ctx(ctx->R, d->id);
     return PAW_TRUE;
+}
+
+static void leave_const_decl(struct AstVisitor *V, struct AstConstDecl *d)
+{
+    PAW_UNUSED(d);
+    struct VisitorContext *ctx = V->ud;
+    pawR_leave_const_ctx(ctx->R);
 }
 
 static paw_Bool visit_use_decl(struct AstVisitor *V, struct AstUseDecl *d)
@@ -506,9 +537,12 @@ static struct ImportScope *collect_items(struct Resolver *R, struct AstDecl *mod
     V.PostVisitImplDecl = leave_impl_decl;
     V.VisitModuleDecl = enter_module_decl;
     V.PostVisitModuleDecl = leave_module_decl;
+    V.VisitBlock = enter_block_expr;
+    V.PostVisitBlock = leave_block_expr;
     V.VisitClosureExpr = enter_closure_expr;
     V.PostVisitClosureExpr = leave_closure_expr;
-    V.VisitConstDecl = visit_const_decl;
+    V.VisitConstDecl = enter_const_decl;
+    V.PostVisitConstDecl = leave_const_decl;
     V.VisitUseDecl = visit_use_decl;
 
     pawAst_visit_decl_list(&V, m->items);
@@ -597,27 +631,23 @@ static paw_Bool resolve_import_in(struct Resolver *R, struct ImportScope const *
         }                                                                          \
     }
 
+static paw_Bool glob_inames(struct Resolver *R, struct ImportScope *target, struct ImportNames *inames, enum Namespace ns, paw_Bool is_pub)
+{
+    paw_Bool changed = PAW_FALSE;
+    FOREACH_INAME(inames, _, iname, {
+        K_LIST_XFOREACH (iname->symbols, struct ImportSymbol const, is) {
+            if (is->is_pub)
+                changed |= add_symbol(R, target, is->ident, is->id, ISYMBOL_GLOB, ns, is_pub);
+        }
+    });
+    return changed;
+}
 
 static paw_Bool glob_module(struct Resolver *R, struct ImportScope *target, struct ImportScope *mod, paw_Bool is_pub)
 {
     paw_Bool changed = PAW_FALSE;
-
-    FOREACH_INAME(mod->types, _, iname, {
-        struct ImportSymbol const *psymbol;
-        K_LIST_FOREACH (iname->symbols, psymbol) {
-            if (psymbol->is_pub)
-                changed |= add_type(R, target, psymbol->ident, psymbol->id, ISYMBOL_GLOB, is_pub);
-        }
-    });
-
-    FOREACH_INAME(mod->values, _, iname, {
-        struct ImportSymbol const *psymbol;
-        K_LIST_FOREACH (iname->symbols, psymbol) {
-            if (psymbol->is_pub)
-                changed |= add_value(R, target, psymbol->ident, psymbol->id, ISYMBOL_GLOB, is_pub);
-        }
-    });
-
+    changed |= glob_inames(R, target, mod->types, NAMESPACE_TYPE, is_pub);
+    changed |= glob_inames(R, target, mod->values, NAMESPACE_VALUE, is_pub);
     return changed;
 }
 

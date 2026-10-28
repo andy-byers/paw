@@ -11,6 +11,8 @@
 #include <limits.h>
 #include <inttypes.h>
 
+#define CODELINE(Line_) Line_ "\n"
+
 static void write_main(char *out, char const *items, char const *text)
 {
 #define ADD_CHUNK(o, p) \
@@ -411,6 +413,13 @@ static void test_import_error(void)
     test_compiler_status(kErrUnknownPath, "unrecognized_import", "use import_not_found;", "");
     test_compiler_status(kErrUnknownPath, "unrecognized_import_item", "use io::NotFound;", "");
     test_compiler_status(kErrUnknownPath, "missing_import_item", "use io;", "let t = io::NotFound;");
+
+    test_compiler_status(kErrUnknownPath, "import_is_scoped_to_block",
+            "",
+            CODELINE("{")
+            CODELINE("  use math;")
+            CODELINE("};")
+            CODELINE("let _ = math::PI;"));
 }
 
 static void test_invalid_case(char const *name, enum ErrorKind expect, char const *item, char const *target, char const *pat)
@@ -622,7 +631,7 @@ static void test_global_const(void)
     test_compiler_status(kErrNone, "const_struct", "struct X; const C: X = X;", "");
     test_compiler_status(kErrNone, "const_enum", "enum X {E} const C: X = X::E;", "");
     test_compiler_status(kErrCannotConstantEvaluate, "const_call", "fn f() {} const C: () = f();", "");
-    test_compiler_status(kErrNonprimitiveConstant, "const_function", "fn f() {} const C: fn() = f;", "");
+    test_compiler_status(kErrCannotConstantEvaluate, "const_function", "fn f() {} const C: fn() = f;", "");
 
     test_compiler_status(kErrReturnOutsideFunction, "const_return", "const C: () = return;", "");
     test_compiler_status(kErrJumpOutsideLoop, "const_break", "const C: () = break;", "");
@@ -678,8 +687,6 @@ static void test_deferred_init(void)
     test_compiler_status(kErrUseBeforeInitialization, "use_in_branch", "", "let a; if true {a = 1;} else {let b = a;}");
     test_compiler_status(kErrUseBeforeInitialization, "uninit_if_else", "", "let a; if true {a = 1;} else if true {return;} else {} let b = a;");
 }
-
-#define CODELINE(Line_) Line_ "\n"
 
 static void test_projections(void)
 {
@@ -935,6 +942,30 @@ static void test_definite_assignment(void)
 #undef TESTCASE
 }
 
+static void test_constants(void)
+{
+    test_compiler_status(kErrCannotConstantEvaluate, "local_from_nonconst_context",
+            "",
+            CODELINE("let nonconst = 1;")
+            CODELINE("const OUTER: int64 = {")
+            CODELINE("  nonconst")
+            CODELINE("};"));
+
+    test_compiler_status(kErrCannotConstantEvaluate, "local_from_enclosing_const_context",
+            "",
+            CODELINE("const OUTER: () = {")
+            CODELINE("  let outer = 2;")
+            CODELINE("  const INNER: int64 = {")
+            CODELINE("    outer")
+            CODELINE("  };")
+            CODELINE("};"));
+
+    test_compiler_status(kErrUnknownPath, "const_is_scoped_to_block",
+            "",
+            CODELINE("{ const K: int64 = 0; }")
+            CODELINE("let _ = K;"));
+}
+
 int main(void)
 {
     test_arithmetic_error();
@@ -955,6 +986,7 @@ int main(void)
     test_import_error();
     test_uninit_local();
     test_global_const();
+    test_constants();
     test_match_error();
     test_trait_error();
     test_destructuring();
