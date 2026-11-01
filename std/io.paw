@@ -127,3 +127,23 @@ pub fn read_exact<R: Read>(reader: *R, data: []char) -> Result<()> {
     }
     Ok(())
 }
+
+
+use string::String;
+
+pub fn read_line<R: Read>(reader: *R, out: *String) -> Result<usize> {
+    let length = 0;
+    loop {
+        let c = ['\0'];
+        let n = reader.read(c.to_slice())?;
+        assert(n == 0 || n == 1);
+        if n == 1 {
+            out.push(c[0])?;
+            length += 1;
+        }
+        if n == 0 || c[0] == '\n' { 
+            break; 
+        }
+    }
+    Ok(length)
+}

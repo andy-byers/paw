@@ -37,6 +37,10 @@ impl String {
         self.len() == 0
     }
 
+    pub fn clear(*self) {
+        self.inner.resize(0, '\0');
+    }
+
     pub fn capacity(*self) -> usize {
         self.inner.capacity()
     }
@@ -82,8 +86,8 @@ impl String {
         self.inner.reserve(len)
     }
 
-    pub fn extend(*self, data: []char) -> mem::Result<()> {
-        self.inner.extend_from_slice(data)
+    pub fn extend<T: ToSlice<char>>(*self, data: T) -> mem::Result<()> {
+        self.inner.extend_from_slice(data.to_slice())
     }
 }
 
