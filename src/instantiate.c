@@ -186,19 +186,6 @@ IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt con
     return instantiate_variant_fields(C, variant, base->args, inst->args);
 }
 
-struct Instantiation pawP_instantiate_v2(struct Compiler *C, IrType *type)
-{
-    IrGenericArgs *before = IR_GENERIC_ARGS(type);
-    if (before == NULL) return (struct Instantiation){.inst = type};
-    IrGenericArgs *after = pawIr_instantiate_args(C, IR_TYPE_DID(type));
-    struct Substitution const subst = {before, after};
-    IrType *instance = pawP_substitute(C, type, subst);
-    return (struct Instantiation){
-        .inst = instance,
-        .subst = subst,
-    };
-}
-
 IrTrait *pawP_substitute_trait(struct Compiler *C, IrTrait *trait, struct Substitution subst)
 {
     IrGenericArgs *types = NULL;

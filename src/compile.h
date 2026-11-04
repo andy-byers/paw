@@ -303,10 +303,6 @@ struct Instantiation {
     struct IrType *inst;
 };
 
-// Replace each generic type from the binder on "type" with an inference variable
-// Note that "type" is not modified by this operation.
-struct Instantiation pawP_instantiate_v2(struct Compiler *C, struct IrType *type);
-
 struct Instantiation pawP_instantiate_assoc(struct Compiler *C, struct IrType *type, struct IrType *method);
 
 // Substitute types in "subst.params" for types in "subst.args" in the context of the given "type"
@@ -315,12 +311,6 @@ struct IrType *pawP_substitute(struct Compiler *C, struct IrType *type, struct S
 struct IrTrait *pawP_substitute_trait(struct Compiler *C, struct IrTrait *trait, struct Substitution subst);
 struct IrGenericArg pawP_substitute_arg(struct Compiler *C, struct IrGenericArg arg, struct Substitution subst);
 struct IrConst *pawP_substitute_const(struct Compiler *C, struct IrConst *k, struct Substitution subst);
-
-// TODO: remove this one and rename _v2
-// Instantiate a polymorphic function or type
-// Works by replacing each generic type in the function signature with the
-// corresponding concrete type from the given list of 'types'.
-struct IrType *pawP_instantiate(struct Compiler *C, struct IrType *base, struct IrTypeList *types);
 
 struct IrType *pawP_instantiate_method(struct Compiler *C, struct IrType *self, struct IrTypeList *types, struct IrType *method);
 struct IrGenericArgs *pawP_instantiate_typelist(struct Compiler *C, struct IrGenericArgs *before, struct IrGenericArgs *after, struct IrGenericArgs *target);

@@ -187,7 +187,7 @@ static paw_Bool impls_are_compatible(struct Compiler *C, struct QueryState q, Ir
 #define SELECT_CANDIDATES_FROM(Kind_, Impls_, Candidates_, Cause_) \
         K_LIST_XFOREACH (Impls_, DeclId const, p) { \
             L->q = start_query(L->C); \
-            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(L->q.S, *p); \
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(L->q.S, *p, (Cause_).span); \
             pawIr_solver_add_obligations_from(L->q.S, *p, inst.args, Cause_); \
             struct Candidate c = {.impl = *p}; \
             struct IrImpl const *impl_def = pawIr_get_impl_def(L->C, *p); \
@@ -279,7 +279,7 @@ static DeclId get_target_decl_id(struct Compiler *C, DeclId did)
     return pawIr_get_method_from_parent(C, impl_def->trait->did, fn_def->name);
 }
 
-static struct Instantiation *finalize_selection(struct LookupState *L)
+static struct Instantiation *finalize_selection(struct LookupState *L, struct IrObligationCause cause)
 {
     Candidates const *candidates = L->candidates;
     IrTypeList *call_args = L->call_args;
@@ -295,7 +295,7 @@ static struct Instantiation *finalize_selection(struct LookupState *L)
 
      struct Candidate const result = Candidates_first(candidates);
      DeclId const target = get_target_decl_id(C, result.target);
-     IrType *method = pawIr_solver_instantiate_type(C->S, target);
+     IrType *method = pawIr_solver_instantiate_type(C->S, target, cause.span);
 
      if (call_args != NULL) {
          struct IrFnPtr const *fn = IrGetFnPtr(IR_SIGNATURE_FN(C, method));
@@ -310,7 +310,7 @@ static struct Instantiation *finalize_selection(struct LookupState *L)
              pawIr_remove_indirection(C, pawIr_get_context(C, method)));
      pawU_unify_unchecked(C->U, context, L->raw_self);
      if (result.kind == CK_TRAIT_IMPL) {
-         struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, result.impl);
+         struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, result.impl, cause.span);
          IrTrait *trait_context = pawIr_get_trait_context(C, method);
          pawIr_unify_traits_unchecked(C, trait_context, inst.trait);
          pawIr_solver_add_obligations_from(C->S, result.impl, inst.args, L->cause);
@@ -359,7 +359,7 @@ struct Instantiation *pawP_find_method(struct Compiler *C, IrType *self, IrTrait
         select_inherent_candidates(&L);
     if (candidates->count == 0)
         select_trait_candidates(&L);
-    return finalize_selection(&L);
+    return finalize_selection(&L, cause);
 }
 
 static Str const *name_of_type(struct Compiler *C, IrType *type)
@@ -418,7 +418,7 @@ struct Instantiation *pawIr_find_assoc_type_generic(struct Compiler *C, IrType *
     IrType *assoc = pawIr_get_def_type(C, result.target);
 
     struct IrProjection *p = IrGetProjection(assoc);
-    IrTrait *trait2 = pawIr_solver_instantiate_trait(C->S, trait->did);
+    IrTrait *trait2 = pawIr_solver_instantiate_trait(C->S, trait->did, cause.span);
     IrType *first = IrGenericArg_get_type(
             IrGenericArgs_first(trait->args));
     pawU_unify_unchecked(C->U, first, self);
@@ -456,7 +456,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
         K_LIST_XFOREACH (trait_defs, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p, cause.span);
             pawIr_solver_add_obligations_from(q.S, impl->did, inst.args, cause);
             if (impls_are_compatible(C, q, self, trait, inst))
                 ADD_APPLICABLE_TYPE(*p, inst.args, impl->items);
@@ -467,7 +467,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
         K_LIST_XFOREACH (C->impls.blanket, DeclId const, p) {
             struct QueryState const q = start_query(C);
             struct IrImpl const *impl = pawIr_get_impl_def(C, *p);
-            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, *p, cause.span);
             pawIr_solver_add_obligations_from(q.S, *p, inst.args, cause);
             paw_assert(inst.trait != NULL); // blanket inherent impls are not allowed
             if (impls_are_compatible(C, q, self, trait, inst))
@@ -480,7 +480,7 @@ struct Instantiation *pawIr_find_assoc_type_projection(struct Compiler *C, IrTyp
         return NULL;
 
     struct Candidate_ const result = Candidates__first(candidates);
-    struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, result.impl_did);
+    struct IrImplInstance const inst = pawIr_solver_instantiate_impl(C->S, result.impl_did, cause.span);
 
     self = pawIr_remove_indirection(C, self);
     IrType *impl_type = pawIr_remove_indirection(C, inst.type);

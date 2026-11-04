@@ -13,7 +13,7 @@
 
 #define NEW_NODE(C, T) (T *)P_ALLOC(C, NULL, 0, sizeof(T))
 
-#define TODO (struct SourceSpan){0}
+#define SPAN_UNUSED (struct SourceSpan){0}
 
 static paw_Bool is_unsized_type(IrType *type)
 {
@@ -383,7 +383,7 @@ IrConst *IrGenericArg_get_const(IrGenericArg ga)
     return ga.inner;
 }
 
-IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did)
+IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did, struct SourceSpan span)
 {
     IrGenericArgs *args = pawIr_get_generic_args(C, did);
 
@@ -392,10 +392,10 @@ IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did)
     K_LIST_XFOREACH (args, IrGenericArg const, p) {
         IrGenericArg r;
         if (IrGenericArg_is_type(*p)) {
-            IrType *t = pawU_new_type_var(C->U, IR_INFER_TYPE, TODO);
+            IrType *t = pawU_new_type_var(C->U, IR_INFER_TYPE, span);
             r = IrGenericArg_from_type(t);
         } else {
-            IrConst *k = pawU_new_const_var(C->U, TODO);
+            IrConst *k = pawU_new_const_var(C->U, span);
             r = IrGenericArg_from_const(k);
         }
         IrGenericArgs_push(C, result, r);
@@ -403,16 +403,16 @@ IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did)
     return result;
 }
 
-IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did)
+IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did, struct SourceSpan span)
 {
     IrGenericArg arg = *pawIr_get_generic_arg(C, did);
 
     IrGenericArg r;
     if (IrGenericArg_is_type(arg)) {
-        IrType *t = pawU_new_type_var(C->U, IR_INFER_TYPE, TODO);
+        IrType *t = pawU_new_type_var(C->U, IR_INFER_TYPE, span);
         r = IrGenericArg_from_type(t);
     } else {
-        IrConst *k = pawU_new_const_var(C->U, TODO);
+        IrConst *k = pawU_new_const_var(C->U, span);
         r = IrGenericArg_from_const(k);
     }
     return r;
@@ -464,12 +464,13 @@ IrGenericArg pawIr_normalize_projections(struct Compiler *C, IrGenericArg g)
 }
 
 
-struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str const *name, struct IrTraitList *bounds)
+struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str const *name, struct SourceSpan span, struct IrTraitList *bounds)
 {
     struct IrGenericDef *def = (struct IrGenericDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrGenericDef){
         .did = did,
         .is_type = PAW_TRUE,
+        .span = span,
         .type.name = name,
         .type.bounds = bounds,
     };
@@ -477,12 +478,13 @@ struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, 
     return def;
 }
 
-struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str const *name)
+struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str const *name, struct SourceSpan span)
 {
     struct IrGenericDef *def = (struct IrGenericDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrGenericDef){
         .did = did,
         .is_type = PAW_FALSE,
+        .span = span,
         .konst.type = type,
         .konst.name = name,
     };
@@ -1169,7 +1171,7 @@ IrType *pawIr_get_custom_drop_type(struct Compiler *C, IrType *type)
         if (P_ID_EQUALS(NULL, def->trait->did, drop_did)) {
             IrSolver *S = pawIr_push_solver(C);
             int const position = pawU_current_position(C->U);
-            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(S, *p);
+            struct IrImplInstance const inst = pawIr_solver_instantiate_impl(S, *p, SPAN_UNUSED);
             pawIr_solver_add_obligations_from(S, *p, inst.args, (struct IrObligationCause){0});
             paw_Bool const matches = P_ID_EQUALS(NULL, inst.trait->did, drop_did)
                 && pawU_unify(C->U, inst.type, type) == 0
@@ -1179,6 +1181,7 @@ IrType *pawIr_get_custom_drop_type(struct Compiler *C, IrType *type)
             if (matches) {
                 IrType *method = IrTypeList_first(def->methods);
                 if (def->generics->count == 0) return method;
+                // TODO: this is probably never reached. drop has no generics...
                 // `Drop::drop()` has no generic args of its own, meaning `inst.args`
                 // can be used directly
                 return pawIr_solver_instantiate_type_with(C->S,

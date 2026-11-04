@@ -143,7 +143,7 @@ static IrGenericArgs *new_unknowns(struct Compiler *C, struct HirDeclList *param
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (params, pdecl) {
         struct HirGenericDecl const *d = HirGetGenericDecl(*pdecl);
-        IrGenericArg const unknown = pawIr_instantiate(C, d->did);
+        IrGenericArg const unknown = pawIr_instantiate(C, d->did, d->span);
         IrGenericArgs_push(C, unknowns, unknown);
     }
 

@@ -163,6 +163,8 @@ static char const *ref_kind_name(enum SpanRefKind kind)
             return "for loop";
         case SPAN_REF_QUESTION_MARK:
             return "question mark operator";
+        case SPAN_REF_GENERATED_DROP:
+            return "generated drop method";
         case SPAN_REF_RANGE:
             return "constructor for range";
         case SPAN_REF_FSTRING:

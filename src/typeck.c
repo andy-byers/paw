@@ -670,7 +670,7 @@ static IrType *instantiate(struct TypeChecker *T, IrType *base, IrGenericArgs *a
                 .span = span);
 
     DeclId const did = IR_TYPE_DID(base);
-    if (args == NULL) args = pawIr_instantiate_args(T->C, did);
+    if (args == NULL) args = pawIr_instantiate_args(T->C, did, span);
     IrType *type = pawIr_solver_instantiate_type_with(T->C->S, did, args);
     pawIr_solver_add_obligations_from(T->C->S, did, args, (struct IrObligationCause){
                 .kind = IR_OBLIGATION_CAUSE_INSTANTIATION,

@@ -21,7 +21,7 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#define TODO (struct SourceSpan){0}
+#define SPAN_UNUSED (struct SourceSpan){0}
 
 struct MonoCollector {
     struct Pool *pool;
@@ -62,28 +62,6 @@ static IrType *monomorphize_inherent_method(struct MonoCollector *M, IrType *typ
     return type;
 }
 
-static IrType *monomorphize_trait_method(struct MonoCollector *M, IrType *type, IrType *self, Str const *name, DeclId parent_did)
-{
-    IrTrait *trait = pawIr_get_trait_context(M->C, type);
-    IrDefs const *trait_impls = pawIr_trait_impls_for(M->C, self);
-    K_LIST_XFOREACH (trait_impls, DeclId const, p) {
-        struct IrImpl const *impl_def = pawIr_get_impl_def(M->C, *p);
-        if (P_ID_EQUALS(NULL, impl_def->trait->did, parent_did)) {
-            DeclId const did = pawIr_get_method_from_parent(M->C, *p, name);
-            IrType *result_type = pawIr_solver_instantiate_type(M->C->S, did);
-
-            IrType *result_self = pawIr_get_context(M->C, result_type);
-            pawU_unify_unchecked(M->C->U, result_self, self);
-
-            IrTrait *result_trait = pawIr_get_trait_context(M->C, result_type);
-            pawIr_unify_traits_unchecked(M->C, result_trait, trait);
-
-            return pawU_normalize(M->C->U, result_type);
-        }
-    }
-    return NULL;
-}
-
 static IrType *monomorphize_fn_type_inner(struct MonoCollector *M, IrType *type)
 {
     struct IrFnDef const *fn_def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
@@ -98,7 +76,7 @@ static IrType *monomorphize_fn_type_inner(struct MonoCollector *M, IrType *type)
         struct IrImpl const *impl_def = pawIr_get_impl_def(M->C, *p);
         if (P_ID_EQUALS(NULL, impl_def->trait->did, fn_def->parent)) {
             DeclId const did = pawIr_get_method_from_parent(M->C, *p, fn_def->name);
-            IrType *result_type = pawIr_solver_instantiate_type(M->C->S, did);
+            IrType *result_type = pawIr_solver_instantiate_type(M->C->S, did, SPAN_UNUSED);
             IrType *result_self = pawIr_get_context(M->C, result_type);
             IrTrait *trait = pawIr_get_trait_context(M->C, type);
             IrTrait *result_trait = pawIr_get_trait_context(M->C, result_type);
@@ -117,7 +95,7 @@ static IrType *monomorphize_fn_type_inner(struct MonoCollector *M, IrType *type)
         struct IrImpl const *impl_def = pawIr_get_impl_def(M->C, *p);
         if (P_ID_EQUALS(NULL, impl_def->trait->did, fn_def->parent)) {
             DeclId const did = pawIr_get_method_from_parent(M->C, *p, fn_def->name);
-            IrType *result_type = pawIr_solver_instantiate_type(M->C->S, did);
+            IrType *result_type = pawIr_solver_instantiate_type(M->C->S, did, SPAN_UNUSED);
             IrType *result_self = pawIr_get_context(M->C, result_type);
             IrTrait *trait = pawIr_get_trait_context(M->C, type);
             IrTrait *result_trait = pawIr_get_trait_context(M->C, result_type);
@@ -334,8 +312,12 @@ static struct Mir *allocate_drop_template(struct MonoCollector *M, IrType *type,
     IrTypeList_push(M->C, params, pawIr_new_ptr(M->C, self));
     IrType *result = pawIr_new_unit(M->C);
 
+    // TODO: use the location of the definition of the type for which this drop is being generated for?
+    struct SpanRef const ref = pawSrc_create_ref(M->C, SPAN_UNUSED);
+    struct SourceSpan const span = SourceSpan_from_ref(ref, SPAN_REF_GENERATED_DROP);
+
     struct IrFnDef const *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
-    struct Mir *mir = pawMir_new(M->C, 0, (struct SourceSpan){0}, def->name, IR_TYPE_DID(type),
+    struct Mir *mir = pawMir_new(M->C, 0, span, def->name, IR_TYPE_DID(type),
             IR_GENERIC_ARGS(type), params, result, Annotations_new(M->C), type, self,
             def->parent, FUNC_METHOD, PAW_TRUE, PAW_FALSE);
     struct MirPlace const result_local = add_local(mir, "(result)", pawIr_new_unit(M->C));
@@ -345,10 +327,10 @@ static struct Mir *allocate_drop_template(struct MonoCollector *M, IrType *type,
     MirBlockDataList_push(mir, mir->blocks, data);
     MirConstant const k = pawMir_kcache_add_value(mir, mir->kcache, I2V(0), pawIr_new_unit(M->C));
     struct MirPlace const value = {.kind = MIR_PLACE_CONSTANT, .k = k};
-    MirInstructionList_push(mir, data->instructions, pawMir_new_alloc_local(mir, TODO, SCAN_STR(M->C, "(result)"), result_local));
-    MirInstructionList_push(mir, data->instructions, pawMir_new_alloc_local(mir, TODO, SCAN_STR(M->C, "self"), self_local));
-    MirInstructionList_push(mir, data->instructions, pawMir_new_move(mir, TODO, result_local, value));
-    MirInstructionList_push(mir, data->instructions, pawMir_new_return(mir, TODO));
+    MirInstructionList_push(mir, data->instructions, pawMir_new_alloc_local(mir, span, SCAN_STR(M->C, "(result)"), result_local));
+    MirInstructionList_push(mir, data->instructions, pawMir_new_alloc_local(mir, span, SCAN_STR(M->C, "self"), self_local));
+    MirInstructionList_push(mir, data->instructions, pawMir_new_move(mir, span, result_local, value));
+    MirInstructionList_push(mir, data->instructions, pawMir_new_return(mir, span));
     return mir;
 }
 

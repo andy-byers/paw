@@ -1091,6 +1091,7 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
             break;
         }
         case kMirNoop:
+        case kMirGetConstant:
         case kMirGlobal:
         case kMirAllocLocal:
         case kMirClosure:

@@ -227,7 +227,7 @@ static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, DeclId did, 
             struct HirGenericDecl const *d = HirGetGenericDecl(*p);
             if (d->is_type) {
                 type = pawIr_new_generic(X->C, d->did);
-                def = pawIr_new_generic_type_def(X->C, d->did, d->t.ident.name, NULL);
+                def = pawIr_new_generic_type_def(X->C, d->did, d->t.ident.name, d->span, NULL);
                 arg = IrGenericArg_from_type(type);
             } else {
                 type = collect_type(X, d->k.type);
@@ -235,7 +235,7 @@ static IrGenericDefs *collect_generic_defs(struct ItemCollector *X, DeclId did, 
                         && !IrIsInt(type) && !IrIsFloat(type))
                     pawErr_generic_error(ENV(X), X->pm->name, d->span,
                             "const generic must be scalar");
-                def = pawIr_new_generic_const_def(X->C, d->did, type, d->k.ident.name);
+                def = pawIr_new_generic_const_def(X->C, d->did, type, d->k.ident.name, d->span);
                 arg = IrGenericArg_from_const(pawIr_new_const_decl(X->C, d->did));
             }
 
@@ -978,7 +978,7 @@ static void solve_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
 
             // add inference variables for generics defined on trait method
             K_LIST_XFOREACH (trait_fn_def->generics, struct IrGenericDef *const, pparam)
-                IrGenericArgs_push(X->C, args, pawIr_instantiate(X->C, (*pparam)->did));
+                IrGenericArgs_push(X->C, args, pawIr_instantiate(X->C, (*pparam)->did, (*pparam)->span));
         }
 
         // ensure that the trait method signature is compatible with the signature of the

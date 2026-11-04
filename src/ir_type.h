@@ -384,6 +384,7 @@ struct IrFieldDef {
 
 struct IrGenericDef {
     DeclId did;
+    struct SourceSpan span;
     paw_Bool is_type : 1;
     union {
         struct {
@@ -454,8 +455,8 @@ struct IrImpl {
     DeclId did;
 };
 
-struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str const *name, struct IrTraitList *bounds);
-struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str const *name);
+struct IrGenericDef *pawIr_new_generic_type_def(struct Compiler *C, DeclId did, Str const *name, struct SourceSpan span, struct IrTraitList *bounds);
+struct IrGenericDef *pawIr_new_generic_const_def(struct Compiler *C, DeclId did, IrType *type, Str const *name, struct SourceSpan span);
 struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str const *name, paw_Bool is_pub);
 struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str const *name, struct IrFieldDefs *fields);
 struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, IrType *result, struct IrParams *params, DeclId parent, paw_Bool is_pub);
@@ -464,8 +465,8 @@ struct IrAssocItem *pawIr_new_assoc_item(struct Compiler *C, DeclId did, Str con
 struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str const *name, struct IrGenericDefs *generics, struct IrTypeList *methods, struct IrAssocItems *items, paw_Bool is_pub);
 struct IrImpl *pawIr_new_impl(struct Compiler *C, DeclId did, IrType *type, IrTrait *trait, struct IrGenericDefs *generics, struct IrTypeList *methods, struct IrAssocItems *items);
 
-struct IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did);
-struct IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did);
+struct IrGenericArgs *pawIr_instantiate_args(struct Compiler *C, DeclId did, struct SourceSpan span);
+struct IrGenericArg pawIr_instantiate(struct Compiler *C, DeclId did, struct SourceSpan span);
 
 
 #define IR_KINDOF(node) ((node)->hdr.kind)

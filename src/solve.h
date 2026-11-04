@@ -96,8 +96,8 @@ void pawIr_solver_add_predicates_from_type(IrSolver *S, struct IrType *type, str
 void pawIr_solver_add_predicates_from_trait(IrSolver *S, struct IrTrait *trait, struct IrObligationCause cause);
 
 
-struct IrType *pawIr_solver_instantiate_type(IrSolver *S, DeclId did);
-struct IrTrait *pawIr_solver_instantiate_trait(IrSolver *S, DeclId did);
+struct IrType *pawIr_solver_instantiate_type(IrSolver *S, DeclId did, struct SourceSpan span);
+struct IrTrait *pawIr_solver_instantiate_trait(IrSolver *S, DeclId did, struct SourceSpan span);
 struct IrType *pawIr_solver_instantiate_type_with(IrSolver *S, DeclId did, struct IrGenericArgs *args);
 struct IrTrait *pawIr_solver_instantiate_trait_with(IrSolver *S, DeclId did, struct IrGenericArgs *args);
 
@@ -107,7 +107,7 @@ struct IrImplInstance {
     struct IrGenericArgs *args;
 };
 
-struct IrImplInstance pawIr_solver_instantiate_impl(IrSolver *S, DeclId did);
+struct IrImplInstance pawIr_solver_instantiate_impl(IrSolver *S, DeclId did, struct SourceSpan span);
 struct IrImplInstance pawIr_solver_instantiate_impl_with(IrSolver *S, DeclId did, struct IrGenericArgs *args);
 
 enum IrSolverStatus {

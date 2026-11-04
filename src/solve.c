@@ -274,7 +274,7 @@ static paw_Bool impl_is_compatible(struct Compiler *C, IrType *self, IrTrait *tr
 {
     paw_Bool matches = PAW_FALSE;
     WITH_SOLVER_CTX(C, child, {
-        struct IrImplInstance const inst = pawIr_solver_instantiate_impl(child, impl->did);
+        struct IrImplInstance const inst = pawIr_solver_instantiate_impl(child, impl->did, cause.span);
         if (pawU_unify(C->U, inst.type, self) == 0
                 && pawIr_unify_traits(C, inst.trait, trait) == 0) {
             pawIr_solver_add_obligations_from(child, impl->did, inst.args, cause);
@@ -372,7 +372,7 @@ static enum IrSolverStatus type_implements_trait(IrSolver *S, IrType *self, IrTr
     {
         IrSolver *child = pawIr_push_solver(S->C);
         struct Candidate const c = Candidates_first(candidates);
-        struct IrImplInstance const inst = pawIr_solver_instantiate_impl(child, c.impl_did);
+        struct IrImplInstance const inst = pawIr_solver_instantiate_impl(child, c.impl_did, cause.span);
         pawIr_solver_add_obligations_from(child, c.impl_did, inst.args, cause);
         pawU_unify_unchecked(C->U, inst.type, self);
         pawIr_unify_traits_unchecked(C, inst.trait, impl_trait);
@@ -623,11 +623,11 @@ struct IrObligation pawIr_solver_first_obligation(IrSolver const *S)
     return IrObligations_first(S->obligations);
 }
 
-IrType *pawIr_solver_instantiate_type(IrSolver *S, DeclId did)
+IrType *pawIr_solver_instantiate_type(IrSolver *S, DeclId did, struct SourceSpan span)
 {
     IrGenericArgs *params = pawIr_get_generic_args(S->C, did);
     if (params == NULL) return pawIr_get_def_type(S->C, did);
-    IrGenericArgs *args = pawIr_instantiate_args(S->C, did);
+    IrGenericArgs *args = pawIr_instantiate_args(S->C, did, span);
     return pawIr_solver_instantiate_type_with(S, did, args);
 }
 
@@ -639,10 +639,10 @@ IrType *pawIr_solver_instantiate_type_with(IrSolver *S, DeclId did, IrGenericArg
     return pawP_substitute(S->C, base, subst);
 }
 
-IrTrait *pawIr_solver_instantiate_trait(IrSolver *S, DeclId did)
+IrTrait *pawIr_solver_instantiate_trait(IrSolver *S, DeclId did, struct SourceSpan span)
 {
     IrTrait *trait = pawIr_get_trait(S->C, did);
-    IrGenericArgs *args = pawIr_instantiate_args(S->C, did);
+    IrGenericArgs *args = pawIr_instantiate_args(S->C, did, span);
     struct Substitution const subst = {trait->args, args};
     return substitute_trait(S->C, trait, subst);
 }
@@ -654,7 +654,7 @@ IrTrait *pawIr_solver_instantiate_trait_with(IrSolver *S, DeclId did, IrGenericA
     return substitute_trait(S->C, trait, subst);
 }
 
-struct IrImplInstance pawIr_solver_instantiate_impl(IrSolver *S, DeclId did)
+struct IrImplInstance pawIr_solver_instantiate_impl(IrSolver *S, DeclId did, struct SourceSpan span)
 {
     IrGenericArgs *params = pawIr_get_generic_args(S->C, did);
     if (params == NULL) {
@@ -665,7 +665,7 @@ struct IrImplInstance pawIr_solver_instantiate_impl(IrSolver *S, DeclId did)
                 .args = NULL,
             };
     }
-    IrGenericArgs *args = pawIr_instantiate_args(S->C, did);
+    IrGenericArgs *args = pawIr_instantiate_args(S->C, did, span);
     return pawIr_solver_instantiate_impl_with(S, did, args);
 }
 

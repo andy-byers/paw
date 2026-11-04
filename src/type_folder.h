@@ -92,6 +92,4 @@ void pawMir_type_folder_init(struct MirTypeFolder *F, struct Compiler *C, struct
 // Type folder entrypoint for MIR:
 void pawMir_fold(struct MirTypeFolder *F, struct Mir *mir);
 
-char const *pawIr_print_type(struct Compiler *C, IrType *type);
-
 #endif // PAW_TYPE_FOLDER_H
