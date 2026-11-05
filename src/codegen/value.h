@@ -11,7 +11,8 @@
 #include <llvm/IR/Value.h>
 
 #include "type.h"
-#include "util.h"
+
+#include "common/util.h"
 
 namespace paw::cg {
 

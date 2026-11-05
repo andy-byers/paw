@@ -1,0 +1,335 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+#include "eval.h"
+#include "mir/mir.h"
+
+struct EvalCtx {
+    struct Allocator a;
+    struct ValueTable *values;
+    struct Compiler *C;
+    struct Pool *pool;
+    struct Mir *mir;
+};
+
+DEFINE_LIST(ValueTable, union IrValue)
+
+struct EvalStep {
+    enum EvalStepKind {
+        ESK_GOTO,
+        ESK_RETURN,
+        ESK_PANIC,
+        ESK_OVERFLOW,
+        ESK_DIVIDE0,
+    } kind;
+    union {
+        MirBlock target;
+        Str const *message;
+    };
+};
+
+#define ES_RETURN() (struct EvalStep){.kind = ESK_RETURN}
+#define ES_OVERFLOW() (struct EvalStep){.kind = ESK_OVERFLOW}
+#define ES_DIVIDE0() (struct EvalStep){.kind = ESK_DIVIDE0}
+#define ES_PANIC(Message_) (struct EvalStep){.kind = ESK_PANIC, .message = Message_}
+#define ES_GOTO(Target_) (struct EvalStep){.kind = ESK_GOTO, .target = Target_}
+
+static IrValue new_tuple(struct Pool *pool, size_t num_elements)
+{
+    struct Tuple *t = pool_alloc(pool, NULL, 0, sizeof(struct Tuple) + num_elements * sizeof(IrValue));
+    t->num_fields = num_elements;
+    t->discr = 0;
+    return (IrValue){.t = t};
+}
+
+static int new_tuple_checked(struct Pool *pool, size_t num_elements, IrValue *out)
+{
+    if (num_elements > (SIZE_MAX - sizeof(struct Tuple)) / sizeof(IrValue))
+        return -1;
+    *out = new_tuple(pool, num_elements);
+    return 0;
+}
+
+static IrValue get_rvalue(struct EvalCtx *E, struct MirPlace place)
+{
+    paw_assert(place.kind == MIR_PLACE_REGISTER);
+    return ValueTable_get(E->values, place.r.value);
+
+//    if (place.kind == MIR_PLACE_REGISTER) {
+//        return ValueTable_get(E->values, place.r.value);
+//    } else {
+//        paw_assert(place.kind == MIR_PLACE_CONSTANT);
+//        IrConst *k = mir_const_data(E->mir, place.k)->data;
+//        paw_assert(k->kind == IR_CONST_VALUE);
+//        return k->value.value;
+//    }
+}
+
+static IrValue *get_lvalue(struct EvalCtx *E, struct MirPlace place)
+{
+    paw_assert(place.kind == MIR_PLACE_REGISTER);
+    paw_assert(0 <= place.r.value && place.r.value < E->values->count);
+    return &LIST_AT(E->values, place.r.value);
+}
+
+static IrValue get_const_value(struct EvalCtx *E, MirConstant k)
+{
+    struct MirConstantData const *kdata = mir_const_data(E->mir, k);
+    paw_assert(kdata->data->kind == IR_CONST_VALUE);
+    return kdata->data->value.value;
+}
+
+static struct EvalStep evaluate_basic_block(struct EvalCtx *E, struct MirBlockData bb)
+{
+    LIST_XFOREACH (bb.instructions, struct MirInstruction *const, pinstr) {
+#define LVALUE(Place_) get_lvalue(E, Place_)
+#define RVALUE(Place_) get_rvalue(E, Place_)
+
+        switch (MIR_KINDOF(*pinstr)) {
+            case kMirNoop:
+                break;
+            case kMirMove: {
+                struct MirMove const *x = MirGetMove(*pinstr);
+                *LVALUE(x->output) = RVALUE(x->target);
+                break;
+            }
+//            case kMirLoad: {
+//                struct MirLoad const *x = MirGetLoad(*pinstr);
+//                break;
+//            }
+//            case kMirStore: {
+//                struct MirStore const *x = MirGetStore(*pinstr);
+//                break;
+//            }
+//            case kMirAddrOf: {
+//                struct MirAddrOf const *x = MirGetAddrOf(*pinstr);
+//                break;
+//            }
+//            case kMirGlobal: {
+//                struct MirGlobal const *x = MirGetGlobal(*pinstr);
+//                break;
+//            }
+//            case kMirArrayGep: {
+//                struct MirArrayGep const *x = MirGetArrayGep(*pinstr);
+//                break;
+//            }
+//            case kMirStructGEP: {
+//                struct MirStructGEP const *x = MirGetStructGEP(*pinstr);
+//                break;
+//            }
+//            case kMirKill: {
+//                struct MirKill const *x = MirGetKill(*pinstr);
+//                break;
+//            }
+//            case kMirDrop: {
+//                struct MirDrop const *x = MirGetDrop(*pinstr);
+//                break;
+//            }
+//            case kMirCall: {
+//                struct MirCall const *x = MirGetCall(*pinstr);
+//                break;
+//            }
+            case kMirCast: {
+                struct MirCast const *x = MirGetCast(*pinstr);
+                mir_fold_cast(RVALUE(x->target),
+                        mir_place_type(E->mir, x->target),
+                        mir_place_type(E->mir, x->output),
+                        LVALUE(x->output));
+                break;
+            }
+            case kMirGetConstant: {
+                struct MirGetConstant const *x = MirGetGetConstant(*pinstr);
+                IrType const *type = mir_place_type(E->mir, x->output);
+                if (IrIsArray(type) || IrIsTuple(type) || IrIsAdt(type)) {
+                    IrValue const value = get_const_value(E, x->k);
+                    IrValue const result = new_tuple(E->pool, value.t->num_fields);
+                    result.t->discr = value.t->discr;
+                    for (size_t i = 0; i < value.t->num_fields; ++i)
+                        result.t->fields[i] = value.t->fields[i];
+                    *LVALUE(x->output) = result;
+                } else {
+                    *LVALUE(x->output) = get_const_value(E, x->k);
+                }
+                break;
+            }
+            case kMirUnaryOp: {
+                struct MirUnaryOp const *x = MirGetUnaryOp(*pinstr);
+                IrType *type = mir_place_type(E->mir, x->val);
+                IrValue const val = RVALUE(x->val);
+                enum MirFoldResult const r = mir_fold_unary_op(x->op,
+                        type, val, LVALUE(x->output));
+                switch (r) {
+                    case MIR_FOLD_FOLDED:
+                        break;
+                    case MIR_FOLD_OVERFLOW:
+                        return ES_OVERFLOW();
+                    case MIR_FOLD_DIVIDE_BY_ZERO:
+                        return ES_DIVIDE0();
+                }
+                break;
+            }
+            case kMirBinaryOp: {
+                struct MirBinaryOp const *x = MirGetBinaryOp(*pinstr);
+                IrType *type = mir_place_type(E->mir, x->lhs);
+                IrValue const lhs = RVALUE(x->lhs);
+                IrValue const rhs = RVALUE(x->rhs);
+                enum MirFoldResult const r = mir_fold_binary_op(x->op,
+                        type, lhs, rhs, LVALUE(x->output));
+                switch (r) {
+                    case MIR_FOLD_FOLDED:
+                        break;
+                    case MIR_FOLD_OVERFLOW:
+                        return ES_OVERFLOW();
+                    case MIR_FOLD_DIVIDE_BY_ZERO:
+                        return ES_DIVIDE0();
+                }
+                break;
+            }
+            case kMirGetDiscriminant: {
+                struct MirGetDiscriminant const *x = MirGetGetDiscriminant(*pinstr);
+                LVALUE(x->output)->u64 = RVALUE(x->object).t->discr;
+                break;
+            }
+            case kMirAggregate: {
+                struct MirAggregate const *x = MirGetAggregate(*pinstr);
+                IrValue *output = LVALUE(x->output);
+                if (new_tuple_checked(E->pool, (size_t)x->fields->count, output) != 0)
+                    return ES_PANIC(SCAN_STR(E->C, "too many array elements"));
+                output->t->discr = (paw_Uint64)x->discr;
+                int index = 0;
+                LIST_XFOREACH (x->fields, struct MirPlace const, p)
+                    output->t->fields[index++] = RVALUE(*p);
+                break;
+            }
+            case kMirArray: {
+                struct MirArray const *x = MirGetArray(*pinstr);
+                IrValue *output = LVALUE(x->output);
+                if (new_tuple_checked(E->pool, (size_t)x->elems->count, output) != 0)
+                    return ES_PANIC(SCAN_STR(E->C, "too many array elements"));
+                int index = 0;
+                LIST_XFOREACH (x->elems, struct MirPlace const, p)
+                    output->t->fields[index++] = RVALUE(*p);
+                break;
+            }
+            case kMirReturn: {
+                return ES_RETURN();
+            }
+            case kMirBranch: {
+                struct MirBranch const *x = MirGetBranch(*pinstr);
+                MirBlock const left = MirBlockList_get(bb.successors, 0);
+                MirBlock const right = MirBlockList_get(bb.successors, 1);
+                return ES_GOTO(RVALUE(x->cond).b ? left : right);
+            }
+            case kMirSwitch: {
+                struct MirSwitch const *x = MirGetSwitch(*pinstr);
+                paw_Int64 const discr = RVALUE(x->discr).i64;
+                return ES_GOTO(MirBlockList_get(bb.successors, discr));
+            }
+            case kMirGoto: {
+                return ES_GOTO(MirBlockList_first(bb.successors));
+            }
+            default:
+                PAW_UNREACHABLE();
+        }
+
+#undef RVALUE
+#undef LVALUE
+    }
+
+    PAW_UNREACHABLE();
+}
+
+static void initialize(struct EvalCtx *E)
+{
+    struct Mir *mir = E->mir;
+    E->values = ValueTable_new(ALLOCATOR_OF(E));
+    ValueTable_reserve(E->values, mir->registers->count);
+    LIST_XFOREACH (mir->registers, struct MirRegisterData const, p)
+        ValueTable_push(E->values, (IrValue){0});
+}
+
+static IrValue clone_value_into(struct EvalCtx *E, struct Pool *pool, IrType *type, IrValue value)
+{
+    if (IrIsArray(type)) {
+        IrValue const value2 = new_tuple(pool, value.t->num_fields);
+        IrType *element_type = IrGetArray(type)->type;
+        for (size_t i = 0; i < value.t->num_fields; ++i)
+            value2.t->fields[i] = clone_value_into(E, pool, element_type, value.t->fields[i]);
+        return value2;
+    } else if (IrIsAdt(type)) {
+        IrTypeList *fields = instantiate_variant_fields(E->C, IrGetAdt(type), value.t->discr);
+        IrValue const value2 = new_tuple(pool, value.t->num_fields);
+        value2.t->discr = value.t->discr;
+        for (size_t i = 0; i < value.t->num_fields; ++i)
+            value2.t->fields[i] = clone_value_into(E, pool, IrTypeList_get(fields, i), value.t->fields[i]);
+        return value2;
+    } else if (IrIsTuple(type)) {
+        struct IrTuple const *t = IrGetTuple(type);
+        IrValue const value2 = new_tuple(pool, value.t->num_fields);
+        for (size_t i = 0; i < value.t->num_fields; ++i)
+            value2.t->fields[i] = clone_value_into(E, pool, IrTypeList_get(t->elems, i), value.t->fields[i]);
+        return value2;
+    }
+    return value;
+}
+
+static IrValue save_return_value(struct EvalCtx *E)
+{
+    IrValue const r = ValueTable_first(E->values);
+    return clone_value_into(E, E->C->pool, E->mir->result_type, r);
+}
+
+static struct MirEvalResult evaluate(struct EvalCtx *E)
+{
+    struct Mir *mir = E->mir;
+    MirBlock cursor = MIR_ENTRY_BB;
+    for (;;) {
+        struct MirBlockData const bb = *mir_bb_data(mir, cursor);
+        struct EvalStep const step = evaluate_basic_block(E, bb);
+        switch (step.kind) {
+            case ESK_GOTO:
+                cursor = step.target;
+                break;
+            case ESK_RETURN:
+                return (struct MirEvalResult){
+                    .status = MES_EVALUATED,
+                    .value = save_return_value(E),
+                };
+            case ESK_PANIC:
+                return (struct MirEvalResult){
+                    .status = MES_PANICKED,
+                    .message = step.message,
+                };
+            case ESK_OVERFLOW:
+                return (struct MirEvalResult){
+                    .status = MES_OVERFLOW,
+                    .message = step.message,
+                };
+            case ESK_DIVIDE0:
+                return (struct MirEvalResult){
+                    .status = MES_DIVIDE0,
+                    .message = step.message,
+                };
+        }
+    }
+}
+
+struct MirEvalResult mir_eval(struct Mir *mir)
+{
+    struct Compiler *C = mir->C;
+    struct MirEvalResult result;
+    {
+        struct Pool *pool = compiler_new_pool(C, C->aux_stats);
+        struct EvalCtx E = {
+            .a = POOL_ALLOCATOR(pool),
+            .pool = pool,
+            .mir = mir,
+            .C = C,
+        };
+        initialize(&E);
+        result = evaluate(&E);
+        compiler_free_pool(C, pool);
+    }
+    return result;
+}

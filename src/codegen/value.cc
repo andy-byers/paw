@@ -8,6 +8,8 @@
 #include "type.h"
 #include "value.h"
 
+#include "common/util.h"
+
 #define S(Str_) std::string((Str_)->text, (size_t)(Str_)->length)
 #define DEFERRED_INIT ((llvm::Value *)42)
 

@@ -816,7 +816,15 @@
 //    }
 //}
 
+enum E<T> {
+    X,
+    Y(T),
+}
+use E::*;
+
 #[test]
 pub fn test() {
+    let e = X;
+    e = Y(123);
 }
 

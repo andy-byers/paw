@@ -10,8 +10,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 #include <llvm/Analysis/ConstantFolding.h>
 #include <llvm/IR/BasicBlock.h>
@@ -40,16 +38,17 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 
 #include "codegen.h"
-#include "glue.h"
-#include "ir_type.h"
-#include "mir.h"
-
 #include "abi.h"
 #include "context.h"
 #include "linker.h"
-#include "mangle.h"
 #include "state.h"
 #include "type.h"
+
+#include "compiler/glue.h"
+#include "compiler/mangle.h"
+#include "ir/type.h"
+#include "mir/mir.h"
+#include "common/util.h"
 
 
 namespace paw::cg {
@@ -155,12 +154,12 @@ public:
 private:
     Compiler *C;
 
-    std::function<unsigned long(IrType *)> type_hash_ = [this](auto *type) {
-        return pawIr_type_hash(C, type);
+    std::function<unsigned long(IrType *)> type_hash_ = [](auto *type) {
+        return ir_type_hash(type);
     };
 
-    std::function<bool(IrType *, IrType *)> type_equals_ = [this](auto *lhs, auto *rhs) {
-        return pawIr_type_equals(C, lhs, rhs);
+    std::function<bool(IrType *, IrType *)> type_equals_ = [](auto *lhs, auto *rhs) {
+        return ir_type_equals(lhs, rhs);
     };
 
     std::unordered_map<
@@ -263,7 +262,7 @@ private:
         paw_assert(IrIsInt(length.type));
         return X->get_array_type(
                     get_or_create_type(t->type),
-                    uint64_t(length.value.i));
+                    uint64_t(length.value.usize));
     }
 
     Type *create_slice_type(IrType *irtype)
@@ -277,8 +276,8 @@ private:
 
     bool is_method_type(IrType *irtype)
     {
-        if (irtype->hdr.kind == kIrSignature && pawIr_get_context(C, irtype) != nullptr) {
-            auto const *def = pawIr_get_fn_def(C, IR_TYPE_DID(irtype));
+        if (irtype->hdr.kind == kIrSignature && ir_get_context(C, irtype) != nullptr) {
+            auto const *def = ir_get_fn_def(C, IR_TYPE_DID(irtype));
             if (def->params->count > 0) {
                 auto const *name = def->params->data[0].name;
                 return pawS_eq(name, SCAN_STR(C, "self"));
@@ -289,12 +288,12 @@ private:
 
     Type *define_enum_type(IrType *irtype)
     {
-        auto const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
+        auto const *def = ir_get_adt_def(C, IR_TYPE_DID(irtype));
         paw_assert(def->variants->count > 0);
 
         std::vector<ObjectType::FieldTypes> variant_types(unsigned(def->variants->count));
         for (int i = 0; i < def->variants->count; ++i) {
-            auto *field_irtypes = pawP_instantiate_variant_fields(C, &irtype->Adt_, i);
+            auto *field_irtypes = instantiate_variant_fields(C, &irtype->Adt_, i);
             auto field_types = get_or_create_types(field_irtypes);
             variant_types[unsigned(i)] = field_types;
         }
@@ -304,7 +303,7 @@ private:
 
     Type *create_adt(IrType *irtype)
     {
-        auto const *def = pawIr_get_adt_def(C, IR_TYPE_DID(irtype));
+        auto const *def = ir_get_adt_def(C, IR_TYPE_DID(irtype));
         auto variant_types = create_adt_variants(irtype, def->variants->count);
         return X->get_object_type(variant_types);
     }
@@ -313,7 +312,7 @@ private:
     {
         std::vector<ObjectType::FieldTypes> variant_types;
         for (int discr = 0; discr < num_variants; ++discr) {
-            auto const *field_irtypes = pawP_instantiate_variant_fields(C, IrGetAdt(irtype), discr);
+            auto const *field_irtypes = instantiate_variant_fields(C, IrGetAdt(irtype), discr);
             auto field_types = get_or_create_types(field_irtypes);
             variant_types.push_back(field_types);
         }
@@ -324,7 +323,7 @@ private:
     {
         std::vector<Type *> types;
         types.reserve(size_t(irtypes->count));
-        K_LIST_XFOREACH (irtypes, IrType *const, p)
+        LIST_XFOREACH (irtypes, IrType *const, p)
             types.push_back(get_or_create_type(*p));
         return types;
     }
@@ -631,7 +630,7 @@ public:
         auto *irtype = IrGenericArg_get_type(IrGenericArgs_get(irargs, 1));
         paw_assert(irconst->kind == IR_CONST_VALUE);
         paw_assert(IrIsInt(irconst->value.type));
-        auto const N = irconst->value.value.u;
+        auto const N = irconst->value.value.usize;
 
         State state(X, fn);
 
@@ -647,7 +646,7 @@ public:
         auto *irtype = IrGenericArg_get_type(IrGenericArgs_get(irargs, 1));
         paw_assert(irconst->kind == IR_CONST_VALUE);
         paw_assert(IrIsInt(irconst->value.type));
-        auto const N = irconst->value.value.u;
+        auto const N = irconst->value.value.usize;
 
         State state(X, fn);
 
@@ -664,7 +663,7 @@ public:
         auto *irtype = IrGenericArg_get_type(IrGenericArgs_get(irargs, 1));
         paw_assert(irconst->kind == IR_CONST_VALUE);
         paw_assert(IrIsInt(irconst->value.type));
-        auto const N = irconst->value.value.u;
+        auto const N = irconst->value.value.usize;
 
         State state(X, fn);
 
@@ -686,8 +685,8 @@ public:
         auto *irtype = ir_deref(IrTypeList_first(irfn->params));
         // The type may not have an implementation of Drop since there is no `Drop` bound on
         // type `T` in the Paw signature.
-        if (pawIr_needs_drop(C, irtype)) {
-            auto *irdrop = pawIr_get_custom_drop_type(C, irtype);
+        if (ir_needs_drop(C, irtype)) {
+            auto *irdrop = ir_get_custom_drop_type(C, irtype);
             auto *arg = READ_ARG(state, X.get_ptr_ty(), 0);
             B->CreateCall(get_fn(irdrop)->get_fn(), arg);
         }
@@ -721,7 +720,7 @@ public:
                     IR_FIRST_GENERIC_ARG(mir->type));
 
         State state(X, fn);
-        auto *result = X.create_i1(pawIr_needs_drop(C, pointee_irtype));
+        auto *result = X.create_i1(ir_needs_drop(C, pointee_irtype));
         state.create_return(result);
     }
 
@@ -1242,7 +1241,7 @@ public:
 
         auto const discr = value.t->discr;
         auto *object_type = cast<ObjectType>(get_type(IR_CAST_TYPE(adt)));
-        auto const *fields = pawP_instantiate_variant_fields(C, adt, discr);
+        auto const *fields = instantiate_variant_fields(C, adt, discr);
 
         if (object_type->get_num_variants() > 1) {
             auto *discr_type = object_type->get_discriminant_type();
@@ -1331,7 +1330,7 @@ private:
     llvm::Function::LinkageTypes get_linkage(Mir const *mir)
     {
         if (!mir->is_pub) {
-            auto const *def = pawIr_get_fn_def(C, IR_TYPE_DID(mir->type));
+            auto const *def = ir_get_fn_def(C, IR_TYPE_DID(mir->type));
             if (!def->is_extern)
                 return llvm::Function::InternalLinkage;
         }
@@ -1492,7 +1491,7 @@ private:
     }
 
     // TODO: locals that became SSA registers need their drops removed, then use ir_deref instead of ir_auto_deref
-    // TODO: also remove check for pawIr_needs_drop
+    // TODO: also remove check for ir_needs_drop
     void create_drop(MirDrop const &x)
     {
         auto *target_irtype = get_place_irtype(x.target);
@@ -1504,8 +1503,8 @@ private:
         } else {
             target = state_->get_raw_value(x.target.r);
         }
-        if (pawIr_needs_drop(C, target_irtype)) {
-            auto *irtype = pawIr_get_custom_drop_type(C, target_irtype);
+        if (ir_needs_drop(C, target_irtype)) {
+            auto *irtype = ir_get_custom_drop_type(C, target_irtype);
             auto *fn = get_fn(irtype)->get_fn();
             B->CreateCall(fn, target);
         }
@@ -1622,7 +1621,7 @@ private:
 
     Type *get_deref_type(IrType *irtype)
     {
-        return get_type(pawIr_remove_indirection(C, irtype));
+        return get_type(ir_remove_indirection(C, irtype));
     }
 
     void create_structgep(struct MirStructGEP const &x)
@@ -1649,7 +1648,7 @@ private:
         {
             auto *konst = IrGetArray(ir_deref(array_irtype))->length;
             paw_assert(konst->kind == IR_CONST_VALUE);
-            auto const length = (size_t)konst->value.value.i;
+            auto const length = (size_t)konst->value.value.usize;
             X.create_check_bounds(index, X.create_isize(length));
         }
 
@@ -1693,7 +1692,7 @@ private:
 
         std::vector<llvm::Value *> args;
         args.reserve((size_t)x.args->count);
-        K_LIST_XFOREACH (x.args, MirPlace const, p)
+        LIST_XFOREACH (x.args, MirPlace const, p)
             args.push_back(operand(*p));
 
         auto *fn = value;
@@ -1804,7 +1803,7 @@ private:
     {
         std::vector<Type *> fields;
         fields.reserve(unsigned(upvalues->count));
-        K_LIST_XFOREACH (upvalues, MirUpvalueInfo const, up)
+        LIST_XFOREACH (upvalues, MirUpvalueInfo const, up)
             fields.push_back(get_type(up->type));
         return X.get_tuple_type(fields);
     }
@@ -2012,7 +2011,7 @@ private:
 
     void create_return(MirReturn const &)
     {
-        auto const result = pawMir_get_register(state_->mir_, MirRegister{0});
+        auto const result = mir_get_register(state_->mir_, MirRegister{0});
         auto *result_irtype = get_place_irtype(result);
         state_->create_return(IrIsUnit(result_irtype) ? nullptr : operand(result));
     }
@@ -2032,26 +2031,26 @@ private:
         paw_assert(kdata.data->kind == IR_CONST_VALUE);
         switch (IR_KINDOF(kdata.data->value.type)) {
             case kIrBool:
-                return X.create_bool(kdata.data->value.value.i);
+                return X.create_bool(kdata.data->value.value.b);
             case kIrChar:
                 return X.create_char(kdata.data->value.value.c);
             case kIrInt:
                 switch (IR_INT_KIND(kdata.data->value.type)) {
                     case IR_INT8:
                     case IR_UINT8:
-                        return X.create_i8((paw_Int8)kdata.data->value.value.i);
+                        return X.create_i8(kdata.data->value.value.i8);
                     case IR_INT16:
                     case IR_UINT16:
-                        return X.create_i16((paw_Int16)kdata.data->value.value.i);
+                        return X.create_i16(kdata.data->value.value.i16);
                     case IR_INT32:
                     case IR_UINT32:
-                        return X.create_i32((paw_Int32)kdata.data->value.value.i);
+                        return X.create_i32(kdata.data->value.value.i32);
                     case IR_INT64:
                     case IR_UINT64:
-                        return X.create_i64(kdata.data->value.value.i);
+                        return X.create_i64(kdata.data->value.value.i64);
                     case IR_ISIZE:
                     case IR_USIZE:
-                        return X.create_isize((paw_Usize)kdata.data->value.value.i);
+                        return X.create_isize((paw_Usize)kdata.data->value.value.isize);
                 }
             default:
                 paw_assert(IrIsFloat(kdata.data->value.type));
@@ -2059,12 +2058,12 @@ private:
                     case IR_FLOAT32:
                         return llvm::cast<llvm::ConstantInt>(
                                 llvm::ConstantExpr::getBitCast(
-                                    X.create_f32(kdata.data->value.value.f),
+                                    X.create_f32(kdata.data->value.value.f32),
                                     X.get_i32_ty()));
                     case IR_FLOAT64:
                         return llvm::cast<llvm::ConstantInt>(
                                 llvm::ConstantExpr::getBitCast(
-                                    X.create_f64(kdata.data->value.value.f),
+                                    X.create_f64(kdata.data->value.value.f64),
                                     X.get_i64_ty()));
                 }
         }
@@ -2108,7 +2107,7 @@ private:
             auto const kdata = *mir_const_data((Mir *)state_->mir_, x.arms->data[i].k);
             paw_assert(IrIsString(kdata.data->value.type));
 
-            auto *target = get_constant_str((::Str const *)kdata.data->value.value.i);
+            auto *target = get_constant_str((::Str const *)kdata.data->value.value.usize);
             auto *cond = B->CreateICmpEQ(create_strcmp(discr, target), X.create_i64(0));
 
             auto *false_block = llvm::BasicBlock::Create(*c, "", *fn);
@@ -2121,7 +2120,7 @@ private:
 
     bool can_switch_directly(IrType *irtype)
     {
-        irtype = pawIr_remove_indirection(C, irtype);
+        irtype = ir_remove_indirection(C, irtype);
         switch (IR_KINDOF(irtype)) {
             case kIrBool:
             case kIrChar:
@@ -2204,7 +2203,7 @@ ObjectType *TypeTranslator::create_env_type(IrType *irtype)
     auto const *upvalues = G->mirs_.lookup(irtype)[0]->upvalues;
     std::vector<Type *> fields;
     fields.reserve(unsigned(upvalues->count));
-    K_LIST_XFOREACH (upvalues, MirUpvalueInfo const, up)
+    LIST_XFOREACH (upvalues, MirUpvalueInfo const, up)
         fields.push_back(get_or_create_type(up->type));
     return X->get_tuple_type(fields);
 }
@@ -2360,11 +2359,11 @@ llvm::Value *PawState::get_upvalue_ptr(unsigned index)
 
 static void link_compilation_artifact(paw_Env *P, std::string prefix)
 {
-    std::string const root_dir(PAW_ROOT_DIR);
+    std::string const root_dir = PAW_BINARY_DIR;
 
     auto linker = Linker(P)
         .with_object(prefix + ".o")
-        .with_arg("-L" + root_dir)
+        .with_arg("-L" + root_dir + "/std")
         .with_staticlib("paw_stdc");
 
     auto const o = P->options;

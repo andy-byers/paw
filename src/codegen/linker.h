@@ -5,7 +5,8 @@
 #ifndef PAW_CODEGEN_LINKER_H
 #define PAW_CODEGEN_LINKER_H
 
-#include "core.h"
+#include "compiler/core.h"
+
 #include <string>
 #include <vector>
 

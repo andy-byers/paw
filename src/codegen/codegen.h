@@ -5,7 +5,7 @@
 #ifndef PAW_CODEGEN_CODEGEN_H
 #define PAW_CODEGEN_CODEGEN_H
 
-#include "core.h"
+#include "compiler/core.h"
 
 struct Compiler;
 struct TranslationUnit;

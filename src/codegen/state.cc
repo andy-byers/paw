@@ -7,6 +7,8 @@
 #include "state.h"
 #include "value.h"
 
+#include "common/util.h"
+
 namespace paw::cg {
 
 ScratchMap::ScratchMap(Context &X)

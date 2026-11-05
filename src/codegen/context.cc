@@ -3,7 +3,10 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "context.h"
-#include "../value.h"
+#include "value.h"
+
+#include "common/str.h"
+#include "common/util.h"
 
 namespace paw::cg {
 
@@ -39,7 +42,7 @@ static std::vector<llvm::DIFile *> create_di_modules(Compiler *C, llvm::DIBuilde
 //    difiles.reserve(unsigned(C->modinfo->count));
 //
 //    ::Module const *pmod;
-//    K_LIST_FOREACH (C->modinfo, pmod) {
+//    LIST_FOREACH (C->modinfo, pmod) {
 //        difiles.push_back(DI.createFile(
 //                to_string(pmod->name) + PAW_MODULE_EXT,
 //                to_string(pmod->dirname)));

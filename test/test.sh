@@ -2,11 +2,13 @@
 
 DRIVER_PATH=$1
 OUTPUT_DIR=$2
-TEST_DIR=$3
+STDLIB_DIR=$3
+TEST_DIR=$4
 
 echo "Running test scripts..."
 echo "DRIVER_PATH: $DRIVER_PATH"
 echo "OUTPUT_DIR: $OUTPUT_DIR"
+echo "STDLIB_DIR: $STDLIB_DIR"
 echo "TEST_DIR: $TEST_DIR"
 
 TESTS=(
@@ -154,7 +156,7 @@ for TESTNAME in "${TESTS[@]}"; do
     EXEC_PATH="$OUTPUT_DIR/test_$TESTNAME"
     echo "Building $SCRIPT_PATH"
 
-    "$DRIVER_PATH" -c -t "$SCRIPT_PATH"
+    "$DRIVER_PATH" -c -t "$SCRIPT_PATH" -L "$STDLIB_DIR"
     if [ $? -eq 0 ]; then
         echo "[PASS]"
     else

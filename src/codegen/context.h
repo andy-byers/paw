@@ -36,6 +36,8 @@
 #include "type.h"
 #include "value.h"
 
+#include "common/util.h"
+
 struct Str;
 
 namespace paw::cg {

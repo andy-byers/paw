@@ -5,33 +5,13 @@
 #include "abi.h"
 #include "context.h"
 
+#include "common/util.h"
+
 #define DEFERRED_INIT ((llvm::Type *)16)
 
 namespace paw::cg {
 
-namespace {
-
-unsigned long static constexpr const HASH_SEED = 0x9E3779B97F4A7C15ULL;
-
-// Splitmix64 PRNG
-template<class T>
-T splitmix64(T &state)
-{
-    state += HASH_SEED;
-
-    auto t = state;
-    t = (t ^ (t >> 30)) * 0xBF58476D1CE4E5B9ULL;
-    t = (t ^ (t >> 27)) * 0x94D049BB133111EBULL;
-    return t ^ (t >> 31);
-}
-
-template<class T>
-T hash_combine(T x, T y) {
-    T t = x ^ y;
-    return splitmix64(t);
-}
-
-} // (anonymous namespace)
+static constexpr const HashValue HASH_SEED = 0x9E3779B97F4A7C15;
 
 unsigned Type::get_alignment() const
 {

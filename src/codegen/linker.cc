@@ -4,6 +4,8 @@
 
 #include "linker.h"
 
+#include "compiler/config.h"
+
 // TODO: probably should write separate linker abstractions for different linkers
 #if defined(PAW_OS_POSIX)
 # include <sys/wait.h>

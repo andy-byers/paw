@@ -1,0 +1,12 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+#include "compiler/compiler.h"
+
+struct IrObligationCause;
+
+struct Instantiation *pawP_find_method(struct Compiler *C, struct IrType *self, struct IrTrait *trait, Str const *name, struct IrTypeList *call_args, struct IrObligationCause cause);
+
+struct Instantiation *ir_find_assoc_type_projection(struct Compiler *C, struct IrType *self, struct IrTrait *trait, Str const *name, struct IrObligationCause cause);
+struct Instantiation *ir_find_assoc_type_generic(struct Compiler *C, struct IrType *self, Str const *name, struct IrObligationCause cause);

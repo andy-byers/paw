@@ -4,10 +4,14 @@
 //
 // TODO: there are quite a few commented-out things that need to be updated to reflect changes in syntax/semantics...
 
-#include "env.h"
-#include "error.h"
-#include "lib.h"
 #include "test.h"
+
+#include "compiler/env.h"
+#include "compiler/error.h"
+#include "compiler/lib.h"
+
+#include "ir/value.h"
+
 #include <limits.h>
 #include <inttypes.h>
 
@@ -43,8 +47,11 @@ static void test_compiler_status(enum ErrorKind expect, char const *name, char c
     static char buffer[100000];
     write_main(buffer, item, text);
 
-    paw_Env *P = paw_open(&(struct paw_Options){0});
-    enum ErrorKind status = (enum ErrorKind)pawL_load_chunk(P, name, buffer);
+    paw_Env *P = paw_open(&(struct paw_Options){
+                .linker_paths = (char const *[]){"../std"},
+                .num_linker_paths = 1,
+            });
+    enum ErrorKind status = (enum ErrorKind)lib_load_chunk(P, name, buffer);
     check_status(P, (int)status, (int)expect);
 
     paw_close(P);

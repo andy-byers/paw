@@ -5,8 +5,9 @@
 #ifndef PAW_TEST_TEST_H
 #define PAW_TEST_TEST_H
 
-#include "os.h"
-#include "core.h"
+#include "compiler/os.h"
+#include "compiler/core.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 

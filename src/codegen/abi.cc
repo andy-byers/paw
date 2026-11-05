@@ -2,9 +2,10 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "abi.h"
 #include "context.h"
 
-#include "abi.h"
+#include "compiler/config.h"
 
 namespace paw::cg {
 
@@ -254,7 +255,9 @@ AbiInfo composite_info(Context &X, llvm::Type *ty, RegisterInfo &regs)
         return info;
     }
 
-    auto const DL = X.get_module()->get_module()->getDataLayout();
+    auto const DL = X.get_module()
+        ->get_module()
+        ->getDataLayout();
     auto *c = X.get_context();
 
     std::vector<Field> fields;
