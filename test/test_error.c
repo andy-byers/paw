@@ -48,8 +48,8 @@ static void test_compiler_status(enum ErrorKind expect, char const *name, char c
     write_main(buffer, item, text);
 
     paw_Env *P = paw_open(&(struct paw_Options){
-                .linker_paths = (char const *[]){"../std"},
-                .num_linker_paths = 1,
+                .library_dirs = (char const *[]){"../std"},
+                .num_library_dirs = 1,
             });
     enum ErrorKind status = (enum ErrorKind)lib_load_chunk(P, name, buffer);
     check_status(P, (int)status, (int)expect);

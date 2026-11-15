@@ -251,7 +251,7 @@ char const *pawOs_find_last_sep(char const *s, size_t n, size_t *pn)
         --s;
         ++*pn;
         char const *q = PAW_FOLDER_SEPS;
-        while (*q != '\0') {
+        while (*q != 0) {
             if (*q++ == *s)
                 return s;
         }

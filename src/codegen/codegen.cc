@@ -2367,12 +2367,12 @@ static void link_compilation_artifact(paw_Env *P, std::string prefix)
         .with_staticlib("paw_stdc");
 
     auto const o = P->options;
-    for (int i = 0; i < o.num_linker_paths; ++i) {
-        std::string const path(o.linker_paths[i]);
+    for (int i = 0; i < o.num_library_dirs; ++i) {
+        std::string const path(o.library_dirs[i]);
         linker.add_arg("-L" + path);
     }
-    for (int i = 0; i < o.num_linker_specs; ++i) {
-        std::string spec(o.linker_specs[i]);
+    for (int i = 0; i < o.num_ld_paths; ++i) {
+        std::string spec(o.ld_paths[i]);
 
         bool is_static = true;
         auto const pos = spec.find('=');

@@ -133,7 +133,7 @@ static int searcher_cwd(paw_Env *P, void *arg)
 
 static int searcher_Paw(paw_Env *P, void *arg)
 {
-    struct SearcherState *state = arg;
+    struct SearcherState const *state = arg;
     unsigned const num_modules = P->options.no_std
         ? PAWL_NUM_CORE_MODULES
         : PAWL_NUM_STD_MODULES;
@@ -175,9 +175,16 @@ static int searcher_env(paw_Env *P, void *arg)
     return search_pathlist(P, lib_getenv(P), arg);
 }
 
-static int searcher_inc(paw_Env *P, void *arg)
+static int searcher_import_dirs(paw_Env *P, void *arg)
 {
-    return search_pathlist(P, P->options.include_paths, arg);
+    struct SearcherState const *state = arg;
+    for (int i = 0; i < P->options.num_import_dirs; ++i) {
+        Str const *import_dir = pawS_new_str(P, P->options.import_dirs[i]);
+        Str const *filename = add_module_ext(P, state->name);
+        if (open_source_file(P, import_dir, filename, state->fr))
+            return 1;
+    }
+    return 0;
 }
 
 void lib_init(paw_Env *P)
@@ -189,7 +196,7 @@ void lib_init(paw_Env *P)
     paw_Function const SEARCHERS[] = {
         searcher_Paw, // check standard library
         searcher_cwd, // check current working directory
-        searcher_inc, // check "-I" option argument
+        searcher_import_dirs, // check "-I" option argument
         searcher_env, // check PAW_PATH
     };
     Searchers *searchers = Searchers_new(ALLOCATOR_OF(P->C));

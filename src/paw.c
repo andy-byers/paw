@@ -10,6 +10,7 @@
 
 #include "ast/ast.h"
 #include "common/list.h"
+#include "common/util.h"
 #include "compiler/core.h"
 #include "compiler/lib.h"
 #include "compiler/os.h"
@@ -25,48 +26,43 @@ enum Status {
     STATUS_NOT_ENOUGH_MEMORY = -3,
 };
 
-// clang-format off
 #define PROGRAM_OPTIONS \
-    OPT_STR(e, source, "accept source code from string argument") \
-    OPT_STR(d, phase, "dump debug info for compilation phase(s)") \
-    OPT_STR(T, triple, "triple specifying compilation target") \
-    OPT_STR(O, level, "optimization level") \
-    OPT_STR(o, path, "path to compiler output") \
-    OPT_STR(I, include, "list of import paths") \
-    OPT_STR(a, name, "name of the target package") \
-    OPT_STRS(L, path, 100, "add to linker search path") \
-    OPT_STRS(l, spec, 100, "specify library to link") \
-    OPT_STRS(p, deps, 100, "list of Paw package dependencies") \
-    OPT_OPT(h, "display this help message") \
-    OPT_OPT(n, "omit the standard library") \
-    OPT_OPT(c, "compile the program only") \
-    OPT_OPT(t, "build tests") \
-    OPT_OPT(V, "validate LLVM IR") \
-    OPT_OPT(q, "suppress output")
+    OPT_OPTION(h, "help", "display this help message") \
+    OPT_OPTION(q, "quiet", "suppress output") \
+    OPT_OPTION(c, "compile", "compile the program only") \
+    OPT_OPTION(t, "test", "build tests") \
+    OPT_OPTION(V, "validate", "validate LLVM IR") \
+    OPT_OPTION(n, "nostd", "omit the standard library") \
+    OPT_STRING(e, "source", "text", "accept source code from string argument") \
+    OPT_STRING(T, "target", "triple", "triple specifying compilation target") \
+    OPT_STRING(O, "optimize", "level", "optimization level") \
+    OPT_STRING(o, "output", "path", "path to compiler output") \
+    OPT_STRING(a, "package-name", "name", "name of the target package") \
+    OPT_STRINGS(d, "debug", "phase", "dump debug info for compilation phase") \
+    OPT_STRINGS(I, "import-directory", "path", "add directory to import search path") \
+    OPT_STRINGS(L, "library-directory", "path", "add directory to linker search path") \
+    OPT_STRINGS(l, "ld-path", "name", "specify library to link") \
+    OPT_STRINGS(p, "dependency", "name", "add Paw package dependency") \
 
 static struct {
-#define OPT_STRS(Name_, A_, Limit_, B_) char const *Name_[Limit_]; int Name_##_count;
-#define OPT_STR(Name_, A_, B_) char const *Name_;
-#define OPT_INT(Name_, A_, B_) paw_Int64 Name_;
-#define OPT_OPT(Name_, A_) paw_Bool Name_;
+#define OPT_STRINGS(Letter_, Name_, A_, B_) struct CStrings *Letter_;
+#define OPT_STRING(Letter_, Name_, A_, B_) char const *Letter_;
+#define OPT_INTEGER(Letter_, Name_, A_, B_) paw_Int64 Letter_;
+#define OPT_OPTION(Letter_, Name_, A_) paw_Bool Letter_;
     PROGRAM_OPTIONS
-#undef OPT_OPT
-#undef OPT_INT
-#undef OPT_STR
-#undef OPT_STRS
+#undef OPT_OPTION
+#undef OPT_INTEGER
+#undef OPT_STRING
+#undef OPT_STRINGS
 } s_opt;
 
 DEFINE_LIST(CStrings, char const *)
 
 static struct {
     char const *name;
-
     char const *package_pathname;
-
     char const *package_name;
-
     paw_Bool started_compilation;
-
     paw_Bool quiet;
 } s_program;
 
@@ -79,30 +75,29 @@ static struct {
 } s_debug;
 
 static struct Option {
-    const char *name;
-    const char *argname;
-    const char **string;
+    char const *short_name;
+    char const *long_name;
+    char const *argname;
+    char const **string;
     paw_Int64 *integer;
     paw_Bool *flag;
-    const char *description;
-    int *arg_count_ptr;
-    int arg_limit;
+    CStrings **strings;
+    char const *description;
 } s_opt_info[] = {
-#define OPT_STRS(Name_, Arg_, Limit_, Help_) \
-    {#Name_, #Arg_, s_opt.Name_, NULL, NULL, Help_, &s_opt.Name_##_count, Limit_},
-#define OPT_STR(Name_, Arg_, Help_) \
-    {#Name_, #Arg_, &s_opt.Name_, NULL, NULL, Help_, NULL, -1},
-#define OPT_INT(Name_, Arg_, Help_) \
-    {#Name_, #Arg_, NULL, &s_opt.Name_, NULL, Help_, NULL, -1},
-#define OPT_OPT(Name_, Help_) \
-    {#Name_, NULL, NULL, NULL, &s_opt.Name_, Help_, NULL, -1},
+#define OPT_STRINGS(Letter_, Name_, Arg_, Help_) \
+    {#Letter_, Name_, Arg_, NULL, NULL, NULL, &s_opt.Letter_, Help_},
+#define OPT_STRING(Letter_, Name_, Arg_, Help_) \
+    {#Letter_, Name_, Arg_, &s_opt.Letter_, NULL, NULL, NULL, Help_},
+#define OPT_INTEGER(Letter_, Name_, Arg_, Help_) \
+    {#Letter_, Name_, Arg_, NULL, &s_opt.Letter_, NULL, NULL, Help_},
+#define OPT_OPTION(Letter_, Name_, Help_) \
+    {#Letter_, Name_, NULL, NULL, NULL, &s_opt.Letter_, NULL, Help_},
     PROGRAM_OPTIONS
-#undef OPT_OPT
-#undef OPT_INT
-#undef OPT_STR
-#undef OPT_STRS
+#undef OPT_OPTION
+#undef OPT_INTEGER
+#undef OPT_STRING
+#undef OPT_STRINGS
 };
-// clang-format on
 
 #define IS_SPACE(Char_) ((Char_) == ' ' || (Char_) == '\t' || (Char_) == '\f'  \
                          || (Char_) == '\v' || (Char_) == '\r' || (Char_) == '\n')
@@ -144,10 +139,10 @@ static void show_help(void)
     info("OPTIONS:\n");
     for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
         struct Option opt = s_opt_info[i];
-        if (opt.flag) {
-            info("-%s     : %s\n", opt.name, opt.description);
+        if (opt.flag != NULL) {
+            info("-%s|--%s : %s\n", opt.short_name, opt.long_name, opt.description);
         } else {
-            info("-%s %s : %s\n", opt.name, opt.argname, opt.description);
+            info("-%s|--%s <%s> : %s\n", opt.short_name, opt.long_name, opt.argname, opt.description);
         }
     }
 }
@@ -174,6 +169,25 @@ static paw_Int64 parse_int(char const *s)
     }
 }
 
+enum OptionKind {
+    SHORT_OPTION,
+    LONG_OPTION,
+};
+
+static char const *find_matching_option(char const *name, enum OptionKind kind, struct Option *out)
+{
+    for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
+        struct Option const *opt = &s_opt_info[i];
+        char const *rest;
+        if ((kind == SHORT_OPTION && (rest = consume_prefix(name, opt->short_name)) != NULL)
+                || (kind == LONG_OPTION && (rest = consume_prefix(name, opt->long_name)) != NULL)) {
+            *out = *opt;
+            return rest;
+        }
+    }
+    return NULL;
+}
+
 // Parse commandline options
 static void parse_options(int argc, char const **argv)
 {
@@ -182,67 +196,59 @@ static void parse_options(int argc, char const **argv)
     {
         // parse the program name
         size_t unused;
-        char const *o = GETOPT(argc, argv);
-        char const *rest = pawOs_find_last_sep(o, strlen(o), &unused);
-        s_program.name = rest != NULL ? rest + 1 : o;
+        char const *arg = GETOPT(argc, argv);
+        char const *rest = pawOs_find_last_sep(arg, strlen(arg), &unused);
+        s_program.name = rest != NULL ? rest + 1 : arg;
     }
 
     while (argc > 0) {
-        char const *option = GETOPT(argc, argv);
-        char const *a = option;
-        if (a[0] != '-') {
+        char const *arg = GETOPT(argc, argv);
+        char const *a = arg;
+        if (*a++ != '-') {
             // found the module pathname
             if (s_program.package_pathname != NULL)
                 error("expected a single module pathname "
                       "(the non-option argument)\n");
-            s_program.package_pathname = option;
+            s_program.package_pathname = arg;
             continue;
         }
-        ++a;
-        paw_Bool found = PAW_FALSE;
-        for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
-            struct Option *state = &s_opt_info[i];
-            char const *arg = consume_prefix(a, state->name);
-            if (arg != NULL) {
-                found = PAW_TRUE;
-                if (state->flag != NULL) {
-                    if (*arg != '\0')
-                        error("unexpected argument for option \"%s\"\n", state->name);
-                    *state->flag = PAW_TRUE;
-                    break; // no argument
-                }
 
-                // handle argument passed in two ways: "-xarg" or "-x arg"
-                if (*arg == '\0') {
-                    if (argc == 0)
-                        error("missing argument \"%s\" for option \"%s\"\n",
-                                state->argname, state->name);
-                    arg = GETOPT(argc, argv);
-                }
-
-                if (state->integer != NULL) {
-                    *state->integer = parse_int(arg);
-                } else {
-                    paw_assert(state->string != NULL);
-                    if (state->arg_count_ptr != NULL) {
-                        int const n = *state->arg_count_ptr;
-                        if (n < state->arg_limit) {
-                            state->string[n] = arg;
-                            ++*state->arg_count_ptr;
-                        } else {
-                            error("too many arguments for option \"%s\" "
-                                  "(expected at most %" PRId64 ")\n", state->name);
-                        }
-                    } else {
-                        *state->string = arg;
-                    }
-                }
-                break;
-            }
+        enum OptionKind kind = SHORT_OPTION;
+        if (*a == '-') {
+            kind = LONG_OPTION;
+            ++a;
         }
 
-        if (!found)
-            error("unrecognized option \"%s\"\n", option);
+        struct Option opt;
+        a = find_matching_option(a, kind, &opt);
+        if (a == NULL)
+            error("unrecognized option \"%s\"\n", arg);
+
+        if (opt.flag != NULL) {
+            if (*a != '\0')
+                error("unexpected argument for option \"%s\"\n", opt.long_name);
+            *opt.flag = PAW_TRUE;
+            continue; // no argument
+        }
+
+        if (*a == '=') {
+            ++a;
+        } else if (*a == '\0') {
+            if (argc == 0)
+                error("missing argument \"%s\" for option \"%s\"\n",
+                        opt.argname, opt.long_name);
+            a = GETOPT(argc, argv);
+        } else if (kind == LONG_OPTION) {
+            error("long option requires '=' or ' ' between option name and argument\n");
+        }
+
+        if (opt.integer != NULL) {
+            *opt.integer = parse_int(a);
+        } else if (opt.string != NULL) {
+            *opt.string = a;
+        } else if (opt.strings != NULL) {
+            CStrings_push(*opt.strings, a);
+        }
     }
 
 #undef GETOPT
@@ -253,42 +259,32 @@ static char to_lower(char c)
     return 'A' <= c && c <= 'Z' ? c | 0x60 : c;
 }
 
-static paw_Bool advance_ignore_case(char const **pp, char const *prefix)
+static paw_Bool equals_ignore_case(char const *a, char const *b)
 {
-    paw_assert(*prefix != '\0');
-    for (; *prefix != '\0'; ++*pp, ++prefix) {
-        if (to_lower(**pp) != *prefix)
+    for (; *a != 0; ++a, ++b) {
+        if (to_lower(*a) != to_lower(*b))
             return PAW_FALSE;
     }
-    return PAW_TRUE;
+    return *b == 0;
 }
 
-static void parse_debug_string(void)
+static void set_debug_flags(void)
 {
-#define SKIP_SPACES(Ptr_) while (IS_SPACE(*(Ptr_))) ++(Ptr_)
-
-    char const *p = s_opt.d;
-    paw_assert(p != NULL);
-
-    do {
-        SKIP_SPACES(p);
-        if (advance_ignore_case(&p, "ast")) {
+    LIST_XFOREACH (s_opt.d, char const *, arg) {
+        if (equals_ignore_case(*arg, "ast")) {
             s_debug.ast = PAW_TRUE;
-        } else if (advance_ignore_case(&p, "hir")) {
+        } else if (equals_ignore_case(*arg, "hir")) {
             s_debug.hir = PAW_TRUE;
-        } else if (advance_ignore_case(&p, "mir")) {
+        } else if (equals_ignore_case(*arg, "mir")) {
             s_debug.mir = PAW_TRUE;
-        } else if (advance_ignore_case(&p, "lir")) {
+        } else if (equals_ignore_case(*arg, "lir")) {
             s_debug.lir = PAW_TRUE;
-        } else if (advance_ignore_case(&p, "stats")) {
+        } else if (equals_ignore_case(*arg, "stats")) {
             s_debug.stats = PAW_TRUE;
         } else {
-            error("invalid debug string '%s'\n", s_opt.d);
+            error("invalid debug string `%s`\n", *arg);
         }
-        SKIP_SPACES(p);
-    } while (*p++ == ',');
-
-#undef SKIP_SPACES
+    }
 }
 
 static int on_build_ast(paw_Env *P, void *arg)
@@ -410,8 +406,36 @@ static void decompose_pathname(char const *pathname, size_t pathlen, char *dirna
     filename[filelen] = '\0';
 }
 
+static void *alloc(void *ctx, void *ptr, size_t size0, size_t size)
+{
+    if (size == 0) {
+        free(ptr);
+        return NULL;
+    }
+
+    if (ptr != NULL)
+        return realloc(ptr, size);
+
+    return malloc(size);
+}
+
+static void startup_program(struct Allocator const *a)
+{
+    for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
+        CStrings **p = s_opt_info[i].strings;
+        if (p != NULL) *p = CStrings_new(a);
+    }
+}
+
 int main(int argc, char const *argv[])
 {
+    struct Allocator const a = {
+        .P = NULL,
+        .alloc = alloc,
+        .ctx = NULL,
+    };
+    startup_program(&a);
+
     parse_options(argc, argv);
     if (s_opt.h) {
         show_help();
@@ -419,7 +443,7 @@ int main(int argc, char const *argv[])
     }
 
     if (s_opt.d != NULL)
-        parse_debug_string();
+        set_debug_flags();
 
     // parse optimization level
     char const *level = s_opt.O ? s_opt.O : "0";
@@ -439,8 +463,8 @@ int main(int argc, char const *argv[])
     }
 
     // ensure linker specs have form `["static" | "dynamic"] "=" name`
-    for (int i = 0; i < s_opt.l_count; ++i) {
-        char const *s = s_opt.l[i];
+    for (int i = 0; i < s_opt.l->count; ++i) {
+        char const *s = s_opt.l->data[i];
         if (strchr(s, '=') != 0
                 && !consume_prefix(s, "static=")
                 && !consume_prefix(s, "dynamic="))
@@ -448,15 +472,15 @@ int main(int argc, char const *argv[])
     }
 
     paw_Env *P = paw_open(&(struct paw_Options){
-                .num_linker_paths = s_opt.L_count,
-                .num_linker_specs = s_opt.l_count,
-                .num_dependencies = s_opt.p_count,
-                .linker_paths = s_opt.L,
-                .linker_specs = s_opt.l,
-                .dependencies = s_opt.p,
+                .num_library_dirs = s_opt.L->count,
+                .num_ld_paths = s_opt.l->count,
+                .num_dependencies = s_opt.p->count,
+                .library_dirs = s_opt.L->data,
+                .import_dirs = s_opt.I->data,
+                .ld_paths = s_opt.l->data,
+                .dependencies = s_opt.p->data,
                 .output_filename = output_filename,
                 .output_dirname = output_dirname,
-                .include_paths = s_opt.I,
                 .compile_only = s_opt.c,
                 .target = s_opt.T,
                 .no_std = s_opt.n,

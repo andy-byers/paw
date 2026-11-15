@@ -59,12 +59,13 @@ struct paw_Options {
     char const *target;
     char const *output_dirname;
     char const *output_filename;
-    char const *include_paths;
-    char const **linker_specs;
-    char const **linker_paths;
+    char const **ld_paths;
+    char const **import_dirs;
+    char const **library_dirs;
     char const **dependencies;
-    int num_linker_specs;
-    int num_linker_paths;
+    int num_ld_paths;
+    int num_import_dirs;
+    int num_library_dirs;
     int num_dependencies;
     paw_Bool compile_only : 1;
     paw_Bool build_tests : 1;
