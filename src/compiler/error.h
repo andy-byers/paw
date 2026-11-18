@@ -7,8 +7,8 @@
 // TODO: produce better error messages: print the line of source code where the error occurred and use span range to highlight target of message if applicable
 // TODO: remove unused errors and add dedicated errors for situations pawErr_generic_error is currently being used
 
-#ifndef PAW_ERROR_H
-#define PAW_ERROR_H
+#ifndef PAW_COMPILER_ERROR_H
+#define PAW_COMPILER_ERROR_H
 
 #include "config.h"
 #include "core.h"
@@ -801,4 +801,4 @@ PAW_NORETURN void pawErr_generic_error(paw_Env *P, struct Str const *modname, st
 // Convenience functions for throwing common errors
 PAW_NORETURN void pawErr_exceeded_limit(paw_Env *P, struct Str const *modname, struct SourceSpan span, char const *what, paw_Int limit);
 
-#endif // PAW_ERROR_H
+#endif // PAW_COMPILER_ERROR_H

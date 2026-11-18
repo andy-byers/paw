@@ -10,29 +10,29 @@ struct Str;
 typedef struct File File;
 typedef struct Directory Directory;
 
-File *pawO_stdout(void);
+File *os_stdout(void);
 
-File *pawO_new_file(paw_Env *P);
-void pawO_free_file(paw_Env *P, File *file);
-File *pawO_detach_file(paw_Env *P, File *src);
+File *os_new_file(paw_Env *P);
+void os_free_file(paw_Env *P, File *file);
+File *os_detach_file(paw_Env *P, File *src);
 
-paw_Bool pawO_is_open(File const *file);
-void pawO_error(paw_Env *P);
-int pawO_open(File *file, char const *pathname, char const *mode);
-void pawO_close(File *file);
-int pawO_seek(File *file, paw_Int offset, int whence);
-paw_Int pawO_tell(File *file);
-int pawO_flush(File *file);
-size_t pawO_read(paw_Env *P, File *file, void *data, size_t size);
-size_t pawO_write(paw_Env *P, File *file, void const *data, size_t size);
-void pawO_read_exact(paw_Env *P, File *file, void *data, size_t size);
-void pawO_write_all(paw_Env *P, File *file, void const *data, size_t size);
+paw_Bool os_is_open(File const *file);
+void os_error(paw_Env *P);
+int os_open(File *file, char const *pathname, char const *mode);
+void os_close(File *file);
+int os_seek(File *file, paw_Int offset, int whence);
+paw_Int os_tell(File *file);
+int os_flush(File *file);
+size_t os_read(paw_Env *P, File *file, void *data, size_t size);
+size_t os_write(paw_Env *P, File *file, void const *data, size_t size);
+void os_read_exact(paw_Env *P, File *file, void *data, size_t size);
+void os_write_all(paw_Env *P, File *file, void const *data, size_t size);
 
 typedef paw_Bool (*AcceptEntry)(paw_Env *P, char const *name, size_t length, void *ctx);
-void pawOs_traverse_dir(paw_Env *P, char const *dirname, AcceptEntry accept, void *ctx);
+void os_traverse_dir(paw_Env *P, char const *dirname, AcceptEntry accept, void *ctx);
 
-paw_Bool pawOs_is_dir(paw_Env *P, char const *name);
+paw_Bool os_is_dir(paw_Env *P, char const *name);
 
-char const *pawOs_find_last_sep(char const *s, size_t n, size_t *pn);
+char const *os_find_last_sep(char const *s, size_t n, size_t *pn);
 
 #endif // PAW_IO_H

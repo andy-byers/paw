@@ -23,7 +23,7 @@ static char const *file_reader(paw_Env *P, void *ud, size_t *psize)
 {
     struct FileReader *fr = ud;
     size_t const zchunk = sizeof(fr->data);
-    *psize = pawO_read(P, fr->file, fr->data, zchunk);
+    *psize = os_read(P, fr->file, fr->data, zchunk);
     return *psize > 0 ? fr->data : NULL;
 }
 
@@ -47,8 +47,8 @@ void lib_close_loader(paw_Env *P, void *state)
     if (state == NULL)
         return;
     struct FileReader *fr = state;
-    pawO_close(fr->file);
-    pawO_free_file(P, fr->file);
+    os_close(fr->file);
+    os_free_file(P, fr->file);
 }
 
 static char const *lib_getenv(paw_Env *P)
@@ -109,16 +109,16 @@ static int open_source_file(paw_Env *P, Str const *dirname, Str const *filename,
     Str const *pathname = lib_buffer_finish(P, &b);
 
     // TODO: clean up on error, no more GC in compiler!
-    File *file = pawO_new_file(P);
-    int const rc = pawO_open(file, pathname->text, "r");
+    File *file = os_new_file(P);
+    int const rc = os_open(file, pathname->text, "r");
     if (rc == -ENOENT) {
         return 0;
     } else if (rc < 0) {
-        pawO_error(P);
+        os_error(P);
     }
 
     result->f = file_reader;
-    result->file = pawO_detach_file(P, file);
+    result->file = os_detach_file(P, file);
     result->dirname = dirname;
     result->pathname = pathname;
     return 1;
@@ -143,7 +143,7 @@ static int searcher_Paw(paw_Env *P, void *arg)
             Str const *dirname = pawS_new_str(P, PAW_STDLIB_PATH);
             Str const *filename = add_module_ext(P, state->name);
             int const found = open_source_file(P, dirname, filename, state->fr);
-            paw_assert(found); PAW_UNUSED(found); // must exist
+            paw_assert(found && "check value of PAW_STDLIB_PATH"); PAW_UNUSED(found);
             return 1;
         }
     }
@@ -217,10 +217,10 @@ void lib_uninit(paw_Env *P)
 int lib_load_file(paw_Env *P, char const *name, char const *pathname, char const *cwd)
 {
     struct FileReader fr = {
-        .file = pawO_new_file(P),
+        .file = os_new_file(P),
         .f = file_reader,
     };
-    int const rc = pawO_open(fr.file, pathname, "r");
+    int const rc = os_open(fr.file, pathname, "r");
     if (rc == 0) {
         int const status = paw_load(P, file_reader, name, cwd, pathname, &fr);
         if (!fr.err) return status;
@@ -252,7 +252,7 @@ static char const *file_import_reader(paw_Env *P, void *ud, size_t *psize)
         *psize = 0;
         return NULL;
     }
-    *psize = pawO_read(P, fr->file, fr->data, sizeof(fr->data));
+    *psize = os_read(P, fr->file, fr->data, sizeof(fr->data));
     return *psize > 0 ? fr->data : NULL;
 }
 
@@ -279,5 +279,5 @@ void lib_finish_import(paw_Env *P, struct FileReader *fr)
 {
     PAW_UNUSED(P);
 
-    pawO_close(fr->file);
+    os_close(fr->file);
 }

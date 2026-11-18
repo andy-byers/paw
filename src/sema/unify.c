@@ -6,6 +6,7 @@
 
 #include "unify.h"
 #include "impl.h"
+#include "ir/instantiate.h"
 #include "solve.h"
 
 #include "compiler/error.h"

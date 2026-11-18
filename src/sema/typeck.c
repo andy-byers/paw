@@ -5,6 +5,7 @@
 // typeck.c: Implementation of the type checker.
 
 #include "impl.h"
+#include "ir/instantiate.h"
 #include "solve.h"
 #include "resolver.h"
 #include "trait.h"
@@ -534,14 +535,17 @@ static IrType *CheckFieldDecl(struct TypeChecker *T, struct HirFieldDecl *d)
     return check_type(T, d->tag, d->span);
 }
 
-static paw_Bool is_unit_type(struct TypeChecker *T, IrType *type)
-{
-    return pawP_type2code(T->C, type) == BUILTIN_UNIT;
-}
-
 static IrType *normalize_fixup(struct IrTypeFolder *F, IrType *type)
 {
     return normalize_projections(F->C->U, type);
+}
+
+static struct HirTypeFolder create_normalizer(struct TypeChecker *T)
+{
+    struct HirTypeFolder F;
+    hir_type_folder_init(&F, T->hir, T);
+    F.F.FoldType = normalize_fixup;
+    return F;
 }
 
 static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
@@ -572,9 +576,7 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
     bs.result = UNIFY_TYPES(T, d->span, result, bs.result);
     UNIFY_TYPES(T, d->span, bs.result, ret);
 
-    struct HirTypeFolder F;
-    hir_type_folder_init(&F, T->hir, T);
-    F.F.FoldType = normalize_fixup;
+    struct HirTypeFolder F = create_normalizer(T);
     hir_fold_decl_type(&F, HIR_CAST_DECL(d));
 
     {
@@ -614,7 +616,7 @@ static void check_methods(struct TypeChecker *T, struct HirDeclList *methods)
         check_item(T, *pmethod);
 }
 
-IrType *instantiate_struct_field(struct Compiler *C, IrType *inst_type, IrType *field)
+static IrType *instantiate_struct_field(struct Compiler *C, IrType *inst_type, IrType *field)
 {
     struct IrAdt *t = IrGetAdt(inst_type);
     if (t->args == NULL) return field;
@@ -622,7 +624,7 @@ IrType *instantiate_struct_field(struct Compiler *C, IrType *inst_type, IrType *
     struct IrTypeFolder F;
     struct Substitution subst;
     IrType *base_type = ir_get_def_type(C, IR_TYPE_DID(inst_type));
-    pawP_init_substitution_folder(&F, C, &subst, IR_GENERIC_ARGS(base_type), t->args);
+    init_substitution_folder(&F, C, &subst, IR_GENERIC_ARGS(base_type), t->args);
     return ir_fold_type(&F, field);
 }
 
@@ -636,17 +638,18 @@ static IrTypeList *instantiate_fields(struct Compiler *C, IrType *self, struct H
         decl = hir_get_decl(C->hir, v->base_did);
     }
     IrGenericArgs *generics = IR_GENERIC_ARGS(GET_NODE_TYPE(C, decl));
-    pawP_init_substitution_folder(&F, C, &subst, generics, IrGetAdt(self)->args);
+    init_substitution_folder(&F, C, &subst, generics, IrGetAdt(self)->args);
     IrTypeList *field_types = hir_collect_decl_types(C, fields);
     return ir_fold_type_list(&F, field_types);
 }
 
 static IrType *instantiate(struct TypeChecker *T, IrType *base, IrGenericArgs *args, struct SourceSpan span)
 {
-    if (IrIsGeneric(base) || IrIsSlice(base) || IrIsTuple(base) || IrIsFnPtr(base) || IrIsPtr(base) || IS_BASIC_TYPE(pawP_type2code(T->C, base)))
+    if (!IrIsAdt(base) && !IrIsSignature(base)
+            && !IrIsProjection(base) && !IrIsClosure(base))
         return base;
 
-    if (IR_GENERIC_ARGS(base) == NULL || (IrIsSignature(base) && IR_GENERIC_ARGS(base)->count == 0))
+    if (IR_GENERIC_ARGS(base) == NULL || IR_GENERIC_ARGS(base)->count == 0)
         return base;
 
     if (args != NULL && IR_GENERIC_ARGS(base)->count != args->count)
@@ -675,7 +678,6 @@ static IrType *lower_adt_segment(struct TypeChecker *T, struct HirSegment segmen
 {
     struct HirDecl *decl = hir_get_node(T->hir, segment.target.id);
     if (HirIsTypeDecl(decl)) {
-        // TODO: handle count == 0 case same as ret == NULL case
         IrGenericArgs *args = segment.args != NULL ? lower_generic_args(T, segment.args) : NULL;
         return pawP_lower_type_alias(T->C, segment, decl, args);
     }
@@ -734,13 +736,11 @@ static IrType *lookup_method(struct Compiler *C, IrType *self, IrTrait *trait, S
 static IrTrait *get_containing_bound(struct Compiler *C, IrType *base, DeclId did)
 {
     IrTraitList *bounds = ir_get_trait_bounds(C, IR_TYPE_DID(base));
-    IrTrait *result /* always set in loop */;
+    IrTrait *result = NULL;
 
-    IrTrait *const *b;
-    LIST_FOREACH (bounds, b) {
-        IrType *const *f;
+    LIST_XFOREACH (bounds, IrTrait *const, b) {
         struct IrTraitDef const *def = ir_get_trait_def(C, (*b)->did);
-        LIST_FOREACH (def->methods, f) {
+        LIST_XFOREACH (def->methods, IrType *const, f) {
             if (IR_TYPE_DID(*f).value == did.value) {
                 result = *b;
                 break;
@@ -748,6 +748,7 @@ static IrTrait *get_containing_bound(struct Compiler *C, IrType *base, DeclId di
         }
     }
 
+    paw_assert(result != NULL);
     return result;
 }
 
@@ -2109,7 +2110,7 @@ static IrTypeList *substitute_types(struct TypeChecker *T, IrGenericArgs *before
 
     struct IrTypeFolder F;
     struct Substitution subst;
-    pawP_init_substitution_folder(&F, T->C, &subst, before, after);
+    init_substitution_folder(&F, T->C, &subst, before, after);
     return ir_fold_type_list(&F, target);
 }
 
@@ -2868,9 +2869,7 @@ static void check_module_types(struct TypeChecker *T, struct HirModule m)
 
     check_items(T, m.items);
 
-    struct HirTypeFolder F;
-    hir_type_folder_init(&F, T->hir, T);
-    F.F.FoldType = normalize_fixup;
+    struct HirTypeFolder F = create_normalizer(T);
     hir_fold_decl_types(&F, m.items);
 }
 
@@ -2930,9 +2929,7 @@ static void check_constant_types(struct TypeChecker *T)
 
         check_unification_ctx(T->U);
 
-        struct HirTypeFolder F;
-        hir_type_folder_init(&F, T->hir, T);
-        F.F.FoldType = normalize_fixup;
+        struct HirTypeFolder F = create_normalizer(T);
         hir_fold_expr_type(&F, expr);
 
         DeclId param_did;

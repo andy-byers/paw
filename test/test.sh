@@ -149,6 +149,7 @@ FAILURES=()
 
 for TESTNAME in "${TESTS[@]}"; do
     rm -f "$OUTPUT_DIR/test_$TESTNAME"
+    rm -f "$OUTPUT_DIR/test_$TESTNAME.o"
 done
 
 for TESTNAME in "${TESTS[@]}"; do
@@ -156,7 +157,7 @@ for TESTNAME in "${TESTS[@]}"; do
     EXEC_PATH="$OUTPUT_DIR/test_$TESTNAME"
     echo "Building $SCRIPT_PATH"
 
-    "$DRIVER_PATH" -c -t "$SCRIPT_PATH" -L "$STDLIB_DIR"
+    "$DRIVER_PATH" "$SCRIPT_PATH" "-ctL$STDLIB_DIR"
     if [ $? -eq 0 ]; then
         echo "[PASS]"
     else

@@ -46,9 +46,10 @@
 
 #include "compiler/glue.h"
 #include "compiler/mangle.h"
+#include "common/util.h"
+#include "ir/instantiate.h"
 #include "ir/type.h"
 #include "mir/mir.h"
-#include "common/util.h"
 
 
 namespace paw::cg {
@@ -938,7 +939,7 @@ public:
     void define_fn(Mir const *mir)
     {
         auto *fn = get_fn(mir->type);
-        if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {
+        if (mir_is_main(mir)) {
             auto const *fptr = IrGetFnPtr(IR_GET_FN(C, mir->type));
             paw_Bool const materialize_return = !IrIsInt(fptr->result);
             create_main_fn_wrapper(*fn, materialize_return);

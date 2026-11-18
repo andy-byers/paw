@@ -13,13 +13,15 @@
 // has form `impl Trait for Type`. When validating such a header we first
 // instantiate `Trait` with `Self` type equal to `Type`. ...talk about adding constraints from assoc. items
 
+#include "ir/instantiate.h"
+#include "solve.h"
+#include "unify.h"
+
 #include "common/map.h"
 #include "compiler/compiler.h"
 #include "compiler/error.h"
 #include "hir/hir.h"
 #include "ir/type.h"
-#include "sema/solve.h"
-#include "sema/unify.h"
 
 #define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))
 #define GET_TYPE(X, id) ir_get_type((X)->C, id)
@@ -1379,9 +1381,5 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool)
     assign_default_literal_types(C->U);
     check_unification_ctx(C->U);
     leave_unification_ctx(C->U);
-
-    // pub fn main(args: [][]char) -> int
-    C->main_args_type = ir_new_slice(C,
-            ir_new_slice(C, ir_new_char(C)));
 }
 

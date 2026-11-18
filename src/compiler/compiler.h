@@ -209,10 +209,6 @@ struct Compiler {
 
     Str const *main_name;
 
-    // type of the runtime string internalization table ("[str: ()]")
-    struct IrType *strtab_type;
-    struct IrType *main_args_type;
-
     paw_Env *P;
     int decl_count;
     int hir_count;
@@ -276,34 +272,6 @@ void bitset_xor(BitSet *x, BitSet const *y);
 
 struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct MatchVars *vars);
 void pawP_lower_matches(struct Compiler *C);
-
-struct Substitution {
-    struct IrGenericArgs *params;
-    struct IrGenericArgs *args;
-};
-
-// Type representing the result of a type instantiation
-// Contains the instantiated type, as well as the substitution applied to it.
-struct Instantiation {
-    struct Substitution subst;
-    struct IrType *inst;
-};
-
-struct Instantiation pawP_instantiate_assoc(struct Compiler *C, struct IrType *type, struct IrType *method);
-
-// Substitute types in "subst.params" for types in "subst.args" in the context of the given "type"
-// Note that "type" is not modified by this operation.
-struct IrType *pawP_substitute(struct Compiler *C, struct IrType *type, struct Substitution subst);
-struct IrTrait *pawP_substitute_trait(struct Compiler *C, struct IrTrait *trait, struct Substitution subst);
-struct IrGenericArg pawP_substitute_arg(struct Compiler *C, struct IrGenericArg arg, struct Substitution subst);
-struct IrConst *pawP_substitute_const(struct Compiler *C, struct IrConst *k, struct Substitution subst);
-
-struct IrType *instantiate_struct_field(struct Compiler *C, struct IrType *self, struct IrType *field);
-EXTERN_C struct IrTypeList *instantiate_struct_fields(struct Compiler *C, struct IrAdt const *inst);
-EXTERN_C struct IrTypeList *instantiate_variant_fields(struct Compiler *C, struct IrAdt const *inst, int index);
-
-void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
-                                   struct IrGenericArgs *params, struct IrGenericArgs *args);
 
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str const *modname, Str const *pathname, Str const *dirname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);

@@ -4,6 +4,8 @@
 
 #include "layout.h"
 
+#include "ir/instantiate.h"
+
 // TODO: module name for error messages, or error return value for ir_compute_layout
 #define LAYOUT_ERROR(C_, Kind_, ...) pawErr_##Kind_(C_, SCAN_STR(C_, "(TODO: module name goes here)"), __VA_ARGS__)
 

@@ -8,10 +8,11 @@
 #include "match.h"
 
 #include "common/map.h"
-#include "compiler/compiler.h"
 #include "compiler/error.h"
+#include "compiler/type_folder.h"
 #include "hir/hir.h"
 #include "ir/type.h"
+#include "ir/instantiate.h"
 
 #define USEFULNESS_ERROR(U_, Kind_, ...) THROW_ERROR((U_)->C, \
         Kind_, .modname = (U_)->modname, __VA_ARGS__)
@@ -481,6 +482,18 @@ static struct Column find_branch_col(struct Usefulness *U, struct ColumnList *co
     return ColumnList_first(cols);
 }
 
+static IrType *instantiate_struct_field(struct Compiler *C, IrType *inst_type, IrType *field)
+{
+    struct IrAdt *t = IrGetAdt(inst_type);
+    if (t->args == NULL) return field;
+
+    struct IrTypeFolder F;
+    struct Substitution subst;
+    IrType *base_type = ir_get_def_type(C, IR_TYPE_DID(inst_type));
+    init_substitution_folder(&F, C, &subst, IR_GENERIC_ARGS(base_type), t->args);
+    return ir_fold_type(&F, field);
+}
+
 static IrTypeList *collect_field_types(struct Usefulness *U, struct HirDecl *decl, IrType *type)
 {
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
@@ -541,8 +554,8 @@ struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar var)
 
 struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar var)
 {
-    IrType *adt_type = ir_remove_indirection(U->C, var.type);
-    struct HirDecl *decl = hir_get_decl(U->hir, IR_TYPE_DID(adt_type));
+    struct IrAdt *adt = IrGetAdt(ir_remove_indirection(U->C, var.type));
+    struct HirDecl *decl = hir_get_decl(U->hir, adt->did);
     struct HirDeclList *variants = HirGetAdtDecl(decl)->variants;
     paw_assert(!HirGetAdtDecl(decl)->is_struct);
 
@@ -553,9 +566,8 @@ struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar var)
     struct HirDecl *const *pvariant;
     LIST_ENUMERATE (variants, index, pvariant) {
         IrType *type = GET_NODE_TYPE(U->C, *pvariant);
-        type = instantiate_struct_field(U->C, adt_type, type);
-        struct MatchVars *subvars = variables_for_types(U,
-                var.span, ir_fn_params(U->C, type));
+        IrTypeList *fields = instantiate_variant_fields(U->C, adt, index);
+        struct MatchVars *subvars = variables_for_types(U, var.span, fields);
         struct Constructor const cons = {
             .kind = CONS_VARIANT,
             .variant.type = type,

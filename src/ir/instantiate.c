@@ -15,99 +15,15 @@
 //     is replaced with a unique type variable. The type variables are filled
 //     in as the instance type is unified with other types (see unify.c).
 
-#include "solve.h"
-#include "unify.h"
+#include "instantiate.h"
 
-#include "compiler/compiler.h"
 #include "compiler/error.h"
 #include "compiler/type_folder.h"
 #include "ir/type.h"
+#include "sema/solve.h"
+#include "sema/unify.h"
 
-#define INSTANTIATION_ERROR(I_, Kind_, ...) THROW_ERROR((I_)->C, \
-        Kind_, .modname = ModuleInfo_get((I_)->C->modinfo, (I_)->modno).name, \
-        __VA_ARGS__)
-
-#define TODO (struct SourceLoc){0}
-
-struct InstanceState {
-    struct Compiler *C;
-    struct Unifier *U;
-    paw_Env *P;
-    int modno;
-};
-
-IrGenericArgs *pawP_instantiate_typelist(struct Compiler *C, IrGenericArgs *before,
-                                             IrGenericArgs *after, IrGenericArgs *target)
-{
-    struct IrTypeFolder F;
-    struct Substitution subst;
-    pawP_init_substitution_folder(&F, C, &subst, before, after);
-    return ir_fold_generic_args(&F, target);
-}
-
-static void prep_fn_instance(struct InstanceState *I, IrGenericArgs *before, IrGenericArgs *after,
-                               struct IrSignature *t)
-{
-    struct IrTypeFolder F;
-    struct Substitution subst;
-    pawP_init_substitution_folder(&F, I->C, &subst, before, after);
-    t->args = ir_fold_generic_args(&F, t->args);
-}
-
-static IrType *instantiate_fn_aux(struct InstanceState *I, struct IrSignature *base, IrGenericArgs *args)
-{
-    struct Substitution const subst = {base->args, args};
-    return pawP_substitute(I->C, IR_CAST_TYPE(base), subst);
-}
-
-static void check_type_param(struct InstanceState *I, IrGenericArgs *params, IrGenericArgs *args)
-{
-    if (params->count != args->count)
-        INSTANTIATION_ERROR(I, IncorrectTypeArity,
-                .want = params->count,
-                .have = args->count,
-                .span = {0});
-}
-
-static void normalize_type_list(struct InstanceState *I, IrGenericArgs *types)
-{
-    IrGenericArg const *p;
-    LIST_FOREACH (types, p)
-        ir_normalize(I->C, *p);
-}
-
-static IrTrait *instantiate_trait(struct InstanceState *I, struct IrTrait *base, IrGenericArgs *types)
-{
-    IrGenericArgs *generics = base->args;
-    if (generics == NULL) {
-        struct HirDecl *decl = hir_get_decl(I->C->hir, base->did);
-        INSTANTIATION_ERROR(I, UnexpectedTypeArguments,
-                .what = SCAN_STR(I->C, "trait"),
-                .name = HirGetTraitDecl(decl)->ident.name,
-                .span = {0});
-    }
-    check_type_param(I, generics, types);
-    normalize_type_list(I, types);
-    return ir_new_trait(I->C, base->did, types);
-}
-
-static IrType *instantiate_adt(struct InstanceState *I, struct IrAdt *base, IrGenericArgs *types)
-{
-    paw_assert(base->args != NULL);
-    check_type_param(I, base->args, types);
-    normalize_type_list(I, types);
-    return ir_new_adt(I->C, base->did, types);
-}
-
-static IrType *instantiate_fn(struct InstanceState *I, struct IrSignature *base, IrGenericArgs *types)
-{
-    paw_assert(base->args != NULL);
-    check_type_param(I, base->args, types);
-    normalize_type_list(I, types);
-    return instantiate_fn_aux(I, base, types);
-}
-
-static IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneric *t)
+static IrType *fold_generic(struct IrTypeFolder *F, struct IrGeneric *t)
 {
     struct Substitution *subst = F->ud;
 
@@ -123,7 +39,7 @@ static IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneric *t)
     return IR_CAST_TYPE(t);
 }
 
-static IrConst *substitute_const(struct IrTypeFolder *F, struct IrConst *k)
+static IrConst *fold_const(struct IrTypeFolder *F, struct IrConst *k)
 {
     struct Substitution *subst = F->ud;
     if (k->kind == IR_CONST_DECL) {
@@ -140,7 +56,7 @@ static IrConst *substitute_const(struct IrTypeFolder *F, struct IrConst *k)
     return k;
 }
 
-void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
+void init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
                                    IrGenericArgs *generics, IrGenericArgs *types)
 {
     *subst = (struct Substitution){
@@ -148,8 +64,8 @@ void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, s
         .args = types,
     };
     ir_type_folder_init(F, C, subst);
-    F->FoldGeneric = substitute_generic;
-    F->FoldConst = substitute_const;
+    F->FoldGeneric = fold_generic;
+    F->FoldConst = fold_const;
 }
 
 static IrTypeList *instantiate_variant_fields_(struct Compiler *C, struct IrVariantDef *def, IrGenericArgs *before, IrGenericArgs *after)
@@ -164,7 +80,7 @@ static IrTypeList *instantiate_variant_fields_(struct Compiler *C, struct IrVari
 
     struct IrTypeFolder F;
     struct Substitution subst;
-    pawP_init_substitution_folder(&F, C, &subst, before, after);
+    init_substitution_folder(&F, C, &subst, before, after);
     return ir_fold_type_list(&F, fields);
 }
 
@@ -183,47 +99,47 @@ IrTypeList *instantiate_variant_fields(struct Compiler *C, struct IrAdt const *i
     return instantiate_variant_fields_(C, variant, base->args, inst->args);
 }
 
-IrTrait *pawP_substitute_trait(struct Compiler *C, IrTrait *trait, struct Substitution subst)
+IrTrait *substitute_trait(struct Compiler *C, IrTrait *trait, struct Substitution subst)
 {
     IrGenericArgs *types = NULL;
     if (trait->args != NULL) {
         types = IrGenericArgs_new(ALLOCATOR_OF(C));
         IrGenericArgs_reserve(types, trait->args->count);
         LIST_XFOREACH (trait->args, IrGenericArg const, p)
-            IrGenericArgs_push(types, pawP_substitute_arg(C, *p, subst));
+            IrGenericArgs_push(types, substitute_arg(C, *p, subst));
     }
 
     return ir_new_trait(C, trait->did, types);
 }
 
-IrType *pawP_substitute(struct Compiler *C, IrType *type, struct Substitution subst)
+IrType *substitute_type(struct Compiler *C, IrType *type, struct Substitution subst)
 {
     struct IrTypeFolder F;
     ir_type_folder_init(&F, C, &subst);
-    F.FoldGeneric = substitute_generic;
-    F.FoldConst = substitute_const;
+    F.FoldGeneric = fold_generic;
+    F.FoldConst = fold_const;
     return ir_fold_type(&F, type);
 }
 
-IrGenericArg pawP_substitute_arg(struct Compiler *C, IrGenericArg arg, struct Substitution subst)
+IrGenericArg substitute_arg(struct Compiler *C, IrGenericArg arg, struct Substitution subst)
 {
     if (IrGenericArg_is_type(arg)) {
         IrType *t = IrGenericArg_get_type(arg);
         return IrGenericArg_from_type(
-                pawP_substitute(C, t, subst));
+                substitute_type(C, t, subst));
     } else {
         IrConst *k = IrGenericArg_get_const(arg);
         return IrGenericArg_from_const(
-                pawP_substitute_const(C, k, subst));
+                substitute_const(C, k, subst));
     }
 }
 
-IrConst *pawP_substitute_const(struct Compiler *C, IrConst *k, struct Substitution subst)
+IrConst *substitute_const(struct Compiler *C, IrConst *k, struct Substitution subst)
 {
     struct IrTypeFolder F;
     ir_type_folder_init(&F, C, &subst);
-    F.FoldGeneric = substitute_generic;
-    F.FoldConst = substitute_const;
+    F.FoldGeneric = fold_generic;
+    F.FoldConst = fold_const;
     return ir_fold_const(&F, k);
 }
 
@@ -247,7 +163,7 @@ struct Instantiation pawP_instantiate_assoc(struct Compiler *C, IrType *type, Ir
         IrGenericArgs_push(subst.args, IrGenericArg_from_type(infer));
     }
 
-    method = pawP_substitute(C, method, subst);
+    method = substitute_type(C, method, subst);
 
     base = ir_get_context(C, method);
     unify_types_unchecked(C->U, base, type);

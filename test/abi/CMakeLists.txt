@@ -4,7 +4,7 @@ set(ABI_OUT "${CMAKE_CURRENT_BINARY_DIR}/abi.o")
         
 add_custom_command(
     OUTPUT "${ABI_OUT}"
-    COMMAND pawc "${ABI_IN}" -c -d lir
+    COMMAND pawc "${ABI_IN}" -cd lir
     DEPENDS "${ABI_IN}" pawc
     COMMENT "Building abi.paw...")
 

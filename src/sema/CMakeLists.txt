@@ -9,7 +9,6 @@ target_sources(paw_sema
     PRIVATE collect_items.c
             impl.c
             import.c
-            instantiate.c
             lower_ast.c
             lower_type.c
             resolver.c

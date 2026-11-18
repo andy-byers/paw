@@ -16,6 +16,7 @@
 
 #include "ir/type.h"
 #include "mir/mir.h"
+#include "ir/instantiate.h"
 #include "sema/solve.h"
 #include "sema/unify.h"
 

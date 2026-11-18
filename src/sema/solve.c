@@ -9,6 +9,7 @@
 #include "unify.h"
 
 #include "hir/hir.h"
+#include "ir/instantiate.h"
 #include "ir/type.h"
 
 #include <stdio.h>
@@ -156,21 +157,6 @@ void ir_solver_add_predicate(IrSolver *S, IrType *type, IrTrait *trait, struct I
             ir_print_trait_v2(S->C, trait)->text);
 }
 
-static IrTrait *substitute_trait(struct Compiler *C, IrTrait *trait, struct Substitution subst)
-{
-    IrGenericArgs *types = IrGenericArgs_new(ALLOCATOR_OF(C));
-    IrGenericArgs_reserve(types, trait->args->count);
-    LIST_XFOREACH (trait->args, IrGenericArg const, p) {
-        if (IrGenericArg_is_type(*p)) {
-            IrType *t = pawP_substitute(C, IrGenericArg_get_type(*p), subst);
-            IrGenericArgs_push(types, IrGenericArg_from_type(t));
-        } else {
-            IrGenericArgs_push(types, *p);
-        }
-    }
-    return ir_new_trait(C, trait->did, types);
-}
-
 void ir_solver_add_well_formed_obligation(IrSolver *S, DeclId did, IrGenericArgs *args, struct IrObligationCause cause)
 {
     IrObligations_push(S->obligations, (struct IrObligation){
@@ -226,8 +212,8 @@ static void add_obligations(IrSolver *S, DeclId did, struct Substitution subst, 
     LIST_XFOREACH (bounds, struct IrConstraint, p) {
         switch (p->kind) {
             case IR_CONSTRAINT_IMPL_TRAIT: {
-                IrType *type = pawP_substitute(S->C, p->impl.type, subst);
-                IrTrait *trait = pawP_substitute_trait(S->C, p->impl.trait, subst);
+                IrType *type = substitute_type(S->C, p->impl.type, subst);
+                IrTrait *trait = substitute_trait(S->C, p->impl.trait, subst);
                 ir_solver_add_impl_trait_obligation(S, type, trait, cause);
                 LOGLN("SOLVER:%p: add obligation `%s: %s`",
                         (void *)S, ir_print_type_v2(S->C, type)->text,
@@ -235,8 +221,8 @@ static void add_obligations(IrSolver *S, DeclId did, struct Substitution subst, 
                 break;
             }
             case IR_CONSTRAINT_TYPE_EQUALS: {
-                IrType *lhs = pawP_substitute(S->C, p->eq.lhs, subst);
-                IrType *rhs = pawP_substitute(S->C, p->eq.rhs, subst);
+                IrType *lhs = substitute_type(S->C, p->eq.lhs, subst);
+                IrType *rhs = substitute_type(S->C, p->eq.rhs, subst);
                 ir_solver_add_type_equals_obligation(S, lhs, rhs, cause);
                 LOGLN("SOLVER:%p: add obligation `%s = %s`",
                         (void *)S, ir_print_type_v2(S->C, lhs)->text,
@@ -637,7 +623,7 @@ IrType *ir_solver_instantiate_type_with(IrSolver *S, DeclId did, IrGenericArgs *
     IrGenericArgs *params = ir_get_generic_args(S->C, did);
     struct Substitution const subst = {params, args};
     IrType *base = ir_get_def_type(S->C, did);
-    return pawP_substitute(S->C, base, subst);
+    return substitute_type(S->C, base, subst);
 }
 
 IrTrait *ir_solver_instantiate_trait(IrSolver *S, DeclId did, struct SourceSpan span)
@@ -676,7 +662,7 @@ struct IrImplInstance ir_solver_instantiate_impl_with(IrSolver *S, DeclId did, I
     IrGenericArgs *params = ir_get_generic_args(S->C, did);
     struct Substitution const subst = {params, args};
     return (struct IrImplInstance){
-        .type = pawP_substitute(S->C, impl->type, subst),
+        .type = substitute_type(S->C, impl->type, subst),
         .trait = impl->trait == NULL ? NULL :
             substitute_trait(S->C, impl->trait, subst),
         .args = args,
@@ -718,15 +704,15 @@ static IrConstraints *add_supertrait_constraints(IrSolver *S, IrTrait *trait, st
         switch (p->kind) {
             case IR_CONSTRAINT_IMPL_TRAIT:
                 if (target_is_self(S, p->impl.type, self_param)) {
-                    IrType *impl_type = pawP_substitute(S->C, p->impl.type, subst);
-                    IrTrait *impl_trait = pawP_substitute_trait(S->C, p->impl.trait, subst);
+                    IrType *impl_type = substitute_type(S->C, p->impl.type, subst);
+                    IrTrait *impl_trait = substitute_trait(S->C, p->impl.trait, subst);
                     ir_solver_add_predicate(S, impl_type, impl_trait, cause);
                 }
                 break;
             case IR_CONSTRAINT_TYPE_EQUALS:
                 if (target_is_self(S, p->eq.lhs, self_param)) {
-                    IrType *eq_lhs = pawP_substitute(S->C, p->eq.lhs, subst);
-                    IrType *eq_rhs = pawP_substitute(S->C, p->eq.rhs, subst);
+                    IrType *eq_lhs = substitute_type(S->C, p->eq.lhs, subst);
+                    IrType *eq_rhs = substitute_type(S->C, p->eq.rhs, subst);
                     ir_solver_add_norm_target(S, eq_lhs, eq_rhs, cause);
                 }
                 break;
@@ -746,8 +732,8 @@ static void add_predicates(IrSolver *S, DeclId did, struct Substitution subst, P
     LIST_XFOREACH (bounds, struct IrConstraint const, p) {
         switch (p->kind) {
             case IR_CONSTRAINT_IMPL_TRAIT: {
-                IrType *type = pawP_substitute(S->C, p->impl.type, subst);
-                IrTrait *trait = pawP_substitute_trait(S->C, p->impl.trait, subst);
+                IrType *type = substitute_type(S->C, p->impl.type, subst);
+                IrTrait *trait = substitute_trait(S->C, p->impl.trait, subst);
                 type = normalize_type(S->U, type);
                 trait = ir_normalize_trait(S->C, trait);
                 ir_solver_add_predicate(S, type, trait, cause);
@@ -756,8 +742,8 @@ static void add_predicates(IrSolver *S, DeclId did, struct Substitution subst, P
                 break;
             }
             case IR_CONSTRAINT_TYPE_EQUALS: {
-                IrType *lhs = pawP_substitute(S->C, p->eq.lhs, subst);
-                IrType *rhs = pawP_substitute(S->C, p->eq.rhs, subst);
+                IrType *lhs = substitute_type(S->C, p->eq.lhs, subst);
+                IrType *rhs = substitute_type(S->C, p->eq.rhs, subst);
                 lhs = normalize_type(S->U, lhs);
                 rhs = normalize_type(S->U, rhs);
                 ir_solver_add_norm_target(S, lhs, rhs, cause);

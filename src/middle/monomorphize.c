@@ -17,6 +17,7 @@
 #include "ir/type.h"
 #include "mir/mir.h"
 #include "sema/impl.h"
+#include "ir/instantiate.h"
 #include "sema/solve.h"
 #include "sema/trait.h"
 #include "sema/unify.h"
@@ -159,13 +160,13 @@ static void *finalize(struct MonoCollector *M, Finalizer f, void *node)
 static void *type_finalizer(struct MonoCollector *M, void *type, struct Substitution subst)
 {
     type = normalize_projections(M->C->U, type);
-    type = pawP_substitute(M->C, type, subst);
+    type = substitute_type(M->C, type, subst);
     return normalize_projections(M->C->U, type);
 }
 
 static void *const_finalizer(struct MonoCollector *M, void *konst, struct Substitution subst)
 {
-    return pawP_substitute_const(M->C, konst, subst);
+    return substitute_const(M->C, konst, subst);
 }
 
 static IrType *finalize_type(struct MonoCollector *M, IrType *type)

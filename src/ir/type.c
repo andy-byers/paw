@@ -7,8 +7,9 @@
 #include "common/map.h"
 #include "compiler/error.h"
 #include "compiler/type_folder.h"
-#include "sema/solve.h"
+#include "ir/instantiate.h"
 #include "sema/resolver.h"
+#include "sema/solve.h"
 #include "sema/trait.h"
 #include "sema/unify.h"
 
@@ -749,7 +750,7 @@ IrType *ir_get_context(struct Compiler *C, IrType *fn)
 
     IrGenericArgs *args = IR_GENERIC_ARGS(fn);
     struct Substitution const subst = {params, args};
-    return pawP_substitute(C, parent, subst);
+    return substitute_type(C, parent, subst);
 }
 
 // TODO: wrong, only works in some situations...
@@ -1382,8 +1383,8 @@ IrType *ir_materialize_fn(struct Compiler *C, DeclId did, IrGenericArgs *type_ar
     struct Substitution const subst = {type_params, type_args};
 
     LIST_XFOREACH (params, IrType *, p)
-        *p = pawP_substitute(C, *p, subst);
-    result = pawP_substitute(C, result, subst);
+        *p = substitute_type(C, *p, subst);
+    result = substitute_type(C, result, subst);
 
     return normalize_projections(C->U,
             ir_new_fn_ptr(C, params, result));

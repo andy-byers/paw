@@ -413,9 +413,10 @@ struct MirInstruction *mir_new_return(struct Mir *mir, struct SourceSpan span)
     };
     return instr;
 }
+
 paw_Bool mir_is_main(struct Mir const *mir)
 {
-    return mir->self == NULL && pawS_eq(mir->name, SCAN_STR(mir->C, "main"));
+    return mir->self == NULL && pawS_eq(mir->name, mir->C->main_name);
 }
 
 struct MirPlace mir_get_register(struct Mir const *mir, MirRegister r)

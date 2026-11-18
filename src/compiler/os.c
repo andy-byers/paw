@@ -25,32 +25,32 @@ struct File {
     FILE *file;
 };
 
-File *pawO_stdout(void)
+File *os_stdout(void)
 {
     static File file;
     file.file = stdout;
     return &file;
 }
 
-paw_Bool pawO_is_open(File const *file)
+paw_Bool os_is_open(File const *file)
 {
     return file->file != NULL;
 }
 
-void pawO_error(paw_Env *P)
+void os_error(paw_Env *P)
 {
     P->current_errmsg = pawS_new_str(P, strerror(errno));
     pawC_throw(P, PAW_ESYSTEM);
 }
 
-File *pawO_new_file(paw_Env *P)
+File *os_new_file(paw_Env *P)
 {
     File *file = P->alloc(P, NULL, 0, sizeof *file);
     *file = (File){0};
     return file;
 }
 
-int pawO_open(File *file, char const *pathname, char const *mode)
+int os_open(File *file, char const *pathname, char const *mode)
 {
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
         FILE *f = fopen(pathname, mode);
@@ -64,7 +64,7 @@ int pawO_open(File *file, char const *pathname, char const *mode)
     return -errno;
 }
 
-void pawO_close(File *file)
+void os_close(File *file)
 {
     if (file->file == NULL)
         return;
@@ -77,17 +77,17 @@ void pawO_close(File *file)
     }
 }
 
-int pawO_seek(File *file, paw_Int offset, int whence)
+int os_seek(File *file, paw_Int offset, int whence)
 {
     return fseek(file->file, CAST(long, offset), whence);
 }
 
-paw_Int pawO_tell(File *file)
+paw_Int os_tell(File *file)
 {
     return ftell(file->file);
 }
 
-int pawO_flush(File *file)
+int os_flush(File *file)
 {
     return fflush(file->file);
 }
@@ -96,11 +96,11 @@ static void check_for_errors(paw_Env *P, File *file)
 {
     if (errno != EINTR) {
         paw_assert(ferror(file->file));
-        pawO_error(P);
+        os_error(P);
     }
 }
 
-size_t pawO_read(paw_Env *P, File *file, void *data, size_t size)
+size_t os_read(paw_Env *P, File *file, void *data, size_t size)
 {
     size_t const original = size;
     for (size_t i = 0; i < INTR_TIMEOUT; ++i) {
@@ -119,7 +119,7 @@ size_t pawO_read(paw_Env *P, File *file, void *data, size_t size)
     return original - size;
 }
 
-size_t pawO_write(paw_Env *P, File *file, void const *data, size_t size)
+size_t os_write(paw_Env *P, File *file, void const *data, size_t size)
 {
     size_t const original = size;
     for (size_t i = 0; i < INTR_TIMEOUT; ++i) {
@@ -136,21 +136,21 @@ size_t pawO_write(paw_Env *P, File *file, void const *data, size_t size)
     return original - size;
 }
 
-void pawO_read_exact(paw_Env *P, File *file, void *data, size_t size)
+void os_read_exact(paw_Env *P, File *file, void *data, size_t size)
 {
-    if (pawO_read(P, file, data, size) != size) {
-        pawO_error(P);
+    if (os_read(P, file, data, size) != size) {
+        os_error(P);
     }
 }
 
-void pawO_write_all(paw_Env *P, File *file, void const *data, size_t size)
+void os_write_all(paw_Env *P, File *file, void const *data, size_t size)
 {
-    if (pawO_write(P, file, data, size) != size) {
-        pawO_error(P);
+    if (os_write(P, file, data, size) != size) {
+        os_error(P);
     }
 }
 
-File *pawO_detach_file(paw_Env *P, File *src)
+File *os_detach_file(paw_Env *P, File *src)
 {
     File *dst = mem_new(P, File);
     *dst = *src;
@@ -158,7 +158,7 @@ File *pawO_detach_file(paw_Env *P, File *src)
     return dst;
 }
 
-void pawO_free_file(paw_Env *P, File *file)
+void os_free_file(paw_Env *P, File *file)
 {
     mem_free(P, file);
 }
@@ -210,7 +210,7 @@ static void os_close_dir(paw_Env *P, Directory dir)
 # error "Windows not yet supported"
 #endif
 
-void pawOs_traverse_dir(paw_Env *P, char const *dirname, AcceptEntry accept, void *ctx)
+void os_traverse_dir(paw_Env *P, char const *dirname, AcceptEntry accept, void *ctx)
 {
     enum DirNextStatus s = DN_ERROR;
 
@@ -226,10 +226,10 @@ void pawOs_traverse_dir(paw_Env *P, char const *dirname, AcceptEntry accept, voi
     }
 
     if (s == DN_ERROR)
-        pawO_error(P);
+        os_error(P);
 }
 
-paw_Bool pawOs_is_dir(paw_Env *P, char const *name)
+paw_Bool os_is_dir(paw_Env *P, char const *name)
 {
     PAW_UNUSED(P);
 #if defined(PAW_OS_POSIX)
@@ -240,7 +240,7 @@ paw_Bool pawOs_is_dir(paw_Env *P, char const *name)
 #endif
 }
 
-char const *pawOs_find_last_sep(char const *s, size_t n, size_t *pn)
+char const *os_find_last_sep(char const *s, size_t n, size_t *pn)
 {
     paw_assert(n > 0);
     char const *s0 = s;

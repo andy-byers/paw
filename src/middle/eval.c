@@ -4,6 +4,7 @@
 
 #include "eval.h"
 #include "mir/mir.h"
+#include "ir/instantiate.h"
 
 struct EvalCtx {
     struct Allocator a;

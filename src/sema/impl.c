@@ -6,6 +6,7 @@
 //       necessary to distinguish between methods with the same name from different traits
 
 #include "impl.h"
+#include "ir/instantiate.h"
 #include "solve.h"
 #include "trait.h"
 #include "unify.h"
@@ -490,7 +491,7 @@ struct Instantiation *ir_find_assoc_type_projection(struct Compiler *C, IrType *
     IrGenericArgs *params = ir_get_generic_args(C, result.impl_did);
     struct Substitution const subst = {params, inst.args};
     IrType *assoc = ir_get_def_type(C, result.target);
-    assoc = pawP_substitute(C, assoc, subst);
+    assoc = substitute_type(C, assoc, subst);
 
     struct Instantiation *out = compiler_alloc(C, NULL, 0, sizeof(*out));
     *out = (struct Instantiation){

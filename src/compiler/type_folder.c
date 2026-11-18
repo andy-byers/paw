@@ -297,6 +297,12 @@ static IrType *FoldNever(struct IrTypeFolder *F, struct IrNever *t)
     return ir_new_never(F->C);
 }
 
+static IrType *FoldGeneric(struct IrTypeFolder *F, struct IrGeneric *t)
+{
+    PAW_UNUSED(t);
+    return ir_new_generic(F->C, t->did);
+}
+
 static IrType *FoldType(struct IrTypeFolder *F, IrType *node)
 {
     if (node == NULL)
@@ -337,6 +343,7 @@ void ir_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud)
         .FoldArray = FoldArray,
         .FoldTuple = FoldTuple,
         .FoldNever = FoldNever,
+        .FoldGeneric = FoldGeneric,
     };
 }
 

@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "impl.h"
+#include "ir/instantiate.h"
 #include "solve.h"
 #include "unify.h"
 
@@ -167,7 +168,7 @@ static IrType *lower_type_alias(struct LowerType *L, struct HirSegment segment, 
     if (args == NULL) args = new_unknowns(C, d->generics);
 
     struct Substitution const subst = {params, args};
-    rhs = pawP_substitute(C, rhs, subst);
+    rhs = substitute_type(C, rhs, subst);
     return normalize_type(C->U, rhs);
 }
 
@@ -188,7 +189,7 @@ static IrType *instantiate_segment(struct LowerType *L, struct HirSegment segmen
                     .span = segment.span);
 
         struct Substitution const subst = {params, args};
-        type = pawP_substitute(L->C, type, subst);
+        type = substitute_type(L->C, type, subst);
     } else if (!pawS_eq(segment.ident.name, SCAN_STR(L->C, "Self"))
             && IR_TYPE_IS_POLYMORPHIC(type)) {
         LOWERING_ERROR(L, ExpectedTypeArguments,

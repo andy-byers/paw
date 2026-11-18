@@ -4,6 +4,7 @@
 
 #include "ir/type.h"
 #include "mir/mir.h"
+#include "ir/instantiate.h"
 
 #define TODO (struct SourceSpan){0}
 
