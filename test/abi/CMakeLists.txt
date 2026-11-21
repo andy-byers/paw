@@ -12,7 +12,7 @@ add_custom_target(generate_abi ALL
     DEPENDS "${ABI_OUT}")
 
 add_executable(test_abi test.c abi.c abi.h "${ABI_OUT}")
-target_link_libraries(test_abi PRIVATE paw_stdc)
+target_link_libraries(test_abi PRIVATE paw_syscall)
 
 add_test(NAME test_abi
     COMMAND test_abi)

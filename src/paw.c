@@ -233,10 +233,9 @@ static void parse_option_arg(char const *arg, struct Args *args)
     if (*a != DASH) {
         a = match_short_option(a, &opt);
     } else {
-        ++a;
         // already checked for "--"
-        paw_assert(*a != 0);
-        a = match_long_option(a, &opt);
+        paw_assert(a[1] != 0);
+        a = match_long_option(a + 1, &opt);
         is_long_opt = PAW_TRUE;
     }
 

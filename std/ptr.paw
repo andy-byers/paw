@@ -78,8 +78,23 @@ pub fn memmove(dest: *char, src: *char, size: usize) -> *char;
 #[extern = "paw_ptr_memset"] 
 pub fn memset(ptr: *char, value: char, size: usize) -> *char;
 
-#[extern = "paw_ptr_memcmp"] 
-pub fn memcmp(lhs: *char, rhs: *char, size: usize) -> int64;
+pub fn memcmp(lhs: *char, rhs: *char, size: usize) -> int32 {
+    for i in 0..size {
+        let a = *lhs as uint8;
+        let b = *rhs as uint8;
+        if a < b {
+            return -1;
+        } else if a > b {
+            return 1;
+        }
+        lhs = add(lhs, 1);
+        rhs = add(rhs, 1);
+    }
+    0
+}
+
+//#[extern = "paw_ptr_memcmp"] 
+//pub fn memcmp(lhs: *char, rhs: *char, size: usize) -> int32;
 
 #[extern] 
 pub fn strlen(string: *char) -> usize;

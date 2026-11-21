@@ -816,10 +816,6 @@
 //    }
 //}
 
-use io;
-
 #[test]
 pub fn test() {
-    io::println("Hello, world!");
 }
-

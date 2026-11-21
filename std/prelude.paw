@@ -27,11 +27,19 @@ pub const USIZE_MAX: usize = 0xFFFFFFFFFFFFFFFF;
 
 
 impl str {
+    pub fn from_slice(chars: []char) -> Self {
+        Self::from_raw_parts(chars.as_ptr(), chars.len())
+    }
+
     #[extern = "paw_str_from_raw_parts"] 
     pub fn from_raw_parts(ptr: *char, len: usize) -> Self;
 
-    #[extern = "paw_str_len"] 
-    pub fn len(self) -> usize;
+    pub fn into_raw_parts(self) -> (*char, usize) {
+        (self.as_ptr(), self.len())
+    }
+
+    #[extern = "paw_str_len"]
+    pub fn len(*self) -> usize;
 
     pub fn is_empty(self) -> bool {
         self.len() == 0
@@ -87,8 +95,10 @@ impl str {
         }
     }
 
-    #[extern = "paw_str_find"] 
-    pub fn find(self, target: Self) -> Option<usize>;
+    pub fn find(self, target: Self) -> Option<usize> {
+        let start = find_substr(self, target)?;
+        Some(ptr::difference(self.as_ptr(), start) as usize)
+    }
 
     pub fn starts_with(self, prefix: Self) -> bool {
         self.len() >= prefix.len()
@@ -158,6 +168,28 @@ impl Eq<Self> for ParseFloatError {
 
 use ptr;
 
+fn find_substr(haystack: str, needle: str) -> Option<*char>
+{
+    let start = haystack.as_ptr();
+    let end = ptr::add(start, haystack.len() as isize);
+
+    if (needle.len() == 0) {
+        return Some(start);
+    }
+
+    loop {
+        start = strchr(start, *needle.as_ptr() as int32);
+        if ptr::equals(start, ptr::null()) { break }
+        if needle.len() as isize <= ptr::difference(start, end)
+                && ptr::memcmp(start, needle.as_ptr(), needle.len()) == 0 {
+            return Some(start);
+        }
+        start = ptr::add(start, 1);
+    }
+
+    None
+}
+
 fn skipchar(s: str) -> str {
     str::from_raw_parts(
         ptr::add(s.as_ptr(), 1),
@@ -197,6 +229,92 @@ fn parse_uint_radix_nonempty(text: str, base: int64) -> Result<uint64, ParseIntE
     Ok(value)
 }
 
-#[extern = "paw_internal_parse_float"] 
-fn internal_parse_float(text: str, out: *float64) -> int32;
+// TODO: put extern C function decls in C FFI library
+#[extern = "strchr"] 
+fn strchr(str: *char, chr: int32) -> *char;
+
+#[extern = "strtod"] 
+fn strtod(str: *char, str_end: **char) -> float64;
+
+fn test(p: str, c: char) -> bool {
+    !p.is_empty() && p[0] == c
+}
+
+fn advance(p: *str, n: usize) {
+    assert(p.len() >= n);
+    *p = str::from_raw_parts(
+        ptr::add(p.as_ptr(), n as isize),
+        p.len() - n);
+}
+
+fn skip_sign(p: *str) -> bool {
+    if p[0] == '-' || p[0] == '+' {
+        advance(p, 1);
+        true
+    } else {
+        false
+    }
+}
+
+fn isnum(c: char) -> bool {
+    '0' <= c && c <= '9'
+}
+
+fn isfp(c: char) -> bool {
+    c == 'e' || c == 'E' || c == '.'
+}
+
+fn skip_digits(p: *str) -> usize {
+    let count = 0;
+    while isnum(p[0]) {
+        advance(p, 1);
+        count += 1;
+    }
+    count
+}
+
+fn internal_parse_float(text: str, out: *float64) -> int32 {
+    use array;
+    let buffer: [1024]char = array::uninit();
+    if text.is_empty() {
+        return -1;
+    }
+    if text.len() >= buffer.len() {
+        return -1;
+    }
+    ptr::copy_nonoverlapping(text.as_ptr(), buffer.as_ptr(), text.len());
+    buffer[text.len()] = '\0';
+
+    let p = str::from_raw_parts(
+        buffer.as_ptr(),
+        text.len());
+
+    skip_sign(&p);
+
+    if p.len() > 1 && p[0] == '0' && !isfp(p[1]) {
+        return -1;
+    }
+
+    skip_digits(&p);
+
+    if test(p, '.') {
+        advance(&p, 1);
+        skip_digits(&p);
+    }
+
+    if test(p, 'e') || test(p, 'E') {
+        advance(&p, 1);
+        if !p.is_empty() {
+            skip_sign(&p);
+        }
+        if p.is_empty() || !isnum(p[0]) { 
+            return -1;
+        }
+        skip_digits(&p);
+    }
+
+    if !p.is_empty() { return -1 }
+    *out = strtod(buffer.as_ptr(), ptr::null());
+    0
+}
 

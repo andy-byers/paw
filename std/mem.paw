@@ -54,16 +54,61 @@ pub fn drop_in_place<T>(ptr: *T) {}
 #[extern = "paw_mem_forget"]
 pub fn forget<T>(value: T);
 
+#[extern = "malloc"] 
+fn malloc_(size: usize) -> *char;
 
-#[extern = "paw_mem_raw_alloc"] 
-fn raw_alloc(size: usize) -> Result<*char>;
+#[extern = "realloc"] 
+fn realloc_(ptr: *char, size: usize) -> *char;
 
-#[extern = "paw_mem_raw_realloc"] 
-fn raw_realloc(ptr: *char, size: usize) -> Result<*char>;
+#[extern = "free"] 
+fn free_(ptr: *char);
 
-#[extern = "paw_mem_raw_dealloc"] 
-fn raw_dealloc(ptr: *char);
+#[extern = "aligned_alloc"] 
+fn aligned_alloc_(alignment: usize, size: usize) -> *char;
 
-#[extern = "paw_mem_raw_aligned_alloc"] 
-fn raw_aligned_alloc(alignment: usize, size: usize) -> Result<*char>;
+fn ptr_as_result<T>(ptr: *T) -> Result<*T> {
+    if ptr as usize != 0 {
+        Ok(ptr)
+    } else {
+        Err(OutOfMemory)
+    }
+}
+
+fn raw_alloc(size: usize) -> Result<*char> {
+    ptr_as_result(malloc_(size))
+}
+
+fn raw_realloc(ptr: *char, size: usize) -> Result<*char> {
+    ptr_as_result(realloc_(ptr, size))
+}
+
+fn raw_dealloc(ptr: *char) {
+    free_(ptr);
+}
+
+fn raw_aligned_alloc(alignment: usize, size: usize) -> Result<*char> {
+    ptr_as_result(aligned_alloc_(alignment, size))
+}
+
+
+struct MaybeUninit<T> {
+    inner: T,
+}
+
+impl<T> MaybeUninit<T> {
+    #[extern = "paw_mem_MaybeUninit_new"]
+    pub fn new() -> Self;
+
+    pub fn assume_init(self) -> T {
+        let Self{inner} = self;
+        inner
+    }
+}
+
+impl<T> AsPtr<T> for MaybeUninit<T> {
+    fn as_ptr(*self) -> *T {
+        &self.inner
+    }
+}
+
 

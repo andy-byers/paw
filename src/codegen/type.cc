@@ -33,6 +33,11 @@ bool Type::is_signed_int() const
     return is_int_type() && ((IntType *)this)->is_signed();
 }
 
+Type *Type::deref_unchecked() const
+{
+     return ((PtrType const *)this)->get_pointee_type();
+}
+
 
 UnitType::UnitType(Context &X)
     : PrimitiveType(X, X.get_unit_ty(), Kind::UNIT)

@@ -74,7 +74,7 @@ impl Formatter {
 }
 
 #[extern = "paw_fmt_write_float"]
-fn write_float_to(value: float64, precision: usize, output: *char, output_len: usize) -> usize;
+fn write_float_to(value: float64, precision: int32, output: *char, output_len: usize) -> usize;
 
 
 impl Display for char {
@@ -177,7 +177,7 @@ impl Display for float32 {
 
 impl Display for float64 {
     fn fmt(*self, f: *Formatter) -> Result<()> {
-        let temp = array::zeros::<32, char>();
+        let temp = array::zeros::<64, char>();
         let len = write_float_to(*self, 17, &temp[0], temp.len());
         f.write_slice(slice::from_raw_parts(&temp[0], len))
     }

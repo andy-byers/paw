@@ -8,178 +8,13 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define DANGLING ((void *)16)
-
-void paw_assert(paw_Bool cond)
-{
-    if (!cond) {
-        char message[] = "assertion failed";
-        paw_panic_((paw_Slice){
-                .start = message,
-                .length = PAW_LENGTHOF(message),
-            });
-    }
-}
 
 _Noreturn void paw_panic_(paw_Slice message)
 {
     fwrite(message.start, 1, (paw_Usize)message.length, stderr);
     exit(EXIT_FAILURE);
-}
-
-paw_Str paw_str_from_raw_parts(char const *ptr, paw_Usize len)
-{
-    return (paw_Str){
-        .text = ptr,
-        .length = len,
-    };
-}
-
-paw_Usize paw_str_len(paw_Str self)
-{
-    return self.length;
-}
-
-char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self)
-{
-    return self->text;
-}
-
-static int parse_float(paw_Char const *text, double *result_ptr)
-{
-#define IS_DIGIT(Ch_) ('0' <= (Ch_) && (Ch_) <= '9')
-#define IS_FP(Ch_) ((Ch_) == '.' || (Ch_) == 'e' || (Ch_) == 'E')
-
-    paw_Bool const is_negative = *text == '-';
-    text += is_negative || *text == '+';
-
-    // First, validate the number format.
-    paw_Char const *p = text;
-    if (p[0] == '0' && p[1] != '\0' && !IS_FP(p[1]))
-        return -1;
-
-    while (IS_DIGIT(*p)) ++p;
-
-    if (*p == '.') {
-        ++p;
-        while (IS_DIGIT(*p)) ++p;
-    }
-    if (*p == 'e' || *p == 'E') {
-        p += 1 + (p[1] == '+' || p[1] == '-');
-        if (!IS_DIGIT(*p)) return -1;
-        while (IS_DIGIT(*p)) ++p;
-    }
-    if (*p != '\0') return -1;
-    double const f = strtod(text, NULL);
-    *result_ptr = is_negative ? -f : f;
-    return 0;
-
-#undef IS_FP
-#undef IS_DIGIT
-}
-
-// fn parse_float(self) -> Option<float64>
-paw_Int32 paw_internal_parse_float(paw_Str self, paw_Float64 *out)
-{
-    return parse_float(self.text, out);
-}
-
-static paw_Char const *find_substr(paw_Char const *str, paw_Usize nstr, paw_Char const *sub, paw_Usize nsub)
-{
-    if (nsub == 0)
-        return str;
-
-    paw_Char const *end = str + nstr;
-    while ((str = strchr(str, sub[0]))) {
-        if ((ptrdiff_t)nsub <= end - str
-                && memcmp(str, sub, (paw_Usize)nsub) == 0)
-            return str;
-        str += nsub;
-    }
-
-    return NULL;
-}
-
-// fn find(self, target: str) -> Option<int>
-paw_Option_Int64 paw_str_find(paw_Str self, paw_Str target)
-{
-    paw_Char const *result = find_substr(
-        self.text, self.length,
-        target.text, target.length);
-    if (result != NULL) {
-        return paw_Option_Int64_some(result - self.text);
-    } else {
-        return paw_Option_Int64_none();
-    }
-}
-
-// fn paw_slice_from_raw_parts<T>(start: *T, length: int) -> []T
-paw_Slice paw_slice_from_raw_parts(void *start, paw_Usize length)
-{
-    return (paw_Slice){
-        .start = start,
-        .length = length,
-    };
-}
-
-// fn as_ptr(*self) -> *T
-void *paw_ops_Slice_AsPtr_as_ptr(paw_Slice *self)
-{
-    return self->start;
-}
-
-// fn len(self) -> int
-paw_Usize paw_slice_Slice_len(paw_Slice self)
-{
-    return self.length;
-}
-
-paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size)
-{
-    PAW_API_CHECK(size != 0, "alloc: expected nonzero size");
-
-    void *ptr = malloc(size);
-    return ptr != NULL
-        ? paw_mem_Result_Ptr_ok(ptr)
-        : paw_mem_Result_Ptr_err();
-}
-
-paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size)
-{
-    PAW_API_CHECK(ptr != NULL, "realloc: expected nonnull pointer");
-    PAW_API_CHECK(size != 0, "realloc: expected nonzero size");
-
-    ptr = realloc(ptr, size);
-    return ptr != NULL
-        ? paw_mem_Result_Ptr_ok(ptr)
-        : paw_mem_Result_Ptr_err();
-}
-
-paw_mem_Result_Ptr paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size)
-{
-    PAW_API_CHECK(alignment != 0 && ((alignment & (alignment - 1)) == 0), "aligned_alloc: expected nonzero power-of-two alignment");
-    PAW_API_CHECK(size != 0, "aligned_alloc: expected nonzero size");
-
-    void *ptr = aligned_alloc(alignment, size);
-    return ptr != NULL
-        ? paw_mem_Result_Ptr_ok(ptr)
-        : paw_mem_Result_Ptr_err();
-}
-
-void paw_mem_raw_dealloc(void *ptr)
-{
-    // `ptr` might be null
-    free(ptr);
-}
-
-// fn memcmp(lhs: *char, rhs: *char, size: int) -> int
-paw_Int64 paw_ptr_memcmp(void *lhs, void *rhs, paw_Usize size)
-{
-    if (size == 0) return 0;
-    paw_assert(lhs != NULL && rhs != NULL);
-    return memcmp(lhs, rhs, size);
 }
 
 void paw_builtin_check_bounds(paw_Usize index, paw_Usize length)
@@ -195,10 +30,5 @@ void paw_builtin_check_bounds(paw_Usize index, paw_Usize length)
                 .length = (paw_Usize)n,
             });
     }
-}
-
-paw_Int64 paw_fmt_write_float(double value, paw_Int64 precision, char *output, paw_Usize output_len)
-{
-    return snprintf(output, output_len, "%.*g", (int)precision, value);
 }
 

@@ -4,16 +4,23 @@ use list::List;
 
 use io;
 use io::File;
+use mem;
 
-fn file_size(f: *File) -> int64 {
-    f.seek(0, io::Seek::End);
-    f.tell().unwrap()
+fn file_size(f: *File) -> usize {
+    f.seek(0, io::Seek::End).unwrap()
 }
 
 #[test]
 pub fn test_io() {
     let test = "test string";
-    let file = File::open("abc.txt".to_slice(), "w+".to_slice()).unwrap();
+    let path = io::Path::from_chars("abc.txt").unwrap();
+    let flags = io::OpenFlags::new()
+        .with_create(true)
+        .with_read(true)
+        .with_write(true)
+        .with_truncate(true);
+    let file = File::open(&path, flags).unwrap();
+
     assert(file_size(&file) == 0);
     let n = file.write(test.to_slice()).unwrap();
     assert(n == test.len());
@@ -22,29 +29,28 @@ pub fn test_io() {
     data.resize(test.len(), '\0').unwrap();
     file.seek(0, io::Seek::Begin);
     assert(file.read(data.to_slice()).unwrap() == test.len());
-    assert(file.tell().unwrap() as usize == n);
-    assert(file_size(&file) as usize == n);
+    assert(file_size(&file) == n);
     assert(data.to_slice().eq(&test.to_slice()));
     let _ = file.close();
 }
 
-//use math::PI as M_PI;
-//
-//#[test]
-//pub fn test_constants() {
-//    assert(3.13 < M_PI && math::PI < 3.15);
-//}
-//
-//use math;
-//
-//#[test]
-//pub fn test_math() {
-//    math::sin(1.0);
-//    math::cos(1.0);
-//    math::tan(1.0);
-//    math::asin(1.0);
-//    math::acos(1.0);
-//    math::atan(1.0);
-//    math::atan2(1.0, 1.0);
-//}
+use math::PI as M_PI;
+
+#[test]
+pub fn test_constants() {
+    assert(3.13 < M_PI && math::PI < 3.15);
+}
+
+use math;
+
+#[test]
+pub fn test_math() {
+    math::sin(1.0);
+    math::cos(1.0);
+    math::tan(1.0);
+    math::asin(1.0);
+    math::acos(1.0);
+    math::atan(1.0);
+    math::atan2(1.0, 1.0);
+}
 

@@ -1322,7 +1322,11 @@ static struct HirPat *LowerIdentPat(struct LowerAst *L, struct AstIdentPat *p)
             if (AstIsAdtDecl(decl))
                 return NEW_NODE(L, struct_pat, p->span, p->id, path, HirPatList_new(ALLOCATOR_OF(L->hir)));
 
-            int const discr = AstGetVariantDecl( ast_get_node(L->ast, res->id))->index;
+            // TODO: support named constant pattern
+            if (AstIsConstDecl(decl))
+                LOWERING_ERROR(L, Unsupported, .span = p->span);
+
+            int const discr = AstGetVariantDecl(ast_get_node(L->ast, res->id))->index;
             return NEW_NODE(L, variant_pat, p->span, p->id, path, HirPatList_new(ALLOCATOR_OF(L->hir)), discr);
         }
     }

@@ -281,6 +281,7 @@ static void add_trait(struct Compiler *C, Buffer *b, IrTrait *trait)
     add_generic_args_omitting_self(C, b, trait->args);
 }
 
+// TODO: don't duplicate generic args from impl block binder in the fn part
 static void add_fn_part(struct Compiler *C, Buffer *b, IrType *type)
 {
     struct IrFnDef const *fn_def = ir_get_fn_def(C, IR_TYPE_DID(type));

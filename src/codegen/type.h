@@ -95,6 +95,8 @@ public:
 
     virtual std::string to_string() const = 0;
 
+    Type *deref_unchecked() const;
+
 protected:
     Context *X;
     llvm::Type *ty_;

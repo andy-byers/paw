@@ -22,7 +22,7 @@ void paw_os_sleep(paw_Uint64 nanos)
     // equal to `NANOS` (EINVAL), or the system call is interrupted (EINTR). Only the
     // EINTR case needs to be handled here.
     while (nanosleep(&dur, &rem) != 0) {
-        paw_assert(errno == EINTR);
+        assert(errno == EINTR);
         dur.tv_sec = rem.tv_sec;
         dur.tv_nsec = rem.tv_nsec;
     }

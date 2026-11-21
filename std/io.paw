@@ -2,7 +2,12 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+use mem;
+use ptr;
 use result;
+use slice;
+use string::String;
+use string_builder;
 
 pub trait Read {
     fn read(*self, data: []char) -> Result<usize>;
@@ -21,40 +26,193 @@ impl From<mem::OutOfMemory> for Error {
     }
 }
 
+
+// TODO: move elsewhere and add more methods
+pub struct CString {
+    inner: String,
+}
+
+impl CString {
+    pub fn new() -> mem::Result<Self> {
+        Ok(CString{inner: String::from_chars("\0")?})
+    }
+
+    pub fn from_string(s: String) -> mem::Result<Self> {
+        s.push('\0')?;
+        Ok(CString{inner: s})
+    }
+
+    pub fn from_chars<T: ToSlice<char>>(chars: T) -> mem::Result<Self> {
+        Self::from_string(String::from_chars(chars)?)
+    }
+
+    pub fn len(*self) -> usize {
+        self.inner.len() - 1
+    }
+}
+
+impl ToSlice<char> for CString {
+    fn to_slice(*self) -> []char {
+        slice::from_raw_parts(self.as_ptr(), self.len())
+    }
+}
+
+impl AsPtr<char> for CString {
+    fn as_ptr(*self) -> *char {
+        self.inner.as_ptr()    
+    }
+}
+
+pub struct Path {
+    path: CString,
+}
+
+impl Path {
+    pub fn new() -> mem::Result<Self> {
+        Ok(Self{path: CString::new()?})
+    }
+
+    pub fn from_cstring(path: CString) -> Self {
+        Self{path}
+    }
+
+    pub fn from_string(path: String) -> mem::Result<Self> {
+        let path = CString::from_string(path)?;
+        Ok(Self{path})
+    }
+
+    pub fn from_chars<T: ToSlice<char>>(chars: T) -> mem::Result<Self> {
+        Ok(Self::from_cstring(CString::from_chars(chars)?))
+    }
+
+    pub fn len(*self) -> usize {
+        self.path.len()
+    }
+}
+
+impl AsPtr<char> for Path {
+    fn as_ptr(*self) -> *char {
+        self.path.as_ptr()
+    }
+}
+
+impl ToSlice<char> for Path {
+    fn to_slice(*self) -> []char {
+        self.path.to_slice()
+    }
+}
+
+// NOTE: Values must match OpenFlags enum in syscall library.
+const OF_READONLY: int32 = 0;
+const OF_WRITEONLY: int32 = 1;
+const OF_CREATE: int32 = 2;
+const OF_TRUNCATE: int32 = 3;
+const OF_APPEND: int32 = 4;
+
+pub struct OpenFlags {
+    bits: int32,
+}
+
+impl Copy for OpenFlags {}
+
+impl OpenFlags {
+    pub fn new() -> Self {
+        Self{bits: 0}
+    }
+
+    pub fn with_read(self, value: bool) -> Self {
+        self.with_flag_value(value, (1 << OF_READONLY))
+    }
+
+    pub fn with_write(self, value: bool) -> Self {
+        self.with_flag_value(value, (1 << OF_WRITEONLY))
+    }
+
+    pub fn with_create(self, value: bool) -> Self {
+        self.with_flag_value(value, (1 << OF_CREATE))
+    }
+
+    pub fn with_truncate(self, value: bool) -> Self {
+        self.with_flag_value(value, (1 << OF_TRUNCATE))
+    }
+
+    pub fn with_append(self, value: bool) -> Self {
+        self.with_flag_value(value, (1 << OF_APPEND))
+    }
+
+    pub fn is_read(*self) -> bool {
+        self.bits & (1 << OF_READONLY) != 0
+    }
+
+    pub fn is_write(self) -> bool {
+        self.bits & (1 << OF_WRITEONLY) != 0
+    }
+
+    pub fn is_create(self) -> bool {
+        self.bits & (1 << OF_CREATE) != 0
+    }
+
+    pub fn is_truncate(self) -> bool {
+        self.bits & (1 << OF_TRUNCATE) != 0
+    }
+
+    pub fn is_append(self) -> bool {
+        self.bits & (1 << OF_APPEND) != 0
+    }
+
+    fn with_flag_value(self, value: bool, bits: int32) -> Self {
+        Self{bits: if value {
+            self.bits | bits
+        } else {
+            self.bits & ~bits
+        }}
+    }
+}
+
+type Fd = int32;
+
 pub struct File {
-    inner: *(),
+    fd: Fd,
 }
 
 impl File {
-    #[extern = "paw_io_File_open"] 
-    pub fn open(pathname: []char, mode: []char) -> Result<Self>;
+    pub fn open(path: *Path, flags: OpenFlags) -> Result<Self> {
+        let flags = translate_open_flags(flags)?;
+        Ok(Self{fd: platform::open(path, flags)?})
+    }
 
-    #[extern = "paw_io_File_close"] 
-    pub fn close(self) -> Result<()>;
+    pub fn close(self) -> Result<()> {
+        // prevent Drop::drop call
+        let Self{fd} = self;
+        platform::close(fd)
+    }
 
-    #[extern = "paw_io_File_seek"] 
-    pub fn seek(*self, offset: int64, whence: Seek) -> Result<()>;
+    pub fn seek(*self, offset: isize, whence: Seek) -> Result<usize> {
+        platform::seek(self.fd, offset, whence)
+    }
 
-    #[extern = "paw_io_File_tell"] 
-    pub fn tell(*self) -> Result<int64>;
-
-    #[extern = "paw_io_File_flush"] 
-    pub fn flush(*self) -> Result<()>;
+    pub fn flush(*self) -> Result<()> {
+        platform::flush(self.fd)
+    }
 }
 
 impl Read for File {
-    #[extern = "paw_io_File_read"] 
-    fn read(*self, data: []char) -> Result<usize>;
+    fn read(*self, data: []char) -> Result<usize> {
+        platform::read(self.fd, data)
+    }
 }
 
 impl Write for File {
-    #[extern = "paw_io_File_write"] 
-    fn write(*self, data: []char) -> Result<usize>;
+    fn write(*self, data: []char) -> Result<usize> {
+        platform::write(self.fd, data)
+    }
 }
 
 impl Drop for File {
-    #[extern = "paw_io_File_drop"]
-    fn drop(*self);
+    fn drop(*self) {
+        // ignore error
+        let _ = platform::close(self.fd);
+    }
 }
 
 
@@ -64,6 +222,28 @@ pub enum Seek {
     End,
 }
 
+impl Copy for Seek {}
+
+impl Seek {
+    pub fn as_int32(*self) -> int32 {
+        match *self {
+            Self::Begin => 0,
+            Self::Current => 1,
+            Self::End => 2,
+        }
+    }
+}
+
+
+// TODO: need conversion from fieldless enum to integer, i.e. way to get value of integer discriminant. consider allowing user-specified values, i.e. "Variant = 42," syntax
+const EK_NOTFOUND: int32 = 0;
+const EK_TOOLARGE: int32 = 1;
+const EK_PERMISSIONDENIED: int32 = 2;
+const EK_ALREADYEXISTS: int32 = 3;
+const EK_NOTOPENED: int32 = 4;
+const EK_NOTSUPPORTED: int32 = 5;
+const EK_INVALIDARGUMENT: int32 = 6;
+const EK_OTHER: int32 = 7;
 
 pub enum Error {
     NotFound,
@@ -93,8 +273,6 @@ pub fn print<T: ToSlice<char>>(message: T) {
     stdout().write(message.to_slice()).unwrap();
 }
 
-use string_builder;
-
 pub fn println<T: ToSlice<char>>(message: T) {
     let b = string_builder::Builder::new();
     b.append_slice(message.to_slice()).unwrap();
@@ -102,9 +280,6 @@ pub fn println<T: ToSlice<char>>(message: T) {
     print(b.string());
 }
 
-
-use ptr;
-use slice;
 
 fn skip_unchecked<T>(data: *[]T, amount: usize) {
     *data = slice::from_raw_parts(
@@ -129,8 +304,6 @@ pub fn read_exact<R: Read>(reader: *R, data: []char) -> Result<()> {
 }
 
 
-use string::String;
-
 pub fn read_line<R: Read>(reader: *R, out: *String) -> Result<usize> {
     let length = 0;
     loop {
@@ -147,3 +320,108 @@ pub fn read_line<R: Read>(reader: *R, out: *String) -> Result<usize> {
     }
     Ok(length)
 }
+
+
+mod syscall {
+    #[extern = "paw_syscall_open"]
+    fn open(path: *char, mode: int32) -> int32;
+
+    #[extern = "paw_syscall_close"]
+    fn close(fd: int32) -> int32;
+
+    #[extern = "paw_syscall_seek"]
+    fn seek(fd: int32, offset: isize, whence: int32) -> isize;
+
+    #[extern = "paw_syscall_sync"]
+    fn sync(fd: int32) -> int32;
+
+    #[extern = "paw_syscall_read"]
+    fn read(fd: int32, data: *char, size: usize) -> isize;
+
+    #[extern = "paw_syscall_write"]
+    fn write(fd: int32, data: *char, size: usize) -> isize;
+}
+
+mod platform {
+    fn open(path: *Path, mode: int32) -> Result<Fd> {
+        let fd = syscall::open(path.as_ptr(), mode);
+        if fd >= 0 {
+            Ok(fd)
+        } else {
+            Err(current_error())
+        }
+    }
+
+    fn close(fd: Fd) -> Result<()> {
+        if syscall::close(fd) == 0 {
+            Ok(())
+        } else {
+            Err(current_error())
+        }
+    }
+
+    fn seek(fd: Fd, offset: isize, whence: Seek) -> Result<usize> {
+        let offset = syscall::seek(fd, offset, whence.as_int32());
+        if offset >= 0 {
+            Ok(offset as usize)
+        } else {
+            Err(current_error())
+        }
+    }
+
+    // TODO: consider calling fcntl(fd, F_FULLFSYNC) on macos
+    fn flush(fd: Fd) -> Result<()> {
+        if syscall::sync(fd) == 0 {
+            Ok(())
+        } else {
+            Err(current_error())
+        }
+    }
+
+    fn read(fd: Fd, data: []char) -> Result<usize> {
+        let size = syscall::read(fd, data.as_ptr(), data.len());
+        if size >= 0 {
+            Ok(size as usize)
+        } else {
+            Err(current_error())
+        }
+    }
+
+    fn write(fd: Fd, data: []char) -> Result<usize> {
+        let size = syscall::write(fd, data.as_ptr(), data.len());
+        if size >= 0 {
+            Ok(size as usize)
+        } else {
+            Err(current_error())
+        }
+    }
+}
+
+#[extern = "paw_io_translate_open_flags"]
+fn translate_open_flags_(flags: int32, out: *int32) -> bool;
+
+fn translate_open_flags(flags: OpenFlags) -> Result<int32> {
+    let f = mem::MaybeUninit::new();
+    if translate_open_flags_(flags.bits, f.as_ptr()) {
+        Ok(f.assume_init())
+    } else {
+        Err(Error::InvalidArgument)
+    }
+}
+
+#[extern = "paw_io_current_error"]
+fn current_error_() -> int32;
+
+fn current_error() -> Error {
+    match current_error_() as int64 {
+        0 => Error::NotFound, // EK_NOTFOUND
+        1 => Error::TooLarge, // EK_TOOLARGE
+        2 => Error::PermissionDenied, // EK_PERMISSIONDENIED
+        3 => Error::AlreadyExists, // EK_ALREADYEXISTS
+        4 => Error::NotOpened, // EK_NOTOPENED
+        5 => Error::NotSupported, // EK_NOTSUPPORTED
+        6 => Error::InvalidArgument, // EK_INVALIDARGUMENT
+        _ => Error::Other, // EK_OTHER
+    }
+}
+

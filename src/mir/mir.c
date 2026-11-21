@@ -1765,7 +1765,8 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         case kMirGetConstant: {
             struct MirGetConstant *t = MirGetGetConstant(instr);
             print_place(P, t->output);
-            PRINT_FORMAT(P, " = getk %d", t->k.value);
+            PRINT_FORMAT(P, " = getk ");
+            print_constant(P, mir_const_data(P->mir, t->k)->data);
             break;
         }
         case kMirGetDiscriminant: {
@@ -1896,7 +1897,7 @@ static void dump_mir(struct Printer *P, struct Mir *mir)
         if (data.name != NULL) {
             DUMP_FORMAT(P, "%s: %s\n", data.name->text, type->text);
         } else {
-            DUMP_FORMAT(P, "_%d: %s\n", i, type->text);
+            DUMP_FORMAT(P, "%%%d: %s\n", i, type->text);
         }
     }
     --P->indent;

@@ -225,7 +225,7 @@ private:
                         return X->get_float_type(FloatKind::FLOAT64);
                 }
             case kIrPtr:
-                return create_ptr_type();
+                return create_ptr_type(ir_deref(irtype));
             case kIrString:
                 return X->get_str_type();
             case kIrSlice:
@@ -250,7 +250,7 @@ private:
         return X->get_tuple_type(field_types);
     }
 
-    Type *create_ptr_type()
+    Type *create_ptr_type(IrType *irtype)
     {
         return X->get_ptr_type();
     }
@@ -603,6 +603,19 @@ public:
     Context *get_context() { return &X; }
     Context const *get_context() const { return &X; }
 
+    bool has_extern_name(Mir const *mir, char const *name)
+    {
+        Annotation annotation;
+        if (pawP_check_extern(mir->C, mir->annotations, &annotation)) {
+            if (annotation.has_value) {
+                // #[extern = "function_name"]
+                paw_assert(annotation.kind == BUILTIN_STR);
+                return to_string((::Str const *)annotation.value.p) == name;
+            }
+        }
+        return false;
+    }
+
     bool is_core_op(Mir const *mir, char const *module_name, char const *name)
     {
         if (mir->self == nullptr && IrIsSignature(mir->type)) {
@@ -622,7 +635,8 @@ public:
             && pawS_eq(mir->name, SCAN_STR(C, name));
     }
 
-#define READ_ARG(State_, Ty_, Index_) B->CreateLoad(Ty_, (State_).get_arg(Index_))
+#define READ_ARG_AS(State_, Ty_, Index_) B->CreateLoad(Ty_, (State_).get_arg(Index_))
+#define READ_ARG(State_, Index_) READ_ARG_AS(State_, (State_).get_fn()->get_type()->get_param_type(Index_)->get_ty(), Index_)
 
     void generate_array_uninit(Mir const *mir, Fn *fn)
     {
@@ -664,14 +678,14 @@ public:
         auto *irtype = IrGenericArg_get_type(IrGenericArgs_get(irargs, 1));
         paw_assert(irconst->kind == IR_CONST_VALUE);
         paw_assert(IrIsInt(irconst->value.type));
-        auto const N = irconst->value.value.usize;
+        auto const N = irconst->value.value.u64;
 
         State state(X, fn);
 
         auto *element_type = get_type(irtype);
         auto *array_ty = X.get_array_ty(*element_type, N);
         llvm::Value *array = llvm::UndefValue::get(array_ty);
-        auto *element = READ_ARG(state, *element_type, 0);
+        auto *element = READ_ARG_AS(state, *element_type, 0);
         for (auto i = 0U; i < N; ++i) {
             array = B->CreateInsertValue(array, element, i);
         }
@@ -688,7 +702,7 @@ public:
         // type `T` in the Paw signature.
         if (ir_needs_drop(C, irtype)) {
             auto *irdrop = ir_get_custom_drop_type(C, irtype);
-            auto *arg = READ_ARG(state, X.get_ptr_ty(), 0);
+            auto *arg = READ_ARG_AS(state, X.get_ptr_ty(), 0);
             B->CreateCall(get_fn(irdrop)->get_fn(), arg);
         }
         state.create_return();
@@ -732,7 +746,7 @@ public:
                     IR_FIRST_GENERIC_ARG(mir->type)));
 
         State state(X, fn);
-        auto *pointer = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *pointer = READ_ARG_AS(state, X.get_ptr_ty(), 0);
         auto *result = read_value(*pointee_type, pointer);
         state.create_return(result);
     }
@@ -744,8 +758,8 @@ public:
                     IR_FIRST_GENERIC_ARG(mir->type)));
 
         State state(X, fn);
-        auto *pointer = READ_ARG(state, X.get_ptr_ty(), 0);
-        auto *value = READ_ARG(state, *pointee_type, 1);
+        auto *pointer = READ_ARG_AS(state, X.get_ptr_ty(), 0);
+        auto *value = READ_ARG_AS(state, *pointee_type, 1);
         write_value(*pointee_type, value, pointer);
         state.create_return();
     }
@@ -758,8 +772,8 @@ public:
 
         State state(X, fn);
 
-        auto *pointer = READ_ARG(state, X.get_ptr_ty(), 0);
-        auto *offset = READ_ARG(state, X.get_isize_ty(), 1);
+        auto *pointer = READ_ARG(state, 0);
+        auto *offset = READ_ARG(state, 1);
         auto *result = B->CreateInBoundsGEP(
                 *pointee_type, pointer, offset);
 
@@ -773,12 +787,28 @@ public:
         state.create_return();
     }
 
+    void generate_ptr_memcmp(Mir const *mir, Fn *fn)
+    {
+        auto *m = M->get_module();
+        auto const callee = m->getOrInsertFunction("memcmp",
+                llvm::FunctionType::get(X.get_i32_ty(),
+                    {X.get_ptr_ty(), X.get_ptr_ty(), X.get_isize_ty()},
+                    false));
+
+        State state(X, fn);
+        auto *left = READ_ARG_AS(state, X.get_ptr_ty(), 0);
+        auto *right = READ_ARG_AS(state, X.get_ptr_ty(), 1);
+        auto *size = READ_ARG_AS(state, X.get_isize_ty(), 2);
+        auto *result = B->CreateCall(callee, {left, right, size});
+        state.create_return(result);
+    }
+
     void generate_ptr_memcpy(Mir const *mir, Fn *fn)
     {
         State state(X, fn);
-        auto *dest = READ_ARG(state, X.get_ptr_ty(), 0);
-        auto *src = READ_ARG(state, X.get_ptr_ty(), 1);
-        auto *size = READ_ARG(state, X.get_isize_ty(), 2);
+        auto *dest = READ_ARG_AS(state, X.get_ptr_ty(), 0);
+        auto *src = READ_ARG_AS(state, X.get_ptr_ty(), 1);
+        auto *size = READ_ARG_AS(state, X.get_isize_ty(), 2);
         X.create_memcpy(dest, src, size, false);
         state.create_return(dest);
     }
@@ -786,9 +816,9 @@ public:
     void generate_ptr_memmove(Mir const *mir, Fn *fn)
     {
         State state(X, fn);
-        auto *dest = READ_ARG(state, X.get_ptr_ty(), 0);
-        auto *src = READ_ARG(state, X.get_ptr_ty(), 1);
-        auto *size = READ_ARG(state, X.get_isize_ty(), 2);
+        auto *dest = READ_ARG_AS(state, X.get_ptr_ty(), 0);
+        auto *src = READ_ARG_AS(state, X.get_ptr_ty(), 1);
+        auto *size = READ_ARG_AS(state, X.get_isize_ty(), 2);
         X.create_memmove(dest, src, size, false);
         state.create_return(dest);
     }
@@ -796,9 +826,9 @@ public:
     void generate_ptr_memset(Mir const *mir, Fn *fn)
     {
         State state(X, fn);
-        auto *ptr = READ_ARG(state, X.get_ptr_ty(), 0);
-        auto *value = READ_ARG(state, X.get_i8_ty(), 1);
-        auto *size = READ_ARG(state, X.get_isize_ty(), 2);
+        auto *ptr = READ_ARG_AS(state, X.get_ptr_ty(), 0);
+        auto *value = READ_ARG_AS(state, X.get_i8_ty(), 1);
+        auto *size = READ_ARG_AS(state, X.get_isize_ty(), 2);
         X.create_memset(ptr, value, size);
         state.create_return(ptr);
     }
@@ -807,9 +837,46 @@ public:
     void generate_ptr_strlen(Mir const *mir, Fn *fn)
     {
         State state(X, fn);
-        auto *string = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *string = READ_ARG_AS(state, X.get_ptr_ty(), 0);
         auto *result = X.call_strlen(string);
         state.create_return(result);
+    }
+
+    void generate_from_raw_parts(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        llvm::Value *result = llvm::UndefValue::get(X.get_fatptr_ty());
+        result = B->CreateInsertValue(result, READ_ARG(state, 0), 0);
+        result = B->CreateInsertValue(result, READ_ARG(state, 1), 1);
+        state.create_return(result);
+    }
+
+    void generate_field_getter(Mir const *mir, Fn *fn, Discriminant discr, size_t index)
+    {
+        State state(X, fn);
+        auto *type = get_type(ir_deref(IrTypeList_first(mir->param_types)));
+        // TODO: either represent str and []T structurally, i.e. as ObjectType instead of [Str|Slice]Type, or write method to convert to structural repr
+        if (type->is_slice_type() || type->is_str_type()) type = X.get_object_type({{X.get_ptr_type(), X.get_int_type(IntKind::ISIZE)}});
+        Object object(state, READ_ARG(state, 0), cast<ObjectType>(type));
+        state.create_return(object.get_field(discr, index));
+    }
+
+    void generate_fmt_write_float(Mir const *mir, Fn *fn)
+    {
+        auto *m = M->get_module();
+        auto const callee = m->getOrInsertFunction("snprintf",
+                llvm::FunctionType::get(X.get_i32_ty(),
+                    {X.get_ptr_ty(), X.get_isize_ty(), X.get_ptr_ty()},
+                    /* isVarArg= */ true));
+
+        State state(X, fn);
+        auto *value = READ_ARG(state, 0);
+        auto *precision = READ_ARG(state, 1);
+        auto *output = READ_ARG(state, 2);
+        auto *output_len = READ_ARG(state, 3);
+        auto *fmt = B->CreateGlobalString("%.*g");
+        auto *result = B->CreateCall(callee, {output, output_len, fmt, precision, value});
+        state.create_return(B->CreateZExt(result, X.get_isize_ty()));
     }
 
     // fn sizeof<T>() -> usize
@@ -845,6 +912,31 @@ public:
         args = B->CreateInsertValue(args, argc, 1);
 
         state.create_return(args);
+    }
+
+    void generate_posix_open_shim(Mir const *mir, Fn *fn)
+    {
+        auto *m = M->get_module();
+        auto const callee = m->getOrInsertFunction("open",
+                llvm::FunctionType::get(X.get_i32_ty(),
+                    {X.get_ptr_ty(), X.get_i32_ty()},
+                    /* isVarArg= */ true));
+
+        State state(X, fn);
+        auto *path = READ_ARG(state, 0);
+        auto *flags = READ_ARG(state, 1);
+        auto *fd = B->CreateCall(callee, {path, flags});
+        state.create_return(fd);
+    }
+
+    void generate_mem_MaybeUninit_new(Mir const *mir, Fn *fn)
+    {
+        auto *type = get_type(IrGenericArg_get_type(
+                    IrGenericArgs_first(mir->args)));
+
+        State state(X, fn);
+        llvm::Value *undef = llvm::UndefValue::get(type->get_ty());
+        state.create_return(undef);
     }
 
     void generate_builtins()
@@ -893,7 +985,7 @@ public:
                 stream_ptr,
                 "stream");
 
-            auto *message = READ_ARG(state, *message_type, 0);
+            auto *message = READ_ARG_AS(state, *message_type, 0);
             auto *ptr = B->CreateExtractValue(message, 0ULL);
             auto *len = B->CreateExtractValue(message, 1ULL);
             B->CreateCall(write, {ptr, X.create_isize(1), len, stream});
@@ -934,6 +1026,7 @@ public:
         }
     }
 
+#undef READ_ARG_AS
 #undef READ_ARG
 
     void define_fn(Mir const *mir)
@@ -956,6 +1049,9 @@ public:
 
         if (is_core_op(mir, "ptr", "needs_drop"))
             return generate_ptr_needs_drop(mir, fn);
+
+        if (is_core_op(mir, "ptr", "memcmp"))
+            return generate_ptr_memcmp(mir, fn);
 
         if (is_core_op(mir, "ptr", "memcpy"))
             return generate_ptr_memcpy(mir, fn);
@@ -992,6 +1088,33 @@ public:
 
         if (is_core_op(mir, "mem", "drop_in_place"))
             return generate_mem_drop_in_place(mir, fn);
+
+        if (has_extern_name(mir, "paw_slice_as_ptr"))
+            return generate_field_getter(mir, fn, Discriminant::base(), 0);
+
+        if (has_extern_name(mir, "paw_slice_len"))
+            return generate_field_getter(mir, fn, Discriminant::base(), 1);
+
+        if (has_extern_name(mir, "paw_slice_from_raw_parts"))
+            return generate_from_raw_parts(mir, fn);
+
+        if (has_extern_name(mir, "paw_str_as_ptr"))
+            return generate_field_getter(mir, fn, Discriminant::base(), 0);
+
+        if (has_extern_name(mir, "paw_str_len"))
+            return generate_field_getter(mir, fn, Discriminant::base(), 1);
+
+        if (has_extern_name(mir, "paw_str_from_raw_parts"))
+            return generate_from_raw_parts(mir, fn);
+
+        if (has_extern_name(mir, "paw_fmt_write_float"))
+            return generate_fmt_write_float(mir, fn);
+
+        if (has_extern_name(mir, "paw_posix_open_shim"))
+            return generate_posix_open_shim(mir, fn);
+
+        if (has_extern_name(mir, "paw_mem_MaybeUninit_new"))
+            return generate_mem_MaybeUninit_new(mir, fn);
 
         if (mir->blocks->count == 0)
             return;
@@ -2365,7 +2488,7 @@ static void link_compilation_artifact(paw_Env *P, std::string prefix)
     auto linker = Linker(P)
         .with_object(prefix + ".o")
         .with_arg("-L" + root_dir + "/std")
-        .with_staticlib("paw_stdc");
+        .with_staticlib("paw_syscall");
 
     auto const o = P->options;
     for (int i = 0; i < o.num_library_dirs; ++i) {

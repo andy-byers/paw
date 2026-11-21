@@ -2,20 +2,19 @@
 set(STD_SRC "${CMAKE_SOURCE_DIR}/std")
 set(STD_DEST "${CMAKE_BINARY_DIR}/std")
 
-add_library(paw_stdc STATIC)
+add_library(paw_syscall STATIC)
 if(${CMAKE_C_COMPILER_ID} STREQUAL MSVC)
-    target_compile_options(paw_stdc
+    target_compile_options(paw_syscall
         PRIVATE /W2)
 else()
-    target_compile_options(paw_stdc
+    target_compile_options(paw_syscall
         PRIVATE -Wall -Wextra -Wpedantic -Wsign-conversion 
-                -Wno-zero-length-array # used for Paw type "()"
     ) 
-    target_link_libraries(paw_stdc
+    target_link_libraries(paw_syscall
         PRIVATE m)
 endif()
 
-target_sources(paw_stdc
+target_sources(paw_syscall
     PUBLIC  paw.h
             io.h
             pmath.h
