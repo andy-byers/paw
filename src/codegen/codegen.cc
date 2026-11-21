@@ -603,6 +603,19 @@ public:
     Context *get_context() { return &X; }
     Context const *get_context() const { return &X; }
 
+    bool has_extern_name(Mir const *mir, char const *name)
+    {
+        Annotation annotation;
+        if (pawP_check_extern(mir->C, mir->annotations, &annotation)) {
+            if (annotation.has_value) {
+                // #[extern = "function_name"]
+                paw_assert(annotation.kind == BUILTIN_STR);
+                return to_string((::Str const *)annotation.value.p) == name;
+            }
+        }
+        return false;
+    }
+
     bool is_core_op(Mir const *mir, char const *module_name, char const *name)
     {
         if (mir->self == nullptr && IrIsSignature(mir->type)) {
@@ -773,6 +786,22 @@ public:
         state.create_return();
     }
 
+    void generate_ptr_memcmp(Mir const *mir, Fn *fn)
+    {
+        auto *m = M->get_module();
+        auto const callee = m->getOrInsertFunction("memcmp",
+                llvm::FunctionType::get(X.get_i32_ty(),
+                    {X.get_ptr_ty(), X.get_ptr_ty(), X.get_isize_ty()},
+                    false));
+
+        State state(X, fn);
+        auto *left = READ_ARG(state, X.get_ptr_ty(), 0);
+        auto *right = READ_ARG(state, X.get_ptr_ty(), 1);
+        auto *size = READ_ARG(state, X.get_isize_ty(), 2);
+        auto *result = B->CreateCall(callee, {left, right, size});
+        state.create_return(result);
+    }
+
     void generate_ptr_memcpy(Mir const *mir, Fn *fn)
     {
         State state(X, fn);
@@ -810,6 +839,34 @@ public:
         auto *string = READ_ARG(state, X.get_ptr_ty(), 0);
         auto *result = X.call_strlen(string);
         state.create_return(result);
+    }
+
+    void generate_slice_into_raw_parts(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *slice = READ_ARG(state, X.get_fatptr_ty(), 0);
+        state.create_return(slice);
+    }
+
+    void generate_str_into_raw_parts(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *slice = READ_ARG(state, X.get_fatptr_ty(), 0);
+        state.create_return(slice);
+    }
+
+    void generate_slice_from_raw_parts(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *parts = READ_ARG(state, X.get_fatptr_ty(), 0);
+        state.create_return(parts);
+    }
+
+    void generate_str_from_raw_parts(Mir const *mir, Fn *fn)
+    {
+        State state(X, fn);
+        auto *parts = READ_ARG(state, X.get_fatptr_ty(), 0);
+        state.create_return(parts);
     }
 
     // fn sizeof<T>() -> usize
@@ -957,6 +1014,9 @@ public:
         if (is_core_op(mir, "ptr", "needs_drop"))
             return generate_ptr_needs_drop(mir, fn);
 
+        if (is_core_op(mir, "ptr", "memcmp"))
+            return generate_ptr_memcmp(mir, fn);
+
         if (is_core_op(mir, "ptr", "memcpy"))
             return generate_ptr_memcpy(mir, fn);
 
@@ -992,6 +1052,18 @@ public:
 
         if (is_core_op(mir, "mem", "drop_in_place"))
             return generate_mem_drop_in_place(mir, fn);
+
+        if (has_extern_name(mir, "paw_slice_into_raw_parts"))
+            return generate_slice_into_raw_parts(mir, fn);
+
+        if (has_extern_name(mir, "paw_slice_from_raw_parts"))
+            return generate_slice_from_raw_parts(mir, fn);
+
+        if (has_extern_name(mir, "paw_str_into_raw_parts"))
+            return generate_str_into_raw_parts(mir, fn);
+
+        if (has_extern_name(mir, "paw_str_from_raw_parts"))
+            return generate_str_from_raw_parts(mir, fn);
 
         if (mir->blocks->count == 0)
             return;

@@ -9,10 +9,13 @@ pub fn from_raw_parts<T>(ptr: *T, len: usize) -> []T;
 //#[extern = "paw_slice_from_raw_parts"]
 //pub fn from_raw_parts_mut<T>(ptr: *mut T, len: usize) -> []mut T;
 
-
 impl<T> []T {
-    #[extern = "paw_slice_Slice_len"]
-    pub fn len(self) -> usize;
+    pub fn len(self) -> usize {
+        self.into_raw_parts().1
+    }
+
+    #[extern = "paw_slice_into_raw_parts"]
+    pub fn into_raw_parts(self) -> (*T, usize);
 
     pub fn is_empty(self) -> bool {
         self.len() == 0

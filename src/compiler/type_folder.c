@@ -448,6 +448,9 @@ static void FoldPlace(struct MirVisitor *V, struct MirPlace r)
     } else if (r.kind == MIR_PLACE_UPVALUE) {
         struct MirUpvalueInfo *data = &LIST_AT(V->mir->upvalues, r.up);
         data->type = ir_fold_type(F, data->type);
+    } else {
+        struct MirConstantData *data = mir_const_data(V->mir, r.k);
+        data->type = ir_fold_type(F, data->type);
     }
 }
 
@@ -473,7 +476,16 @@ void mir_fold(struct MirTypeFolder *F, struct Mir *mir)
 {
     mir->self = ir_fold_type(&F->F, mir->self);
     mir->type = ir_fold_type(&F->F, mir->type);
-    for (int i = 0; i < mir->blocks->count; ++i) {
-        mir_fold_block(F, MIR_BB(i));
-    }
+    mir->result_type = ir_fold_type(&F->F, mir->result_type);
+    mir->param_types = ir_fold_type_list(&F->F, mir->param_types);
+    mir->args = ir_fold_generic_args(&F->F, mir->args);
+    if (mir->env_type != NULL)
+        mir->env_type = ir_fold_type(&F->F, mir->env_type);
+
+    LIST_XFOREACH (mir->registers, struct MirRegisterData, p)
+        p->type = ir_fold_type(&F->F, p->type);
+    LIST_XFOREACH (mir->upvalues, struct MirUpvalueInfo, p)
+        p->type = ir_fold_type(&F->F, p->type);
+    LIST_XFOREACH (mir->kcache->data, struct MirConstantData, p)
+        p->type = ir_fold_type(&F->F, p->type);
 }

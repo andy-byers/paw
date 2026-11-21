@@ -274,8 +274,9 @@ impl Clone for str {
 }
 
 impl AsPtr<char> for str {
-    #[extern = "paw_ops_str_AsPtr_as_ptr"]
-    fn as_ptr(*self) -> *char;
+    fn as_ptr(*self) -> *char {
+        self.into_raw_parts().0
+    }
 }
 
 impl ToSlice<char> for str {
@@ -337,8 +338,9 @@ impl IntoIterator for str {
 impl<T> Copy for []T {}
 
 impl<T> AsPtr<T> for []T {
-    #[extern = "paw_ops_Slice_AsPtr_as_ptr"]
-    fn as_ptr(*self) -> *T;
+    fn as_ptr(*self) -> *T {
+        self.into_raw_parts().0
+    }
 }
 
 impl<T> Index<usize> for []T {
@@ -577,8 +579,8 @@ fn builtin_hash_bytes(bytes: *char, length: usize, hash: uint64) -> uint64
 fn builtin_rawcmp(
         lhs: *char, lhs_len: usize, 
         rhs: *char, rhs_len: usize) -> int64 {
-    let r = ptr::memcmp(lhs, rhs, minmax(lhs_len, rhs_len).0);
-    if r != 0 { return r }
+    let r = ptr::memcmp(lhs, rhs, min(lhs_len, rhs_len));
+    if r != 0 { return r as int64 }
     lhs_len as int64 - rhs_len as int64
 }
 
@@ -1018,6 +1020,16 @@ pub fn __format_str(f: *fmt::Formatter, r: *Option<fmt::Error>, s: str) {
     }
 }
 
+
+pub fn min<T: Ord<T>>(a: T, b: T) -> T {
+    let (x, _) = minmax(a, b);
+    x
+}
+
+pub fn max<T: Ord<T>>(a: T, b: T) -> T {
+    let (_, y) = minmax(a, b);
+    y
+}
 
 pub fn minmax<T: Ord<T>>(a: T, b: T) -> (T, T) {
     match a.cmp(&b) {

@@ -820,6 +820,8 @@ use io;
 
 #[test]
 pub fn test() {
-    io::println("Hello, world!");
+    let s = "1.5";
+    let f = s.parse_float().unwrap();
+    io::println(f"Hello, world! float64 = \{f}".unwrap());
 }
 

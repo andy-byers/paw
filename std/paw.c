@@ -12,39 +12,10 @@
 
 #define DANGLING ((void *)16)
 
-void paw_assert(paw_Bool cond)
-{
-    if (!cond) {
-        char message[] = "assertion failed";
-        paw_panic_((paw_Slice){
-                .start = message,
-                .length = PAW_LENGTHOF(message),
-            });
-    }
-}
-
 _Noreturn void paw_panic_(paw_Slice message)
 {
     fwrite(message.start, 1, (paw_Usize)message.length, stderr);
     exit(EXIT_FAILURE);
-}
-
-paw_Str paw_str_from_raw_parts(char const *ptr, paw_Usize len)
-{
-    return (paw_Str){
-        .text = ptr,
-        .length = len,
-    };
-}
-
-paw_Usize paw_str_len(paw_Str self)
-{
-    return self.length;
-}
-
-char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self)
-{
-    return self->text;
 }
 
 static int parse_float(paw_Char const *text, double *result_ptr)
@@ -113,73 +84,6 @@ paw_Option_Int64 paw_str_find(paw_Str self, paw_Str target)
     } else {
         return paw_Option_Int64_none();
     }
-}
-
-// fn paw_slice_from_raw_parts<T>(start: *T, length: int) -> []T
-paw_Slice paw_slice_from_raw_parts(void *start, paw_Usize length)
-{
-    return (paw_Slice){
-        .start = start,
-        .length = length,
-    };
-}
-
-// fn as_ptr(*self) -> *T
-void *paw_ops_Slice_AsPtr_as_ptr(paw_Slice *self)
-{
-    return self->start;
-}
-
-// fn len(self) -> int
-paw_Usize paw_slice_Slice_len(paw_Slice self)
-{
-    return self.length;
-}
-
-paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size)
-{
-    PAW_API_CHECK(size != 0, "alloc: expected nonzero size");
-
-    void *ptr = malloc(size);
-    return ptr != NULL
-        ? paw_mem_Result_Ptr_ok(ptr)
-        : paw_mem_Result_Ptr_err();
-}
-
-paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size)
-{
-    PAW_API_CHECK(ptr != NULL, "realloc: expected nonnull pointer");
-    PAW_API_CHECK(size != 0, "realloc: expected nonzero size");
-
-    ptr = realloc(ptr, size);
-    return ptr != NULL
-        ? paw_mem_Result_Ptr_ok(ptr)
-        : paw_mem_Result_Ptr_err();
-}
-
-paw_mem_Result_Ptr paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size)
-{
-    PAW_API_CHECK(alignment != 0 && ((alignment & (alignment - 1)) == 0), "aligned_alloc: expected nonzero power-of-two alignment");
-    PAW_API_CHECK(size != 0, "aligned_alloc: expected nonzero size");
-
-    void *ptr = aligned_alloc(alignment, size);
-    return ptr != NULL
-        ? paw_mem_Result_Ptr_ok(ptr)
-        : paw_mem_Result_Ptr_err();
-}
-
-void paw_mem_raw_dealloc(void *ptr)
-{
-    // `ptr` might be null
-    free(ptr);
-}
-
-// fn memcmp(lhs: *char, rhs: *char, size: int) -> int
-paw_Int64 paw_ptr_memcmp(void *lhs, void *rhs, paw_Usize size)
-{
-    if (size == 0) return 0;
-    paw_assert(lhs != NULL && rhs != NULL);
-    return memcmp(lhs, rhs, size);
 }
 
 void paw_builtin_check_bounds(paw_Usize index, paw_Usize length)

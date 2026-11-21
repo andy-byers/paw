@@ -144,73 +144,19 @@ PAW_DEFINE_OPTION(Float64)
         }; \
     }
 
-#define PAW_DEFINE_MEM_RESULT(T) \
-    typedef struct { \
-        paw_Int64 discr; \
-        paw_##T value; \
-    } paw_mem_ResultOk_##T; \
-    typedef struct { \
-        paw_Int64 discr; \
-    } paw_mem_ResultErr_##T; \
-    typedef struct { \
-        union { \
-            paw_mem_ResultOk_##T ok; \
-            paw_mem_ResultErr_##T err; \
-        }; \
-    } paw_mem_Result_##T; \
-    static inline paw_mem_Result_##T paw_mem_Result_##T##_ok(paw_##T value) \
-    { \
-        return (paw_mem_Result_##T){ \
-            .ok.discr = PAW_RESULT_OK, \
-            .ok.value = value, \
-        }; \
-    } \
-    static inline paw_mem_Result_##T paw_mem_Result_##T##_err(void) \
-    { \
-        return (paw_mem_Result_##T){ \
-            .err.discr = PAW_RESULT_ERR, \
-        }; \
-    }
-
-
 typedef struct {
     void *start;
     paw_Usize length;
 } paw_Slice;
 
 
-void paw_assert(paw_Bool condition);
 _Noreturn void paw_panic_(paw_Slice message);
 
-paw_Str paw_str_from_raw_parts(char const *ptr, paw_Usize len);
-paw_Usize paw_str_len(paw_Str self);
-char const *paw_ops_str_AsPtr_as_ptr(paw_Str *self);
 paw_Option_Int64 paw_str_find(paw_Str, paw_Str self);
 
 paw_Int32 paw_internal_parse_float(paw_Str self, paw_Float64 *out);
 
 void paw_builtin_check_bounds(paw_Usize index, paw_Usize length);
-
-void *paw_ops_Slice_AsPtr_as_ptr(paw_Slice *self);
-paw_Usize paw_slice_Slice_len(paw_Slice self);
-paw_Slice paw_slice_from_raw_parts(void *start, paw_Usize length);
-
-typedef struct paw_mem_OOM {
-    paw_Unit _;
-} paw_mem_OOM;
-
-typedef void *paw_Ptr;
-PAW_DEFINE_MEM_RESULT(Ptr)
-
-paw_mem_Result_Ptr paw_mem_raw_alloc(paw_Usize size);
-paw_mem_Result_Ptr paw_mem_raw_realloc(void *ptr, paw_Usize size);
-paw_mem_Result_Ptr paw_mem_raw_aligned_alloc(paw_Usize alignment, paw_Usize size);
-void paw_mem_raw_dealloc(void *ptr);
-
-void *paw_ptr_memcpy(void *dest, void *src, paw_Usize size);
-void *paw_ptr_memmove(void *dest, void *src, paw_Usize size);
-void *paw_ptr_memset(void *ptr, char value, paw_Usize size);
-paw_Int64 paw_ptr_memcmp(void *lhs, void *rhs, paw_Usize size);
 
 paw_Int64 paw_fmt_write_float(double value, paw_Int64 precision, char *output, paw_Usize output_len);
 

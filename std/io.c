@@ -55,7 +55,7 @@ static int os_close(paw_io_File *file)
     // never happen becuase (a) `Drop::drop()` is never called more than once on any value
     // and (b) `File::close()`, which takes ownership of the File handle, is a C function,
     // so there is no drop call generated when the File goes out of scope.
-    paw_assert(file->inner != NULL);
+    assert(file->inner != NULL);
     int const rc = fclose(file->inner);
     file->inner = NULL;
     return rc;

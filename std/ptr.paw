@@ -79,7 +79,7 @@ pub fn memmove(dest: *char, src: *char, size: usize) -> *char;
 pub fn memset(ptr: *char, value: char, size: usize) -> *char;
 
 #[extern = "paw_ptr_memcmp"] 
-pub fn memcmp(lhs: *char, rhs: *char, size: usize) -> int64;
+pub fn memcmp(lhs: *char, rhs: *char, size: usize) -> int32;
 
 #[extern] 
 pub fn strlen(string: *char) -> usize;
