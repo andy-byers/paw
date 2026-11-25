@@ -413,7 +413,7 @@ fn translate_open_flags(flags: OpenFlags) -> Result<int32> {
 fn current_error_() -> int32;
 
 fn current_error() -> Error {
-    match current_error_() as int64 {
+    match current_error_() {
         0 => Error::NotFound, // EK_NOTFOUND
         1 => Error::TooLarge, // EK_TOOLARGE
         2 => Error::PermissionDenied, // EK_PERMISSIONDENIED

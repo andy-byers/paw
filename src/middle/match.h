@@ -6,6 +6,7 @@
 #define PAW_MATCH_H
 
 #include "compiler/compiler.h"
+#include "ir/type.h"
 
 struct MatchVar {
     struct SourceSpan span;
@@ -33,13 +34,22 @@ enum ConstructorKind {
     CONS_STRUCT,
     CONS_VARIANT,
     CONS_WILDCARD,
-    CONS_REST,
 };
 
 struct Constructor {
     enum ConstructorKind kind;
     union {
         IrValue value;
+
+        struct {
+            IrValue value; // must be first member
+            enum IrIntKind kind;
+        } i;
+
+        struct {
+            IrValue value; // must be first member
+            enum IrFloatKind kind;
+        } f;
 
         struct {
             struct IrTypeList *elems;
