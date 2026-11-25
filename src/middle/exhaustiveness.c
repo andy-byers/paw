@@ -418,12 +418,8 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
         struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
         struct Constructor cons = {0};
 
+        IrType *type = ir_get_type(U->C, e->id);
         switch (e->lit_kind) {
-            case HIR_LIT_TUPLE:
-                paw_assert(e->tuple.elems->count == 0);
-                cons.kind = CONS_TUPLE;
-                cons.tuple.elems = IrTypeList_new(ALLOCATOR_OF(U));
-                break;
             case HIR_LIT_BOOL:
                 cons.kind = CONS_BOOL;
                 cons.value.b = e->b;
@@ -434,14 +430,16 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
                 break;
             case HIR_LIT_INT:
                 cons.kind = CONS_INT;
-                cons.value.i64 = e->i.value;
+                cons.i.kind = IR_INT_KIND(type);
+                cons.i.value.i64 = e->i.value;
                 break;
             case HIR_LIT_FLOAT:
                 // normalize float values
                 if (e->f.value == 0.0)
                     e->f.value = 0.0;
                 cons.kind = CONS_FLOAT;
-                cons.value.f64 = e->f.value;
+                cons.f.kind = IR_FLOAT_KIND(type);
+                cons.f.value.f64 = e->f.value;
                 break;
             default:
                 paw_assert(e->lit_kind == HIR_LIT_STR);

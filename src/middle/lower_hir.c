@@ -329,7 +329,7 @@ static IrType *new_ptr(struct FunctionState *fs, IrType *type)
 
 static MirConstant new_discriminant(struct FunctionState *fs, paw_Uint64 value)
 {
-    return mir_kcache_add_value(fs->mir, fs->mir->kcache, (IrValue){.u64 = value}, ir_new_int(fs->C, IR_INT64));
+    return mir_kcache_add_value(fs->mir, fs->mir->kcache, (IrValue){.u64 = value}, ir_new_int(fs->C, IR_UINT64));
 }
 
 static struct MirPlace discharge_const(struct FunctionState *fs, struct SourceSpan span, MirConstant k)
@@ -395,8 +395,88 @@ static struct MirPlace discharge_const_char(struct FunctionState *fs, struct Sou
 
 static struct MirPlace discharge_const_int(struct FunctionState *fs, struct SourceSpan span, paw_Int64 i, enum IrIntKind kind)
 {
+    union Bound {
+        paw_Int64 i;
+        paw_Uint64 u;
+    };
+
+    struct {
+        paw_Bool is_signed;
+        union Bound min;
+        union Bound max;
+        unsigned num_bytes;
+    } info = {0};
+
+    switch (kind) {
+        case IR_INT8:
+            info.is_signed = PAW_TRUE;
+            info.min.i = INT8_MIN;
+            info.max.i = INT8_MAX;
+            info.num_bytes = sizeof(paw_Int8);
+            break;
+        case IR_INT16:
+            info.is_signed = PAW_TRUE;
+            info.min.i = INT16_MIN;
+            info.max.i = INT16_MAX;
+            info.num_bytes = sizeof(paw_Int16);
+            break;
+        case IR_INT32:
+            info.is_signed = PAW_TRUE;
+            info.min.i = INT32_MIN;
+            info.max.i = INT32_MAX;
+            info.num_bytes = sizeof(paw_Int32);
+            break;
+        case IR_INT64:
+            info.is_signed = PAW_TRUE;
+            info.min.i = INT64_MIN;
+            info.max.i = INT64_MAX;
+            info.num_bytes = sizeof(paw_Int64);
+            break;
+        case IR_ISIZE:
+            info.is_signed = PAW_TRUE;
+            // TODO: query LLVM target info for target platform
+            info.min.i = INT64_MIN;
+            info.max.i = INT64_MAX;
+            info.num_bytes = sizeof(paw_Int64);
+            break;
+        case IR_UINT8:
+            info.max.i = UINT8_MAX;
+            info.num_bytes = sizeof(paw_Uint8);
+            break;
+        case IR_UINT16:
+            info.max.i = UINT16_MAX;
+            info.num_bytes = sizeof(paw_Uint16);
+            break;
+        case IR_UINT32:
+            info.max.i = UINT32_MAX;
+            info.num_bytes = sizeof(paw_Uint32);
+            break;
+        case IR_UINT64:
+            info.max.i = UINT64_MAX;
+            info.num_bytes = sizeof(paw_Uint64);
+            break;
+        case IR_USIZE:
+            info.max.i = UINT64_MAX;
+            info.num_bytes = sizeof(paw_Uint64);
+            break;
+    }
+
+    IrValue value = {.i64 = i};
+    if (info.num_bytes < sizeof(paw_Uint64)) {
+        if (info.is_signed) {
+            if (value.i64 < info.min.i || info.max.i < value.i64)
+                LOWERING_ERROR(fs->L, IntegerOutOfRange,
+                        .uint64 = value.u64,
+                        .span = span);
+        } else if (info.max.u < value.u64) {
+            LOWERING_ERROR(fs->L, IntegerOutOfRange,
+                    .uint64 = value.u64,
+                    .span = span);
+        }
+    }
+
     return discharge_const(fs, span,
-            new_const_value(fs, (union IrValue){.i64 = i}, ir_new_int(fs->C, kind)));
+            new_const_value(fs, value, ir_new_int(fs->C, kind)));
 }
 
 static struct MirPlace discharge_const_float(struct FunctionState *fs, struct SourceSpan span, paw_Float64 f, enum IrFloatKind kind)
@@ -1941,25 +2021,25 @@ static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object
     }
 }
 
-static enum BuiltinKind cons_kind(enum ConstructorKind kind)
+static IrType *type_of_cons(struct LowerHir *L, struct Constructor cons)
 {
-    switch (kind) {
+    switch (cons.kind) {
         case CONS_BOOL:
-            return BUILTIN_BOOL;
+            return ir_new_bool(L->C);
         case CONS_CHAR:
-            return BUILTIN_CHAR;
+            return ir_new_char(L->C);
         case CONS_INT:
-            return BUILTIN_INT64;
+            return ir_new_int(L->C, cons.i.kind);
         case CONS_FLOAT:
-            return BUILTIN_FLOAT64;
+            return ir_new_float(L->C, cons.f.kind);
         case CONS_STR:
-            return BUILTIN_STR;
+            return ir_new_string(L->C);
         case CONS_TUPLE:
         case CONS_STRUCT:
         case CONS_VARIANT:
         case CONS_WILDCARD:
         case CONS_REST:
-            return NBUILTINS;
+            return NULL;
     }
 }
 
@@ -1982,9 +2062,9 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, struct 
     MirBlock const *psucc = get_successors(fs);
     LIST_ZIP (cases, pmc, arms, parm) {
         set_current_bb(fs, *psucc++);
-        enum BuiltinKind const kind = cons_kind(pmc->cons.kind);
-        union IrValue const temp = {.p = pmc->cons.value.p}; // TODO
-        parm->k = new_const_value(fs, temp, pawP_builtin_type(fs->C, kind));
+        IrType *cons_type = type_of_cons(L, pmc->cons);
+        paw_assert(cons_type != NULL && "invalid constructor type");
+        parm->k = new_const_value(fs, pmc->cons.value, cons_type);
 
         visit_decision(V, pmc->dec, result);
         set_goto_edge(fs, span, join_bb);

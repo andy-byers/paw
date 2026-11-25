@@ -10,8 +10,6 @@
 #include "compiler/error.h"
 #include "compiler/lib.h"
 
-#include "ir/value.h"
-
 #include <limits.h>
 #include <inttypes.h>
 
@@ -200,6 +198,11 @@ static void test_type_error(void)
     test_compiler_status(kErrIncompatibleTypes, "non_unit_guard", "fn f(x: bool) {if x {123}}", "");
     test_compiler_status(kErrIncompatibleTypes, "nonscalar_cast", "", "let x = 123 as str;");
     test_compiler_status(kErrFalseObligation, "invalid_map_key", "use hashmap::HashMap; struct S;", "let x: HashMap<S, int64> = HashMap::new();");
+
+    test_compiler_status(kErrIntegerOutOfRange, "literal_int_out_of_range",
+            "", "let i: int8 = -1_000;");
+    test_compiler_status(kErrIntegerOutOfRange, "literal_uint_out_of_range",
+            "", "let u: uint16 = 1_000_000_000;");
 }
 
 static void test_arity_error(void)
